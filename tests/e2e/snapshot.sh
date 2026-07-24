@@ -203,8 +203,11 @@ snapshot_test "snapshot-desktop-indicator" "desktop with mic icon in top bar"
 
 # Dismiss any notifications to ensure consistent snapshots
 echo "  Dismissing notifications..."
-do_in_pod xdotool key Escape
-sleep 0.5
+for i in 1 2 3; do
+  do_in_pod xdotool key Escape
+  sleep 0.3
+done
+sleep 1
 
 # ============================================
 # State 2: Preferences dialog - full scroll
