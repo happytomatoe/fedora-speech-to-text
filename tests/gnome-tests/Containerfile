@@ -14,8 +14,8 @@ RUN mkdir -p /etc/dconf/db/local.d && \
     echo "welcome-dialog-last-shown-version='4294967295'" >> /etc/dconf/db/local.d/00-gnome-shell && \
     dconf update
 
-# Use smaller screen for faster tests (1280x720 instead of 1920x1080)
-RUN sed -i 's/1920x1080x24/1280x720x24/' /etc/systemd/system/xvfb@.service
+# Use smaller screen for faster tests (800x600)
+RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service
 
 # Copy the project source
 COPY . /app

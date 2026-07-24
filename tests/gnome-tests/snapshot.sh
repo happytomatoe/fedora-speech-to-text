@@ -96,6 +96,14 @@ for i in $(seq 1 5); do
   sleep 2
 done
 
+# Install extension BEFORE starting GNOME Shell
+echo "Installing extension..."
+do_in_pod gnome-extensions install "${EXTENSION_ZIP}" --force
+
+# Enable extension via dconf BEFORE starting GNOME Shell
+echo "Enabling extension..."
+do_in_pod dconf write /org/gnome/shell/enabled-extensions "['\"${EXTENSION_UUID}\"']"
+
 # Start GNOME Shell
 echo "Starting GNOME Shell..."
 do_in_pod systemctl --user start "gnome-xsession@:99"
@@ -115,21 +123,9 @@ echo "Closing Overview..."
 do_in_pod xdotool keydown super
 sleep 0.5
 do_in_pod xdotool keyup super
-sleep 2
+sleep 3
 
-# Check if extension is already installed (it might be in system extensions)
-INSTALLED=$(do_in_pod gnome-extensions list 2>/dev/null | grep -c "${EXTENSION_UUID}" || true)
-if [[ "${INSTALLED}" -eq 0 ]]; then
-  echo "Installing extension..."
-  do_in_pod gnome-extensions install "${EXTENSION_ZIP}" --force
-fi
-
-# Enable extension via dconf (gnome-extensions enable has issues in headless)
-echo "Enabling extension..."
-do_in_pod dconf write /org/gnome/shell/enabled-extensions "['\"${EXTENSION_UUID}\"']"
-sleep 2
-
-# Final wait for extension to load
+# Final wait for extension indicator to appear
 echo "Waiting for extension to load..."
 sleep 3
 
@@ -216,7 +212,7 @@ do_in_pod xdotool click 3  # Right click
 sleep 2
 snapshot_test "snapshot-indicator-menu" "context menu with Preferences"
 # Close menu by clicking elsewhere
-do_in_pod xdotool mousemove 960 540
+do_in_pod xdotool mousemove 400 300
 do_in_pod xdotool click 1
 sleep 1
 
