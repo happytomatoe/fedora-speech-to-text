@@ -216,8 +216,12 @@ echo ""
 echo "2. Preferences dialog"
 if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
   poll_until "preferences window" 10 1 do_in_pod xdotool search --name 'Voice.*Text'
-  # Wait for dialog to fully render before capturing
-  sleep 2
+  # Focus the preferences window and wait for full render
+  PREFS_WID=$(do_in_pod xdotool search --name 'Voice.*Text' 2>/dev/null | head -1)
+  if [[ -n "${PREFS_WID}" ]]; then
+    do_in_pod xdotool windowactivate "${PREFS_WID}"
+  fi
+  sleep 3
   snapshot_test "snapshot-prefs-top" "preferences - top of settings"
   
   # Scroll through ALL settings to capture full dialog
@@ -260,26 +264,32 @@ else
 fi
 
 # ============================================
-# State 4: Transcription result typed into search
+# State 4: Transcription result typed into terminal
 # ============================================
 echo ""
 echo "4. Transcription result"
-# Open GNOME search (Activities or Super key)
-# Note: xdotool key events may not reach GNOME Shell in Xvfb/mutter environments
-# If search doesn't appear, skip this snapshot gracefully
-do_in_pod xdotool keydown super 2>/dev/null || true
-sleep 0.5
-do_in_pod xdotool keyup super 2>/dev/null || true
-if poll_until "search box" 5 1 do_in_pod xdotool search --name "Activities"; then
-  # Type the transcribed text (xdotool key for spaces)
-  do_in_pod xdotool key H e l l o space w o r l d space f r o m space v o i c e space t o space t e x t
-  sleep 1
-  snapshot_test "snapshot-transcription" "transcription typed into search"
-  # Close search
-  do_in_pod xdotool key Escape
+
+# Open terminal (xdotool type needs a focused window)
+do_in_pod gnome-terminal &
+sleep 3
+
+# Find and focus terminal window
+TERM_WID=$(do_in_pod xdotool search --name "Terminal" 2>/dev/null | head -1)
+if [[ -n "${TERM_WID}" ]]; then
+  do_in_pod xdotool windowactivate "${TERM_WID}"
+  sleep 0.5
+
+  # Type transcription text
+  do_in_pod xdotool type --delay 30 "Hello world from voice to text"
+  sleep 2
+
+  snapshot_test "snapshot-transcription" "transcription typed into terminal"
+
+  # Close terminal
+  do_in_pod xdotool windowclose "${TERM_WID}"
   sleep 0.5
 else
-  echo "  Skipping transcription (search box not available in Xvfb)"
+  echo "  Skipping transcription (terminal window not found)"
 fi
 
 echo ""
