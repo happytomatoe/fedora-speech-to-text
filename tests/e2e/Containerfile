@@ -1,0 +1,62 @@
+# Custom container for visual regression testing of the GNOME extension.
+# Extends gnome-shell-pod-rawhide with Python D-Bus service for E2E testing.
+
+FROM ghcr.io/schneegans/gnome-shell-pod-rawhide
+
+# Install system packages (ImageMagick, zip, etc.)
+USER root
+RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 && \
+    dnf clean all
+
+# Install uv and create a venv with pinned Python 3.13
+# This avoids the dnf Python 3.13→3.15 upgrade entirely
+RUN curl -LsSf https://astral.sh/uv/install.sh -o /tmp/install-uv.sh && \
+    bash /tmp/install-uv.sh && rm /tmp/install-uv.sh
+ENV PATH="/root/.local/bin:${PATH}"
+RUN uv python install 3.13 && \
+    uv venv --python 3.13 /app-venv && \
+    chmod 755 /root
+
+# Install Python packages into the venv (no patching needed on 3.13)
+RUN uv pip install --python /app-venv/bin/python \
+    dbus-next httpx sounddevice numpy pyyaml python-dotenv websockets \
+    groq mistralai
+
+
+# Disable GNOME welcome tour by pre-seeding dconf database
+# This must be set BEFORE GNOME Shell starts (at build time, not runtime)
+RUN mkdir -p /etc/dconf/db/local.d && \
+    echo '[org/gnome/shell]' > /etc/dconf/db/local.d/00-gnome-shell && \
+    echo "welcome-dialog-last-shown-version='4294967295'" >> /etc/dconf/db/local.d/00-gnome-shell && \
+    dconf update
+
+# Use smaller screen for faster tests (800x600)
+RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service
+
+# Copy the project source
+COPY . /app
+WORKDIR /app
+
+# Build the GNOME extension ZIP
+RUN bash /app/tests/e2e/build-ext-zip.sh
+
+# Install Python voice-to-text package into the venv
+RUN VENV_SITE="/app-venv/lib/python3.13/site-packages" && \
+    cp -r /app/src/voice_to_text "${VENV_SITE}/" && \
+    mkdir -p /home/gnomeshell/.local/share/dbus-1/services/ /home/gnomeshell/.local/bin/ /home/gnomeshell/.config/voice-to-text && \
+    cp /app/service/com.happytomatoe.VoiceToText.service /home/gnomeshell/.local/share/dbus-1/services/ && \
+    cp /app/tests/e2e/voice-to-text.conf /home/gnomeshell/.config/voice-to-text/config.yaml && \
+    echo '#!/bin/sh' > /home/gnomeshell/.local/bin/voice-to-text-dbus && \
+    echo 'exec /app-venv/bin/python -m voice_to_text "$@"' >> /home/gnomeshell/.local/bin/voice-to-text-dbus && \
+    chmod +x /home/gnomeshell/.local/bin/voice-to-text-dbus && \
+    chown -R gnomeshell:users /home/gnomeshell/.local /home/gnomeshell/.config
+
+# Make venv available to the gnomeshell user
+RUN echo 'export PATH="/app-venv/bin:$PATH"' >> /etc/profile.d/venv.sh && \
+    chmod +x /etc/profile.d/venv.sh
+
+# Ensure output directories exist
+RUN mkdir -p /app/tests/e2e-output
+
+# USER gnomeshell — don't set here; systemd needs root as PID 1
+WORKDIR /home/gnomeshell

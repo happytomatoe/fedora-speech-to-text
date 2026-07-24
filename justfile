@@ -212,54 +212,45 @@ gnome-ext-pack:
     echo "Extension packed to dist/$UUID.shell-extension.zip"
 
 
-# @category gnome-ext
-# Build the test container locally
-gnome-test-build:
+# @category e2e
+# Build the E2E test container locally
+e2e-build:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Building test container..."
-    podman build -t voice-to-text-gnome-test -f tests/gnome-tests/Containerfile .
-    echo "Container built: voice-to-text-gnome-test"
+    echo "Building E2E test container..."
+    podman build -t voice-to-text-e2e -f tests/e2e/Containerfile .
+    echo "Container built: voice-to-text-e2e"
 
-# @category gnome-ext
+# @category e2e
 # Generate reference images for visual regression tests
-gnome-references: gnome-test-build
+e2e-references: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Generating reference images..."
-    tests/gnome-tests/generate-references.sh
+    tests/e2e/snapshot.sh --update
     echo "References generated. Review and commit tests/gnome-references/"
 
-# @category gnome-ext
-# Run visual regression tests locally
-gnome-test: gnome-test-build
+# @category e2e
+# Run E2E visual regression tests
+e2e-test: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Running visual regression tests..."
-    tests/gnome-tests/run-test.sh
+    echo "Running E2E tests..."
+    tests/e2e/snapshot.sh
 
-# @category gnome-ext
-# Update reference images with current state (after intentional changes)
-gnome-references-update: gnome-test-build
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Updating reference images..."
-    tests/gnome-tests/generate-references.sh
-    echo "References updated. Review and commit."
-
-# @category gnome-ext
-# Capture snapshot screenshots of all extension UI states
-gnome-snapshot: gnome-test-build
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Running snapshot tests..."
-    tests/gnome-tests/snapshot.sh
-
-# @category gnome-ext
+# @category e2e
 # Update snapshot references with current state
-gnome-snapshot-update: gnome-test-build
+e2e-update: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Capturing snapshot references..."
-    tests/gnome-tests/snapshot.sh --update
+    tests/e2e/snapshot.sh --update
     echo "Snapshots saved. Review and commit tests/gnome-references/snapshot-*.png"
+
+# @category e2e
+# Run E2E test with D-Bus service (requires DEEPGRAM_API_KEY)
+e2e-full: e2e-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Running full E2E test with D-Bus service..."
+    tests/e2e/snapshot.sh --dbus

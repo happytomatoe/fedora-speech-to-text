@@ -69,3 +69,4 @@ thoughts/
 
 # Visual regression test output
 tests/gnome-snapshots/
+tests/gnome-output/

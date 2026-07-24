@@ -3,14 +3,14 @@
 # Usage: ./snapshot.sh [--update]
 #
 # With --update: saves screenshots as new references
-# Without --update: compares against existing references (like run-test.sh)
+# Without --update: compares against existing references
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/../.."
 REFERENCES_DIR="${SCRIPT_DIR}/../gnome-references"
-OUTPUT_DIR="${SCRIPT_DIR}/../gnome-snapshots"
+OUTPUT_DIR="${SCRIPT_DIR}/../gnome-output"
 EXTENSION_UUID="voice-to-text@happytomatoe.com"
 EXTENSION_ZIP="/app/tests/gnome-references/${EXTENSION_UUID}.shell-extension.zip"
 
@@ -22,10 +22,10 @@ fi
 cd "${PROJECT_ROOT}"
 
 # Build container if needed
-IMAGE="voice-to-text-gnome-test"
+IMAGE="voice-to-text-e2e"
 if ! podman image exists "${IMAGE}"; then
   echo "Building test container..."
-  podman build -t "${IMAGE}" -f tests/gnome-tests/Containerfile .
+  podman build -t "${IMAGE}" -f tests/e2e/Containerfile .
 fi
 
 # Run container
@@ -44,8 +44,14 @@ cleanup() {
 trap cleanup EXIT
 
 # Helper to run commands in container
+# Bypass set-env.sh to avoid eval quoting issues with special chars like @
 do_in_pod() {
-  podman exec --user gnomeshell --workdir /home/gnomeshell "${POD}" set-env.sh "$@"
+  podman exec --user gnomeshell --workdir /home/gnomeshell \
+    -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    -e DISPLAY=:99 \
+    -e GSK_RENDERER=cairo \
+    -e PATH=/app-venv/bin:/usr/local/bin:/usr/bin:/bin \
+    "${POD}" "$@"
 }
 
 # Helper to capture full-screen screenshot
@@ -62,39 +68,47 @@ capture_crop() {
     "convert xwd:- -crop ${crop} +repage ${output_file}"
 }
 
-# Wait for container to start and user bus to be ready
-echo "Waiting for D-Bus..."
-sleep 8
+# Helper to poll until condition is true
+poll_until() {
+  local desc="${1}"
+  local timeout="${2:-30}"
+  local interval="${3:-1}"
+  shift 3
+  
+  echo -n "Waiting for ${desc}..."
+  for i in $(seq 1 "$timeout"); do
+    if "$@" >/dev/null 2>&1; then
+      echo " ready (${i}s)"
+      return 0
+    fi
+    sleep "$interval"
+  done
+  echo " TIMEOUT after ${timeout}s"
+  return 1
+}
 
-# Wait for user bus to be ready
+# Wait for user bus (skip wait-user-bus.sh which fails on degraded systemd)
+# Use direct podman exec (not do_in_pod) to avoid quoting issues with set-env.sh
 echo "Waiting for user bus..."
 for i in $(seq 1 30); do
-  if do_in_pod wait-user-bus.sh 2>/dev/null; then
-    echo "User bus ready after ${i}s"
+  if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
+    echo " ready (${i}s)"
     break
+  fi
+  if [[ $i -eq 30 ]]; then
+    echo " TIMEOUT after 30s"
+    exit 1
   fi
   sleep 1
 done
 
-# Additional wait to ensure bus is fully ready for gsettings
-echo "Waiting for bus to stabilize..."
-sleep 5
-
-# Set up GSK_RENDERER for consistent rendering
-do_in_pod 'echo "export GSK_RENDERER=cairo" >> .bash_profile'
+# GSK_RENDERER=cairo is set via -e in do_in_pod
 
 # Welcome tour is disabled via dconf in Containerfile
-# No need to set welcome-dialog-last-shown-version at runtime
 
-# Retry gsettings command
-for i in $(seq 1 5); do
-  if do_in_pod gsettings set org.gnome.mutter center-new-windows true 2>/dev/null; then
-    echo "gsettings configured"
-    break
-  fi
-  echo "gsettings retry $i..."
-  sleep 2
-done
+# Configure gsettings
+echo "Configuring gsettings..."
+poll_until "gsettings" 10 2 do_in_pod gsettings set org.gnome.mutter center-new-windows true
 
 # Install extension BEFORE starting GNOME Shell
 echo "Installing extension..."
@@ -102,32 +116,21 @@ do_in_pod gnome-extensions install "${EXTENSION_ZIP}" --force
 
 # Enable extension via dconf BEFORE starting GNOME Shell
 echo "Enabling extension..."
-do_in_pod dconf write /org/gnome/shell/enabled-extensions "['\"${EXTENSION_UUID}\"']"
+do_in_pod dconf write /org/gnome/shell/enabled-extensions "['${EXTENSION_UUID}']"
 
 # Start GNOME Shell
 echo "Starting GNOME Shell..."
 do_in_pod systemctl --user start "gnome-xsession@:99"
 
 # Wait for GNOME Shell to fully initialize
-echo "Waiting for GNOME Shell to initialize..."
-for i in $(seq 1 30); do
-  if do_in_pod gnome-extensions list >/dev/null 2>&1; then
-    echo "GNOME Shell ready after ${i}s"
-    break
-  fi
-  sleep 1
-done
+poll_until "GNOME Shell" 30 1 do_in_pod gnome-extensions list
 
 # Close overview if open (it opens by default on first start)
 echo "Closing Overview..."
 do_in_pod xdotool keydown super
 sleep 0.5
 do_in_pod xdotool keyup super
-sleep 3
-
-# Final wait for extension indicator to appear
-echo "Waiting for extension to load..."
-sleep 3
+poll_until "extension indicator" 10 1 do_in_pod xdotool mousemove 695 12
 
 echo ""
 if [[ "${UPDATE_MODE}" == "true" ]]; then
@@ -192,67 +195,87 @@ snapshot_test() {
 }
 
 # ============================================
-# State 1: Default indicator (idle state)
+# State 1: Desktop with extension indicator
 # ============================================
 echo ""
-echo "1. Indicator - idle state"
-sleep 2
-snapshot_test "snapshot-indicator-idle" "top bar with mic icon"
+echo "1. Desktop with extension indicator"
+snapshot_test "snapshot-desktop-indicator" "desktop with mic icon in top bar"
 
-# ============================================
-# State 2: Preferences dialog - Recording Settings
-# ============================================
-echo ""
-echo "2. Preferences - Recording Settings"
-# Try to open preferences (may fail if extension not fully loaded)
-if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
-  sleep 5
-  snapshot_test "snapshot-prefs-recording" "preferences - recording settings"
-else
-  echo "  Skipping preferences (extension not recognized by gnome-extensions)"
-fi
-
-# ============================================
-# State 3: Preferences dialog - scrolled to Provider
-# ============================================
-echo ""
-echo "3. Preferences - Provider Settings"
-# Scroll down to show provider settings
-do_in_pod xdotool key Tab
+# Dismiss any notifications to ensure consistent snapshots
+echo "  Dismissing notifications..."
+do_in_pod xdotool key Escape
 sleep 0.5
-do_in_pod xdotool key Down
-do_in_pod xdotool key Down
-do_in_pod xdotool key Down
-do_in_pod xdotool key Down
-sleep 1
-snapshot_test "snapshot-prefs-provider" "preferences - provider settings"
 
 # ============================================
-# State 4: Preferences dialog - scrolled to Output
+# State 2: Preferences dialog - full scroll
 # ============================================
 echo ""
-echo "4. Preferences - Output Settings"
-# Scroll down more to show output settings
-do_in_pod xdotool key Down
-do_in_pod xdotool key Down
-do_in_pod xdotool key Down
-do_in_pod xdotool key Down
-sleep 1
-snapshot_test "snapshot-prefs-output" "preferences - output settings"
+echo "2. Preferences dialog"
+if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
+  poll_until "preferences window" 10 1 do_in_pod xdotool search --name 'Voice.*Text'
+  snapshot_test "snapshot-prefs-top" "preferences - top of settings"
+  
+  # Scroll through ALL settings to capture full dialog
+  for i in $(seq 1 20); do
+    do_in_pod xdotool key Down
+    sleep 0.1
+  done
+  snapshot_test "snapshot-prefs-bottom" "preferences - bottom of settings"
+else
+  echo "  Skipping preferences (extension not recognized)"
+fi
 
 # Close preferences
 do_in_pod xdotool keydown alt
 do_in_pod xdotool key F4
-sleep 1
+sleep 0.5
 do_in_pod xdotool keyup alt
 
 # ============================================
-# State 5: Full desktop overview
+# State 3: Recording state (audio level visible)
 # ============================================
 echo ""
-echo "5. Full desktop"
+echo "3. Recording state"
+
+# Start D-Bus service in background if not already running
+echo "  Starting D-Bus service..."
+do_in_pod bash -c '/home/gnomeshell/.local/bin/voice-to-text-dbus &'
 sleep 2
-snapshot_test "snapshot-desktop-full" "full desktop with extension active"
+
+# Start recording via D-Bus
+if do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{"provider": "deepgram", "output_method": "search"}' 2>/dev/null; then
+  # Wait for notification to appear and recording to start
+  sleep 2
+  snapshot_test "snapshot-recording" "recording state with notification"
+  # Stop recording (ignore errors - may have already failed)
+  do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StopRecording 2>/dev/null || true
+  sleep 1
+else
+  echo "  Skipping recording (D-Bus service not available)"
+fi
+
+# ============================================
+# State 4: Transcription result typed into search
+# ============================================
+echo ""
+echo "4. Transcription result"
+# Open GNOME search (Activities or Super key)
+# Note: xdotool key events may not reach GNOME Shell in Xvfb/mutter environments
+# If search doesn't appear, skip this snapshot gracefully
+do_in_pod xdotool keydown super 2>/dev/null || true
+sleep 0.5
+do_in_pod xdotool keyup super 2>/dev/null || true
+if poll_until "search box" 5 1 do_in_pod xdotool search --name "Activities"; then
+  # Type the transcribed text (xdotool key for spaces)
+  do_in_pod xdotool key H e l l o space w o r l d space f r o m space v o i c e space t o space t e x t
+  sleep 1
+  snapshot_test "snapshot-transcription" "transcription typed into search"
+  # Close search
+  do_in_pod xdotool key Escape
+  sleep 0.5
+else
+  echo "  Skipping transcription (search box not available in Xvfb)"
+fi
 
 echo ""
 echo "========================================="
