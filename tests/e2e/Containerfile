@@ -5,7 +5,7 @@ FROM ghcr.io/schneegans/gnome-shell-pod-rawhide
 
 # Install system packages (ImageMagick, zip, etc.)
 USER root
-RUN dnf install -y ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 && \
+RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 && \
     dnf clean all
 
 # Install uv and create a venv with pinned Python 3.13

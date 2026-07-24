@@ -230,6 +230,13 @@ if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
     sleep 0.1
   done
   snapshot_test "snapshot-prefs-bottom" "preferences - bottom of settings"
+  
+  # Scroll to the very end for the last preferences screenshot
+  for i in $(seq 1 10); do
+    do_in_pod xdotool key Down
+    sleep 0.1
+  done
+  snapshot_test "snapshot-prefs-end" "preferences - very end of settings"
 else
   echo "  Skipping preferences (extension not recognized)"
 fi
@@ -256,6 +263,10 @@ if do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-p
   # Wait for notification to appear and recording to start
   sleep 2
   snapshot_test "snapshot-recording" "recording state with notification"
+  
+  # Capture cropped screenshot of the recording indicator area (top bar)
+  # The microphone icon with audio level is in the top-left area
+  snapshot_test "snapshot-recording-indicator" "recording indicator with audio level" "crop:100x30+0+0"
   # Stop recording (ignore errors - may have already failed)
   do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StopRecording 2>/dev/null || true
   sleep 1
