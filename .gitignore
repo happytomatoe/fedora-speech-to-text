@@ -66,3 +66,6 @@ src/voice_to_text/_build_info.py
 .pi/
 docs/
 thoughts/
+
+# Visual regression test output
+tests/gnome-snapshots/
