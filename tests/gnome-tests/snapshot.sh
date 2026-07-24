@@ -200,42 +200,24 @@ sleep 2
 snapshot_test "snapshot-indicator-idle" "top bar with mic icon"
 
 # ============================================
-# State 2: Right-click menu open
+# State 2: Preferences dialog - Recording Settings
 # ============================================
 echo ""
-echo "2. Right-click menu"
-# Right-click on the extension area in top panel
-# The indicator is typically at the right side of the panel
-do_in_pod xdotool mousemove 25 12
-sleep 0.5
-do_in_pod xdotool click 3  # Right click
-sleep 2
-snapshot_test "snapshot-indicator-menu" "context menu with Preferences"
-# Close menu by clicking elsewhere
-do_in_pod xdotool mousemove 400 300
-do_in_pod xdotool click 1
-sleep 1
-
-# ============================================
-# State 3: Preferences dialog - General tab
-# ============================================
-echo ""
-echo "3. Preferences dialog"
+echo "2. Preferences - Recording Settings"
 # Try to open preferences (may fail if extension not fully loaded)
 if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
   sleep 5
-  snapshot_test "snapshot-prefs-general" "preferences window - general settings"
+  snapshot_test "snapshot-prefs-recording" "preferences - recording settings"
 else
   echo "  Skipping preferences (extension not recognized by gnome-extensions)"
 fi
-# Keep prefs open for next screenshot
 
 # ============================================
-# State 4: Preferences dialog - scrolled down
+# State 3: Preferences dialog - scrolled to Provider
 # ============================================
 echo ""
-echo "4. Preferences - scrolled down"
-# Scroll down in the preferences window to show more settings
+echo "3. Preferences - Provider Settings"
+# Scroll down to show provider settings
 do_in_pod xdotool key Tab
 sleep 0.5
 do_in_pod xdotool key Down
@@ -243,7 +225,20 @@ do_in_pod xdotool key Down
 do_in_pod xdotool key Down
 do_in_pod xdotool key Down
 sleep 1
-snapshot_test "snapshot-prefs-scrolled" "preferences scrolled to provider settings"
+snapshot_test "snapshot-prefs-provider" "preferences - provider settings"
+
+# ============================================
+# State 4: Preferences dialog - scrolled to Output
+# ============================================
+echo ""
+echo "4. Preferences - Output Settings"
+# Scroll down more to show output settings
+do_in_pod xdotool key Down
+do_in_pod xdotool key Down
+do_in_pod xdotool key Down
+do_in_pod xdotool key Down
+sleep 1
+snapshot_test "snapshot-prefs-output" "preferences - output settings"
 
 # Close preferences
 do_in_pod xdotool keydown alt
@@ -258,14 +253,6 @@ echo ""
 echo "5. Full desktop"
 sleep 2
 snapshot_test "snapshot-desktop-full" "full desktop with extension active"
-
-# ============================================
-# State 6: Top bar close-up (for indicator detail)
-# ============================================
-echo ""
-echo "6. Top bar indicator detail"
-# Capture just the top-right area where indicator lives
-snapshot_test "snapshot-topbar-indicator" "top bar indicator" "crop:200x30+0+0"
 
 echo ""
 echo "========================================="
