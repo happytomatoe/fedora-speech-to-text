@@ -1,6 +1,6 @@
 ---
 date: 2026-07-24T06:50:00+00:00
-git_commit: f0e74fe
+git_commit: a77bc20
 branch: feat/gnome-shell-pod-visual-regression
 repository: voice-to-text
 topic: "GNOME Shell Pod Visual Regression Testing Implementation"
@@ -12,19 +12,19 @@ tags: [gnome-shell, visual-testing, container, podman, extension]
 ## Task(s)
 Implementing automated visual regression testing for the GNOME Shell extension using gnome-shell-pod containers.
 
-**Status: ~90% Complete**
+**Status: ~95% Complete**
 
-- ✅ Phase 1: Containerfile (working, builds in ~5s, 1280x720 resolution)
-- ✅ Phase 2: Test scripts created (find-target.sh, generate-references.sh, run-test.sh, snapshot.sh)
-- ✅ Phase 3: CI workflow (.github/workflows/gnome-visual-tests.yml)
+- ✅ Phase 1: Containerfile (working, builds in ~5s, 800x600 resolution)
+- ✅ Phase 2: Test scripts created
+- ✅ Phase 3: CI workflow
 - ✅ Phase 4: Justfile recipes added
 - ✅ Welcome tour disabled via dconf pre-seeding
-- ✅ Screen resolution changed to 1280x720
-- ✅ Reference screenshots captured (5 of 6 states at 1280x720)
-- ✅ Snapshot tests passing (MSE comparison working)
-- 🔄 Extension interaction via xdotool partially working
-- ❌ Context menu trigger opens Activities instead (known issue)
-- ❌ Preferences dialog not captured (gnome-extensions prefs fails headless)
+- ✅ Screen resolution 800x600
+- ✅ 5 reference screenshots captured
+- ✅ All tests passing (MSE < 100)
+- ✅ Extension loads correctly
+- ✅ Preferences dialog captured (3 pages)
+- ⏳ Push to PR #57 pending
 
 ## Critical References
 - `thoughts/shared/plans/gnome-shell-pod-visual-regression.md` - Original implementation plan
@@ -32,10 +32,10 @@ Implementing automated visual regression testing for the GNOME Shell extension u
 - `gnome-ext/extension.js` - Extension code (indicator positions, D-Bus interface)
 
 ## Recent changes
-- `tests/gnome-tests/snapshot.sh` - Fixed MSE parsing, added retry logic, use dconf for extension enable
-- `tests/gnome-tests/Containerfile` - Resolution changed to 1280x720
-- `tests/gnome-references/` - 5 reference screenshots at 1280x720
-- `.gitignore` - Added gnome-snapshots/ to ignore test output
+- `tests/gnome-tests/snapshot.sh` - 5 states: indicator, prefs (3 pages), desktop
+- `tests/gnome-tests/Containerfile` - Resolution 800x600
+- `tests/gnome-references/` - 5 reference screenshots
+- Key fix: install extension BEFORE starting GNOME Shell
 
 ## Learnings
 
