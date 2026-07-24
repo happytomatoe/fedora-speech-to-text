@@ -216,6 +216,8 @@ echo ""
 echo "2. Preferences dialog"
 if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
   poll_until "preferences window" 10 1 do_in_pod xdotool search --name 'Voice.*Text'
+  # Wait for dialog to fully render before capturing
+  sleep 2
   snapshot_test "snapshot-prefs-top" "preferences - top of settings"
   
   # Scroll through ALL settings to capture full dialog

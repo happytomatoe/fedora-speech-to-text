@@ -4,14 +4,14 @@ on:
   pull_request:
     paths:
       - 'gnome-ext/**'
-      - 'tests/gnome-tests/**'
+      - 'tests/e2e/**'
       - 'src/voice_to_text/**'
   push:
     branches:
       - main
     paths:
       - 'gnome-ext/**'
-      - 'tests/gnome-tests/**'
+      - 'tests/e2e/**'
       - 'src/voice_to_text/**'
 
 jobs:
@@ -28,13 +28,13 @@ jobs:
 
       - name: Build test container
         run: |
-          podman build -t voice-to-text-gnome-test \
-            -f tests/gnome-tests/Containerfile .
+          podman build -t voice-to-text-e2e \
+            -f tests/e2e/Containerfile .
 
       - name: Run visual tests
         run: |
-          chmod +x tests/gnome-tests/*.sh
-          tests/gnome-tests/run-test.sh
+          chmod +x tests/e2e/*.sh
+          tests/e2e/snapshot.sh
 
       - name: Upload test artifacts
         if: failure()
@@ -70,7 +70,7 @@ jobs:
             }
             
             body += '\nDownload the full artifacts to inspect the differences.\n';
-            body += 'To update references, run `just gnome-references` locally and commit.\n';
+            body += 'To update references, run `just e2e-references` locally and commit.\n';
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
