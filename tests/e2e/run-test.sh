@@ -17,7 +17,7 @@ cd "${PROJECT_ROOT}"
 IMAGE="voice-to-text-gnome-test"
 if ! podman image exists "${IMAGE}"; then
   echo "Building test container..."
-  podman build -t "${IMAGE}" -f tests/gnome-tests/Containerfile .
+  podman build -t "${IMAGE}" -f "${SCRIPT_DIR}/Containerfile" .
 fi
 
 # Run container
@@ -47,7 +47,7 @@ echo "Waiting for D-Bus..."
 sleep 5
 
 # Set up GSK_RENDERER for consistent rendering
-do_in_pod 'echo "export GSK_RENDERER=cairo" >> .bash_profile'
+do_in_pod 'echo "export GSK_RENDERER=cairo" >> .bashrc'
 
 # Disable welcome tour
 do_in_pod gsettings set org.gnome.shell welcome-dialog-last-shown-version "999" || true
@@ -103,7 +103,7 @@ run_test() {
     rm -f "${diff}"
   else
     # Extract numeric value from compare output
-    MSE=$(echo "${METRIC}" | grep -oP '[\d.]+')
+    MSE=$(echo "${METRIC}" | grep -oP '^[\d.]+')
     if (( $(echo "${MSE} < 100" | bc -l 2>/dev/null || echo 0) )); then
       echo "PASS (MSE: ${MSE})"
       rm -f "${diff}"

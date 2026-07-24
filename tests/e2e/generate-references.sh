@@ -19,7 +19,7 @@ cd "${PROJECT_ROOT}"
 IMAGE="voice-to-text-gnome-test"
 if ! podman image exists "${IMAGE}"; then
   echo "Building test container..."
-  podman build -t "${IMAGE}" -f tests/gnome-tests/Containerfile .
+  podman build -t "${IMAGE}" -f "${SCRIPT_DIR}/Containerfile" .
 fi
 
 # Run container
@@ -50,7 +50,7 @@ echo "Waiting for D-Bus..."
 sleep 5
 
 # Set up GSK_RENDERER for consistent rendering
-do_in_pod 'echo "export GSK_RENDERER=cairo" >> .bash_profile'
+do_in_pod 'echo "export GSK_RENDERER=cairo" >> .bashrc'
 
 # Disable welcome tour (GNOME 40+)
 echo "Disabling welcome tour..."

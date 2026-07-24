@@ -3,15 +3,21 @@ name: GNOME Extension Visual Tests
 on:
   pull_request:
     paths:
+      - '.github/workflows/gnome-visual-tests.yml'
+      - '.containerignore'
       - 'gnome-ext/**'
       - 'tests/e2e/**'
+      - 'tests/gnome-references/**'
       - 'src/voice_to_text/**'
   push:
     branches:
       - main
     paths:
+      - '.github/workflows/gnome-visual-tests.yml'
+      - '.containerignore'
       - 'gnome-ext/**'
       - 'tests/e2e/**'
+      - 'tests/gnome-references/**'
       - 'src/voice_to_text/**'
 
 jobs:

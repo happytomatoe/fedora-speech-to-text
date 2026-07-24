@@ -107,9 +107,8 @@ Implementing automated visual regression testing for the GNOME Shell extension u
 ## Other Notes
 
 ### Container Management
-- Running container: `5f52f881a2ea` (voice-to-text-gnome-test)
-- To start fresh: `podman stop -a && podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK -td voice-to-text-gnome-test`
-- To access container: `podman exec 5f52f881a2ea set-env.sh <command>`
+- To start fresh: `podman stop voice-to-text-gnome-test 2>/dev/null; podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK -td voice-to-text-gnome-test`
+- To access container: `podman exec voice-to-text-gnome-test set-env.sh <command>`
 
 ### Key Scripts
 - `set-env.sh` - Sets DBUS_SESSION_BUS_ADDRESS and DISPLAY for user commands

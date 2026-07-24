@@ -2,9 +2,11 @@
 """Build the GNOME extension ZIP from the source tree."""
 import os
 import shutil
+import subprocess
+import tempfile
 import zipfile
 
-ext_dir = '/tmp/ext-build'
+ext_dir = tempfile.mkdtemp(prefix='ext-build-')
 src_dir = '/app/gnome-ext'
 out_zip = '/app/tests/gnome-references/voice-to-text@happytomatoe.com.shell-extension.zip'
 
@@ -20,7 +22,7 @@ for f in os.listdir(os.path.join(src_dir, 'schemas')):
     shutil.copy(os.path.join(src_dir, 'schemas', f), f'{ext_dir}/schemas')
 
 # Compile schemas
-os.system(f'glib-compile-schemas {ext_dir}/schemas')
+subprocess.run(['glib-compile-schemas', f'{ext_dir}/schemas'], check=True)
 
 # Create ZIP
 with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
