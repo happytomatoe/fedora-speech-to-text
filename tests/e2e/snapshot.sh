@@ -90,13 +90,13 @@ poll_until() {
 # Wait for user bus (skip wait-user-bus.sh which fails on degraded systemd)
 # Use direct podman exec (not do_in_pod) to avoid quoting issues with set-env.sh
 echo "Waiting for user bus..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
   if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
     echo " ready (${i}s)"
     break
   fi
-  if [[ $i -eq 30 ]]; then
-    echo " TIMEOUT after 30s"
+  if [[ $i -eq 60 ]]; then
+    echo " TIMEOUT after 60s"
     exit 1
   fi
   sleep 1

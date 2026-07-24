@@ -4,6 +4,8 @@
 FROM ghcr.io/schneegans/gnome-shell-pod-rawhide
 
 # Install system packages (ImageMagick, zip, etc.)
+# Enable user session lingering so D-Bus session bus starts at boot
+RUN loginctl enable-linger gnomeshell
 USER root
 RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 && \
     dnf clean all
