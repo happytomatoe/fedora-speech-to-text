@@ -56,7 +56,7 @@ do_in_pod() {
   podman exec --user gnomeshell --workdir /home/gnomeshell \
     -e XDG_RUNTIME_DIR=/run/user/1000 \
     -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-    -e DISPLAY=:99 \
+    -e DISPLAY=:100 \
     -e GSK_RENDERER=cairo \
     -e PIPEWIRE_RUNTIME_DIR=/tmp \
     -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
@@ -144,7 +144,7 @@ sleep 2  # Wait for service to fully stop
 
 # Start GNOME Shell first — this will D-Bus-activate the service with the new env file
 echo "Starting GNOME Shell..."
-do_in_pod systemctl --user start "gnome-xsession@:99"
+do_in_pod systemctl --user start "gnome-xsession@:100"
 
 # Wait for GNOME Shell to fully initialize
 poll_until "GNOME Shell" 30 1 do_in_pod gnome-extensions list
