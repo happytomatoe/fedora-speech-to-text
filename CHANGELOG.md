@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - None
 
 ### Fixed
-- None
+- **E2E preferences screenshots now capture actual content** — GNOME 47 renders extension preferences in-process via Clutter, so `xwd` couldn't capture them. Fixed by using `org.gnome.Shell.Eval` → `Shell.Screenshot` from inside gnome-shell, which reads `global.stage` directly. Requires `--unsafe-mode` enabled via systemd drop-in on `org.gnome.Shell@x11.service`.
 
 ### Security
 - None

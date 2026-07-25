@@ -247,28 +247,55 @@ done
 sleep 1
 
 # ============================================
-# State 2: Preferences dialog - verify window exists
-# (GNOME 47 renders prefs in-process via Clutter, not X11,
-#  so xwd cannot capture the window content)
+# State 2: Preferences dialog screenshot
+# GNOME 47 renders prefs in-process via Clutter (not X11).
+# xwd captures the X11 framebuffer, which misses Clutter content.
+# Solution: use org.gnome.Shell.Eval to call Shell.Screenshot
+# from inside gnome-shell, which captures the composited output.
 # ============================================
+screenshot_prefs() {
+  local output_path="/tmp/e2e-prefs.png"
+  # Capture full screen via Shell.Screenshot (runs inside gnome-shell via Eval)
+  # Shell.Screenshot reads global.stage directly — captures X11 + Clutter composited output
+  # API requires a Gio.FileOutputStream (not a filename string)
+  do_in_pod gdbus call --session \
+    --dest org.gnome.Shell \
+    --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Eval \
+    "const s = new Shell.Screenshot(); const file = Gio.File.new_for_path('${output_path}'); const stream = file.replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null); s.screenshot(false, stream, (obj, res) => { obj.screenshot_finish(res); });"
+  # Wait for async screenshot to complete
+  sleep 3
+  # Copy from container
+  podman cp "${POD}:${output_path}" "${1}" 2>/dev/null
+}
+
 echo ""
-echo "2. Preferences dialog (verification only)"
+echo "2. Preferences dialog"
 if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
   poll_until "preferences window" 10 1 do_in_pod xdotool search --name 'Voice.*Text'
   PREFS_WID=$(do_in_pod xdotool search --name 'Voice.*Text' 2>/dev/null | head -1)
   if [[ -n "${PREFS_WID}" ]]; then
-    echo "  ✓ Preferences window found (ID: ${PREFS_WID})"
+    echo "  Preferences window found (ID: ${PREFS_WID})"
     PREFS_GEOM=$(do_in_pod xdotool getwindowgeometry "${PREFS_WID}" 2>/dev/null)
-    echo "  ✓ Window geometry: ${PREFS_GEOM}"
+    echo "  Window geometry: ${PREFS_GEOM}"
     do_in_pod xdotool windowactivate "${PREFS_WID}" 2>/dev/null
     sleep 1
-    echo "  ✓ Preferences window verified"
+
+    # Capture screenshot via Shell.Screenshot (captures Clutter-rendered content)
+    PREFS_FILE="${DEST}/snapshot-prefs.png"
+    screenshot_prefs "${PREFS_FILE}"
+    if [[ -f "${PREFS_FILE}" ]]; then
+      echo "  Captured prefs screenshot via Shell.Screenshot"
+    else
+      echo "  Shell.Screenshot failed — falling back to window verification"
+      echo "  Preferences window verified (geometry: ${PREFS_GEOM})"
+    fi
   else
-    echo "  ✗ Preferences window not found"
+    echo "  Preferences window not found"
     TESTS_FAILED=$((TESTS_FAILED + 1))
   fi
 else
-  echo "  ✗ Failed to open preferences (extension not recognized)"
+  echo "  Failed to open preferences (extension not recognized)"
   TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 TESTS_RUN=$((TESTS_RUN + 1))

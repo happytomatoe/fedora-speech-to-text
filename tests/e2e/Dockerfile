@@ -46,10 +46,20 @@ RUN uv pip install --python /app-venv/bin/python \
 
 # Disable GNOME welcome tour by pre-seeding dconf database
 # This must be set BEFORE GNOME Shell starts (at build time, not runtime)
+# Also enable development-tools so org.gnome.Shell.Eval works for E2E screenshots
 RUN mkdir -p /etc/dconf/db/local.d && \
     echo '[org/gnome/shell]' > /etc/dconf/db/local.d/00-gnome-shell && \
     echo "welcome-dialog-last-shown-version='4294967295'" >> /etc/dconf/db/local.d/00-gnome-shell && \
+    echo "development-tools=true" >> /etc/dconf/db/local.d/00-gnome-shell && \
     dconf update
+
+# Create systemd drop-in to start gnome-shell with --unsafe-mode (enables Eval for E2E screenshots)
+# Eval() is guarded by global.context.unsafe_mode (not development-tools) since GNOME 41
+RUN mkdir -p /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d && \
+    echo '[Service]' > /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d/override.conf && \
+    echo 'ExecStart=' >> /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d/override.conf && \
+    echo 'ExecStart=/usr/bin/gnome-shell --unsafe-mode' >> /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d/override.conf && \
+    chown -R gnomeshell:users /home/gnomeshell/.config
 
 # Use smaller screen for faster tests (800x600) and display :100 to avoid host conflicts
 RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service && \
