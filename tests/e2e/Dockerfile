@@ -35,8 +35,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh -o /tmp/install-uv.sh && \
     bash /tmp/install-uv.sh && rm /tmp/install-uv.sh
 ENV PATH="/root/.local/bin:${PATH}"
 RUN uv python install 3.13 && \
-    uv venv --python 3.13 /app-venv && \
-    chmod 755 /root
+    uv venv --python 3.13 /app-venv
 
 # Install Python packages into the venv (no patching needed on 3.13)
 RUN uv pip install --python /app-venv/bin/python \
@@ -46,14 +45,14 @@ RUN uv pip install --python /app-venv/bin/python \
 
 # Disable GNOME welcome tour by pre-seeding dconf database
 # This must be set BEFORE GNOME Shell starts (at build time, not runtime)
-# Also enable development-tools so org.gnome.Shell.Eval works for E2E screenshots
+# Enable development-tools for E2E testing features
 RUN mkdir -p /etc/dconf/db/local.d && \
     echo '[org/gnome/shell]' > /etc/dconf/db/local.d/00-gnome-shell && \
     echo "welcome-dialog-last-shown-version='4294967295'" >> /etc/dconf/db/local.d/00-gnome-shell && \
     echo "development-tools=true" >> /etc/dconf/db/local.d/00-gnome-shell && \
     dconf update
 
-# Create systemd drop-in to start gnome-shell with --unsafe-mode (enables Eval for E2E screenshots)
+# Create systemd drop-in to start gnome-shell with --unsafe-mode (enables Eval for E2E prefs screenshots)
 # Eval() is guarded by global.context.unsafe_mode (not development-tools) since GNOME 41
 RUN mkdir -p /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d && \
     echo '[Service]' > /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d/override.conf && \
@@ -63,7 +62,7 @@ RUN mkdir -p /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d
 
 # Use smaller screen for faster tests (800x600) and display :100 to avoid host conflicts
 RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service && \
-    rm -f /etc/systemd/system/multi-user.target.wants/xvfb@:99.service && \
+    rm -f /etc/systemd/system/multi-user.target.wants/xvfb@:100.service && \
     ln -s /etc/systemd/system/xvfb@.service /etc/systemd/system/multi-user.target.wants/xvfb@:100.service
 
 # Copy the project source

@@ -20,7 +20,9 @@ for f in "${SRC_DIR}"/*.js "${SRC_DIR}"/*.json "${SRC_DIR}"/*.css; do
 done
 
 # Copy schema files
-cp "${SRC_DIR}"/schemas/* "${EXT_DIR}/schemas/"
+if ls "${SRC_DIR}"/schemas/* &>/dev/null; then
+  cp "${SRC_DIR}"/schemas/* "${EXT_DIR}/schemas/"
+fi
 
 # Compile schemas
 glib-compile-schemas "${EXT_DIR}/schemas"

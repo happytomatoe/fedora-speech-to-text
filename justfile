@@ -289,13 +289,13 @@ e2e-screenshot-test:
     done
     
     EXT_UUID="voice-to-text@happytomatoe.com"
-    EXT_ZIP="/app/tests/gnome-references/${EXT_UUID}.shell-extension.zip"
+    EXT_ZIP="/app/tests/e2e/expected/${EXT_UUID}.shell-extension.zip"
     
     do_in_pod() {
       podman exec --user gnomeshell --workdir /home/gnomeshell \
         -e XDG_RUNTIME_DIR=/run/user/1000 \
         -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-        -e DISPLAY=:99 \
+        -e DISPLAY=:100 \
         "$POD" "$@"
     }
     
@@ -306,7 +306,7 @@ e2e-screenshot-test:
     
     # Start GNOME Shell
     echo "Starting GNOME Shell..."
-    do_in_pod systemctl --user start "gnome-xsession@:99"
+    do_in_pod systemctl --user start "gnome-xsession@:100"
     
     # Wait for GNOME Shell to initialize
     echo -n "Waiting for GNOME Shell..."
@@ -380,7 +380,7 @@ container-watch:
     
     # Start VNC server with -noshm to fix MIT-SHM error
     echo "Starting VNC server on port 5900..."
-    podman exec --user gnomeshell -e DISPLAY=:99 -d $POD bash -c "nohup /usr/bin/x11vnc -display :99 -nopw -forever -shared -rfbport 5900 -noshm > /tmp/x11vnc.log 2>&1 &"
+    podman exec --user gnomeshell -e DISPLAY=:100 -d $POD bash -c "nohup /usr/bin/x11vnc -display :100 -nopw -forever -shared -rfbport 5900 -noshm > /tmp/x11vnc.log 2>&1 &"
     sleep 3
     
     # Verify it started

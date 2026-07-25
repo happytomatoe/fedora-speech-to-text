@@ -15,7 +15,8 @@ Usage:
 import asyncio
 import logging
 import os
-from typing import Any
+import random
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,6 @@ async def handle_debug_recording(
         # This gives visual feedback that recording started
         logger.info("DEBUG MODE: Simulating audio capture for %d seconds...", DEBUG_RECORDING_DURATION)
 
-        import random
 
         # Emit fake audio levels to show the indicator is working
         level = 0.0

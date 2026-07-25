@@ -313,7 +313,7 @@ class RecordingEngine:
                     # Output the result
                     if text and typer:
                         await typer.stream_diff(text)
-                    elif text and output_method == "clipboard":
+                    elif text and (output_method == "clipboard" or fallback_to_clipboard):
                         await asyncio.to_thread(_copy_to_clipboard, text)
 
                     logger.info("DEBUG MODE: Transcription complete")
@@ -323,7 +323,6 @@ class RecordingEngine:
                 # debug.py not available (production build) - continue with normal flow
                 logger.debug("Debug module not available, using normal recording flow")
 
-            # 4. Set up providers
             # 4. Set up providers
             provider = config.get("provider", "voxtral")
             mode = config.get("mode", "batch")

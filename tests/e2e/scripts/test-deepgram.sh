@@ -27,7 +27,7 @@ fi
 
 # Run container
 echo "Starting container..."
-POD=$(podman run --rm -td "${IMAGE}")
+POD=$(podman run --rm -d "${IMAGE}")
 
 cleanup() {
   podman kill "${POD}" 2>/dev/null || true
@@ -92,7 +92,7 @@ echo "=== Step 3: Testing Transcription ==="
 
 # Copy test audio file into container
 echo "Copying test audio file..."
-podman cp tests/e2e/test-audio.wav ${POD}:/home/gnomeshell/test-audio.wav
+podman cp tests/e2e/fixtures/test-audio.wav ${POD}:/home/gnomeshell/test-audio.wav
 
 # Run transcription test
 echo "Running transcription test..."

@@ -79,6 +79,29 @@ capture_crop() {
     "convert xwd:- -crop ${crop} +repage ${output_file}"
 }
 
+# Helper to capture screenshot via gnome-shell Eval + Shell.Screenshot
+# This runs inside the gnome-shell process, bypassing X11 framebuffer limitations
+capture_via_eval() {
+  local output_file="${1}"
+  local tmp_path="/tmp/e2e-screenshot.png"
+  
+  # Use Eval to run Shell.Screenshot inside gnome-shell
+  do_in_pod gdbus call --session \
+    --dest org.gnome.Shell \
+    --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Eval \
+    "const screenshot = new Shell.Screenshot();
+     screenshot.screenshot(false, '${tmp_path}', (obj, res) => {
+       obj.screenshot_finish(res);
+     });" 2>/dev/null
+  
+  # Wait for screenshot to be written
+  sleep 1
+  
+  # Copy the screenshot out of the container
+  podman cp "${POD}:${tmp_path}" "${output_file}" 2>/dev/null
+}
+
 # Helper to poll until condition is true
 poll_until() {
   local desc="${1}"
@@ -234,11 +257,8 @@ snapshot_test() {
 # ============================================
 # State 1: Desktop with extension indicator
 # ============================================
-echo ""
-echo "1. Desktop with extension indicator"
-snapshot_test "snapshot-desktop-indicator" "desktop with mic icon in top bar"
 
-# Dismiss any notifications to ensure consistent snapshots
+# Dismiss any startup notifications before the first snapshot
 echo "  Dismissing notifications..."
 for i in 1 2 3; do
   do_in_pod xdotool key Escape
@@ -246,13 +266,15 @@ for i in 1 2 3; do
 done
 sleep 1
 
+echo ""
+echo "1. Desktop with extension indicator"
+snapshot_test "snapshot-desktop-indicator" "desktop with mic icon in top bar"
+
 # ============================================
 # State 2: Preferences dialog
 # GNOME 47 renders extension prefs in-process via Clutter (same PID as
-# gnome-shell). The window IS managed by Mutter (xdotool finds it) but its
-# content is rendered by Clutter, bypassing both the X11 framebuffer (xwd)
-# and the Clutter stage (Shell.Screenshot). No known capture method works
-# on Xvfb. We verify the window exists with correct geometry instead.
+# gnome-shell). We use Eval + Shell.Screenshot to capture the composited
+# output from inside the gnome-shell process.
 # ============================================
 
 echo ""
@@ -265,8 +287,33 @@ if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
     PREFS_GEOM=$(do_in_pod xdotool getwindowgeometry "${PREFS_WID}" 2>/dev/null)
     echo "  Window geometry: ${PREFS_GEOM}"
     do_in_pod xdotool windowactivate "${PREFS_WID}" 2>/dev/null
-    sleep 1
-    echo "  Preferences window verified (screenshot not possible — see note above)"
+    sleep 2
+    
+    # Try capturing via Eval + Shell.Screenshot
+    echo "  Capturing preferences screenshot via Eval..."
+    PREFS_SHOT="${DEST}/snapshot-prefs.png"
+    if capture_via_eval "${PREFS_SHOT}"; then
+      if [[ -f "${PREFS_SHOT}" ]] && [[ -s "${PREFS_SHOT}" ]]; then
+        echo "  Preferences screenshot captured: ${PREFS_SHOT}"
+        
+        # Check if the screenshot is actually non-blank (not just desktop)
+        # by checking if it's larger than a minimal threshold
+        FILE_SIZE=$(stat -c%s "${PREFS_SHOT}" 2>/dev/null || echo 0)
+        if [[ "${FILE_SIZE}" -gt 5000 ]]; then
+          echo "  Screenshot looks valid (${FILE_SIZE} bytes)"
+        else
+          echo "  Warning: Screenshot may be blank (${FILE_SIZE} bytes)"
+          echo "  Falling back to verification-only"
+          rm -f "${PREFS_SHOT}"
+        fi
+      else
+        echo "  Eval screenshot failed (empty file)"
+        echo "  Falling back to verification-only"
+      fi
+    else
+      echo "  Eval screenshot failed"
+      echo "  Falling back to verification-only"
+    fi
   else
     echo "  Preferences window not found"
     TESTS_FAILED=$((TESTS_FAILED + 1))

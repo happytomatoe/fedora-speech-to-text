@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -62,7 +64,8 @@ jobs:
             try {
               diffFiles = fs.readdirSync(outputDir)
                 .filter(f => f.endsWith('-diff.png'));
-            } catch {
+            } catch (e) {
+              console.error(e);
               return; // no output dir means tests didn't run
             }
             

@@ -197,7 +197,11 @@ export const VoiceIndicator = GObject.registerClass(
                     } else {
                         cr.lineTo(fillW, h);
                     }
-                    _drawRoundedRect(cr, 0, 0, radius, h, radius);
+                    cr.lineTo(radius, h);
+                    cr.arc(radius, h - radius, radius, Math.PI / 2, Math.PI);
+                    cr.lineTo(0, radius);
+                    cr.arc(radius, radius, radius, Math.PI, Math.PI * 1.5);
+                    cr.closePath();
 
                     if (level < 0.13) {
                         cr.setSourceRGBA(0.4, 0.4, 0.4, 0.7);
