@@ -1,15 +1,33 @@
 # Custom container for visual regression testing of the GNOME extension.
-# Extends gnome-shell-pod-rawhide with Python D-Bus service for E2E testing.
+# Extends gnome-shell-pod-41 with Python D-Bus service for E2E testing.
+# NOTE: This is a DEBUG/E2E build that includes voice_to_text/debug.py
+# For production builds, remove debug.py after copying:
+#   RUN rm -f /app/src/voice_to_text/debug.py
+# The debug module provides VOICE_TO_TEXT_DEBUG_FILE support for testing
+# with pre-recorded audio files instead of a microphone.
 
-FROM ghcr.io/schneegans/gnome-shell-pod-rawhide
+# Build stage: compile dotool from source
+FROM fedora:41 AS dotool-builder
+RUN dnf install -y golang git libxkbcommon-devel pkgconf && dnf clean all
+RUN git clone https://git.sr.ht/~geb/dotool /tmp/dotool && \
+    cd /tmp/dotool && go build -ldflags "-X main.Version=1.0"
+
+# Main stage
+FROM ghcr.io/schneegans/gnome-shell-pod-41
+
+# Copy dotool from builder (dotool is a Go binary; dotoolc and dotoold are shell scripts)
+COPY --from=dotool-builder /tmp/dotool/dotool /usr/local/bin/dotool
+COPY --from=dotool-builder /tmp/dotool/dotoolc /usr/local/bin/dotoolc
+COPY --from=dotool-builder /tmp/dotool/dotoold /usr/local/bin/dotoold
 
 # Install system packages (ImageMagick, zip, etc.)
 # Enable user session lingering so D-Bus session bus starts at boot
 # (can't use loginctl during build - systemd not running as PID 1)
 RUN mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/gnomeshell
 USER root
-RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 && \
+RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 pipewire-utils xdotool && \
     dnf clean all
+RUN dnf update -y --nogpgcheck libwayland-server libei libeis && dnf clean all
 
 # Install uv and create a venv with pinned Python 3.13
 # This avoids the dnf Python 3.13→3.15 upgrade entirely
@@ -47,9 +65,15 @@ RUN bash /app/tests/e2e/build-ext-zip.sh
 RUN VENV_SITE="/app-venv/lib/python3.13/site-packages" && \
     cp -r /app/src/voice_to_text "${VENV_SITE}/" && \
     mkdir -p /home/gnomeshell/.local/share/dbus-1/services/ /home/gnomeshell/.local/bin/ /home/gnomeshell/.config/voice-to-text && \
-    cp /app/service/com.happytomatoe.VoiceToText.service /home/gnomeshell/.local/share/dbus-1/services/ && \
+    # Write D-Bus service file with inline env sourcing (avoids timing issues)
+    # The env file is written before GNOME Shell starts, so it will be available
+    echo '[D-BUS Service]' > /home/gnomeshell/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service && \
+    echo 'Name=com.happytomatoe.VoiceToText' >> /home/gnomeshell/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service && \
+    echo 'Exec=/bin/sh -c '\"'. /home/gnomeshell/.config/voice-to-text/env 2>/dev/null; exec /app-venv/bin/python -m voice_to_text'\"'' >> /home/gnomeshell/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service && \
     cp /app/tests/e2e/voice-to-text.conf /home/gnomeshell/.config/voice-to-text/config.yaml && \
     echo '#!/bin/sh' > /home/gnomeshell/.local/bin/voice-to-text-dbus && \
+    echo '# Source environment variables if they exist' >> /home/gnomeshell/.local/bin/voice-to-text-dbus && \
+    echo 'test -f /home/gnomeshell/.config/voice-to-text/env && . /home/gnomeshell/.config/voice-to-text/env' >> /home/gnomeshell/.local/bin/voice-to-text-dbus && \
     echo 'exec /app-venv/bin/python -m voice_to_text "$@"' >> /home/gnomeshell/.local/bin/voice-to-text-dbus && \
     chmod +x /home/gnomeshell/.local/bin/voice-to-text-dbus && \
     chown -R gnomeshell:users /home/gnomeshell/.local /home/gnomeshell/.config

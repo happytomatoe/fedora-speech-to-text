@@ -6,7 +6,6 @@
 # Without --update: compares against existing references
 
 set -e
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/../.."
 REFERENCES_DIR="${SCRIPT_DIR}/../gnome-references"
@@ -25,12 +24,17 @@ cd "${PROJECT_ROOT}"
 IMAGE="voice-to-text-e2e"
 if ! podman image exists "${IMAGE}"; then
   echo "Building test container..."
-  podman build -t "${IMAGE}" -f tests/e2e/Containerfile .
+  podman build -t "${IMAGE}" -f tests/e2e/Dockerfile .
 fi
 
 # Run container
 echo "Starting container..."
-POD=$(podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK -td "${IMAGE}")
+POD=$(podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK \
+  --net=host --ipc=host \
+  -v "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0:/tmp/pipewire-0:ro" \
+  -e PIPEWIRE_RUNTIME_DIR=/tmp \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -td "${IMAGE}")
 
 if [[ "${UPDATE_MODE}" == "true" ]]; then
   mkdir -p "${REFERENCES_DIR}"
@@ -47,9 +51,11 @@ trap cleanup EXIT
 # Bypass set-env.sh to avoid eval quoting issues with special chars like @
 do_in_pod() {
   podman exec --user gnomeshell --workdir /home/gnomeshell \
+    -e XDG_RUNTIME_DIR=/run/user/1000 \
     -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
     -e DISPLAY=:99 \
     -e GSK_RENDERER=cairo \
+    -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
     -e PATH=/app-venv/bin:/usr/local/bin:/usr/bin:/bin \
     "${POD}" "$@"
 }
@@ -118,9 +124,30 @@ do_in_pod gnome-extensions install "${EXTENSION_ZIP}" --force
 echo "Enabling extension..."
 do_in_pod dconf write /org/gnome/shell/enabled-extensions "['${EXTENSION_UUID}']"
 
-# Start GNOME Shell
+# Write DEEPGRAM_API_KEY to a file for the D-Bus service to source
+echo "Writing API key to container..."
+do_in_pod bash -c "echo 'export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}' > /home/gnomeshell/.config/voice-to-text/env"
+
+# Kill any running D-Bus service instance (it was started without the API key)
+do_in_pod pkill -f voice-to-text-dbus 2>/dev/null || true
+sleep 1
+
+# Start GNOME Shell first — this will D-Bus-activate the service with the new env file
 echo "Starting GNOME Shell..."
 do_in_pod systemctl --user start "gnome-xsession@:99"
+
+# Wait for GNOME Shell to fully initialize
+poll_until "GNOME Shell" 30 1 do_in_pod gnome-extensions list
+
+# Wait for D-Bus service to be activated by GNOME Shell
+echo "Waiting for D-Bus service to start with API key..."
+for i in $(seq 1 10); do
+  if do_in_pod busctl --user list 2>/dev/null | grep -q com.happytomatoe.VoiceToText; then
+    echo "  D-Bus service is running"
+    break
+  fi
+  sleep 1
+done
 
 # Wait for GNOME Shell to fully initialize
 poll_until "GNOME Shell" 30 1 do_in_pod gnome-extensions list
@@ -253,20 +280,68 @@ do_in_pod xdotool keyup alt
 echo ""
 echo "3. Recording state"
 
-# Start D-Bus service in background if not already running
-echo "  Starting D-Bus service..."
-do_in_pod bash -c '/home/gnomeshell/.local/bin/voice-to-text-dbus &'
+# D-Bus service should already be running (activated by GNOME Shell)
+# Just check if it's available and get logs
+echo "  Checking D-Bus service..."
+DBUS_LOG="/home/gnomeshell/.config/voice-to-text/dbus-service.log"
+
+# Check if service is already running
+if do_in_pod busctl --user list 2>/dev/null | grep -q com.happytomatoe.VoiceToText; then
+  echo "  D-Bus service is already running (activated by GNOME Shell)"
+else
+  echo "  Starting D-Bus service..."
+  do_in_pod bash -c "rm -f ${DBUS_LOG}; /home/gnomeshell/.local/bin/voice-to-text-dbus > ${DBUS_LOG} 2>&1 &"
+  sleep 3
+fi
+
+# Get logs from systemd journal (D-Bus activation logs go to journal, not file)
+echo "  Service logs:"
+do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "voice_to_text\|VoiceToText" | head -10 || echo "  No logs yet"
+
+# Copy test audio file into container
+TEST_AUDIO="/app/tests/e2e/test-audio.wav"
+echo "  Copying test audio file..."
+podman cp "${TEST_AUDIO}" "${POD}:/home/gnomeshell/test-audio.wav" 2>/dev/null || true
+do_in_pod chmod 644 /home/gnomeshell/test-audio.wav 2>/dev/null || true
+
+# Create pipewire loopback device for audio routing
+# This creates a virtual sink (loopback_sink) and source (loopback_source)
+# Audio played to loopback_sink will appear on loopback_source for recording
+echo "  Creating pipewire loopback..."
+do_in_pod bash -c "pw-loopback --capture.props='node.name=loopback_source media.class=Audio/Source' --playback.props='node.name=loopback_sink media.class=Audio/Sink' &" 2>/dev/null || true
 sleep 2
+
+# Set loopback_source as the default source so recording picks up audio
+echo "  Setting default source to loopback_source..."
+do_in_pod bash -c "sleep 1 && wpctl status | grep loopback_source | awk '{print \$2}' | xargs -I{} wpctl set-default {}" 2>/dev/null || true
+
+# Debug: show wpctl status to verify loopback is created
+echo "  Debug: wpctl status after loopback creation:"
+do_in_pod bash -c "wpctl status" 2>/dev/null | head -30 || echo "  wpctl status failed"
 
 # Start recording via D-Bus
 if do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{"provider": "deepgram", "output_method": "search"}' 2>/dev/null; then
   # Wait for notification to appear and recording to start
   sleep 2
+  
+  # Play test audio through loopback device
+  echo "  Playing test audio through loopback..."
+  do_in_pod pw-play -d loopback_sink /home/gnomeshell/test-audio.wav 2>/dev/null &
+  AUDIO_PID=$!
+  
+  # Wait for audio to start playing and levels to update
+  sleep 3
   snapshot_test "snapshot-recording" "recording state with notification"
   
   # Capture cropped screenshot of the recording indicator area (top bar)
-  # The microphone icon with audio level is in the top-left area
-  snapshot_test "snapshot-recording-indicator" "recording indicator with audio level" "crop:100x30+0+0"
+  # The microphone icon with audio level is in the top-right area
+  # Meter is 50x6 pixels, positioned to the right of the microphone icon
+  snapshot_test "snapshot-recording-indicator" "recording indicator with audio level" "crop:80x25+655+2"
+  
+  # Wait for audio to finish playing
+  wait $AUDIO_PID 2>/dev/null || true
+  sleep 1
+  
   # Stop recording (ignore errors - may have already failed)
   do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StopRecording 2>/dev/null || true
   sleep 1
@@ -275,12 +350,37 @@ else
 fi
 
 # ============================================
-# State 4: Transcription result typed into terminal
+# State 4: Transcription result from Deepgram
 # ============================================
 echo ""
 echo "4. Transcription result"
 
-# Open terminal (xdotool type needs a focused window)
+# Wait for transcription to complete (Deepgram needs time to process)
+echo "  Waiting for Deepgram transcription..."
+for i in $(seq 1 30); do
+  if do_in_pod journalctl --user --no-pager 2>/dev/null | grep -qi "transcri"; then
+    echo "  Transcription detected in logs"
+    break
+  fi
+  sleep 1
+done
+
+# Show D-Bus service logs from journal
+echo ""
+echo "=== D-Bus Service Logs (from systemd journal) ==="
+do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "voice_to_text\|VoiceToText\|deepgram\|transcri\|result" | tail -20 || echo "  No logs available"
+echo "=== End Logs ==="
+echo ""
+
+# Extract transcription result from journal logs
+TRANSCRIPTION=$(do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "Transcription result:" | tail -1 | sed 's/.*Transcription result: //' || true)
+if [[ -z "${TRANSCRIPTION}" ]]; then
+  TRANSCRIPTION="(empty - no speech detected in audio)"
+fi
+echo "  Transcription from logs: ${TRANSCRIPTION:-none found}"
+echo ""
+
+# Open terminal and show the result
 do_in_pod gnome-terminal &
 sleep 3
 
@@ -290,8 +390,14 @@ if [[ -n "${TERM_WID}" ]]; then
   do_in_pod xdotool windowactivate "${TERM_WID}"
   sleep 0.5
 
-  # Type transcription text
-  do_in_pod xdotool type --delay 30 "Hello world from voice to text"
+  # Type the actual transcription result if we found one
+  if [[ -n "${TRANSCRIPTION}" ]] && [[ "${TRANSCRIPTION}" != *"("* ]]; then
+    echo "  Typing transcription: ${TRANSCRIPTION}"
+    do_in_pod xdotool type --delay 30 "${TRANSCRIPTION}"
+  else
+    echo "  Using fallback text (no transcription found)"
+    do_in_pod xdotool type --delay 30 "Hello world from voice to text (fallback - check logs for actual transcription)"
+  fi
   sleep 2
 
   snapshot_test "snapshot-transcription" "transcription typed into terminal"
@@ -303,6 +409,43 @@ else
   echo "  Skipping transcription (terminal window not found)"
 fi
 
+echo ""
+echo "========================================="
+# Save D-Bus service logs from systemd journal
+mkdir -p "${OUTPUT_DIR}"
+echo ""
+echo "Saving D-Bus service logs from journal..."
+do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "voice_to_text\|VoiceToText\|deepgram\|transcri" > "${OUTPUT_DIR}/dbus-service.log" 2>/dev/null || true
+if [[ -s "${OUTPUT_DIR}/dbus-service.log" ]]; then
+  echo "  Logs saved to: ${OUTPUT_DIR}/dbus-service.log"
+  echo ""
+  echo "=== D-Bus Service Log Contents ==="
+  cat "${OUTPUT_DIR}/dbus-service.log"
+  echo "=== End Log Contents ==="
+else
+  echo "  No voice-to-text logs found in journal"
+fi
+
+# Save audio files and transcription
+echo ""
+echo "Saving artifacts..."
+
+# Copy the test audio file (input)
+if [[ -f "${TEST_AUDIO}" ]]; then
+  cp "${TEST_AUDIO}" "${OUTPUT_DIR}/test-audio-input.wav" 2>/dev/null || true
+  echo "  Test audio input saved to: ${OUTPUT_DIR}/test-audio-input.wav"
+fi
+
+# Save the transcription result
+echo "${TRANSCRIPTION}" > "${OUTPUT_DIR}/transcription.txt" 2>/dev/null || true
+echo "  Transcription saved to: ${OUTPUT_DIR}/transcription.txt"
+echo "  Transcription text: ${TRANSCRIPTION}"
+
+# Try to copy recorded audio files from /tmp (where sounddevice saves them)
+for AUDIO_FILE in $(podman exec --user gnomeshell "${POD}" find /tmp -name "*.wav" -type f 2>/dev/null | head -5); do
+  podman cp "${POD}:${AUDIO_FILE}" "${OUTPUT_DIR}/recorded-audio.wav" 2>/dev/null && \
+    echo "  Recorded audio saved to: ${OUTPUT_DIR}/recorded-audio.wav" && break
+done
 echo ""
 echo "========================================="
 
