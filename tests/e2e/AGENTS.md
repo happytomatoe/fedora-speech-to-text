@@ -32,7 +32,7 @@ E2E tests verify the GNOME extension's visual appearance using screenshot compar
 2. Screenshots captured via: `podman cp <container>:/opt/Xvfb_screen0 - | tar xf - --to-command "convert xwd:- output.png"` (ImageMagick)
 3. **Extension icon location**: The microphone/recording indicator is in the **top-right corner** of the GNOME top bar
 4. Audio level captured with crop: `convert xwd:- -crop 80x25+655+2 +repage output.png` (top-right panel area for extension indicator)
-5. **Preferences screenshots** use `org.gnome.Shell.Eval` → `Shell.Screenshot` instead of xwd, because GNOME 47 renders extension prefs in-process via Clutter (not X11). `--unsafe-mode` is enabled via systemd drop-in on `org.gnome.Shell@x11.service` (Eval is guarded by `global.context.unsafe_mode`, not `development-tools`).
+5. **Preferences**: Cannot be captured via screenshot. GNOME 47 renders extension prefs in-process via Clutter (same PID as gnome-shell). The window is managed by Mutter (xdotool finds it) but its Clutter-rendered content bypasses both the X11 framebuffer (xwd) and the Clutter stage (Shell.Screenshot). We verify the window exists with correct geometry instead. `--unsafe-mode` is enabled via systemd drop-in for potential future use.
 6. Comparison: `compare -metric MSE reference.png actual.png diff.png` — MSE < 100 = pass
 
 ## Running Tests
@@ -62,4 +62,4 @@ export DEEPGRAM_API_KEY=your_key_here
 - **Do NOT try to fix PipeWire loopback** — it's not needed for visual testing
 - **Do NOT add microphone tests** — the audio level meter shows empty by design
 - The transcription test uses a pre-recorded file, not live audio
-- **Preferences screenshots**: GNOME 47 runs extension prefs in-process via Clutter, so xwd can't capture them. Instead, we use `org.gnome.Shell.Eval` to call `Shell.Screenshot` from inside gnome-shell (via `Gio.FileOutputStream`), which reads `global.stage` directly and captures the composited output (X11 + Clutter). This requires `--unsafe-mode` enabled via systemd drop-in on `org.gnome.Shell@x11.service` (Eval is guarded by `global.context.unsafe_mode` since GNOME 41).
+- **Preferences screenshots are NOT possible**: GNOME 47 runs extension prefs in-process via Clutter. The window is managed by Mutter (xdotool finds it) but its content is rendered by Clutter, bypassing both the X11 framebuffer (`xwd`) and the Clutter stage (`Shell.Screenshot`). The D-Bus `ScreenshotWindow` method returns success but captures blank. We verify the window exists with correct geometry instead. `--unsafe-mode` is enabled via systemd drop-in on `org.gnome.Shell@x11.service` (Eval is guarded by `global.context.unsafe_mode` since GNOME 41).
