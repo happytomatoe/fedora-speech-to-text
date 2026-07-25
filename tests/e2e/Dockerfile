@@ -59,7 +59,7 @@ COPY . /app
 WORKDIR /app
 
 # Build the GNOME extension ZIP
-RUN bash /app/tests/e2e/build-ext-zip.sh
+RUN mkdir -p /app/tests/e2e/expected && bash /app/tests/e2e/scripts/build-ext-zip.sh
 
 # Install Python voice-to-text package into the venv
 RUN VENV_SITE="/app-venv/lib/python3.13/site-packages" && \
@@ -70,7 +70,7 @@ RUN VENV_SITE="/app-venv/lib/python3.13/site-packages" && \
     echo '[D-BUS Service]' > /home/gnomeshell/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service && \
     echo 'Name=com.happytomatoe.VoiceToText' >> /home/gnomeshell/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service && \
     echo 'Exec=/bin/sh -c '\"'. /home/gnomeshell/.config/voice-to-text/env 2>/dev/null; exec /app-venv/bin/python -m voice_to_text'\"'' >> /home/gnomeshell/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service && \
-    cp /app/tests/e2e/voice-to-text.conf /home/gnomeshell/.config/voice-to-text/config.yaml && \
+    cp /app/tests/e2e/fixtures/voice-to-text.conf /home/gnomeshell/.config/voice-to-text/config.yaml && \
     echo '#!/bin/sh' > /home/gnomeshell/.local/bin/voice-to-text-dbus && \
     echo '# Source environment variables if they exist' >> /home/gnomeshell/.local/bin/voice-to-text-dbus && \
     echo 'test -f /home/gnomeshell/.config/voice-to-text/env && . /home/gnomeshell/.config/voice-to-text/env' >> /home/gnomeshell/.local/bin/voice-to-text-dbus && \

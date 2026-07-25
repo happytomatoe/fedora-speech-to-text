@@ -3,10 +3,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/../.."
+PROJECT_ROOT="${SCRIPT_DIR}/../../.."
 SRC_DIR="${PROJECT_ROOT}/gnome-ext"
 EXT_DIR=$(mktemp -d)
-OUT_ZIP="${PROJECT_ROOT}/tests/gnome-references/voice-to-text@happytomatoe.com.shell-extension.zip"
+OUT_ZIP="${PROJECT_ROOT}/tests/e2e/expected/voice-to-text@happytomatoe.com.shell-extension.zip"
 
 trap "rm -rf ${EXT_DIR}" EXIT
 

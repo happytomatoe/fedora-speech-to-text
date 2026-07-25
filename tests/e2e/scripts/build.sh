@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/../.."
+PROJECT_ROOT="${SCRIPT_DIR}/../../.."
 
 echo "Building test container..."
 podman build -t voice-to-text-gnome-test -f "${SCRIPT_DIR}/Containerfile" "${PROJECT_ROOT}"

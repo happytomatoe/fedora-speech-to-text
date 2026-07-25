@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/../.."
+PROJECT_ROOT="${SCRIPT_DIR}/../../.."
 REFERENCES_DIR="${SCRIPT_DIR}/../gnome-references"
 OUTPUT_DIR="${SCRIPT_DIR}/../gnome-output"
 EXTENSION_UUID="voice-to-text@happytomatoe.com"

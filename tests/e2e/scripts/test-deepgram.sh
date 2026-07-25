@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/../.."
+PROJECT_ROOT="${SCRIPT_DIR}/../../.."
 IMAGE="voice-to-text-e2e"
 
 cd "${PROJECT_ROOT}"

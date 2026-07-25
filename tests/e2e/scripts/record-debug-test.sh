@@ -7,7 +7,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/../.."
+PROJECT_ROOT="${SCRIPT_DIR}/../../.."
 OUTPUT_DIR="${SCRIPT_DIR}/../e2e-output"
 
 cd "${PROJECT_ROOT}"

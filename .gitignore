@@ -71,6 +71,7 @@ thoughts/
 tests/gnome-snapshots/
 tests/gnome-output/
 tests/e2e-output/
+tests/e2e/output/
 tests/gnome-references/*.zip
 
 

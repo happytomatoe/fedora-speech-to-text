@@ -7,11 +7,12 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/../.."
-REFERENCES_DIR="${SCRIPT_DIR}/../gnome-references"
-OUTPUT_DIR="${SCRIPT_DIR}/../gnome-output"
+PROJECT_ROOT="${SCRIPT_DIR}/../../.."
+REFERENCES_DIR="${SCRIPT_DIR}/../expected"
+OUTPUT_DIR="${SCRIPT_DIR}/../output"
+FIXTURES_DIR="${SCRIPT_DIR}/../fixtures"
 EXTENSION_UUID="voice-to-text@happytomatoe.com"
-EXTENSION_ZIP="/app/tests/gnome-references/${EXTENSION_UUID}.shell-extension.zip"
+EXTENSION_ZIP="/app/tests/e2e/expected/${EXTENSION_UUID}.shell-extension.zip"
 
 UPDATE_MODE=false
 if [[ "${1:-}" == "--update" ]]; then
@@ -299,7 +300,7 @@ echo "  Service logs:"
 do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "voice_to_text\|VoiceToText" | head -10 || echo "  No logs yet"
 
 # Copy test audio file into container
-TEST_AUDIO="/app/tests/e2e/test-audio.wav"
+TEST_AUDIO="/app/tests/e2e/fixtures/test-audio.wav"
 echo "  Copying test audio file..."
 podman cp "${TEST_AUDIO}" "${POD}:/home/gnomeshell/test-audio.wav" 2>/dev/null || true
 do_in_pod chmod 644 /home/gnomeshell/test-audio.wav 2>/dev/null || true
