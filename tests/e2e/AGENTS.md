@@ -7,7 +7,7 @@ E2E tests verify the GNOME extension's visual appearance using screenshot compar
 ## What We Test
 
 - Desktop with extension indicator (mic icon in top bar)
-- Preferences dialog (top, bottom, end)
+- Preferences dialog verification (window exists, correct geometry)
 - Recording state with notification
 - Recording indicator with audio level meter
 - Transcription result typed into terminal
@@ -61,3 +61,4 @@ export DEEPGRAM_API_KEY=your_key_here
 - **Do NOT try to fix PipeWire loopback** — it's not needed for visual testing
 - **Do NOT add microphone tests** — the audio level meter shows empty by design
 - The transcription test uses a pre-recorded file, not live audio
+- **Preferences screenshots are skipped** — GNOME 47 runs extension prefs in-process via Clutter, which cannot be captured by xwd. Instead, we verify the prefs window exists and has correct geometry.
