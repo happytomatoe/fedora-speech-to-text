@@ -33,6 +33,13 @@ repos:
         types: [text]
         files: ^gnome-ext/.*\.(js|css|json)$
         pass_filenames: true
+      - id: jscpd
+        name: jscpd (copy-paste detection)
+        entry: npx jscpd
+        language: system
+        types_or: [python, javascript]
+        files: ^(src/|gnome-ext/)
+        pass_filenames: false
       - id: pytest
         name: pytest
         entry: uv run pytest -n auto

@@ -48,6 +48,8 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 ### E2E / Snapshot tests
 
+See `tests/e2e/AGENTS.md` for detailed instructions.
+
 E2E tests run in a containerized GNOME Shell (Xvfb + Podman) and capture screenshots for visual regression:
 
 - `tests/e2e/snapshot.sh` — main script. Captures screenshots of desktop, preferences, recording state (with audio level), and transcription result.
