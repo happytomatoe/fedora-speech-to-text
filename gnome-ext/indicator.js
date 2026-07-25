@@ -9,6 +9,20 @@ const METER_WIDTH = 50;
 const METER_HEIGHT = 6;
 const SMOOTH = 0.6;
 
+/** Draw a rounded rectangle path on the cairo context. */
+function _drawRoundedRect(cr, x, y, w, h, radius) {
+    cr.moveTo(x + radius, y);
+    cr.lineTo(x + w - radius, y);
+    cr.arc(x + w - radius, y + radius, radius, -Math.PI / 2, 0);
+    cr.lineTo(x + w, y + h - radius);
+    cr.arc(x + w - radius, y + h - radius, radius, 0, Math.PI / 2);
+    cr.lineTo(x + radius, y + h);
+    cr.arc(x + radius, y + h - radius, radius, Math.PI / 2, Math.PI);
+    cr.lineTo(x, y + radius);
+    cr.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    cr.closePath();
+}
+
 export const VoiceIndicator = GObject.registerClass(
     class VoiceIndicator extends PanelMenu.Button {
         _init() {
@@ -47,11 +61,11 @@ export const VoiceIndicator = GObject.registerClass(
             });
             this._box.add_child(this._icon);
 
-            this._spinner = new St.Widget({
+            this._spinner = new St.Icon({
+                icon_name: 'process-working-symbolic',
                 style_class: 'system-status-icon',
                 visible: false,
             });
-            this._spinner.set_content(new St.SpinnerContent());
             this._box.add_child(this._spinner);
 
             const spacer1 = new St.Widget({x_expand: true});
@@ -168,17 +182,7 @@ export const VoiceIndicator = GObject.registerClass(
 
                 // Background
                 const radius = 2;
-                cr.moveTo(radius, 0);
-                cr.lineTo(w - radius, 0);
-                cr.arc(w - radius, radius, radius, -Math.PI / 2, 0);
-                cr.lineTo(w, h - radius);
-                cr.arc(w - radius, h - radius, radius, 0, Math.PI / 2);
-                cr.lineTo(radius, h);
-                cr.arc(radius, h - radius, radius, Math.PI / 2, Math.PI);
-                cr.lineTo(0, radius);
-                cr.arc(radius, radius, radius, Math.PI, Math.PI * 1.5);
-                cr.closePath();
-
+                _drawRoundedRect(cr, 0, 0, w, h, radius);
                 cr.setSourceRGBA(0.5, 0.5, 0.5, 0.3);
                 cr.fill();
 
@@ -193,11 +197,7 @@ export const VoiceIndicator = GObject.registerClass(
                     } else {
                         cr.lineTo(fillW, h);
                     }
-                    cr.lineTo(radius, h);
-                    cr.arc(radius, h - radius, radius, Math.PI / 2, Math.PI);
-                    cr.lineTo(0, radius);
-                    cr.arc(radius, radius, radius, Math.PI, Math.PI * 1.5);
-                    cr.closePath();
+                    _drawRoundedRect(cr, 0, 0, radius, h, radius);
 
                     if (level < 0.13) {
                         cr.setSourceRGBA(0.4, 0.4, 0.4, 0.7);
