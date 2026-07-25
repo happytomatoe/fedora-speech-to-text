@@ -35,6 +35,8 @@ POD=$(podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK \
   -v "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0:/tmp/pipewire-0:ro" \
   -e PIPEWIRE_RUNTIME_DIR=/tmp \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
+  -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
   -td "${IMAGE}")
 
 if [[ "${UPDATE_MODE}" == "true" ]]; then
@@ -56,6 +58,8 @@ do_in_pod() {
     -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
     -e DISPLAY=:99 \
     -e GSK_RENDERER=cairo \
+    -e PIPEWIRE_RUNTIME_DIR=/tmp \
+    -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
     -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
     -e PATH=/app-venv/bin:/usr/local/bin:/usr/bin:/bin \
     "${POD}" "$@"
@@ -125,13 +129,18 @@ do_in_pod gnome-extensions install "${EXTENSION_ZIP}" --force
 echo "Enabling extension..."
 do_in_pod dconf write /org/gnome/shell/enabled-extensions "['${EXTENSION_UUID}']"
 
-# Write DEEPGRAM_API_KEY to a file for the D-Bus service to source
-echo "Writing API key to container..."
-do_in_pod bash -c "echo 'export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}' > /home/gnomeshell/.config/voice-to-text/env"
+# Write environment variables to a file for the D-Bus service to source
+echo "Writing environment variables to container..."
+do_in_pod bash -c "cat > /home/gnomeshell/.config/voice-to-text/env << 'EOF'
+export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
+export VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav
+EOF"
+sleep 1  # Ensure file is written before service reads it
 
 # Kill any running D-Bus service instance (it was started without the API key)
 do_in_pod pkill -f voice-to-text-dbus 2>/dev/null || true
-sleep 1
+do_in_pod pkill -f 'python -m voice_to_text' 2>/dev/null || true
+sleep 2  # Wait for service to fully stop
 
 # Start GNOME Shell first — this will D-Bus-activate the service with the new env file
 echo "Starting GNOME Shell..."
@@ -305,50 +314,26 @@ echo "  Copying test audio file..."
 podman cp "${TEST_AUDIO}" "${POD}:/home/gnomeshell/test-audio.wav" 2>/dev/null || true
 do_in_pod chmod 644 /home/gnomeshell/test-audio.wav 2>/dev/null || true
 
-# Create pipewire loopback device for audio routing
-# This creates a virtual sink (loopback_sink) and source (loopback_source)
-# Audio played to loopback_sink will appear on loopback_source for recording
-echo "  Creating pipewire loopback..."
-do_in_pod bash -c "pw-loopback --capture.props='node.name=loopback_source media.class=Audio/Source' --playback.props='node.name=loopback_sink media.class=Audio/Sink' &" 2>/dev/null || true
-sleep 2
-
-# Set loopback_source as the default source so recording picks up audio
-echo "  Setting default source to loopback_source..."
-do_in_pod bash -c "sleep 1 && wpctl status | grep loopback_source | awk '{print \$2}' | xargs -I{} wpctl set-default {}" 2>/dev/null || true
-
-# Debug: show wpctl status to verify loopback is created
-echo "  Debug: wpctl status after loopback creation:"
-do_in_pod bash -c "wpctl status" 2>/dev/null | head -30 || echo "  wpctl status failed"
-
 # Start recording via D-Bus
+# Debug mode will simulate audio levels and transcribe the test file
 if do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{"provider": "deepgram", "output_method": "search"}' 2>/dev/null; then
-  # Wait for notification to appear and recording to start
-  sleep 2
+  # Debug mode simulates audio for 3 seconds, then transcribes
+  echo "  Recording started (debug mode will simulate audio)..."
+  sleep 5  # Wait for debug mode to finish audio simulation
   
-  # Play test audio through loopback device
-  echo "  Playing test audio through loopback..."
-  do_in_pod pw-play -d loopback_sink /home/gnomeshell/test-audio.wav 2>/dev/null &
-  AUDIO_PID=$!
-  
-  # Wait for audio to start playing and levels to update
-  sleep 3
+  # Capture recording state with simulated audio levels
   snapshot_test "snapshot-recording" "recording state with notification"
   
   # Capture cropped screenshot of the recording indicator area (top bar)
-  # The microphone icon with audio level is in the top-right area
-  # Meter is 50x6 pixels, positioned to the right of the microphone icon
   snapshot_test "snapshot-recording-indicator" "recording indicator with audio level" "crop:80x25+655+2"
   
-  # Wait for audio to finish playing
-  wait $AUDIO_PID 2>/dev/null || true
-  sleep 1
-  
-  # Stop recording (ignore errors - may have already failed)
-  do_in_pod gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StopRecording 2>/dev/null || true
-  sleep 1
+  # Wait for transcription to complete (debug mode transcribes after simulation)
+  echo "  Waiting for transcription..."
+  sleep 5  # Give time for Deepgram API call
 else
   echo "  Skipping recording (D-Bus service not available)"
 fi
+
 
 # ============================================
 # State 4: Transcription result from Deepgram

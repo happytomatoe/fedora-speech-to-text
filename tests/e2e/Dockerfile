@@ -1,5 +1,5 @@
 # Custom container for visual regression testing of the GNOME extension.
-# Extends gnome-shell-pod-41 with Python D-Bus service for E2E testing.
+# Extends gnome-shell-pod-41 (Fedora 41, GNOME 47) with Python D-Bus service for E2E testing.
 # NOTE: This is a DEBUG/E2E build that includes voice_to_text/debug.py
 # For production builds, remove debug.py after copying:
 #   RUN rm -f /app/src/voice_to_text/debug.py
@@ -7,8 +7,8 @@
 # with pre-recorded audio files instead of a microphone.
 
 # Build stage: compile dotool from source
-FROM fedora:41 AS dotool-builder
-RUN dnf install -y golang git libxkbcommon-devel pkgconf && dnf clean all
+FROM fedora:rawhide AS dotool-builder
+RUN dnf install -y --nogpgcheck golang git libxkbcommon-devel pkgconf && dnf clean all
 RUN git clone https://git.sr.ht/~geb/dotool /tmp/dotool && \
     cd /tmp/dotool && go build -ldflags "-X main.Version=1.0"
 
@@ -25,9 +25,9 @@ COPY --from=dotool-builder /tmp/dotool/dotoold /usr/local/bin/dotoold
 # (can't use loginctl during build - systemd not running as PID 1)
 RUN mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/gnomeshell
 USER root
-RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 pipewire-utils xdotool && \
+RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 pipewire-utils xdotool \
+    gtk4 gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good && \
     dnf clean all
-RUN dnf update -y --nogpgcheck libwayland-server libei libeis && dnf clean all
 
 # Install uv and create a venv with pinned Python 3.13
 # This avoids the dnf Python 3.13→3.15 upgrade entirely
@@ -51,8 +51,10 @@ RUN mkdir -p /etc/dconf/db/local.d && \
     echo "welcome-dialog-last-shown-version='4294967295'" >> /etc/dconf/db/local.d/00-gnome-shell && \
     dconf update
 
-# Use smaller screen for faster tests (800x600)
-RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service
+# Use smaller screen for faster tests (800x600) and display :100 to avoid host conflicts
+RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service && \
+    rm -f /etc/systemd/system/multi-user.target.wants/xvfb@:99.service && \
+    ln -s /etc/systemd/system/xvfb@.service /etc/systemd/system/multi-user.target.wants/xvfb@:100.service
 
 # Copy the project source
 COPY . /app
