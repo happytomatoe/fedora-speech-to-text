@@ -218,7 +218,7 @@ e2e-build:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building E2E test container..."
-    podman build -t voice-to-text-e2e -f tests/e2e/Containerfile .
+    podman build -t voice-to-text-e2e -f tests/e2e/Dockerfile .
     echo "Container built: voice-to-text-e2e"
 
 # @category e2e
@@ -227,7 +227,7 @@ e2e-references: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Generating reference images..."
-    tests/e2e/snapshot.sh --update
+    tests/e2e/scripts/snapshot.sh --update
     echo "References generated. Review and commit tests/gnome-references/"
 
 # @category e2e
@@ -236,7 +236,7 @@ e2e-test: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running E2E tests..."
-    tests/e2e/snapshot.sh
+    tests/e2e/scripts/snapshot.sh
 
 # @category e2e
 # Update snapshot references with current state
@@ -244,7 +244,7 @@ e2e-update: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Capturing snapshot references..."
-    tests/e2e/snapshot.sh --update
+    tests/e2e/scripts/snapshot.sh --update
     echo "Snapshots saved. Review and commit tests/gnome-references/snapshot-*.png"
 
 # @category e2e
@@ -253,4 +253,154 @@ e2e-full: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running full E2E test with D-Bus service..."
-    tests/e2e/snapshot.sh --dbus
+    # Export DEEPGRAM_API_KEY so the container can use it
+    if [ -z "${DEEPGRAM_API_KEY:-}" ]; then
+      echo "Error: DEEPGRAM_API_KEY is not set. Export it first:"
+      echo "  export DEEPGRAM_API_KEY=your_key_here"
+      exit 1
+    fi
+    export DEEPGRAM_API_KEY
+    tests/e2e/scripts/snapshot.sh
+
+# @category e2e
+# Quick test: capture screenshot and check if microphone indicator is visible
+e2e-screenshot-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    IMAGE="voice-to-text-e2e"
+    if ! podman image exists "$IMAGE"; then
+      echo "Building container..."
+      podman build -t "$IMAGE" -f tests/e2e/Dockerfile .
+    fi
+    
+    echo "Starting container..."
+    POD=$(podman run --rm -td "$IMAGE")
+    trap "podman rm -f $POD >/dev/null 2>&1 || true" EXIT
+    
+    # Wait for user bus
+    echo -n "Waiting for user bus..."
+    for i in $(seq 1 30); do
+      if podman exec --user gnomeshell "$POD" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
+        echo " ready"
+        break
+      fi
+      sleep 1
+    done
+    
+    EXT_UUID="voice-to-text@happytomatoe.com"
+    EXT_ZIP="/app/tests/gnome-references/${EXT_UUID}.shell-extension.zip"
+    
+    do_in_pod() {
+      podman exec --user gnomeshell --workdir /home/gnomeshell \
+        -e XDG_RUNTIME_DIR=/run/user/1000 \
+        -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+        -e DISPLAY=:99 \
+        "$POD" "$@"
+    }
+    
+    # Install extension BEFORE starting GNOME Shell
+    echo "Installing extension..."
+    do_in_pod gnome-extensions install "$EXT_ZIP" --force 2>/dev/null
+    do_in_pod dconf write /org/gnome/shell/enabled-extensions "['${EXT_UUID}']" 2>/dev/null
+    
+    # Start GNOME Shell
+    echo "Starting GNOME Shell..."
+    do_in_pod systemctl --user start "gnome-xsession@:99"
+    
+    # Wait for GNOME Shell to initialize
+    echo -n "Waiting for GNOME Shell..."
+    for i in $(seq 1 30); do
+      if do_in_pod gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
+        echo " ready"
+        break
+      fi
+      sleep 1
+    done
+    
+    # Close overview if open (use dotool instead of xdotool - works on Wayland too)
+    echo 'key super' | do_in_pod dotool
+    sleep 2
+    
+    # Capture screenshot
+    OUTPUT_DIR="tests/e2e-output"
+    mkdir -p "$OUTPUT_DIR"
+    FULL_SCREENSHOT="${OUTPUT_DIR}/screenshot-full.png"
+    INDICATOR_SCREENSHOT="${OUTPUT_DIR}/screenshot-indicator.png"
+    
+    echo "Capturing screenshot..."
+    podman cp "$POD":/opt/Xvfb_screen0 - | tar xf - --to-command "convert xwd:- ${FULL_SCREENSHOT}"
+    
+    # Crop right side of top bar where microphone indicator is (icon is left of volume)
+    convert "$FULL_SCREENSHOT" -crop 80x30+650+0 +repage "$INDICATOR_SCREENSHOT"
+    
+    echo "Screenshots saved:"
+    echo "  Full: $FULL_SCREENSHOT"
+    echo "  Indicator: $INDICATOR_SCREENSHOT"
+    
+    # Check if indicator area has the microphone icon (non-uniform pixels)
+    # The indicator should have non-uniform pixels (icon vs black background)
+    INDICATOR_STATS=$(convert "$INDICATOR_SCREENSHOT" -colorspace Gray -format "%[fx:standard_deviation]" info: 2>/dev/null || echo "0")
+    
+    echo "Indicator area standard deviation: $INDICATOR_STATS"
+    
+    # A blank black area would have stddev ~0, an area with an icon will be >0.1
+    if (( $(echo "$INDICATOR_STATS > 0.1" | bc -l 2>/dev/null || echo 0) )); then
+      echo "✅ PASS: Microphone indicator detected"
+      exit 0
+    else
+      echo "❌ FAIL: No microphone indicator detected (stddev: $INDICATOR_STATS)"
+      exit 1
+    fi
+
+# @category e2e
+# Watch container via VNC (real-time live view)
+# Usage: just container-watch
+container-watch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    # Find running container
+    POD=$(podman ps --filter ancestor=voice-to-text-e2e --format '{'{'.ID'}'}' | head -1)
+    if [ -z "$POD" ]; then
+      echo "No running voice-to-text-e2e container found."
+      echo "Start one with: just e2e-full (in background) or podman run..."
+      exit 1
+    fi
+    
+    echo "Found container: $POD"
+    
+    # Install x11vnc as root (not gnomeshell user)
+    echo "Installing x11vnc..."
+    podman exec $POD dnf install -y --nogpgcheck x11vnc 2>/dev/null || true
+    
+    # Kill any existing VNC server
+    podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true
+    sleep 1
+    
+    # Start VNC server with -noshm to fix MIT-SHM error
+    echo "Starting VNC server on port 5900..."
+    podman exec --user gnomeshell -e DISPLAY=:99 -d $POD bash -c "nohup /usr/bin/x11vnc -display :99 -nopw -forever -shared -rfbport 5900 -noshm > /tmp/x11vnc.log 2>&1 &"
+    sleep 3
+    
+    # Verify it started
+    echo "Checking VNC server..."
+    podman exec --user gnomeshell $POD cat /tmp/x11vnc.log 2>/dev/null | tail -5 || echo "No log yet"
+    
+    echo ""
+    echo "========================================="
+    echo "VNC server is running!"
+    echo "Connect with any VNC client to: localhost:5900"
+    echo ""
+    echo "Suggested viewers:"
+    echo "  - GNOME Connections"
+    echo "  - Remmina"
+    echo "  - TigerVNC Viewer"
+    echo "  - macOS Screen Sharing (vnc://localhost:5900)"
+    echo "========================================="
+    echo ""
+    echo "Press Ctrl+C to stop the VNC server"
+    
+    # Keep script running and cleanup on exit
+    trap "podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true; echo 'VNC server stopped.'" EXIT
+    wait
