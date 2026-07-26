@@ -1,6 +1,6 @@
 {
     "name": "Voice to Text",
-    "description": "Global hotkey voice transcription with top-bar audio visualizer",
+    "description": "Global hotkey voice transcription with audio level OSD",
     "uuid": "voice-to-text@happytomatoe.com",
     "shell-version": ["45", "46", "47", "48", "49", "50"],
     "version": 2,

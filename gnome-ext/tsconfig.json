@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "outDir": "./dist",
+        "sourceMap": false,
+        "strict": false,
+        "skipLibCheck": true,
+        "target": "ES2023",
+        "lib": ["ES2023"],
+        "declaration": false,
+        "removeComments": false,
+        "allowImportingTsExtensions": false
+    },
+    "include": ["ambient.d.ts"],
+    "files": ["extension.ts", "indicator.ts", "hotkey.ts", "typer.ts"]
+}

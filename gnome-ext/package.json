@@ -1,0 +1,18 @@
+{
+    "name": "voice-to-text-gnome-ext",
+    "version": "0.0.0",
+    "description": "Voice to Text GNOME Shell Extension",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --watch",
+        "clean": "rm -rf dist node_modules",
+        "check": "node check.js"
+    },
+    "devDependencies": {
+        "typescript": "^5.4.0",
+        "@girs/gjs": "^4.1.0",
+        "@girs/gnome-shell": "^50.0.4"
+    }
+}

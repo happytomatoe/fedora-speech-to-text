@@ -11,6 +11,19 @@ const SMOOTH = 0.6;
 
 export const VoiceIndicator = GObject.registerClass(
     class VoiceIndicator extends PanelMenu.Button {
+        _destroyed: boolean;
+        _smoothedLevel: number;
+        _recording: boolean;
+        _box!: InstanceType<typeof St.BoxLayout>;
+        _icon!: InstanceType<typeof St.Icon>;
+        _spinner!: InstanceType<typeof St.Widget>;
+        _meter!: InstanceType<typeof St.DrawingArea>;
+        _stopBtn!: InstanceType<typeof St.Button>;
+
+        onStart: (() => void) | null;
+        onStop: (() => void) | null;
+        onConfigure: (() => void) | null;
+
         _init() {
             super._init(0.0, 'Voice to Text');
             this._destroyed = false;
@@ -32,7 +45,7 @@ export const VoiceIndicator = GObject.registerClass(
                 style_class: 'system-status-icon',
                 reactive: true,
             });
-            this._icon.connect('button-press-event', (actor, event) => {
+            this._icon.connect('button-press-event', (actor: unknown, event: any) => {
                 // Right-click opens the menu, left-click toggles recording
                 if (event.get_button() === Clutter.BUTTON_SECONDARY) {
                     this.menu.open();
@@ -96,17 +109,17 @@ export const VoiceIndicator = GObject.registerClass(
 
         _buildMenu() {
             // Clear any existing menu items
-            this.menu.removeAll();
+            (this.menu as any).removeAll();
 
             // Add Preferences menu item
             const prefsItem = new PopupMenu.PopupMenuItem(_('Preferences'));
             prefsItem.connect('activate', () => {
                 this.onConfigure?.();
             });
-            this.menu.addMenuItem(prefsItem);
+            (this.menu as any).addMenuItem(prefsItem);
         }
 
-        setRecording(recording) {
+        setRecording(recording: boolean) {
             this._recording = recording;
             if (recording) {
                 this._setRecordingUI();
@@ -147,7 +160,7 @@ export const VoiceIndicator = GObject.registerClass(
             this._meter.queue_repaint();
         }
 
-        updateLevel(level) {
+        updateLevel(level: number) {
             if (this._destroyed) return;
             this._smoothedLevel =
                 SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
@@ -211,7 +224,7 @@ export const VoiceIndicator = GObject.registerClass(
                     cr.fill();
                 }
             } finally {
-                cr.$dispose();
+                (cr as any).$dispose();
             }
         }
 

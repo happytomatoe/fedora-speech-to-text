@@ -28,7 +28,7 @@ const VoiceToTextIface = `
   </interface>
 </node>`;
 
-const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
+const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface) as unknown as new (...args: any[]) => any;
 
 const SessionManagerIface =
     '<node>\
@@ -46,9 +46,19 @@ const SessionManagerIface =
   </interface>\
 </node>';
 
-const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);
+const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface) as unknown as new (...args: any[]) => any;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default class VoiceToTextExtension extends Extension {
+    private _settings: any = null;
+    private _indicator: any = null;
+    private _proxy: any = null;
+    private _recording = false;
+    private _hotkeySignalId: number | null = null;
+    private _signalIds: number[] = [];
+    private _inhibitCookie = 0;
+    private _sessionManager: any = null;
+
     enable() {
         this._settings = this.getSettings(
             'org.gnome.shell.extensions.voice-to-text'
@@ -63,7 +73,7 @@ export default class VoiceToTextExtension extends Extension {
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
 
-        Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
+        Main.panel.addToStatusArea(this.metadata.uuid, this._indicator, 0, 'right');
         this._registerHotkey();
 
         // Listen for hotkey changes
@@ -105,7 +115,7 @@ export default class VoiceToTextExtension extends Extension {
         this._recording = false;
     }
 
-    _toggle() {
+    private _toggle(): void {
         console.log('VoiceToText: _toggle called');
         if (this._recording) {
             this._stop();
@@ -114,30 +124,30 @@ export default class VoiceToTextExtension extends Extension {
         }
     }
 
-    _registerHotkey() {
+    private _registerHotkey(): void {
         this._unregisterHotkey();
 
         try {
             registerHotkey('hotkey', this._settings, () => this._toggle());
             console.log('VoiceToText: hotkey registered');
         } catch (e) {
-            console.error('VoiceToText: failed to register hotkey:', e.message);
+            console.error('VoiceToText: failed to register hotkey:', e instanceof Error ? e.message : e);
         }
     }
 
-    _unregisterHotkey() {
+    private _unregisterHotkey(): void {
         try {
             unregisterHotkey('hotkey');
             console.log('VoiceToText: hotkey unregistered');
         } catch (e) {
             console.error(
                 'VoiceToText: failed to unregister hotkey:',
-                e.message
+                e instanceof Error ? e.message : e
             );
         }
     }
 
-    _connectDBus() {
+    private _connectDBus(): void {
         try {
             this._proxy = new VoiceToTextProxy(
                 Gio.DBus.session,
@@ -150,14 +160,14 @@ export default class VoiceToTextExtension extends Extension {
 
             const stateId = this._proxy.connectSignal(
                 'StateChanged',
-                (proxy, name, [state]) => {
+                (_proxy: any, _name: string, [state]: [string]) => {
                     console.log('VoiceToText: state changed to', state);
                     if (state === 'recording') {
-                        this._indicator.setRecordingActive();
+                        this._indicator?.setRecordingActive();
                     } else if (state === 'processing') {
-                        this._indicator.setProcessing();
+                        this._indicator?.setProcessing();
                     } else if (state === 'idle') {
-                        this._indicator.setRecording(false);
+                        this._indicator?.setRecording(false);
                         this._recording = false;
                         this._releaseInhibitor();
                     }
@@ -167,15 +177,15 @@ export default class VoiceToTextExtension extends Extension {
 
             const levelId = this._proxy.connectSignal(
                 'AudioLevel',
-                (proxy, name, [level]) => {
-                    this._indicator.updateLevel(level);
+                (_proxy: any, _name: string, [level]: [number]) => {
+                    this._indicator?.updateLevel(level);
                 }
             );
             this._signalIds.push(levelId);
 
             const errorId = this._proxy.connectSignal(
                 'Error',
-                (proxy, name, [msg]) => {
+                (_proxy: any, _name: string, [msg]: [string]) => {
                     console.log('VoiceToText: error:', msg);
                     this._showNotification(`Transcription failed: ${msg}`);
                 }
@@ -186,14 +196,14 @@ export default class VoiceToTextExtension extends Extension {
 
             // Sync state on (re)enable — engine may already be recording
             this._proxy.GetStatusAsync().then(
-                state => {
+                (state: string) => {
                     console.log('VoiceToText: initial state:', state);
                     if (state === 'recording' || state === 'processing') {
                         this._recording = true;
                         if (state === 'processing') {
-                            this._indicator.setProcessing();
+                            this._indicator?.setProcessing();
                         } else {
-                            this._indicator.setRecordingActive();
+                            this._indicator?.setRecordingActive();
                         }
                         this._ensureInhibitor();
                     }
@@ -203,13 +213,13 @@ export default class VoiceToTextExtension extends Extension {
         } catch (e) {
             console.error(
                 'VoiceToText: failed to connect to D-Bus service:',
-                e.message
+                e instanceof Error ? e.message : e
             );
             this._showNotification('Voice-to-Text D-Bus service not running. ');
         }
     }
 
-    _disconnectDBusSignals() {
+    private _disconnectDBusSignals(): void {
         if (this._proxy && this._signalIds.length > 0) {
             for (const id of this._signalIds) {
                 try {
@@ -222,7 +232,7 @@ export default class VoiceToTextExtension extends Extension {
         }
     }
 
-    _start() {
+    private _start(): void {
         console.log('VoiceToText: _start called');
         if (this._recording) return;
 
@@ -232,7 +242,7 @@ export default class VoiceToTextExtension extends Extension {
             return;
         }
 
-        this._indicator.setProcessing();
+        this._indicator?.setProcessing();
         this._recording = true;
 
         const config = {
@@ -251,17 +261,17 @@ export default class VoiceToTextExtension extends Extension {
 
         this._proxy.StartRecordingAsync(JSON.stringify(config)).then(
             () => console.log('VoiceToText: StartRecording called via D-Bus'),
-            e => {
+            (e: unknown) => {
                 console.error(
                     'VoiceToText: D-Bus StartRecording failed:',
-                    e.message
+                    e instanceof Error ? e.message : e
                 );
                 this._showNotification(
-                    `Failed to start recording: ${e.message}`
+                    `Failed to start recording: ${e instanceof Error ? e.message : e}`
                 );
                 this._recording = false;
                 this._releaseInhibitor();
-                this._indicator.setRecording(false);
+                this._indicator?.setRecording(false);
             }
         );
 
@@ -271,7 +281,7 @@ export default class VoiceToTextExtension extends Extension {
         }
     }
 
-    _stop() {
+    private _stop(): void {
         console.log('VoiceToText: _stop called');
         if (!this._recording) return;
 
@@ -281,21 +291,21 @@ export default class VoiceToTextExtension extends Extension {
             return;
         }
 
-        this._indicator.setProcessing();
+        this._indicator?.setProcessing();
 
         this._proxy.StopRecordingAsync().then(
             () => console.log('VoiceToText: StopRecording called via D-Bus'),
-            e => {
+            (e: unknown) => {
                 console.error(
                     'VoiceToText: D-Bus StopRecording failed:',
-                    e.message
+                    e instanceof Error ? e.message : e
                 );
                 this._setIdle();
             }
         );
     }
 
-    _ensureInhibitor() {
+    private _ensureInhibitor(): void {
         if (this._inhibitCookie !== 0) return;
         if (!this._settings.get_boolean('inhibit-sleep')) return;
         if (!this._recording) return;
@@ -308,7 +318,7 @@ export default class VoiceToTextExtension extends Extension {
                 12 // INHIBIT_SUSPEND | INHIBIT_IDLE (per InhibitedActions=12)
             )
             .then(
-                cookie => {
+                (cookie: number) => {
                     // Race guard: only commit cookie if still recording and enabled
                     if (!this._recording || this._inhibitCookie !== 0) {
                         // Recording stopped or inhibitor already acquired;
@@ -323,16 +333,16 @@ export default class VoiceToTextExtension extends Extension {
                         }`
                     );
                 },
-                e => {
+                (e: unknown) => {
                     console.error(
                         'VoiceToText: failed to acquire sleep inhibitor:',
-                        e.message
+                        e instanceof Error ? e.message : e
                     );
                 }
             );
     }
 
-    _releaseInhibitor() {
+    private _releaseInhibitor(): void {
         if (this._inhibitCookie === 0) return;
         this._sessionManager.UninhibitAsync(this._inhibitCookie).then(
             () => {
@@ -342,34 +352,34 @@ export default class VoiceToTextExtension extends Extension {
                     }`
                 );
             },
-            e => {
+            (e: unknown) => {
                 console.error(
                     'VoiceToText: failed to release sleep inhibitor:',
-                    e.message
+                    e instanceof Error ? e.message : e
                 );
             }
         );
         this._inhibitCookie = 0;
     }
 
-    _setIdle() {
+    private _setIdle(): void {
         this._releaseInhibitor();
         this._recording = false;
         this._indicator?.setRecording(false);
     }
 
-    _openPreferences() {
+    private _openPreferences(): void {
         console.log('VoiceToText: opening preferences dialog');
         try {
             const launcher = new Gio.SubprocessLauncher();
-            launcher.spawnv(['gnome-extensions', 'prefs', this.uuid]);
+            launcher.spawnv(['gnome-extensions', 'prefs', this.metadata.uuid]);
         } catch (e) {
-            console.error('VoiceToText: failed to open preferences:', e);
-            this._showNotification(`Failed to open preferences: ${e.message}`);
+            console.error('VoiceToText: failed to open preferences:', e instanceof Error ? e.message : e);
+            this._showNotification(`Failed to open preferences: ${e instanceof Error ? e.message : e}`);
         }
     }
 
-    _showNotification(message) {
+    private _showNotification(message: string): void {
         const systemSource = MessageTray.getSystemSource();
         const notification = new MessageTray.Notification({
             source: systemSource,

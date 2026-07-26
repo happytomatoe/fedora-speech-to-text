@@ -2,7 +2,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-export function registerHotkey(name, settings, callback) {
+export function registerHotkey(name: string, settings: any, callback: () => void): void {
     const hotkeyArr = settings.get_strv(name);
     const hotkeyValue = hotkeyArr && hotkeyArr.length > 0 ? hotkeyArr[0] : '';
     console.log(
@@ -24,12 +24,13 @@ export function registerHotkey(name, settings, callback) {
             `VoiceToText: hotkey '${hotkeyValue}' registered successfully`
         );
     } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
         console.error(
-            `VoiceToText: failed to register hotkey '${hotkeyValue}': ${e.message}`
+            `VoiceToText: failed to register hotkey '${hotkeyValue}': ${error.message}`
         );
     }
 }
 
-export function unregisterHotkey(name) {
+export function unregisterHotkey(name: string): void {
     Main.wm.removeKeybinding(name);
 }
