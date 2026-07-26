@@ -7,13 +7,6 @@ run *args:
 test:
   uv run pytest -n auto
 
-# @category test
-test-e2e:
-  uv run pytest tests/e2e/ -v --tb=short -x
-
-# @category test  
-test-all: test test-e2e
-
 install:
     uv tool install -e .
 
@@ -207,9 +200,6 @@ gnome-ext-uninstall:
 gnome-ext-reload:
     ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
 
-# Run E2E tests
-gnome-ext-e2e-test:
-    ./gnome-ext/e2e-test.sh
 # Pack extension into a ZIP for distribution
 gnome-ext-pack:
     #!/usr/bin/env bash

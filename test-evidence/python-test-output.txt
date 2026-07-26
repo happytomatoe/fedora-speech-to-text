@@ -1,0 +1,24 @@
+uv run pytest -n auto
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.0.3, pluggy-1.6.0
+rootdir: /var/home/l/git/voice-to-text
+configfile: pyproject.toml
+testpaths: tests
+plugins: xdist-3.8.0, asyncio-1.4.0, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+created: 8/8 workers
+8 workers [93 items]
+
+........................................................................ [ 77%]
+.....................                                                    [100%]
+=============================== warnings summary ===============================
+.venv/lib64/python3.14/site-packages/dbus_next/service.py:87: 32 warnings
+  /var/home/l/git/voice-to-text/.venv/lib64/python3.14/site-packages/dbus_next/service.py:87: DeprecationWarning: 'typing.no_type_check_decorator' is deprecated and slated for removal in Python 3.15
+    @no_type_check_decorator
+
+.venv/lib64/python3.14/site-packages/dbus_next/service.py:162: 24 warnings
+  /var/home/l/git/voice-to-text/.venv/lib64/python3.14/site-packages/dbus_next/service.py:162: DeprecationWarning: 'typing.no_type_check_decorator' is deprecated and slated for removal in Python 3.15
+    @no_type_check_decorator
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 93 passed, 56 warnings in 4.93s ========================
