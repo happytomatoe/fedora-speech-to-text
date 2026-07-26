@@ -181,10 +181,19 @@ gnome-ext-dev: reinstall gnome-ext-install
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash
+    set -euo pipefail
     UUID="voice-to-text@happytomatoe.com"
     DEST=$HOME/.local/share/gnome-shell/extensions/$UUID
+    # Build TypeScript first
+    cd gnome-ext && bun install --frozen-lockfile 2>/dev/null || bun install
+    bun run build
+    bun run check
+    cd ..
     mkdir -p "$DEST/schemas"
-    cp gnome-ext/*.js gnome-ext/*.json gnome-ext/*.css "$DEST/" 2>/dev/null || true
+    # Copy compiled JS from dist/
+    cp gnome-ext/dist/*.js "$DEST/" 2>/dev/null || true
+    # Copy other files from gnome-ext/
+    cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/" 2>/dev/null || true
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
     glib-compile-schemas "$DEST/schemas/"
     echo "Extension installed to $DEST"
@@ -198,6 +207,9 @@ gnome-ext-uninstall:
 gnome-ext-reload:
     ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
 
+# Run E2E tests
+gnome-ext-e2e-test:
+    ./gnome-ext/e2e-test.sh
 # Pack extension into a ZIP for distribution
 gnome-ext-pack:
     #!/usr/bin/env bash
