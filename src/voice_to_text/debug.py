@@ -14,6 +14,7 @@ Usage:
 
 import asyncio
 import logging
+import math
 import os
 from typing import Any, Callable
 
@@ -72,7 +73,7 @@ async def handle_debug_recording(
 
     # Create provider
     batch_provider = await asyncio.to_thread(
-        get_batch_provider, provider, provider_config
+        _get_batch_provider, provider, provider_config
     )
 
     try:
@@ -91,7 +92,6 @@ async def handle_debug_recording(
                 level = progress * 2.5  # ramp up 0 -> 0.5
             elif progress < 0.8:
                 # Deterministic waveform using sin wave for visual variety
-                import math
                 level = 0.4 + 0.15 * math.sin(progress * 60)  # hold ~0.5 with sine wave
             else:
                 level = max(0, (1.0 - progress) * 2.5)  # ramp down 0.5 -> 0
