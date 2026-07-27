@@ -40,10 +40,10 @@ sleep 3
 echo ""
 echo "=== Step 1: Injecting API Key ==="
 
-# Write API key to env file
+# Write API key to env file (pass as env var, expand inside container)
 podman exec --user gnomeshell --workdir /home/gnomeshell \
   -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY}" \
-  ${POD} bash -c "echo 'export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}' > /home/gnomeshell/.config/voice-to-text/env"
+  ${POD} bash -c 'echo "export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}" > /home/gnomeshell/.config/voice-to-text/env'
 
 # Verify env file was written (redact API key)
 echo "Verifying env file:"

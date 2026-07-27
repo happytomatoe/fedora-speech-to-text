@@ -30,10 +30,8 @@ fi
 
 # Run container
 echo "Starting container..."
-POD=$(podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK \
-  --net=host --ipc=host \
-  -v "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0:/tmp/pipewire-0:ro" \
-  -e PIPEWIRE_RUNTIME_DIR=/tmp \
+# Note: No PipeWire socket mount needed - debug mode uses test audio file, not live audio
+POD=$(podman run --rm \
   -e XDG_RUNTIME_DIR=/tmp \
   -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
   -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
@@ -204,14 +202,16 @@ do_in_pod xdotool keyup super
 echo -n "Waiting for extension indicator..."
 for i in $(seq 1 10); do
   # Capture a small crop of the indicator area and check if it's not blank
-  INDICATOR_CROP=$(podman cp "${POD}:/opt/Xvfb_screen0" - | tar xf - --to-command "convert xwd:- -crop 40x20+675+0 +repage txt:-" 2>/dev/null | tail -1)
-  # Check if the crop has non-background pixels (indicator is visible)
-  if echo "${INDICATOR_CROP}" | grep -qvE '^.*,.*,.*,0$'; then
-    echo " ready (${i}s)"
+  # Use standard deviation to detect non-uniform pixels (icon vs black background)
+  INDICATOR_STDDEV=$(podman cp "${POD}:/opt/Xvfb_screen0" - | tar xf - --to-command \
+    "convert xwd:- -crop 40x20+675+0 +repage -colorspace Gray -format '%[fx:standard_deviation]' info:-" 2>/dev/null || echo "0")
+  # A blank black area has stddev ~0, an area with an icon will be >0.05
+  if (( $(echo "${INDICATOR_STDDEV} > 0.05" | bc -l 2>/dev/null || echo 0) )); then
+    echo " ready (${i}s, stddev=${INDICATOR_STDDEV})"
     break
   fi
   if [[ $i -eq 10 ]]; then
-    echo " TIMEOUT after 10s (continuing anyway)"
+    echo " TIMEOUT after 10s (stddev=${INDICATOR_STDDEV}, continuing anyway)"
   fi
   sleep 1
 done
@@ -325,6 +325,31 @@ if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
         FILE_SIZE=$(stat -c%s "${PREFS_SHOT}" 2>/dev/null || echo 0)
         if [[ "${FILE_SIZE}" -gt 5000 ]]; then
           echo "  Screenshot looks valid (${FILE_SIZE} bytes)"
+          TESTS_RUN=$((TESTS_RUN + 1))
+          
+          # Compare with reference if not in update mode
+          if [[ "${UPDATE_MODE}" != "true" ]]; then
+            PREFS_REF="${REFERENCES_DIR}/snapshot-prefs.png"
+            if [[ -f "${PREFS_REF}" ]]; then
+              PREFS_DIFF="${OUTPUT_DIR}/snapshot-prefs-diff.png"
+              METRIC=$(compare -metric MSE "${PREFS_REF}" "${PREFS_SHOT}" "${PREFS_DIFF}" 2>&1 || true)
+              if [[ -z "${METRIC}" ]] || [[ "${METRIC}" == "0" ]]; then
+                echo "  Preferences: PASS (exact match)"
+                rm -f "${PREFS_DIFF}"
+              else
+                MSE=$(echo "${METRIC}" | head -1 | grep -oP '^[\d.]+')
+                if (( $(echo "${MSE} < 100" | bc -l 2>/dev/null || echo 0) )); then
+                  echo "  Preferences: PASS (MSE: ${MSE})"
+                  rm -f "${PREFS_DIFF}"
+                else
+                  echo "  Preferences: FAIL (MSE: ${MSE})"
+                  TESTS_FAILED=$((TESTS_FAILED + 1))
+                fi
+              fi
+            else
+              echo "  Preferences: NEW (no reference)"
+            fi
+          fi
         else
           echo "  Warning: Screenshot may be blank (${FILE_SIZE} bytes)"
           echo "  Falling back to verification-only"
@@ -379,9 +404,15 @@ echo "  Service logs:"
 do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "voice_to_text\|VoiceToText" | head -10 || echo "  No logs yet"
 
 # Copy test audio file into container
-TEST_AUDIO="/app/tests/e2e/fixtures/test-audio.wav"
+# Use repo-relative path for host operations, container path for in-container operations
+TEST_AUDIO_HOST="${PROJECT_ROOT}/tests/e2e/fixtures/test-audio.wav"
+TEST_AUDIO_CONTAINER="/app/tests/e2e/fixtures/test-audio.wav"
 echo "  Copying test audio file..."
-podman cp "${TEST_AUDIO}" "${POD}:/home/gnomeshell/test-audio.wav" 2>/dev/null || true
+if [[ -f "${TEST_AUDIO_HOST}" ]]; then
+  podman cp "${TEST_AUDIO_HOST}" "${POD}:/home/gnomeshell/test-audio.wav" 2>/dev/null || true
+else
+  echo "  Warning: Test audio file not found at ${TEST_AUDIO_HOST}"
+fi
 do_in_pod chmod 644 /home/gnomeshell/test-audio.wav 2>/dev/null || true
 
 # Start recording via D-Bus

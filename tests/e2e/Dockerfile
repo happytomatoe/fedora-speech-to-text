@@ -23,10 +23,10 @@ COPY --from=dotool-builder /tmp/dotool/dotoold /usr/local/bin/dotoold
 # Install system packages (ImageMagick, zip, etc.)
 # Enable user session lingering so D-Bus session bus starts at boot
 # (can't use loginctl during build - systemd not running as PID 1)
-RUN mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/gnomeshell
 USER root
+RUN mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/gnomeshell
 RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy python3-cffi python3-yaml glib2 pipewire-utils xdotool \
-    gtk4 gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good && \
+    gtk4 gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good libxkbcommon && \
     dnf clean all
 
 # Install uv and create a venv with pinned Python 3.13
