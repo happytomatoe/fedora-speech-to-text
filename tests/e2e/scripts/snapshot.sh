@@ -123,12 +123,22 @@ poll_until() {
   return 1
 }
 
-# Wait for user bus using the base image's built-in script
+# Wait for user bus — use manual poll since wait-user-bus.sh may have issues
 echo "Waiting for user bus..."
-podman exec --user gnomeshell --workdir /home/gnomeshell \
-  -e PIPEWIRE_RUNTIME_DIR=/tmp \
-  "${POD}" wait-user-bus.sh
-echo "User bus ready"
+for i in $(seq 1 60); do
+  if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
+    echo " ready (${i}s)"
+    break
+  fi
+  if [[ $i -eq 60 ]]; then
+    echo " TIMEOUT after 60s"
+    # Debug: check what's inside the container
+    podman exec --user gnomeshell "${POD}" ls -la /run/user/ 2>/dev/null || true
+    podman exec --user gnomeshell "${POD}" systemctl --user status 2>/dev/null || true
+    exit 1
+  fi
+  sleep 1
+done
 
 # GSK_RENDERER=cairo is set via -e in do_in_pod
 
