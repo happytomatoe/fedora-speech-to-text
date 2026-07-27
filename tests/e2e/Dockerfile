@@ -38,9 +38,11 @@ RUN uv python install 3.13 && \
     uv venv --python 3.13 /app-venv
 
 # Install Python packages into the venv (no patching needed on 3.13)
+# Pin versions to match pyproject.toml for reproducible builds
 RUN uv pip install --python /app-venv/bin/python \
-    dbus-next httpx sounddevice numpy pyyaml python-dotenv websockets \
-    groq mistralai
+    dbus-next~=0.2.3 httpx~=0.28.0 sounddevice~=0.5.5 numpy~=2.4.4 \
+    pyyaml~=6.0.3 python-dotenv~=1.2.2 websockets~=14.0 \
+    groq~=1.2.0 'mistralai[realtime]~=2.4,!=2.4.6'
 
 
 # Disable GNOME welcome tour by pre-seeding dconf database

@@ -19,13 +19,11 @@ for f in "${SRC_DIR}"/*.js "${SRC_DIR}"/*.json "${SRC_DIR}"/*.css; do
   [ -f "$f" ] && cp "$f" "${EXT_DIR}/"
 done
 
-# Copy schema files
+# Copy and compile schema files (only if schemas exist)
 if ls "${SRC_DIR}"/schemas/* &>/dev/null; then
   cp "${SRC_DIR}"/schemas/* "${EXT_DIR}/schemas/"
+  glib-compile-schemas "${EXT_DIR}/schemas"
 fi
-
-# Compile schemas
-glib-compile-schemas "${EXT_DIR}/schemas"
 
 # Create ZIP
 cd "${EXT_DIR}"

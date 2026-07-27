@@ -86,20 +86,28 @@ capture_via_eval() {
   local tmp_path="/tmp/e2e-screenshot.png"
   
   # Use Eval to run Shell.Screenshot inside gnome-shell
-  do_in_pod gdbus call --session \
+  if ! do_in_pod gdbus call --session \
     --dest org.gnome.Shell \
     --object-path /org/gnome/Shell \
     --method org.gnome.Shell.Eval \
     "const screenshot = new Shell.Screenshot();
      screenshot.screenshot(false, '${tmp_path}', (obj, res) => {
        obj.screenshot_finish(res);
-     });" 2>/dev/null
+     });" 2>/dev/null; then
+    echo "  Error: gdbus call failed"
+    return 1
+  fi
   
   # Wait for screenshot to be written
   sleep 1
   
   # Copy the screenshot out of the container
-  podman cp "${POD}:${tmp_path}" "${output_file}" 2>/dev/null
+  if ! podman cp "${POD}:${tmp_path}" "${output_file}" 2>/dev/null; then
+    echo "  Error: failed to copy screenshot from container"
+    return 1
+  fi
+  
+  return 0
 }
 
 # Helper to poll until condition is true
@@ -190,7 +198,23 @@ echo "Closing Overview..."
 do_in_pod xdotool keydown super
 sleep 0.5
 do_in_pod xdotool keyup super
-poll_until "extension indicator" 10 1 do_in_pod xdotool mousemove 695 12
+
+# Wait for extension indicator to be visible by checking screenshot pixel color
+# The indicator is a microphone icon in the top-right corner (around x=695, y=12)
+echo -n "Waiting for extension indicator..."
+for i in $(seq 1 10); do
+  # Capture a small crop of the indicator area and check if it's not blank
+  INDICATOR_CROP=$(podman cp "${POD}:/opt/Xvfb_screen0" - | tar xf - --to-command "convert xwd:- -crop 40x20+675+0 +repage txt:-" 2>/dev/null | tail -1)
+  # Check if the crop has non-background pixels (indicator is visible)
+  if echo "${INDICATOR_CROP}" | grep -qvE '^.*,.*,.*,0$'; then
+    echo " ready (${i}s)"
+    break
+  fi
+  if [[ $i -eq 10 ]]; then
+    echo " TIMEOUT after 10s (continuing anyway)"
+  fi
+  sleep 1
+done
 
 echo ""
 if [[ "${UPDATE_MODE}" == "true" ]]; then

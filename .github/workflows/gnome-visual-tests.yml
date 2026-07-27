@@ -52,8 +52,16 @@ jobs:
           path: tests/gnome-output/
           retention-days: 7
 
+  # Separate job for PR comments (needs issues: write for fork PRs)
+  comment-on-failure:
+    name: Comment on PR
+    needs: visual-tests
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
       - name: Comment on PR with diff images
-        if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
