@@ -297,7 +297,12 @@ class RecordingEngine:
 
             # 3. Check for debug mode (test file instead of microphone)
             try:
-                from voice_to_text.debug import handle_debug_recording, is_debug_mode
+                # Lazy import to avoid circular dependencies in production builds
+                try:
+                    from voice_to_text.debug import handle_debug_recording, is_debug_mode
+                except ImportError:
+                    is_debug_mode = lambda: False
+                    handle_debug_recording = None
 
                 if is_debug_mode():
                     logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
@@ -305,7 +310,7 @@ class RecordingEngine:
                     self._notify_state()
 
                     # Handle debug recording (simulates audio capture, then transcribes test file)
-                    text = await handle_debug_recording(config)
+                    text = await handle_debug_recording(config, on_level=self.on_audio_level)
 
                     self.state = EngineState.PROCESSING
                     self._notify_state()

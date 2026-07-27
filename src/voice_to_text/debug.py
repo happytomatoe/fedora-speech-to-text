@@ -15,8 +15,23 @@ Usage:
 import asyncio
 import logging
 import os
-import random
+import time
 from typing import Any, Callable
+
+# Lazy imports to avoid circular dependencies
+# These are resolved at runtime when handle_debug_recording is called
+_get_batch_provider = None
+_ConfigManager = None
+
+
+def _lazy_imports():
+    """Import provider dependencies lazily to avoid circular imports."""
+    global _get_batch_provider, _ConfigManager
+    if _get_batch_provider is None:
+        from voice_to_text.providers import get_batch_provider
+        from voice_to_text.config import ConfigManager
+        _get_batch_provider = get_batch_provider
+        _ConfigManager = ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +63,11 @@ async def handle_debug_recording(
     logger.info("DEBUG MODE: Using test file %s instead of microphone", debug_file)
     logger.info("DEBUG MODE: Will show audio level for %d seconds", DEBUG_RECORDING_DURATION)
 
-    # Import here to avoid circular imports
-    from voice_to_text.providers import get_batch_provider
-    from voice_to_text.config import ConfigManager
+    # Lazy import to avoid circular dependencies
+    _lazy_imports()
 
     # Get provider config
-    config_mgr = ConfigManager()
+    config_mgr = _ConfigManager()
     provider = config.get("provider", "deepgram")
     provider_config = config_mgr.get_provider_config(provider)
 
@@ -77,7 +91,9 @@ async def handle_debug_recording(
             if progress < 0.2:
                 level = progress * 2.5  # ramp up 0 -> 0.5
             elif progress < 0.8:
-                level = 0.4 + random.uniform(-0.1, 0.2)  # hold ~0.5 with jitter
+                # Deterministic waveform using sin wave for visual variety
+                import math
+                level = 0.4 + 0.15 * math.sin(time.time() * 10)  # hold ~0.5 with sine wave
             else:
                 level = max(0, (1.0 - progress) * 2.5)  # ramp down 0.5 -> 0
 
@@ -113,7 +129,8 @@ async def handle_debug_recording(
 
 def is_debug_mode() -> bool:
     """Check if debug mode is enabled via environment variable."""
-    return os.environ.get("VOICE_TO_TEXT_DEBUG_FILE") is not None
+    debug_file = os.environ.get("VOICE_TO_TEXT_DEBUG_FILE")
+    return bool(debug_file)
 
 
 def get_debug_file() -> str | None:

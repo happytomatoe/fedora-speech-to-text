@@ -292,7 +292,7 @@ e2e-screenshot-test:
     EXT_ZIP="/app/tests/e2e/expected/${EXT_UUID}.shell-extension.zip"
     
     do_in_pod() {
-      podman exec --user gnomeshell --workdir /home/gnomeshell \
+      podman exec -i --user gnomeshell --workdir /home/gnomeshell \
         -e XDG_RUNTIME_DIR=/run/user/1000 \
         -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
         -e DISPLAY=:100 \
@@ -403,4 +403,5 @@ container-watch:
     
     # Keep script running and cleanup on exit
     trap "podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true; echo 'VNC server stopped.'" EXIT
-    wait
+    # Block until user presses Ctrl+C (wait won't work since no background jobs in this shell)
+    while true; do sleep 3600; done

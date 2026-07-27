@@ -37,19 +37,19 @@ jobs:
       - name: Build test container
         run: |
           podman build -t voice-to-text-e2e \
-            -f tests/e2e/Containerfile .
+            -f tests/e2e/Dockerfile .
 
       - name: Run visual tests
         run: |
-          chmod +x tests/e2e/*.sh
-          tests/e2e/snapshot.sh
+          chmod +x tests/e2e/scripts/*.sh
+          tests/e2e/scripts/snapshot.sh
 
       - name: Upload test artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: visual-test-results
-          path: tests/gnome-output/
+          path: tests/e2e/output/
           retention-days: 7
 
   # Separate job for PR comments (needs issues: write for fork PRs)
@@ -67,7 +67,7 @@ jobs:
           script: |
             const fs = require('fs');
             
-            const outputDir = 'tests/gnome-output';
+            const outputDir = 'tests/e2e/output';
             let diffFiles = [];
             try {
               diffFiles = fs.readdirSync(outputDir)
