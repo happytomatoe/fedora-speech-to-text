@@ -31,7 +31,7 @@ fi
 # Run container
 echo "Starting container..."
 # Note: No PipeWire socket mount needed - debug mode uses test audio file, not live audio
-POD=$(podman run --rm \
+POD=$(podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK --cap-add=CAP_SYS_ADMIN \
   -e XDG_RUNTIME_DIR=/tmp \
   -e PIPEWIRE_RUNTIME_DIR= \
   -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
