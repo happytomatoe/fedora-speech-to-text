@@ -15,7 +15,6 @@ Usage:
 import asyncio
 import logging
 import os
-import time
 from typing import Any, Callable
 
 # Lazy imports to avoid circular dependencies
@@ -93,7 +92,7 @@ async def handle_debug_recording(
             elif progress < 0.8:
                 # Deterministic waveform using sin wave for visual variety
                 import math
-                level = 0.4 + 0.15 * math.sin(time.time() * 10)  # hold ~0.5 with sine wave
+                level = 0.4 + 0.15 * math.sin(progress * 60)  # hold ~0.5 with sine wave
             else:
                 level = max(0, (1.0 - progress) * 2.5)  # ramp down 0.5 -> 0
 

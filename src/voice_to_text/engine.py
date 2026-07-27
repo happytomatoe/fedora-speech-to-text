@@ -296,37 +296,32 @@ class RecordingEngine:
             _step("dotoolc_opened")
 
             # 3. Check for debug mode (test file instead of microphone)
+            # Lazy import to avoid circular dependencies in production builds
             try:
-                # Lazy import to avoid circular dependencies in production builds
-                try:
-                    from voice_to_text.debug import handle_debug_recording, is_debug_mode
-                except ImportError:
-                    is_debug_mode = lambda: False
-                    handle_debug_recording = None
-
-                if is_debug_mode():
-                    logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
-                    self.state = EngineState.RECORDING
-                    self._notify_state()
-
-                    # Handle debug recording (simulates audio capture, then transcribes test file)
-                    text = await handle_debug_recording(config, on_level=self.on_audio_level)
-
-                    self.state = EngineState.PROCESSING
-                    self._notify_state()
-
-                    # Output the result
-                    if text and typer:
-                        await typer.stream_diff(text)
-                    elif text and (output_method == "clipboard" or fallback_to_clipboard):
-                        await asyncio.to_thread(_copy_to_clipboard, text)
-
-                    logger.info("DEBUG MODE: Transcription complete")
-                    return  # Exit early, skip normal recording flow
-
+                from voice_to_text.debug import handle_debug_recording, is_debug_mode
             except ImportError:
-                # debug.py not available (production build) - continue with normal flow
-                logger.debug("Debug module not available, using normal recording flow")
+                is_debug_mode = lambda: False
+                handle_debug_recording = None
+
+            if is_debug_mode():
+                logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
+                self.state = EngineState.RECORDING
+                self._notify_state()
+
+                # Handle debug recording (simulates audio capture, then transcribes test file)
+                text = await handle_debug_recording(config, on_level=self.on_audio_level)
+
+                self.state = EngineState.PROCESSING
+                self._notify_state()
+
+                # Output the result
+                if text and typer:
+                    await typer.stream_diff(text)
+                elif text and (output_method == "clipboard" or fallback_to_clipboard):
+                    await asyncio.to_thread(_copy_to_clipboard, text)
+
+                logger.info("DEBUG MODE: Transcription complete")
+                return  # Exit early, skip normal recording flow
 
             # 4. Set up providers
             provider = config.get("provider", "voxtral")
