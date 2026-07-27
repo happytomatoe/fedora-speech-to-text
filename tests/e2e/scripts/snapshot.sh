@@ -135,12 +135,18 @@ podman exec --user root "${POD}" chown gnomeshell:gnomeshell /run/user/1000
 
 # Start D-Bus session bus manually
 echo "Starting D-Bus session bus..."
-podman exec --user gnomeshell "${POD}" bash -c 'dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork --nopidfile &' 
-sleep 1
+podman exec --user gnomeshell "${POD}" bash -c 'dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork --nopidfile --print-address &' 
+sleep 2
+
+# Debug: check if bus socket exists and list runtime directory
+podman exec --user gnomeshell "${POD}" ls -la /run/user/1000/ 2>/dev/null || echo "  ls failed"
+podman exec --user gnomeshell "${POD}" ps aux | grep dbus 2>/dev/null || true
 
 # Verify the bus socket exists
 if ! podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
   echo "ERROR: D-Bus session bus failed to start"
+  # Try to get error output from dbus-daemon
+  podman exec --user gnomeshell "${POD}" bash -c 'dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork --nopidfile 2>&1' || true
   exit 1
 fi
 echo "D-Bus session bus is ready"
