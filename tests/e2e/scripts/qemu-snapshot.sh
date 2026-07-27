@@ -385,7 +385,13 @@ if [[ "${PREFS_OPENED}" == "true" ]]; then
     snapshot_test "snapshot-prefs" "preferences dialog"
     # Close preferences
     do_ssh "xdotool keydown alt; xdotool key F4; xdotool keyup alt" 2>/dev/null || true
-    sleep 1
+    sleep 2
+    # Verify dialog is closed
+    PREFS_STILL_OPEN=$(do_ssh "xdotool search --name 'Voice' 2>/dev/null | head -1" 2>/dev/null || true)
+    if [[ -n "${PREFS_STILL_OPEN}" ]]; then
+        do_ssh "xdotool keydown alt; xdotool key F4; xdotool keyup alt" 2>/dev/null || true
+        sleep 1
+    fi
 else
     echo "  Skipping (preferences window not found after 5 attempts)"
 fi
