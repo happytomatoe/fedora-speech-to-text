@@ -34,6 +34,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman imagemagick
 
+      - name: Configure Podman for rootless systemd
+        run: |
+          mkdir -p ~/.config/containers
+          echo -e '[engine]\ncgroup_manager = "cgroupfs"' > ~/.config/containers/containers.conf
+
       - name: Build test container
         run: |
           podman build -t voice-to-text-e2e \
