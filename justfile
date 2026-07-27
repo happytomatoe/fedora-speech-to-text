@@ -7,13 +7,6 @@ run *args:
 test:
   uv run pytest -n auto
 
-# @category test
-test-e2e:
-  uv run pytest tests/e2e/ -v --tb=short -x
-
-# @category test  
-test-all: test test-e2e
-
 install:
     uv tool install -e .
 
@@ -181,10 +174,19 @@ gnome-ext-dev: reinstall gnome-ext-install
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash
+    set -euo pipefail
     UUID="voice-to-text@happytomatoe.com"
     DEST=$HOME/.local/share/gnome-shell/extensions/$UUID
+    # Build TypeScript first
+    cd gnome-ext && [ -f bun.lockb ] && bun install --frozen-lockfile || bun install
+    bun run build
+    bun run check
+    cd ..
     mkdir -p "$DEST/schemas"
-    cp gnome-ext/*.js gnome-ext/*.json gnome-ext/*.css "$DEST/" 2>/dev/null || true
+    # Copy compiled JS from dist/
+    cp gnome-ext/dist/*.js "$DEST/"
+    # Copy other files from gnome-ext/
+    cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
     glib-compile-schemas "$DEST/schemas/"
     echo "Extension installed to $DEST"
@@ -205,7 +207,12 @@ gnome-ext-pack:
     SRC="gnome-ext"
     rm -rf "dist/$UUID"
     mkdir -p "dist/$UUID/schemas"
-    cp "$SRC"/*.js "$SRC"/*.json "$SRC"/*.css "dist/$UUID/"
+    # Build TypeScript first
+    cd "$SRC" && bun install --frozen-lockfile && bun run build && cd ..
+    # Copy compiled JS from dist/
+    cp "$SRC"/dist/*.js "dist/$UUID/"
+    # Copy other files from gnome-ext/
+    cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
     cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"
     glib-compile-schemas "dist/$UUID/schemas/"
     cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
