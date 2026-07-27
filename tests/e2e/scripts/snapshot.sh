@@ -50,13 +50,16 @@ cleanup() {
 trap cleanup EXIT
 
 # Helper to run commands in container
-# Uses the base image's set-env.sh to properly configure D-Bus and display env
+# Manually sets env vars (set-env.sh hardcodes DISPLAY=:99, we use :100)
 do_in_pod() {
   podman exec --user gnomeshell --workdir /home/gnomeshell \
+    -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    -e DISPLAY=:100 \
     -e PIPEWIRE_RUNTIME_DIR=/tmp \
     -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
     -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
-    "${POD}" set-env.sh "$@"
+    -e PATH=/usr/local/bin:/usr/bin:/bin \
+    "${POD}" "$@"
 }
 
 # Helper to capture full-screen screenshot
@@ -123,22 +126,41 @@ poll_until() {
   return 1
 }
 
-# Wait for user bus — use manual poll since wait-user-bus.sh may have issues
+# On CI, systemd-logind auto-login doesn't work. Start everything manually:
+# 1. Create D-Bus session bus
+# 2. Start Xvfb
+# 3. Start GNOME Shell
+echo "Starting D-Bus session bus..."
+podman exec --user gnomeshell "${POD}" bash -c 'dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork --nopidfile &' 
+sleep 1
+
+# Create the bus socket directory if needed
+podman exec --user gnomeshell "${POD}" mkdir -p /run/user/1000
+
+# Wait for bus socket
 echo "Waiting for user bus..."
-for i in $(seq 1 60); do
+for i in $(seq 1 10); do
   if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
     echo " ready (${i}s)"
     break
   fi
-  if [[ $i -eq 60 ]]; then
-    echo " TIMEOUT after 60s"
-    # Debug: check what's inside the container
-    podman exec --user gnomeshell "${POD}" ls -la /run/user/ 2>/dev/null || true
-    podman exec --user gnomeshell "${POD}" systemctl --user status 2>/dev/null || true
+  if [[ $i -eq 10 ]]; then
+    echo " TIMEOUT after 10s"
+    podman exec --user gnomeshell "${POD}" ls -la /run/user/1000/ 2>/dev/null || true
     exit 1
   fi
   sleep 1
 done
+
+# Start Xvfb
+echo "Starting Xvfb on :100..."
+podman exec -d --user gnomeshell "${POD}" /usr/bin/Xvfb :100 -screen 0 800x600x24 -fbdir /opt
+sleep 1
+
+# Start GNOME Shell
+echo "Starting GNOME Shell..."
+podman exec -d --user gnomeshell "${POD}" env DISPLAY=:100 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/bin/gnome-shell --x11
+sleep 3
 
 # GSK_RENDERER=cairo is set via -e in do_in_pod
 
@@ -169,9 +191,7 @@ do_in_pod pkill -f voice-to-text-dbus 2>/dev/null || true
 do_in_pod pkill -f 'python -m voice_to_text' 2>/dev/null || true
 sleep 2  # Wait for service to fully stop
 
-# Start GNOME Shell first — this will D-Bus-activate the service with the new env file
-echo "Starting GNOME Shell..."
-do_in_pod systemctl --user start "gnome-xsession@:100"
+# GNOME Shell was started manually above (systemd user session not available on CI)
 
 # Wait for GNOME Shell to fully initialize
 poll_until "GNOME Shell" 30 1 do_in_pod gnome-extensions list
