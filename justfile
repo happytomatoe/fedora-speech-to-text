@@ -405,3 +405,51 @@ container-watch:
     trap "podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true; echo 'VNC server stopped.'" EXIT
     # Block until user presses Ctrl+C (wait won't work since no background jobs in this shell)
     while true; do sleep 3600; done
+
+# @category e2e-qemu
+# Kill any running QEMU E2E test VM
+qemu-e2e-kill:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PID_FILE="/tmp/gnome-ext-vm/qemu.pid"
+    if [[ -f "${PID_FILE}" ]]; then
+        PID=$(cat "${PID_FILE}")
+        if kill -0 "${PID}" 2>/dev/null; then
+            echo "Killing QEMU (PID ${PID})..."
+            kill "${PID}" 2>/dev/null || true
+            sleep 2
+            kill -9 "${PID}" 2>/dev/null || true
+        else
+            echo "QEMU PID ${PID} not running"
+        fi
+        rm -f "${PID_FILE}"
+    fi
+    # Also kill any stray QEMU processes
+    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    rm -f /tmp/gnome-ext-vm/overlay.qcow2 /tmp/gnome-ext-vm/qemu-monitor.sock
+    echo "Done"
+# @category e2e-qemu
+# Create base QEMU VM image for E2E testing (run once, or after changes)
+qemu-e2e-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Setting up QEMU E2E test VM..."
+    podman exec fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-setup.sh"
+    echo "Setup complete. Run 'just qemu-e2e-test' to test."
+
+# @category e2e-qemu
+# Run E2E visual regression tests using QEMU VM
+qemu-e2e-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Running QEMU E2E tests..."
+    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh"
+
+# @category e2e-qemu
+# Update QEMU E2E reference images with current state
+qemu-e2e-update:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Updating QEMU E2E reference images..."
+    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh --update"
+    echo "References saved to tests/e2e/expected-qemu/"

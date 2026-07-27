@@ -72,6 +72,7 @@ tests/gnome-snapshots/
 tests/gnome-output/
 tests/e2e-output/
 tests/e2e/output/
+tests/e2e/output-qemu/
 tests/gnome-references/*.zip
 
 
