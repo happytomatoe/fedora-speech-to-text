@@ -50,18 +50,13 @@ cleanup() {
 trap cleanup EXIT
 
 # Helper to run commands in container
-# Bypass set-env.sh to avoid eval quoting issues with special chars like @
+# Uses the base image's set-env.sh to properly configure D-Bus and display env
 do_in_pod() {
   podman exec --user gnomeshell --workdir /home/gnomeshell \
-    -e XDG_RUNTIME_DIR=/run/user/1000 \
-    -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-    -e DISPLAY=:100 \
-    -e GSK_RENDERER=cairo \
     -e PIPEWIRE_RUNTIME_DIR=/tmp \
     -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
     -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
-    -e PATH=/app-venv/bin:/usr/local/bin:/usr/bin:/bin \
-    "${POD}" "$@"
+    "${POD}" set-env.sh "$@"
 }
 
 # Helper to capture full-screen screenshot
@@ -128,20 +123,12 @@ poll_until() {
   return 1
 }
 
-# Wait for user bus (skip wait-user-bus.sh which fails on degraded systemd)
-# Use direct podman exec (not do_in_pod) to avoid quoting issues with set-env.sh
+# Wait for user bus using the base image's built-in script
 echo "Waiting for user bus..."
-for i in $(seq 1 60); do
-  if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
-    echo " ready (${i}s)"
-    break
-  fi
-  if [[ $i -eq 60 ]]; then
-    echo " TIMEOUT after 60s"
-    exit 1
-  fi
-  sleep 1
-done
+podman exec --user gnomeshell --workdir /home/gnomeshell \
+  -e PIPEWIRE_RUNTIME_DIR=/tmp \
+  "${POD}" wait-user-bus.sh
+echo "User bus ready"
 
 # GSK_RENDERER=cairo is set via -e in do_in_pod
 
@@ -326,7 +313,6 @@ if do_in_pod gnome-extensions prefs "${EXTENSION_UUID}" 2>/dev/null; then
         FILE_SIZE=$(stat -c%s "${PREFS_SHOT}" 2>/dev/null || echo 0)
         if [[ "${FILE_SIZE}" -gt 5000 ]]; then
           echo "  Screenshot looks valid (${FILE_SIZE} bytes)"
-          TESTS_RUN=$((TESTS_RUN + 1))
           
           # Compare with reference if not in update mode
           if [[ "${UPDATE_MODE}" != "true" ]]; then
