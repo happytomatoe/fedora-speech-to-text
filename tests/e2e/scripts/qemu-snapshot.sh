@@ -296,13 +296,13 @@ if [[ "${NEEDS_SETUP}" == "true" ]]; then
     do_ssh "mkdir -p ~/.local/bin" || true
     scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} "${SCRIPT_DIR_REAL}/dotoolc-wrapper.sh" ${SSH_USER}@localhost:~/.local/bin/dotoolc 2>/dev/null || true
     do_ssh "chmod +x ~/.local/bin/dotoolc" || true
-    do_ssh "mkdir -p \"\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}\" && mkfifo \"\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}/dotool-pipe\" 2>/dev/null || true" || true
+    do_ssh "mkdir -p /run/user/\$(id -u) && mkfifo /run/user/\$(id -u)/dotool-pipe 2>/dev/null || true" || true
     # Copy test audio file to VM
     TEST_AUDIO="${SCRIPT_DIR_REAL}/../fixtures/test-audio.wav"
     if [[ -f "${TEST_AUDIO}" ]]; then
         scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} "${TEST_AUDIO}" ${SSH_USER}@localhost:/tmp/test-audio.wav 2>/dev/null || true
     fi
-    do_ssh "export PATH=\$HOME/.local/bin:\$PATH; export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/..; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &"
+    do_ssh "export PATH=\$HOME/.local/bin:\$PATH; export XDG_RUNTIME_DIR=/run/user/\$(id -u); export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/..; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &"
     sleep 1
 
     echo -n "Waiting for D-Bus service"
