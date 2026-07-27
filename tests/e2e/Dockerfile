@@ -29,6 +29,11 @@ RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy py
     gtk4 gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good libxkbcommon && \
     dnf clean all
 
+# Fix console-getty.service: remove ImportCredential= which fails in CI (exit 243/CREDENTIALS)
+# The base image's systemd expects credential files that don't exist in rootless podman on CI.
+RUN mkdir -p /etc/systemd/system/console-getty.service.d && \
+    printf '[Service]\nImportCredential=\n' > /etc/systemd/system/console-getty.service.d/fix-credits.conf
+
 # Install uv and create a venv with pinned Python 3.13
 # This avoids the dnf Python 3.13→3.15 upgrade entirely
 RUN curl -LsSf https://astral.sh/uv/install.sh -o /tmp/install-uv.sh && \
@@ -62,10 +67,9 @@ RUN mkdir -p /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d
     echo 'ExecStart=/usr/bin/gnome-shell --unsafe-mode' >> /home/gnomeshell/.config/systemd/user/org.gnome.Shell@x11.service.d/override.conf && \
     chown -R gnomeshell:users /home/gnomeshell/.config
 
-# Use smaller screen for faster tests (800x600) and display :100 to avoid host conflicts
-RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service && \
-    rm -f /etc/systemd/system/multi-user.target.wants/xvfb@:100.service && \
-    ln -s /etc/systemd/system/xvfb@.service /etc/systemd/system/multi-user.target.wants/xvfb@:100.service
+# Use smaller screen for faster tests (800x600)
+# Keep display :99 (base image default) — snapshot.sh uses set-env.sh which expects :99
+RUN sed -i 's/1920x1080x24/800x600x24/' /etc/systemd/system/xvfb@.service
 
 # Copy the project source
 COPY . /app

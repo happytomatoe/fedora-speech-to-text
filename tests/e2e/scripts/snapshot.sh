@@ -29,10 +29,10 @@ if ! podman image exists "${IMAGE}"; then
 fi
 
 # Run container
+# --privileged is required: systemd-logind needs user namespaces (exit 226/NAMESPACE)
+# without it, the D-Bus session bus and login1 never appear.
 echo "Starting container..."
-# Note: No PipeWire socket mount needed - debug mode uses test audio file, not live audio
-POD=$(podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK --cap-add=CAP_SYS_ADMIN \
-  -e XDG_RUNTIME_DIR=/tmp \
+POD=$(podman run --rm --privileged \
   -e PIPEWIRE_RUNTIME_DIR= \
   -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
   -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
@@ -50,16 +50,13 @@ cleanup() {
 trap cleanup EXIT
 
 # Helper to run commands in container
-# Manually sets env vars (set-env.sh hardcodes DISPLAY=:99, we use :100)
+# Uses base image's set-env.sh which sets DISPLAY=:99 and DBUS_SESSION_BUS_ADDRESS
 do_in_pod() {
   podman exec --user gnomeshell --workdir /home/gnomeshell \
-    -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-    -e DISPLAY=:100 \
-    -e PIPEWIRE_RUNTIME_DIR=/tmp \
+    -e PIPEWIRE_RUNTIME_DIR= \
     -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
     -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
-    -e PATH=/usr/local/bin:/usr/bin:/bin \
-    "${POD}" "$@"
+    "${POD}" set-env.sh "$@"
 }
 
 # Helper to capture full-screen screenshot
@@ -126,41 +123,29 @@ poll_until() {
   return 1
 }
 
-# On CI, systemd-logind auto-login doesn't work. Start everything manually:
-# 1. Create D-Bus session bus
-# 2. Start Xvfb
-# 3. Start GNOME Shell
-echo "Starting D-Bus session bus..."
-podman exec --user gnomeshell "${POD}" bash -c 'dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork --nopidfile &' 
-sleep 1
-
-# Create the bus socket directory if needed
-podman exec --user gnomeshell "${POD}" mkdir -p /run/user/1000
-
-# Wait for bus socket
-echo "Waiting for user bus..."
-for i in $(seq 1 10); do
+# Let systemd handle everything: console-getty auto-logins gnomeshell,
+# which starts systemd --user, which creates /run/user/1000/bus,
+# then Xvfb and gnome-shell start via systemd user services.
+# With --privileged + the ImportCredential fix in Dockerfile, this chain works.
+echo "Waiting for user bus (systemd auto-login)..."
+for i in $(seq 1 30); do
   if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
     echo " ready (${i}s)"
     break
   fi
-  if [[ $i -eq 10 ]]; then
-    echo " TIMEOUT after 10s"
-    podman exec --user gnomeshell "${POD}" ls -la /run/user/1000/ 2>/dev/null || true
+  if [[ $i -eq 30 ]]; then
+    echo " TIMEOUT after 30s"
+    podman exec --user root "${POD}" systemctl status console-getty.service 2>&1 | head -10 || true
+    podman exec --user root "${POD}" systemctl status systemd-logind.service 2>&1 | head -10 || true
+    podman exec --user gnomeshell "${POD}" ls -la /run/user/ 2>/dev/null || true
     exit 1
   fi
   sleep 1
 done
 
-# Start Xvfb
-echo "Starting Xvfb on :100..."
-podman exec -d --user gnomeshell "${POD}" /usr/bin/Xvfb :100 -screen 0 800x600x24 -fbdir /opt
-sleep 1
-
-# Start GNOME Shell
+# Start GNOME Shell via systemd user service
 echo "Starting GNOME Shell..."
-podman exec -d --user gnomeshell "${POD}" env DISPLAY=:100 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/bin/gnome-shell --x11
-sleep 3
+do_in_pod systemctl --user start gnome-xsession@:99.service
 
 # GSK_RENDERER=cairo is set via -e in do_in_pod
 

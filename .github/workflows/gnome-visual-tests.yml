@@ -34,10 +34,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman imagemagick
 
-      - name: Configure Podman for rootless systemd
+      - name: Configure Podman
         run: |
           mkdir -p ~/.config/containers
-          echo -e '[engine]\ncgroup_manager = "cgroupfs"' > ~/.config/containers/containers.conf
 
       - name: Build test container
         run: |
