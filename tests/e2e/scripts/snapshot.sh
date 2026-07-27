@@ -129,8 +129,9 @@ poll_until() {
 
 echo "Setting up user session..."
 
-# Create the runtime directory
-podman exec --user gnomeshell "${POD}" mkdir -p /run/user/1000
+# Create the runtime directory (must be root to create /run/user/1000)
+podman exec --user root "${POD}" mkdir -p /run/user/1000
+podman exec --user root "${POD}" chown gnomeshell:gnomeshell /run/user/1000
 
 # Start D-Bus session bus manually
 echo "Starting D-Bus session bus..."
