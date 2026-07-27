@@ -123,26 +123,39 @@ poll_until() {
   return 1
 }
 
-# Let systemd handle everything: console-getty auto-logins gnomeshell,
-# which starts systemd --user, which creates /run/user/1000/bus,
-# then Xvfb and gnome-shell start via systemd user services.
-# With --privileged + the ImportCredential fix in Dockerfile, this chain works.
-echo "Waiting for user bus (systemd auto-login)..."
-for i in $(seq 1 60); do
-  if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
-    echo " ready (${i}s)"
-    break
-  fi
-  if [[ $i -eq 60 ]]; then
-    echo " TIMEOUT after 60s"
-    podman exec --user root "${POD}" systemctl status console-getty.service 2>&1 | head -15 || true
-    podman exec --user root "${POD}" systemctl status systemd-logind.service 2>&1 | head -15 || true
-    podman exec --user gnomeshell "${POD}" ls -la /run/user/1000/ 2>/dev/null || true
-    podman exec --user gnomeshell "${POD}" loginctl list-sessions 2>/dev/null || true
-    exit 1
-  fi
-  sleep 1
-done
+# The auto-login chain (console-getty → agetty → PAM → systemd --user) is unreliable
+# in rootless podman. Instead, manually start the D-Bus session bus and systemd --user.
+# systemd-logind is already running (started automatically by systemd).
+
+echo "Setting up user session..."
+
+# Create the runtime directory
+podman exec --user gnomeshell "${POD}" mkdir -p /run/user/1000
+
+# Start D-Bus session bus manually
+echo "Starting D-Bus session bus..."
+podman exec --user gnomeshell "${POD}" bash -c 'dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork --nopidfile &' 
+sleep 1
+
+# Verify the bus socket exists
+if ! podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
+  echo "ERROR: D-Bus session bus failed to start"
+  exit 1
+fi
+echo "D-Bus session bus is ready"
+
+# Start systemd --user for the gnomeshell user
+# This enables systemctl --user for starting user services like gnome-shell
+echo "Starting systemd --user..."
+podman exec --user gnomeshell "${POD}" bash -c 'XDG_RUNTIME_DIR=/run/user/1000 /usr/lib/systemd/systemd --user &' 
+sleep 2
+
+# Verify systemd --user is running
+if podman exec --user gnomeshell "${POD}" bash -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user is-active' 2>/dev/null | grep -q active; then
+  echo "systemd --user is running"
+else
+  echo "WARNING: systemd --user may not be running, continuing anyway"
+fi
 
 # Start GNOME Shell via systemd user service
 echo "Starting GNOME Shell..."
