@@ -6,7 +6,10 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 DEST="$HOME/.local/share/gnome-shell/extensions/$UUID"
 
 mkdir -p "$DEST/schemas"
-cp "$SRC"/*.js "$SRC"/*.json "$SRC"/*.css "$DEST/" 2>/dev/null || true
+# Copy compiled JS from dist/
+cp "$SRC"/dist/*.js "$DEST/"
+# Copy other files from gnome-ext/
+cp "$SRC"/metadata.json "$SRC"/stylesheet.css "$DEST/"
 cp "$SRC"/schemas/*.xml "$DEST/schemas/"
 glib-compile-schemas "$DEST/schemas/"
 
