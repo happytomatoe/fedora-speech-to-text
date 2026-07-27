@@ -29,10 +29,12 @@ RUN dnf install -y --nogpgcheck ImageMagick zip portaudio-devel python3-numpy py
     gtk4 gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good libxkbcommon && \
     dnf clean all
 
-# Fix console-getty.service: remove ImportCredential= which fails in CI (exit 243/CREDENTIALS)
-# The base image's systemd expects credential files that don't exist in rootless podman on CI.
+# Fix console-getty.service for rootless podman on CI:
+# 1. Remove ImportCredential= which fails with exit 243 (CREDENTIALS)
+# 2. Remove ConditionPathExists=/dev/console which fails without /dev/console
 RUN mkdir -p /etc/systemd/system/console-getty.service.d && \
-    printf '[Service]\nImportCredential=\n' > /etc/systemd/system/console-getty.service.d/fix-credits.conf
+    printf '[Service]\nImportCredential=\n' > /etc/systemd/system/console-getty.service.d/fix-credits.conf && \
+    printf '[Unit]\nConditionPathExists=\n' > /etc/systemd/system/console-getty.service.d/fix-condition.conf
 
 # Install uv and create a venv with pinned Python 3.13
 # This avoids the dnf Python 3.13→3.15 upgrade entirely

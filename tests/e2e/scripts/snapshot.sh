@@ -128,16 +128,17 @@ poll_until() {
 # then Xvfb and gnome-shell start via systemd user services.
 # With --privileged + the ImportCredential fix in Dockerfile, this chain works.
 echo "Waiting for user bus (systemd auto-login)..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
   if podman exec --user gnomeshell "${POD}" bash -c 'test -S /run/user/1000/bus' 2>/dev/null; then
     echo " ready (${i}s)"
     break
   fi
-  if [[ $i -eq 30 ]]; then
-    echo " TIMEOUT after 30s"
-    podman exec --user root "${POD}" systemctl status console-getty.service 2>&1 | head -10 || true
-    podman exec --user root "${POD}" systemctl status systemd-logind.service 2>&1 | head -10 || true
-    podman exec --user gnomeshell "${POD}" ls -la /run/user/ 2>/dev/null || true
+  if [[ $i -eq 60 ]]; then
+    echo " TIMEOUT after 60s"
+    podman exec --user root "${POD}" systemctl status console-getty.service 2>&1 | head -15 || true
+    podman exec --user root "${POD}" systemctl status systemd-logind.service 2>&1 | head -15 || true
+    podman exec --user gnomeshell "${POD}" ls -la /run/user/1000/ 2>/dev/null || true
+    podman exec --user gnomeshell "${POD}" loginctl list-sessions 2>/dev/null || true
     exit 1
   fi
   sleep 1
