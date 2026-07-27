@@ -33,6 +33,7 @@ echo "Starting container..."
 # Note: No PipeWire socket mount needed - debug mode uses test audio file, not live audio
 POD=$(podman run --rm \
   -e XDG_RUNTIME_DIR=/tmp \
+  -e PIPEWIRE_RUNTIME_DIR= \
   -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
   -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
   -td "${IMAGE}")
