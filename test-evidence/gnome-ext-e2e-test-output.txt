@@ -1,3 +1,0 @@
-./gnome-ext/e2e-test.sh
-sh: line 1: ./gnome-ext/e2e-test.sh: No such file or directory
-error: recipe `gnome-ext-e2e-test` failed on line 212 with exit code 127
