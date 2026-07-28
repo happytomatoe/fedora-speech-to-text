@@ -177,14 +177,10 @@ gnome-ext-install:
     set -euo pipefail
     UUID="voice-to-text@happytomatoe.com"
     DEST=$HOME/.local/share/gnome-shell/extensions/$UUID
-    # Build TypeScript first
-    cd gnome-ext && [ -f bun.lockb ] && bun install --frozen-lockfile || bun install
-    bun run build
-    bun run check
-    cd ..
+    # No TypeScript build needed — extension is plain JS
     mkdir -p "$DEST/schemas"
-    # Copy compiled JS from dist/
-    cp gnome-ext/dist/*.js "$DEST/"
+    # Copy JS files from gnome-ext/
+    cp gnome-ext/*.js "$DEST/"
     # Copy other files from gnome-ext/
     cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
@@ -207,10 +203,9 @@ gnome-ext-pack:
     SRC="gnome-ext"
     rm -rf "dist/$UUID"
     mkdir -p "dist/$UUID/schemas"
-    # Build TypeScript first
-    cd "$SRC" && bun install --frozen-lockfile && bun run build && cd ..
-    # Copy compiled JS from dist/
-    cp "$SRC"/dist/*.js "dist/$UUID/"
+    # No TypeScript build needed — extension is plain JS
+    # Copy JS files from gnome-ext/
+    cp "$SRC"/*.js "dist/$UUID/"
     # Copy other files from gnome-ext/
     cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
     cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"

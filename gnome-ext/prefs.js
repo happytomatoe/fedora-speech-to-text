@@ -127,40 +127,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             }
         });
 
-        // Show recording notification toggle
-        const showNotificationRow = new Adw.SwitchRow({
-            title: _('Show Recording Notification'),
-            subtitle: _('Show a notification when recording starts'),
-        });
-        settings.bind(
-            'show-recording-notification',
-            showNotificationRow,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT
-        );
-        group.add(showNotificationRow);
-
-        // Stop timeout setting
-        const stopTimeoutRow = new Adw.SpinRow({
-            title: _('Stop Timeout'),
-            subtitle: _(
-                'Seconds to wait for recording process to stop before forcing it'
-            ),
-            adjustment: new Gtk.Adjustment({
-                lower: 1,
-                upper: 120,
-                step_increment: 1,
-                page_increment: 10,
-            }),
-        });
-        settings.bind(
-            'stop-timeout-seconds',
-            stopTimeoutRow,
-            'value',
-            Gio.SettingsBindFlags.DEFAULT
-        );
-        group.add(stopTimeoutRow);
-
         // Provider setting (batch mode only)
         const providerRow = new Adw.ActionRow({
             title: _('Transcription Provider'),
@@ -276,6 +242,40 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         outputMethodRow.add_suffix(outputMethodCombo);
         group.add(outputMethodRow);
 
+        // Show floating audio level widget toggle
+        const showAudioLevelRow = new Adw.SwitchRow({
+            title: _('Show Audio Level Widget'),
+            subtitle: _('Display a floating audio level bar at the bottom of the screen during recording'),
+        });
+        settings.bind(
+            'show-audio-level-widget',
+            showAudioLevelRow,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        group.add(showAudioLevelRow);
+
+        // Stop timeout setting
+        const stopTimeoutRow = new Adw.SpinRow({
+            title: _('Stop Timeout'),
+            subtitle: _(
+                'Seconds to wait for recording process to stop before forcing it'
+            ),
+            adjustment: new Gtk.Adjustment({
+                lower: 1,
+                upper: 120,
+                step_increment: 1,
+                page_increment: 10,
+            }),
+        });
+        settings.bind(
+            'stop-timeout-seconds',
+            stopTimeoutRow,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        group.add(stopTimeoutRow);
+
         // Inhibit sleep during recording
         const inhibitSleepRow = new Adw.SwitchRow({
             title: _('Inhibit Sleep During Recording'),
@@ -347,12 +347,11 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
         editConfigButton.connect('clicked', () => {
             const configPath = `${GLib.get_home_dir()}/.config/voice-to-text/config.yaml`;
-            const editor = GLib.getenv('EDITOR') || 'nano';
             try {
                 const launcher = new Gio.SubprocessLauncher({
                     flags: Gio.SubprocessFlags.NONE,
                 });
-                launcher.spawnv([editor, configPath]);
+                launcher.spawnv(['xdg-open', configPath]);
             } catch (e) {
                 console.error('VoiceToText: failed to open editor:', e.message);
             }
