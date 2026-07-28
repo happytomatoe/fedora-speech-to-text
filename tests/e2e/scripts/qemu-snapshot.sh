@@ -291,12 +291,15 @@ if [[ "${NEEDS_SETUP}" == "true" ]]; then
     # ─── Start D-Bus service with debug mode ──────────────────────────────
     timer_start
     echo "Starting D-Bus service..."
-    # Install dotoolc wrapper (translates dotool commands to xdotool)
+    # Install dotool daemon shim (translates dotool commands to xdotool)
     SCRIPT_DIR_REAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     do_ssh "mkdir -p ~/.local/bin" || true
-    scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} "${SCRIPT_DIR_REAL}/dotoolc-wrapper.sh" ${SSH_USER}@localhost:~/.local/bin/dotoolc 2>/dev/null || true
-    do_ssh "chmod +x ~/.local/bin/dotoolc" || true
-    do_ssh "mkdir -p /run/user/\$(id -u) && mkfifo /run/user/\$(id -u)/dotool-pipe 2>/dev/null || true" || true
+    scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} "${SCRIPT_DIR_REAL}/dotoolc-wrapper.sh" ${SSH_USER}@localhost:~/.local/bin/dotool-shim 2>/dev/null || true
+    do_ssh "chmod +x ~/.local/bin/dotool-shim" || true
+    do_ssh "mkdir -p /run/user/\$(id -u) && rm -f /run/user/\$(id -u)/dotool-pipe && mkfifo /run/user/\$(id -u)/dotool-pipe 2>/dev/null || true" || true
+    # Start the shim in background (reads from pipe, types via xdotool)
+    do_ssh "nohup ~/.local/bin/dotool-shim &>/tmp/dotool-shim.log &" 2>/dev/null || true
+    sleep 1
     # Copy test audio file to VM
     TEST_AUDIO="${SCRIPT_DIR_REAL}/../fixtures/test-audio.wav"
     if [[ -f "${TEST_AUDIO}" ]]; then
