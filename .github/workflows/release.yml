@@ -7,38 +7,60 @@ on:
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
 
 jobs:
-  release:
-    name: Semantic Release
+  build:
     runs-on: ubuntu-latest
-    concurrency: release
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v4
+      - name: Bump version and push tag
+        id: tag_version
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          version: "latest"
+          enable-cache: true
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen
 
-      - name: Python Semantic Release
-        id: release
+      - name: Build Python package
+        run: uv build --out-dir dist
+
+      - name: Pack GNOME extension
         run: |
-          uv run semantic-release version
-          uv run semantic-release publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UUID="voice-to-text@happytomatoe.com"
+          SRC="gnome-ext"
+          rm -rf "dist/$UUID"
+          mkdir -p "dist/$UUID/schemas"
+          VERSION_NUM=$(echo "${{ steps.tag_version.outputs.new_tag }}" | sed 's/^v//')
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION_NUM\"/g" "$SRC"/metadata.json
+
+          cp "$SRC"/*.js "$SRC"/*.json "$SRC"/*.css "dist/$UUID/"
+          cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"
+          cp "$SRC"/metadata.json "dist/$UUID/"
+          glib-compile-schemas "dist/$UUID/schemas/"
+          cd "dist/$UUID" && zip -r "../$UUID.shell-extension.zip" ./*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          files: |
+            dist/voice_to_text-*.whl
+            dist/voice_to_text-*.tar.gz
+            dist/voice-to-text@happytomatoe.com.shell-extension.zip
+          generate_release_notes: true
