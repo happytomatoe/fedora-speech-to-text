@@ -12,6 +12,20 @@ import {
 // Config YAML helpers
 const CONFIG_PATH = GLib.build_filenamev([GLib.get_home_dir(), '.config', 'voice-to-text', 'config.yaml']);
 
+// Mapping: GSettings key → [config.yaml path parts..., value type]
+// Types: 'string', 'int', 'double', 'strv'
+const CONFIG_SYNC_MAP = {
+    'mode':                    { path: ['transcription', 'mode'],                    type: 'string' },
+    'provider':                { path: ['transcription', 'provider'],                type: 'string' },
+    'language':                { path: ['transcription', 'language'],                type: 'string' },
+    'streaming-provider':      { path: ['transcription', 'hybrid', 'streaming_provider'], type: 'string' },
+    'batch-provider':          { path: ['transcription', 'hybrid', 'batch_provider'],     type: 'string' },
+    'decrease-speaker-volume': { path: ['audio', 'speaker', 'decrease_volume'],       type: 'int' },
+    'stop-timeout-seconds':    { path: ['engine', 'stop_timeout'],                   type: 'int' },
+    'custom-words':            { path: ['postprocess', 'custom_words'],              type: 'strv' },
+    'custom-words-threshold':  { path: ['postprocess', 'custom_words_threshold'],    type: 'double' },
+};
+
 async function readConfigYaml() {
     try {
         const file = Gio.File.new_for_path(CONFIG_PATH);
@@ -31,6 +45,88 @@ async function writeConfigYaml(config) {
     const encoder = new TextEncoder();
     const bytes = encoder.encode(yamlStr);
     file.replace_contents(bytes, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+}
+
+// Get a nested value from an object by path array
+function getConfigValue(config, path) {
+    let val = config;
+    for (const key of path) {
+        if (val == null) return undefined;
+        val = val[key];
+    }
+    return val;
+}
+
+// Set a nested value in an object by path array
+function setConfigValue(config, path, value) {
+    let obj = config;
+    for (let i = 0; i < path.length - 1; i++) {
+        if (obj[path[i]] == null) obj[path[i]] = {};
+        obj = obj[path[i]];
+    }
+    obj[path[path.length - 1]] = value;
+}
+
+// Read config.yaml and seed GSettings for any keys that are empty
+async function syncFromConfig(settings) {
+    const config = await readConfigYaml();
+    if (!config) return { config: null, drifted: [] };
+
+    const drifted = [];
+    for (const [gkey, { path, type }] of Object.entries(CONFIG_SYNC_MAP)) {
+        const cfgVal = getConfigValue(config, path);
+        if (cfgVal === undefined || cfgVal === null) continue;
+
+        let gsetVal;
+        if (type === 'strv') {
+            gsetVal = settings.get_strv(gkey);
+            // If GSettings is empty but config has values, seed from config
+            if (gsetVal.length === 0 && cfgVal.length > 0) {
+                settings.set_strv(gkey, cfgVal);
+                gsetVal = cfgVal;
+            }
+            // Compare sorted arrays
+            const gsetStr = gsetVal.slice().sort().join('\n');
+            const cfgStr = cfgVal.slice().sort().join('\n');
+            if (gsetStr !== cfgStr) drifted.push(gkey);
+        } else if (type === 'int') {
+            gsetVal = settings.get_int(gkey);
+            if (gsetVal === 0 && cfgVal !== 0) {
+                settings.set_int(gkey, cfgVal);
+                gsetVal = cfgVal;
+            }
+            if (gsetVal !== cfgVal) drifted.push(gkey);
+        } else if (type === 'double') {
+            gsetVal = settings.get_double(gkey);
+            if (gsetVal === 0.0 && cfgVal !== 0.0) {
+                settings.set_double(gkey, cfgVal);
+                gsetVal = cfgVal;
+            }
+            if (gsetVal !== cfgVal) drifted.push(gkey);
+        } else {
+            gsetVal = settings.get_string(gkey);
+            if (!gsetVal && cfgVal) {
+                settings.set_string(gkey, cfgVal);
+                gsetVal = cfgVal;
+            }
+            if (gsetVal !== cfgVal) drifted.push(gkey);
+        }
+    }
+    return { config, drifted };
+}
+
+// Write all mapped settings from GSettings to config.yaml
+async function syncToConfig(settings) {
+    const config = await readConfigYaml() || {};
+    for (const [gkey, { path, type }] of Object.entries(CONFIG_SYNC_MAP)) {
+        let value;
+        if (type === 'strv') value = settings.get_strv(gkey);
+        else if (type === 'int') value = settings.get_int(gkey);
+        else if (type === 'double') value = settings.get_double(gkey);
+        else value = settings.get_string(gkey);
+        setConfigValue(config, path, value);
+    }
+    await writeConfigYaml(config);
 }
 
 export default class VoiceToTextPrefs extends ExtensionPreferences {
@@ -167,6 +263,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         providerCombo.set_active_id(settings.get_string('provider'));
         providerCombo.connect('changed', () => {
             settings.set_string('provider', providerCombo.get_active_id());
+            _syncAllToConfig();
         });
         providerRow.add_suffix(providerCombo);
         group.add(providerRow);
@@ -205,6 +302,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 'streaming-provider',
                 streamingProviderCombo.get_active_id()
             );
+            _syncAllToConfig();
         });
         streamingProviderRow.add_suffix(streamingProviderCombo);
         group.add(streamingProviderRow);
@@ -230,6 +328,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 'batch-provider',
                 batchProviderCombo.get_active_id()
             );
+            _syncAllToConfig();
         });
         batchProviderRow.add_suffix(batchProviderCombo);
         group.add(batchProviderRow);
@@ -246,6 +345,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         modeCombo.connect('changed', () => {
             settings.set_string('mode', modeCombo.get_active_id());
             updateProviderVisibility();
+            _syncAllToConfig();
         });
 
         // Output method setting
@@ -300,6 +400,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT
         );
         group.add(stopTimeoutRow);
+        stopTimeoutRow.connect('notify::value', () => _syncAllToConfig());
 
         // Inhibit sleep during recording
         const inhibitSleepRow = new Adw.SwitchRow({
@@ -334,6 +435,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT
         );
         group.add(decreaseVolumeRow);
+        decreaseVolumeRow.connect('notify::value', () => _syncAllToConfig());
 
         // Language setting
         const languageRow = new Adw.ActionRow({
@@ -347,26 +449,57 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         languageEntry.connect('changed', () => {
             settings.set_string('language', languageEntry.get_text());
+            _syncAllToConfig();
         });
         languageRow.add_suffix(languageEntry);
         group.add(languageRow);
+
+        // Config sync warning (hidden by default)
+        const _configSyncFailed = {v: false};
+        const syncWarningRow = new Adw.ActionRow({
+            title: _('⚠ config.yaml drift detected'),
+            subtitle: _('GSettings and config.yaml differ; saved values will overwrite config.yaml'),
+            icon_name: 'dialog-warning-symbolic',
+            visible: false,
+        });
+        syncWarningRow.add_css_class('warning');
+        group.add(syncWarningRow);
+
+        // Sync all settings to config.yaml — auto-retry if previous sync failed
+        const _syncAllToConfig = async () => {
+            const attempts = _configSyncFailed.v ? 2 : 1;
+            for (let i = 0; i < attempts; i++) {
+                try {
+                    await syncToConfig(settings);
+                    _configSyncFailed.v = false;
+                    syncWarningRow.visible = false;
+                    return;
+                } catch (e) {
+                    if (i === attempts - 1) {
+                        console.error(`VoiceToText: config.yaml sync failed: ${e.message}`);
+                        _configSyncFailed.v = true;
+                        syncWarningRow.visible = true;
+                    }
+                }
+            }
+        };
+
+        // Seed GSettings from config.yaml on load
+        const _initSync = async () => {
+            const { config, drifted } = await syncFromConfig(settings);
+            if (config && drifted.length > 0) {
+                syncWarningRow.visible = true;
+                _configSyncFailed.v = true;
+            }
+        };
+        _initSync();
+
         // Custom words for fuzzy correction — list widget
         const customWordsGroup = new Adw.PreferencesGroup({
             title: _('Custom Words'),
             description: _('Words/phrases for fuzzy correction in transcription output'),
         });
         page.add(customWordsGroup);
-
-        // Config sync warning (hidden by default)
-        const _configSyncFailed = {v: false};
-        const syncWarningRow = new Adw.ActionRow({
-            title: _('⚠ config.yaml sync failed'),
-            subtitle: _('Words saved in preferences; will retry on next change'),
-            icon_name: 'dialog-warning-symbolic',
-            visible: false,
-        });
-        syncWarningRow.add_css_class('warning');
-        customWordsGroup.add(syncWarningRow);
 
         const customWordsList = new Gtk.ListBox({
             selection_mode: Gtk.SelectionMode.NONE,
@@ -385,14 +518,15 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             });
             deleteButton.connect('clicked', async () => {
                 customWordsList.remove(row);
-                await _saveCustomWords();
+                settings.set_strv('custom-words', _getCustomWordsFromList());
+                await _syncAllToConfig();
             });
             row.add_suffix(deleteButton);
             return row;
         };
 
-        // Helper to persist the current list to GSettings
-        const _saveCustomWords = async () => {
+        // Collect current words from the list widget
+        const _getCustomWordsFromList = () => {
             const words = [];
             let child = customWordsList.get_first_child();
             while (child) {
@@ -401,53 +535,12 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 }
                 child = child.get_next_sibling();
             }
-            // Sync to GSettings (always succeeds)
-            settings.set_strv('custom-words', words);
-            // Sync to config.yaml — auto-retry if previous sync failed
-            const attempts = _configSyncFailed.v ? 2 : 1;
-            for (let i = 0; i < attempts; i++) {
-                try {
-                    const config = await readConfigYaml();
-                    if (config) {
-                        if (!config.postprocess) config.postprocess = {};
-                        config.postprocess.custom_words = words;
-                        await writeConfigYaml(config);
-                    }
-                    _configSyncFailed.v = false;
-                    syncWarningRow.visible = false;
-                    return;
-                } catch (e) {
-                    if (i === attempts - 1) {
-                        console.error(`VoiceToText: config.yaml sync failed: ${e.message}`);
-                        _configSyncFailed.v = true;
-                        syncWarningRow.visible = true;
-                    }
-                }
-            }
+            return words;
         };
 
-        // Populate existing words — prefer GSettings, fall back to config.yaml
-        const _populateCustomWords = async () => {
-            let customWords = settings.get_strv('custom-words');
-            const config = await readConfigYaml();
-            const configWords = config?.postprocess?.custom_words ?? [];
-
-            // If GSettings is empty, seed from config.yaml
-            if (customWords.length === 0 && configWords.length > 0) {
-                customWords = configWords;
-                settings.set_strv('custom-words', customWords);
-            }
-
-            // Check for drift: do GSettings and config.yaml differ?
-            if (customWords.length > 0 || configWords.length > 0) {
-                const gsetStr = customWords.slice().sort().join('\n');
-                const cfgStr = configWords.slice().sort().join('\n');
-                if (gsetStr !== cfgStr) {
-                    syncWarningRow.visible = true;
-                    _configSyncFailed.v = true;
-                }
-            }
-
+        // Populate existing words from GSettings
+        const _populateCustomWords = () => {
+            const customWords = settings.get_strv('custom-words');
             for (const word of customWords) {
                 if (word) customWordsList.append(createWordRow(word));
             }
@@ -513,7 +606,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 const text = entry.get_text().trim();
                 if (text) {
                     customWordsList.append(createWordRow(text));
-                    await _saveCustomWords();
+                    settings.set_strv('custom-words', _getCustomWordsFromList());
+                    await _syncAllToConfig();
                 }
                 dialog.close();
             });
@@ -541,6 +635,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             'value',
             Gio.SettingsBindFlags.DEFAULT
         );
+        thresholdRow.connect('notify::value', () => _syncAllToConfig());
         group.add(thresholdRow);
 
         // Configuration group
