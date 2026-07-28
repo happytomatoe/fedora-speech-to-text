@@ -288,6 +288,7 @@ export default class VoiceToTextExtension extends Extension {
         }
 
         this._indicator.setProcessing();
+        this._audioLevelWidget.hide();
 
         this._proxy.StopRecordingAsync().then(
             () => console.log('VoiceToText: StopRecording called via D-Bus'),
