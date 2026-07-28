@@ -63,7 +63,9 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         self._client = httpx.AsyncClient(timeout=120)
         self._init_ws_state()
 
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         logger.info("Transcribing %s with Deepgram model %s", audio_path, self.model)
         try:
             params = {

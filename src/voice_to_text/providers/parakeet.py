@@ -26,7 +26,9 @@ class ParakeetProvider(BatchProvider):
         self.timeout = config.get("timeout", 120.0)
         logger.info("Using Parakeet HTTP mode: %s (timeout=%.1fs)", self.http_endpoint, self.timeout)
 
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         logger.info("Transcribing %s via HTTP", audio_path)
         url = f"{self.http_endpoint}/v1/audio/transcriptions"
         async with httpx.AsyncClient(timeout=self.timeout) as client:

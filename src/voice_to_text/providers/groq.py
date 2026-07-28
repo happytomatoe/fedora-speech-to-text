@@ -29,7 +29,9 @@ class GroqProvider(BatchProvider):
         self.model = config.get("model", "whisper-large-v3-turbo")
         self.client = AsyncGroq(api_key=self.api_key)  # pyright: ignore[reportCallIssue]
 
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         logger.info("Transcribing %s with Groq model %s", audio_path, self.model)
         try:
             transcription = await self.client.audio.transcriptions.create(

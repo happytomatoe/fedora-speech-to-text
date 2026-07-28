@@ -19,7 +19,9 @@ class BatchProvider(ABC):
         pass
 
     @abstractmethod
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         """Transcribe audio file (batch processing)."""
 
     @abstractmethod

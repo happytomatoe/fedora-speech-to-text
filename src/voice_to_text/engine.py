@@ -409,21 +409,25 @@ class RecordingEngine:
             self._notify_state()
             if filepath:
                 try:
+                    postprocess_cfg = config_mgr.config.get("postprocess", {})
+                    custom_words = config.get("custom_words") or postprocess_cfg.get("custom_words", [])
+                    custom_words_threshold = config.get("custom_words_threshold") or postprocess_cfg.get(
+                        "custom_words_threshold", 0.5
+                    )
                     if transcriber:
-                        text = await transcriber.on_recording_stop(filepath, language)
+                        text = await transcriber.on_recording_stop(filepath, language, custom_words)
                     else:
                         assert batch_provider is not None
-                        text = await batch_provider.transcribe_file(filepath, language)
+                        text = await batch_provider.transcribe_file(filepath, language, custom_words)
                     _step("transcription_done")
                     # Apply text post-processing
                     if text:
-                        postprocess_cfg = config_mgr.config.get("postprocess", {})
                         if postprocess_cfg.get("enabled", True):
                             text = postprocess(
                                 text,
                                 lang=postprocess_cfg.get("language") or language,
-                                custom_words=postprocess_cfg.get("custom_words", []),
-                                custom_words_threshold=postprocess_cfg.get("custom_words_threshold", 0.5),
+                                custom_words=custom_words,
+                                custom_words_threshold=custom_words_threshold,
                                 custom_filler_words=postprocess_cfg.get("custom_filler_words"),
                             )
                     _step("postprocess_done")

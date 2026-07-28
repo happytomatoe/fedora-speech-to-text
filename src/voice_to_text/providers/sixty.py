@@ -39,7 +39,9 @@ class SixtyProvider(BatchProvider, StreamingProvider):
 
     # ── Batch ──────────────────────────────────────────────────────────
 
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         logger.info("Transcribing %s with 60db", audio_path)
         headers = {"Authorization": f"Bearer {self.api_key}"}
         data: dict[str, str] = {}

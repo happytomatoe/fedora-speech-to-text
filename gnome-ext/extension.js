@@ -257,6 +257,8 @@ export default class VoiceToTextExtension extends Extension {
             ),
             output_method: this._settings.get_string('output-method'),
             stop_timeout: this._settings.get_int('stop-timeout-seconds'),
+            custom_words: this._settings.get_strv('custom-words'),
+            custom_words_threshold: this._settings.get_double('custom-words-threshold'),
         };
 
         this._proxy.StartRecordingAsync(JSON.stringify(config)).then(

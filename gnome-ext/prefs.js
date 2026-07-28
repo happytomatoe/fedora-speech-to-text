@@ -3,10 +3,35 @@ import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gdk from 'gi://Gdk';
+import {load as yamlLoad, dump as yamlDump} from './js-yaml.mjs';
 import {
     ExtensionPreferences,
     gettext as _,
 } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+
+// Config YAML helpers
+const CONFIG_PATH = GLib.build_filenamev([GLib.get_home_dir(), '.config', 'voice-to-text', 'config.yaml']);
+
+async function readConfigYaml() {
+    try {
+        const file = Gio.File.new_for_path(CONFIG_PATH);
+        const [ok, contents] = file.load_contents(null);
+        if (!ok) return null;
+        const decoder = new TextDecoder('utf-8');
+        return yamlLoad(decoder.decode(contents));
+    } catch (e) {
+        console.error('VoiceToText: failed to read config.yaml:', e.message);
+        return null;
+    }
+}
+
+async function writeConfigYaml(config) {
+    const file = Gio.File.new_for_path(CONFIG_PATH);
+    const yamlStr = yamlDump(config);
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(yamlStr);
+    file.replace_contents(bytes, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+}
 
 export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -325,6 +350,198 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         languageRow.add_suffix(languageEntry);
         group.add(languageRow);
+        // Custom words for fuzzy correction — list widget
+        const customWordsGroup = new Adw.PreferencesGroup({
+            title: _('Custom Words'),
+            description: _('Words/phrases for fuzzy correction in transcription output'),
+        });
+        page.add(customWordsGroup);
+
+        // Config sync warning (hidden by default)
+        const _configSyncFailed = {v: false};
+        const syncWarningRow = new Adw.ActionRow({
+            title: _('⚠ config.yaml sync failed'),
+            subtitle: _('Words saved in preferences; will retry on next change'),
+            icon_name: 'dialog-warning-symbolic',
+            visible: false,
+        });
+        syncWarningRow.add_css_class('warning');
+        customWordsGroup.add(syncWarningRow);
+
+        const customWordsList = new Gtk.ListBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            css_classes: ['boxed-list'],
+        });
+        customWordsGroup.add(customWordsList);
+
+        // Helper to create a word row
+        const createWordRow = (word) => {
+            const row = new Adw.ActionRow();
+            row.title = word;
+            const deleteButton = new Gtk.Button({
+                icon_name: 'edit-delete-symbolic',
+                css_classes: ['flat', 'error'],
+                valign: Gtk.Align.CENTER,
+            });
+            deleteButton.connect('clicked', async () => {
+                customWordsList.remove(row);
+                await _saveCustomWords();
+            });
+            row.add_suffix(deleteButton);
+            return row;
+        };
+
+        // Helper to persist the current list to GSettings
+        const _saveCustomWords = async () => {
+            const words = [];
+            let child = customWordsList.get_first_child();
+            while (child) {
+                if (child instanceof Adw.ActionRow && child.title && child.title !== _('Add Word…')) {
+                    words.push(child.title);
+                }
+                child = child.get_next_sibling();
+            }
+            // Sync to GSettings (always succeeds)
+            settings.set_strv('custom-words', words);
+            // Sync to config.yaml — auto-retry if previous sync failed
+            const attempts = _configSyncFailed.v ? 2 : 1;
+            for (let i = 0; i < attempts; i++) {
+                try {
+                    const config = await readConfigYaml();
+                    if (config) {
+                        if (!config.postprocess) config.postprocess = {};
+                        config.postprocess.custom_words = words;
+                        await writeConfigYaml(config);
+                    }
+                    _configSyncFailed.v = false;
+                    syncWarningRow.visible = false;
+                    return;
+                } catch (e) {
+                    if (i === attempts - 1) {
+                        console.error(`VoiceToText: config.yaml sync failed: ${e.message}`);
+                        _configSyncFailed.v = true;
+                        syncWarningRow.visible = true;
+                    }
+                }
+            }
+        };
+
+        // Populate existing words — prefer GSettings, fall back to config.yaml
+        const _populateCustomWords = async () => {
+            let customWords = settings.get_strv('custom-words');
+            const config = await readConfigYaml();
+            const configWords = config?.postprocess?.custom_words ?? [];
+
+            // If GSettings is empty, seed from config.yaml
+            if (customWords.length === 0 && configWords.length > 0) {
+                customWords = configWords;
+                settings.set_strv('custom-words', customWords);
+            }
+
+            // Check for drift: do GSettings and config.yaml differ?
+            if (customWords.length > 0 || configWords.length > 0) {
+                const gsetStr = customWords.slice().sort().join('\n');
+                const cfgStr = configWords.slice().sort().join('\n');
+                if (gsetStr !== cfgStr) {
+                    syncWarningRow.visible = true;
+                    _configSyncFailed.v = true;
+                }
+            }
+
+            for (const word of customWords) {
+                if (word) customWordsList.append(createWordRow(word));
+            }
+        };
+        _populateCustomWords();
+
+        // "Add Word…" row at the bottom
+        const addWordRow = new Adw.ActionRow({
+            activatable: true,
+            title: _('Add Word…'),
+            subtitle: _('Add a new word or phrase for fuzzy correction'),
+            icon_name: 'list-add-symbolic',
+        });
+        addWordRow.add_css_class('activatable');
+        addWordRow.connect('activated', () => {
+            const dialog = new Gtk.Window({
+                title: _('Add Custom Word'),
+                modal: true,
+                transient_for: this._window,
+                default_width: 400,
+                default_height: 150,
+            });
+
+            const mainBox = new Gtk.Box({
+                orientation: Gtk.Orientation.VERTICAL,
+                spacing: 12,
+                margin_top: 12,
+                margin_bottom: 12,
+                margin_start: 12,
+                margin_end: 12,
+            });
+            dialog.set_child(mainBox);
+
+            mainBox.append(
+                new Gtk.Label({
+                    label: _('Enter a word or phrase:'),
+                    wrap: true,
+                    xalign: 0,
+                })
+            );
+
+            const entry = new Gtk.Entry({
+                placeholder_text: _('e.g., R&D, API, machine learning'),
+                hexpand: true,
+            });
+            mainBox.append(entry);
+
+            const buttonBox = new Gtk.Box({
+                spacing: 6,
+                halign: Gtk.Align.END,
+            });
+            const cancelButton = new Gtk.Button({ label: _('Cancel') });
+            const addButton = new Gtk.Button({
+                label: _('Add'),
+                css_classes: ['suggested-action'],
+            });
+            buttonBox.append(cancelButton);
+            buttonBox.append(addButton);
+            mainBox.append(buttonBox);
+
+            cancelButton.connect('clicked', () => dialog.close());
+            addButton.connect('clicked', async () => {
+                const text = entry.get_text().trim();
+                if (text) {
+                    customWordsList.append(createWordRow(text));
+                    await _saveCustomWords();
+                }
+                dialog.close();
+            });
+            entry.connect('activate', () => addButton.emit('clicked'));
+
+            dialog.present();
+        });
+        customWordsList.append(addWordRow);
+
+        // Custom words threshold
+        const thresholdRow = new Adw.SpinRow({
+            title: _('Matching Threshold'),
+            subtitle: _('How strict fuzzy matching is (0=exact, 1=any match)'),
+            digits: 2,
+            adjustment: new Gtk.Adjustment({
+                lower: 0.0,
+                upper: 1.0,
+                step_increment: 0.1,
+                page_increment: 0.25,
+            }),
+        });
+        settings.bind(
+            'custom-words-threshold',
+            thresholdRow,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        group.add(thresholdRow);
 
         // Configuration group
         const configGroup = new Adw.PreferencesGroup({

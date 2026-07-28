@@ -42,7 +42,7 @@ def list_input_devices() -> list[tuple[str, str]]:
     first entry uses the id "__system_default__" which tells the engine to
     let PortAudio choose the input device.
     """
-    devices: list[tuple[str, str]] = [("__system_default__", "System default")]
+    devices: list[list[str]] = [["__system_default__", "System default"]]
     seen: set[str] = set()
     try:
         all_devices = sd.query_devices()
@@ -59,7 +59,7 @@ def list_input_devices() -> list[tuple[str, str]]:
         except Exception:
             continue
         seen.add(name)
-        devices.append((name, name))
+        devices.append([name, name])
     return devices
 
 

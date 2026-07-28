@@ -34,7 +34,9 @@ class ElevenLabsProvider(BatchProvider):
         self.api_url = config.get("api_url", "https://api.elevenlabs.io")
         self.tag_audio_events = config.get("tag_audio_events", False)
 
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         logger.info("Transcribing %s with ElevenLabs model %s", audio_path, self.model)
         headers = {"xi-api-key": self.api_key}
         data: dict[str, Any] = {
