@@ -59,7 +59,11 @@ export default class VoiceToTextExtension extends Extension {
         this._recording = false;
         this._hotkeySignalId = null;
         this._signalIds = [];
-        this._audioLevelWidget = new AudioLevelWidget();
+        this._audioLevelWidget = this._settings.get_boolean(
+            'show-audio-level-widget'
+        )
+            ? new AudioLevelWidget()
+            : null;
 
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
@@ -162,7 +166,7 @@ export default class VoiceToTextExtension extends Extension {
                         this._indicator.setProcessing();
                     } else if (state === 'idle') {
                         this._indicator.setRecording(false);
-                        this._audioLevelWidget.hide();
+                        this._audioLevelWidget?.hide();
                         this._recording = false;
                         this._releaseInhibitor();
                     }
@@ -173,7 +177,7 @@ export default class VoiceToTextExtension extends Extension {
             const levelId = this._proxy.connectSignal(
                 'AudioLevel',
                 (proxy, name, [level]) => {
-                    this._audioLevelWidget.updateLevel(level);
+                    this._audioLevelWidget?.updateLevel(level);
                 }
             );
             this._signalIds.push(levelId);
@@ -238,7 +242,7 @@ export default class VoiceToTextExtension extends Extension {
         }
 
         this._indicator.setProcessing();
-        this._audioLevelWidget.show();
+        this._audioLevelWidget?.show();
         this._recording = true;
 
         const config = {
@@ -288,7 +292,7 @@ export default class VoiceToTextExtension extends Extension {
         }
 
         this._indicator.setProcessing();
-        this._audioLevelWidget.hide();
+        this._audioLevelWidget?.hide();
 
         this._proxy.StopRecordingAsync().then(
             () => console.log('VoiceToText: StopRecording called via D-Bus'),
@@ -362,7 +366,7 @@ export default class VoiceToTextExtension extends Extension {
     _setIdle() {
         this._releaseInhibitor();
         this._recording = false;
-        this._audioLevelWidget.hide();
+        this._audioLevelWidget?.hide();
         this._indicator?.setRecording(false);
     }
 

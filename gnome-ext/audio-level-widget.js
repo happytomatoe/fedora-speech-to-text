@@ -1,20 +1,38 @@
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const WIDGET_WIDTH = 300;
 const WIDGET_HEIGHT = 12;
 const MARGIN_BOTTOM = 60;
 const SMOOTH = 0.6;
+const SHOW_DELAY_MS = 300;
 
 export class AudioLevelWidget {
     constructor() {
         this._widget = null;
         this._smoothedLevel = 0;
         this._visible = false;
+        this._showTimeoutId = 0;
     }
 
     show() {
+        if (this._widget) return;
+
+        // Delay showing the widget to avoid initial audio spikes
+        this._showTimeoutId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            SHOW_DELAY_MS,
+            () => {
+                this._showTimeoutId = 0;
+                this._createWidget();
+                return GLib.SOURCE_REMOVE;
+            }
+        );
+    }
+
+    _createWidget() {
         if (this._widget) return;
 
         this._widget = new St.DrawingArea({
@@ -31,6 +49,12 @@ export class AudioLevelWidget {
     }
 
     hide() {
+        // Cancel any pending show timeout
+        if (this._showTimeoutId) {
+            GLib.source_remove(this._showTimeoutId);
+            this._showTimeoutId = 0;
+        }
+
         if (!this._widget) return;
 
         Main.layoutManager.removeChrome(this._widget);

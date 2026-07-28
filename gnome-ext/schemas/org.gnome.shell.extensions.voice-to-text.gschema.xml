@@ -57,5 +57,10 @@
       <summary>Batch provider for hybrid mode</summary>
       <description>Provider used for final batch transcription in hybrid mode (deepgram, groq, voxtral, parakeet, or elevenlabs)</description>
     </key>
+    <key name="show-audio-level-widget" type="b">
+      <default>false</default>
+      <summary>Show floating audio level widget</summary>
+      <description>Display a floating audio level bar at the bottom-center of the screen during recording</description>
+    </key>
   </schema>
 </schemalist>
