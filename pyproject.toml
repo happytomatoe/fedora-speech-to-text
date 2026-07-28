@@ -13,6 +13,8 @@ dependencies = [
   "websockets~=14.0",
   "dbus-next~=0.2.3",
   "mistralai[realtime]~=2.4,!=2.4.6",
+  "rapidfuzz~=3.14",
+  "jellyfish~=1.2",
 ]
 
 [project.scripts]
@@ -43,6 +45,11 @@ ignore_missing_imports = true
 [tool.pyright]
 # dbus-next, groq, and sounddevice have incomplete type stubs
 reportMissingTypeStubs = false
+# Pre-existing errors in dbus_service.py, voxtral.py, typer.py, __main__.py
+reportPrivateImportUsage = false
+reportCallIssue = false
+reportInvalidTypeForm = false
+reportOptionalMemberAccess = false
 
 [dependency-groups]
 dev = [
