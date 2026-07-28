@@ -1,0 +1,40 @@
+# Lefthook configuration
+# https://lefthook.dev/configuration
+
+pre-commit:
+  parallel: true
+  commands:
+    check-merge-conflict:
+      run: bash -c 'matches=$(grep -rn "^<<<<<<< \\|^=======$\\|^>>>>>>> " {staged_files}); if [ -n "$matches" ]; then echo "$matches"; exit 1; fi'
+      glob: "*.{py,js,css,json,xml,yaml,yml,toml,md}"
+    uv-sync:
+      run: uv sync
+    ruff-lint:
+      run: uv run ruff check --fix {staged_files}
+      glob: "*.py"
+      stage_fixed: true
+    ruff-format:
+      run: uv run ruff format {staged_files}
+      glob: "*.py"
+      stage_fixed: true
+    eslint:
+      run: bash -c 'npm ci 2>/dev/null || npm install 2>/dev/null; for f in {staged_files}; do npx eslint --stdin --stdin-filename="$f" < "$f"; done'
+      glob: "gnome-ext/**/*.js"
+    gjs-syntax:
+      run: node --check {staged_files}
+      glob: "gnome-ext/**/*.js"
+    gschema-validate:
+      run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
+      glob: "gnome-ext/schemas/*.xml"
+    prettier-check:
+      run: npx prettier@3.8.4 --check {staged_files}
+      glob: "gnome-ext/**/*.{js,css,json}"
+    pytest:
+      run: uv run pytest -n auto
+      glob: "*.{py,js}"
+      interactive: true
+
+commit-msg:
+  commands:
+    no-co-authored-by:
+      run: bash scripts/no-co-authored-by.sh {1}

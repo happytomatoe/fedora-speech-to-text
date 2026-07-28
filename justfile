@@ -1,6 +1,12 @@
 default:
     @just --list
 
+# @category setup
+# Install npm deps (lefthook) and set up git hooks
+setup:
+    npm install
+    lefthook install
+
 run *args:
     PYTHONPATH=src .venv/bin/python -m voice_to_text.__main__ {{args}}
 
@@ -129,8 +135,10 @@ gnome-ext-dev: reinstall gnome-ext-install
         echo "Error: Cannot start a development GNOME Shell from within a toolbox container. Run this command on the host system." >&2
         exit 1
     fi
-    echo "" > /tmp/gnome-shell-nested.log
-    echo "" > /tmp/voice-to-text.log
+    LOG_DIR="$PWD/logs"
+    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    mkdir -p "$LOG_DIR"
+    echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing..."
         if command -v rpm-ostree &>/dev/null; then
@@ -164,13 +172,13 @@ gnome-ext-dev: reinstall gnome-ext-install
     # GNOME extension can find and call it on real hardware.
     # Trap EXIT/INT/TERM to kill the background service when the shell exits,
     dbus-run-session -- sh -c "
-      voice-to-text-dbus > /tmp/voice-to-text.log 2>&1 &
+      voice-to-text-dbus >> "$LOG_FILE" 2>&1 &
       DBUS_PID=\$!
       sleep 1
       trap 'kill \$DBUS_PID 2>/dev/null || true' EXIT INT TERM
       gnome-shell --wayland $DEVKIT_FLAG
-    " 2>&1 | tee /tmp/gnome-shell-nested.log
-
+    " 2>&1 | tee -a "$LOG_FILE"
+    echo "Logs written to $LOG_FILE"
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash
@@ -180,7 +188,7 @@ gnome-ext-install:
     # No TypeScript build needed — extension is plain JS
     mkdir -p "$DEST/schemas"
     # Copy JS files from gnome-ext/
-    cp gnome-ext/*.js "$DEST/"
+    cp gnome-ext/*.js gnome-ext/*.mjs "$DEST/"
     # Copy other files from gnome-ext/
     cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
@@ -192,6 +200,18 @@ gnome-ext-uninstall:
     rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
     echo "Extension uninstalled"
 
+# Validate GNOME extension (syntax + schema)
+gnome-ext-lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking JS syntax..."
+    for f in gnome-ext/*.js; do
+        node --check "$f" || exit 1
+    done
+    echo "Validating GSettings schema..."
+    python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
+    glib-compile-schemas --strict gnome-ext/schemas/ 2>&1 || exit 1
+    echo "All checks passed!"
 # Reinstall files and reset in GNOME Shell
 gnome-ext-reload:
     ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
