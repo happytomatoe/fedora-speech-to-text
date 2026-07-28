@@ -353,11 +353,7 @@ timer_stop "Screenshot: desktop"
 timer_start
 echo ""
 echo "2. Preferences dialog"
-# Ensure overview is closed first
-do_ssh xdotool keydown super 2>/dev/null || true
-sleep 0.3
-do_ssh xdotool keyup super 2>/dev/null || true
-sleep 1
+# Overview is already closed from desktop screenshot — don't toggle it
 
 # Open preferences dialog with retries
 PREFS_OPENED=false
@@ -383,14 +379,26 @@ done
 
 if [[ "${PREFS_OPENED}" == "true" ]]; then
     snapshot_test "snapshot-prefs" "preferences dialog"
-    # Close preferences
-    do_ssh "xdotool keydown alt; xdotool key F4; xdotool keyup alt" 2>/dev/null || true
-    sleep 2
-    # Verify dialog is closed
-    PREFS_STILL_OPEN=$(do_ssh "xdotool search --name 'Voice' 2>/dev/null | head -1" 2>/dev/null || true)
-    if [[ -n "${PREFS_STILL_OPEN}" ]]; then
+    # Close preferences — use windowclose on the specific WID (Alt+F4 unreliable for GNOME Shell modals)
+    if [[ -n "${PREFS_WID}" ]]; then
+        for close_attempt in 1 2 3; do
+            do_ssh "xdotool windowclose ${PREFS_WID} 2>/dev/null" || true
+            sleep 1
+            # Verify the window is gone
+            PREFS_STILL_OPEN=$(do_ssh "xdotool search --name 'Voice' 2>/dev/null | head -1" 2>/dev/null || true)
+            if [[ -z "${PREFS_STILL_OPEN}" ]]; then
+                echo "  Preferences dialog closed (attempt ${close_attempt})"
+                break
+            fi
+            echo "  Close attempt ${close_attempt} failed, retrying..."
+            # Fallback: try Escape key
+            do_ssh "xdotool key Escape 2>/dev/null" || true
+            sleep 0.5
+        done
+    else
+        # No WID found — try Alt+F4 as last resort
         do_ssh "xdotool keydown alt; xdotool key F4; xdotool keyup alt" 2>/dev/null || true
-        sleep 1
+        sleep 2
     fi
 else
     echo "  Skipping (preferences window not found after 5 attempts)"
