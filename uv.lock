@@ -1062,7 +1062,6 @@ wheels = [
 
 [[package]]
 name = "voice-to-text"
-version = "0.0.58"
 source = { editable = "." }
 dependencies = [
     { name = "dbus-next" },
