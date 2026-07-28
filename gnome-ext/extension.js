@@ -276,9 +276,6 @@ export default class VoiceToTextExtension extends Extension {
         );
 
         this._ensureInhibitor();
-        if (this._settings.get_boolean('show-recording-notification')) {
-            this._showNotification('Recording...');
-        }
     }
 
     _stop() {
