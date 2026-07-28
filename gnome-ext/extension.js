@@ -5,6 +5,7 @@ import {registerHotkey, unregisterHotkey} from './hotkey.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {AudioLevelWidget} from './audio-level-widget.js';
 
 const VoiceToTextIface = `
 <node>
@@ -58,6 +59,11 @@ export default class VoiceToTextExtension extends Extension {
         this._recording = false;
         this._hotkeySignalId = null;
         this._signalIds = [];
+        this._audioLevelWidget = this._settings.get_boolean(
+            'show-audio-level-widget'
+        )
+            ? new AudioLevelWidget()
+            : null;
 
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
@@ -99,6 +105,8 @@ export default class VoiceToTextExtension extends Extension {
         this._sessionManager = null;
         this._proxy = null;
 
+        this._audioLevelWidget?.destroy();
+        this._audioLevelWidget = null;
         this._indicator?.destroy();
         this._indicator = null;
         this._settings = null;
@@ -158,6 +166,7 @@ export default class VoiceToTextExtension extends Extension {
                         this._indicator.setProcessing();
                     } else if (state === 'idle') {
                         this._indicator.setRecording(false);
+                        this._audioLevelWidget?.hide();
                         this._recording = false;
                         this._releaseInhibitor();
                     }
@@ -168,7 +177,7 @@ export default class VoiceToTextExtension extends Extension {
             const levelId = this._proxy.connectSignal(
                 'AudioLevel',
                 (proxy, name, [level]) => {
-                    this._indicator.updateLevel(level);
+                    this._audioLevelWidget?.updateLevel(level);
                 }
             );
             this._signalIds.push(levelId);
@@ -233,6 +242,7 @@ export default class VoiceToTextExtension extends Extension {
         }
 
         this._indicator.setProcessing();
+        this._audioLevelWidget?.show();
         this._recording = true;
 
         const config = {
@@ -282,6 +292,7 @@ export default class VoiceToTextExtension extends Extension {
         }
 
         this._indicator.setProcessing();
+        this._audioLevelWidget?.hide();
 
         this._proxy.StopRecordingAsync().then(
             () => console.log('VoiceToText: StopRecording called via D-Bus'),
@@ -355,6 +366,7 @@ export default class VoiceToTextExtension extends Extension {
     _setIdle() {
         this._releaseInhibitor();
         this._recording = false;
+        this._audioLevelWidget?.hide();
         this._indicator?.setRecording(false);
     }
 
