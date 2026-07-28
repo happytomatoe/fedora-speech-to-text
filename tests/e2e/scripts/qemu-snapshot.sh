@@ -302,7 +302,16 @@ if [[ "${NEEDS_SETUP}" == "true" ]]; then
     if [[ -f "${TEST_AUDIO}" ]]; then
         scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} "${TEST_AUDIO}" ${SSH_USER}@localhost:/tmp/test-audio.wav 2>/dev/null || true
     fi
-    do_ssh "export PATH=\$HOME/.local/bin:\$PATH; export XDG_RUNTIME_DIR=/run/user/\$(id -u); export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/..; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &"
+    # Support both Deepgram (cloud) and Parakeet (local) providers
+    PROVIDER_ARGS=""
+    if [[ -n "${PARAKEET_MODEL_PATH:-}" ]]; then
+        PROVIDER_ARGS="export PARAKEET_MODEL_PATH=${PARAKEET_MODEL_PATH}; export VOICE_TO_TEXT_PROVIDER=parakeet;"
+        echo "  Using Parakeet provider (local model)"
+    else
+        PROVIDER_ARGS="export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-};"
+        echo "  Using Deepgram provider (cloud)"
+    fi
+    do_ssh "export PATH=\$HOME/.local/bin:\$PATH; export XDG_RUNTIME_DIR=/run/user/\$(id -u); ${PROVIDER_ARGS} export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/..; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &"
     sleep 1
 
     echo -n "Waiting for D-Bus service"
@@ -368,10 +377,14 @@ for attempt in 1 2 3 4 5; do
     if [[ -n "${PREFS_WID}" ]]; then
         do_ssh "xdotool windowactivate ${PREFS_WID} 2>/dev/null" || true
         do_ssh "xdotool windowraise ${PREFS_WID} 2>/dev/null" || true
-        sleep 1
-        PREFS_OPENED=true
-        echo "  Preferences dialog opened (attempt ${attempt})"
-        break
+        sleep 2
+        # Verify dialog is fully rendered by checking window size
+        PREFS_SIZE=$(do_ssh "xdotool getwindowgeometry ${PREFS_WID} 2>/dev/null | grep -oP '\\d+x\\d+'" 2>/dev/null || true)
+        if [[ -n "${PREFS_SIZE}" ]]; then
+            PREFS_OPENED=true
+            echo "  Preferences dialog opened (attempt ${attempt}, size: ${PREFS_SIZE})"
+            break
+        fi
     fi
     echo "  Retry ${attempt}..."
     sleep 1
@@ -424,6 +437,26 @@ timer_start
 echo ""
 echo "4. Transcription result"
 
+# Open a terminal to receive the typed transcription text
+# Terminal's command prompt is a reliable text input field
+echo "  Opening terminal for transcription..."
+do_ssh "nohup gnome-terminal &>/dev/null &" 2>/dev/null || true
+sleep 3
+# Find the terminal window and focus it
+TERM_WID=$(do_ssh "xdotool search --name 'Terminal' 2>/dev/null | head -1" 2>/dev/null || true)
+if [[ -z "${TERM_WID}" ]]; then
+    TERM_WID=$(do_ssh "xdotool search --class 'gnome-terminal' 2>/dev/null | head -1" 2>/dev/null || true)
+fi
+if [[ -n "${TERM_WID}" ]]; then
+    do_ssh "xdotool windowactivate ${TERM_WID} 2>/dev/null" || true
+    do_ssh "xdotool windowraise ${TERM_WID} 2>/dev/null" || true
+    sleep 1
+    echo "  Terminal opened (WID: ${TERM_WID})"
+else
+    echo "  WARNING: Could not find terminal window"
+fi
+
+
 # Wait for the D-Bus service to type the transcription via xdotool
 # The service handles typing — we just wait and screenshot
 echo -n "  Waiting for service to type transcription"
@@ -439,11 +472,17 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# Save transcription to file for reliable verification
+if [[ -n "${TRANSCRIPTION}" ]]; then
+    do_ssh "echo '${TRANSCRIPTION}' > /tmp/transcription-result.txt" 2>/dev/null || true
+    echo "  Transcription saved to /tmp/transcription-result.txt"
+fi
+
 if [[ -z "${TRANSCRIPTION}" ]]; then
     echo " TIMEOUT"
 fi
 
-# The service typed the result — take a screenshot of whatever is on screen
+# Take screenshot of the terminal with typed text
 snapshot_test "snapshot-transcription" "transcription typed by service"
 timer_stop "Screenshot: transcription"
 
