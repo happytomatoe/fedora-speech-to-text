@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - **E2E preferences screenshots now capture actual content** — GNOME 47 renders extension preferences in-process via Clutter, so `xwd` couldn't capture them. Fixed by using `org.gnome.Shell.Eval` → `Shell.Screenshot` from inside gnome-shell, which reads `global.stage` directly. Requires `--unsafe-mode` enabled via systemd drop-in on `org.gnome.Shell@x11.service`.
+- **QEMU E2E prefs dialog close** — GNOME Shell modal prefs dialog doesn't respond to Alt+F4. Fixed by using `xdotool windowclose` on the specific window ID with retry loop and Escape fallback. Removed Super keypress that incorrectly toggled Activities overview.
 
 ### Security
 - None
