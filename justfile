@@ -453,3 +453,49 @@ qemu-e2e-update:
     echo "Updating QEMU E2E reference images..."
     podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh --update"
     echo "References saved to tests/e2e/expected-qemu/"
+
+# @category e2e-qemu
+# Install QEMU/KVM on host (Fedora Silverblue — requires reboot)
+qemu-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Installing QEMU/KVM on host via rpm-ostree..."
+    rpm-ostree install qemu-kvm libvirt virt-install qemu-img
+    echo "Packages staged. Run 'systemctl reboot' to activate."
+
+# @category e2e-qemu
+# Create base QEMU VM image directly on host (no podman)
+qemu-e2e-setup-host:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Setting up QEMU E2E test VM on host..."
+    REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
+        /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-setup.sh
+    echo "Setup complete. Run 'just qemu-e2e-test-host' to test."
+
+# @category e2e-qemu
+# Run E2E tests directly on host (no podman)
+qemu-e2e-test-host:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Running QEMU E2E tests on host..."
+    REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
+        /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh
+
+# @category e2e-qemu
+# Update E2E reference images directly on host
+qemu-e2e-update-host:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Updating QEMU E2E reference images on host..."
+    REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
+        /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh --update
+    echo "References saved to tests/e2e/expected-qemu/"
+
+# @category e2e-qemu
+# Record E2E test flow as video directly on host
+qemu-e2e-record-host:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Recording QEMU E2E test flow on host..."
+    /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-e2e-record.sh

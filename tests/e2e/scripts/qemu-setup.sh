@@ -160,6 +160,14 @@ echo "Ensuring required packages..."
 ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost \
     "sudo dnf install -y gnome-shell gnome-terminal dbus-x11 xdotool dotool xorg-x11-server-Xorg pipewire-utils pulseaudio-utils python3-pip python3-devel portaudio-devel" 2>/dev/null || true
 
+# ─── Step 7d: Configure dotool permissions ─────────────────────────────
+echo "Configuring dotool permissions..."
+ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost << 'DTOOL_SETUP'
+sudo groupadd -f input
+sudo usermod -aG input testuser
+echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/80-dotool.rules
+sudo udevadm control --reload && sudo udevadm trigger
+DTOOL_SETUP
 # ─── Step 7c: Disable GNOME welcome tour ────────────────────────────
 echo "Disabling GNOME welcome tour..."
 ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost << 'TOUR_DISABLE'
