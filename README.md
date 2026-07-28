@@ -1,6 +1,6 @@
-# voice-to-text
+# Fedora speech to text
 
-Convert speech to text for free by using free APIs on Linux
+Convert speech to text for free by using free APIs or local Parakeet on Fedora.  
 
 # Providers
 
