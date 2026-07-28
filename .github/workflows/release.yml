@@ -9,49 +9,44 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Semantic Release
+  build:
     runs-on: ubuntu-latest
-    concurrency: release
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
+      - name: Bump version and push tag
+        id: tag_version
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
 
-      - name: Setup Python
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: uv sync
-
-      - name: Python Semantic Release
-        id: release
-        run: |
-          uv run semantic-release version
-          uv run semantic-release publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv sync --frozen
 
       - name: Build Python package
-        if: steps.release.outcome == 'success'
         run: uv build --out-dir dist
 
       - name: Pack GNOME extension
-        if: steps.release.outcome == 'success'
         run: |
           UUID="voice-to-text@happytomatoe.com"
           SRC="gnome-ext"
           rm -rf "dist/$UUID"
           mkdir -p "dist/$UUID/schemas"
-          VERSION_NUM=$(echo "${{ steps.release.outputs.tag }}" | sed 's/^v//')
+          VERSION_NUM=$(echo "${{ steps.tag_version.outputs.new_tag }}" | sed 's/^v//')
           sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION_NUM\"/g" "$SRC"/metadata.json
 
           cp "$SRC"/*.js "$SRC"/*.json "$SRC"/*.css "dist/$UUID/"
@@ -59,3 +54,13 @@ jobs:
           cp "$SRC"/metadata.json "dist/$UUID/"
           glib-compile-schemas "dist/$UUID/schemas/"
           cd "dist/$UUID" && zip -r "../$UUID.shell-extension.zip" ./*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          files: |
+            dist/voice_to_text-*.whl
+            dist/voice_to_text-*.tar.gz
+            dist/voice-to-text@happytomatoe.com.shell-extension.zip
+          generate_release_notes: true
