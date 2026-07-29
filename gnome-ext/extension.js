@@ -59,12 +59,13 @@ export default class VoiceToTextExtension extends Extension {
         this._recording = false;
         this._hotkeySignalId = null;
         this._signalIds = [];
-        this._audioLevelWidget = this._settings.get_boolean(
-            'show-audio-level-widget'
-        )
+
+        // Log audio level widget setting on startup
+        const showAudioLevel = this._settings.get_boolean('show-audio-level-widget');
+        console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
+        this._audioLevelWidget = showAudioLevel
             ? new AudioLevelWidget()
             : null;
-
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
@@ -76,6 +77,22 @@ export default class VoiceToTextExtension extends Extension {
         this._hotkeySignalId = this._settings.connect('changed::hotkey', () => {
             this._registerHotkey();
         });
+        // Listen for audio level widget changes
+        this._audioLevelWidgetSignalId = this._settings.connect(
+            'changed::show-audio-level-widget',
+            () => {
+                const enabled = this._settings.get_boolean('show-audio-level-widget');
+                console.log(`VoiceToText: show-audio-level-widget changed to ${enabled}`);
+                if (enabled && !this._audioLevelWidget) {
+                    this._audioLevelWidget = new AudioLevelWidget();
+                    console.log('VoiceToText: AudioLevelWidget created');
+                } else if (!enabled && this._audioLevelWidget) {
+                    this._audioLevelWidget.destroy();
+                    this._audioLevelWidget = null;
+                    console.log('VoiceToText: AudioLevelWidget destroyed');
+                }
+            }
+        );
 
         this._inhibitCookie = 0;
         this._sessionManager = new SessionManagerProxy(
@@ -93,6 +110,10 @@ export default class VoiceToTextExtension extends Extension {
         if (this._hotkeySignalId) {
             this._settings.disconnect(this._hotkeySignalId);
             this._hotkeySignalId = null;
+        }
+        if (this._audioLevelWidgetSignalId) {
+            this._settings.disconnect(this._audioLevelWidgetSignalId);
+            this._audioLevelWidgetSignalId = null;
         }
 
         this._disconnectDBusSignals();

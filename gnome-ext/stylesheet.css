@@ -1,7 +1,38 @@
-/* Floating audio level widget */
-.audio-level-widget {
+/* Floating OSD widget — segmented meter */
+.osd-widget {
     background-color: rgba(30, 30, 30, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    padding: 8px 18px;
+}
+
+
+.osd-mic-icon {
+    icon-size: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-right: 6px;
+}
+
+.osd-segment {
+    width: 8px;
+    height: 24px;
+    margin: 0 2px;
+    border-radius: 2px;
+    transition: background-color 80ms ease-in-out;
+}
+.osd-segment.idle {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.osd-segment.green {
+    background-color: #3ddc84;
+}
+
+.osd-segment.yellow {
+    background-color: #f5c542;
+}
+
+.osd-segment.red {
+    background-color: #f54242;
 }

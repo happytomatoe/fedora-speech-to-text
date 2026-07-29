@@ -52,6 +52,31 @@ service-uninstall:
     @echo "D-Bus service uninstalled."
 
 # @category service
+# Install parakeet-v2 as a Quadlet service (starts on boot)
+parakeet-start-on-boot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p ~/.config/containers/systemd
+    cp parakeet-v2.container ~/.config/containers/systemd/parakeet-v2.container
+    systemctl --user daemon-reload
+    systemctl --user enable --now parakeet-v2.service
+    echo "Parakeet v2 Quadlet service installed and started."
+    echo "It will auto-start on boot."
+
+# @category service
+# Uninstall parakeet-v2 Quadlet service (stops and removes it)
+parakeet-dont-start-on-boot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    systemctl --user stop parakeet-v2.service 2>/dev/null || true
+    systemctl --user disable parakeet-v2.service 2>/dev/null || true
+    rm -f ~/.config/containers/systemd/parakeet-v2.container
+    systemctl --user daemon-reload
+    podman rm -f parakeet-v2 2>/dev/null || true
+    echo "Parakeet v2 Quadlet service removed."
+    echo "Model files in ~/parakeet/models/ were kept."
+
+# @category service
 # Start the service (runs in background via D-Bus activation or directly)
 service-start:
     #!/usr/bin/env bash

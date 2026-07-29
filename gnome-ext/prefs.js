@@ -601,17 +601,18 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             buttonBox.append(addButton);
             mainBox.append(buttonBox);
 
-            cancelButton.connect('clicked', () => dialog.close());
-            addButton.connect('clicked', async () => {
+            const doAdd = async () => {
                 const text = entry.get_text().trim();
                 if (text) {
-                    customWordsList.append(createWordRow(text));
+                    customWordsList.insert_child_before(createWordRow(text), addWordRow);
                     settings.set_strv('custom-words', _getCustomWordsFromList());
                     await _syncAllToConfig();
                 }
                 dialog.close();
-            });
-            entry.connect('activate', () => addButton.emit('clicked'));
+            };
+            cancelButton.connect('clicked', () => dialog.close());
+            addButton.connect('clicked', () => doAdd());
+            entry.connect('activate', () => doAdd());
 
             dialog.present();
         });
