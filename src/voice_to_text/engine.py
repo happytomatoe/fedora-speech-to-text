@@ -422,6 +422,7 @@ class RecordingEngine:
                     _step("transcription_done")
                     # Apply text post-processing
                     if text:
+                        postprocess_cfg = config_mgr.config.get("postprocess", {})
                         if postprocess_cfg.get("enabled", True):
                             text = postprocess(
                                 text,
