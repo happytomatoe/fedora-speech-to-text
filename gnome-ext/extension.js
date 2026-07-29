@@ -183,6 +183,7 @@ export default class VoiceToTextExtension extends Extension {
                     console.log('VoiceToText: state changed to', state);
                     if (state === 'recording') {
                         this._indicator.setRecordingActive();
+                        this._audioLevelWidget?.show();
                     } else if (state === 'processing') {
                         this._indicator.setProcessing();
                     } else if (state === 'idle') {
@@ -263,7 +264,6 @@ export default class VoiceToTextExtension extends Extension {
         }
 
         this._indicator.setProcessing();
-        this._audioLevelWidget?.show();
         this._recording = true;
 
         const config = {
