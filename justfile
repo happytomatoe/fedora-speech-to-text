@@ -225,6 +225,10 @@ gnome-ext-uninstall:
     rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
     echo "Extension uninstalled"
 
+# @category gnome-ext
+# Verify GTK4 widget APIs used in prefs.js actually exist (catches GTK3→GTK4 regressions)
+gtk4-api-check:
+    gjs gnome-ext/tests/test-gtk4-api.js
 # Validate GNOME extension (syntax + schema)
 gnome-ext-lint:
     #!/usr/bin/env bash
@@ -233,6 +237,8 @@ gnome-ext-lint:
     for f in gnome-ext/*.js; do
         node --check "$f" || exit 1
     done
+    echo "Checking GTK4 API compatibility..."
+    gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
     echo "Validating GSettings schema..."
     python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
     glib-compile-schemas --strict gnome-ext/schemas/ 2>&1 || exit 1

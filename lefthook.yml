@@ -23,6 +23,9 @@ pre-commit:
     gjs-syntax:
       run: node --check {staged_files}
       glob: "gnome-ext/**/*.js"
+    gtk4-api-check:
+      run: gjs gnome-ext/tests/test-gtk4-api.js
+      glob: "gnome-ext/**/*.js"
     gschema-validate:
       run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
       glob: "gnome-ext/schemas/*.xml"

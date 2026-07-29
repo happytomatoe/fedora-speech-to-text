@@ -1,3 +1,4 @@
+// @ts-check
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
@@ -15,18 +16,18 @@ const CONFIG_PATH = GLib.build_filenamev([GLib.get_home_dir(), '.config', 'voice
 // Mapping: GSettings key → [config.yaml path parts..., value type]
 // Types: 'string', 'int', 'double', 'strv'
 const CONFIG_SYNC_MAP = {
-    'mode':                    { path: ['transcription', 'mode'],                    type: 'string' },
-    'provider':                { path: ['transcription', 'provider'],                type: 'string' },
-    'language':                { path: ['transcription', 'language'],                type: 'string' },
-    'streaming-provider':      { path: ['transcription', 'hybrid', 'streaming_provider'], type: 'string' },
-    'batch-provider':          { path: ['transcription', 'hybrid', 'batch_provider'],     type: 'string' },
-    'decrease-speaker-volume': { path: ['audio', 'speaker', 'decrease_volume'],       type: 'int' },
-    'stop-timeout-seconds':    { path: ['engine', 'stop_timeout'],                   type: 'int' },
-    'custom-words':            { path: ['postprocess', 'custom_words'],              type: 'strv' },
-    'custom-words-threshold':  { path: ['postprocess', 'custom_words_threshold'],    type: 'double' },
+    'mode': { path: ['transcription', 'mode'], type: 'string' },
+    'provider': { path: ['transcription', 'provider'], type: 'string' },
+    'language': { path: ['transcription', 'language'], type: 'string' },
+    'streaming-provider': { path: ['transcription', 'hybrid', 'streaming_provider'], type: 'string' },
+    'batch-provider': { path: ['transcription', 'hybrid', 'batch_provider'], type: 'string' },
+    'decrease-speaker-volume': { path: ['audio', 'speaker', 'decrease_volume'], type: 'int' },
+    'stop-timeout-seconds': { path: ['engine', 'stop_timeout'], type: 'int' },
+    'custom-words': { path: ['postprocess', 'custom_words'], type: 'strv' },
+    'custom-words-threshold': { path: ['postprocess', 'custom_words_threshold'], type: 'double' },
 };
 
-async function readConfigYaml() {
+function readConfigYaml() {
     try {
         const file = Gio.File.new_for_path(CONFIG_PATH);
         const [ok, contents] = file.load_contents(null);
@@ -39,7 +40,7 @@ async function readConfigYaml() {
     }
 }
 
-async function writeConfigYaml(config) {
+function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     const yamlStr = yamlDump(config);
     const encoder = new TextEncoder();
@@ -98,7 +99,9 @@ async function syncFromConfig(settings) {
             if (gsetVal !== cfgVal) drifted.push(gkey);
         } else if (type === 'double') {
             gsetVal = settings.get_double(gkey);
-            if (gsetVal === 0.0 && cfgVal !== 0.0) {
+            const defaultVar = settings.get_default_value(gkey);
+            const schemaDefault = defaultVar ? defaultVar.get_value() : 0.0;
+            if (gsetVal === schemaDefault && cfgVal !== schemaDefault) {
                 settings.set_double(gkey, cfgVal);
                 gsetVal = cfgVal;
             }
@@ -202,6 +205,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         const DeviceListProxy = Gio.DBusProxy.makeProxyWrapper(DeviceListIface);
         let deviceProxy = null;
         try {
+            // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
             deviceProxy = new DeviceListProxy(
                 Gio.DBus.session,
                 'com.happytomatoe.VoiceToText',
@@ -232,12 +236,13 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                         deviceCombo.set_active_id(active);
                     }
                     deviceRow.subtitle = _('Audio input device used for recording');
+                    return undefined;
                 },
                 (err) => {
                     deviceRow.subtitle = _('Start the Voice-to-Text service to list microphones');
                     console.error('VoiceToText: ListInputDevices failed:', err?.message || err);
                 }
-            );
+            ).catch(e => console.error('VoiceToText: ListInputDevices unexpected error:', e));
         };
         populateDevices();
 
@@ -263,7 +268,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         providerCombo.set_active_id(settings.get_string('provider'));
         providerCombo.connect('changed', () => {
             settings.set_string('provider', providerCombo.get_active_id());
-            _syncAllToConfig();
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
         });
         providerRow.add_suffix(providerCombo);
         group.add(providerRow);
@@ -302,7 +308,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 'streaming-provider',
                 streamingProviderCombo.get_active_id()
             );
-            _syncAllToConfig();
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
         });
         streamingProviderRow.add_suffix(streamingProviderCombo);
         group.add(streamingProviderRow);
@@ -328,7 +335,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 'batch-provider',
                 batchProviderCombo.get_active_id()
             );
-            _syncAllToConfig();
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
         });
         batchProviderRow.add_suffix(batchProviderCombo);
         group.add(batchProviderRow);
@@ -345,7 +353,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         modeCombo.connect('changed', () => {
             settings.set_string('mode', modeCombo.get_active_id());
             updateProviderVisibility();
-            _syncAllToConfig();
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
         });
 
         // Output method setting
@@ -400,7 +409,10 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT
         );
         group.add(stopTimeoutRow);
-        stopTimeoutRow.connect('notify::value', () => _syncAllToConfig());
+        stopTimeoutRow.connect('notify::value', () => {
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
+        });
 
         // Inhibit sleep during recording
         const inhibitSleepRow = new Adw.SwitchRow({
@@ -435,7 +447,10 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT
         );
         group.add(decreaseVolumeRow);
-        decreaseVolumeRow.connect('notify::value', () => _syncAllToConfig());
+        decreaseVolumeRow.connect('notify::value', () => {
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
+        });
 
         // Language setting
         const languageRow = new Adw.ActionRow({
@@ -449,7 +464,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         languageEntry.connect('changed', () => {
             settings.set_string('language', languageEntry.get_text());
-            _syncAllToConfig();
+            // eslint-disable-next-line no-use-before-define
+            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
         });
         languageRow.add_suffix(languageEntry);
         group.add(languageRow);
@@ -492,7 +508,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 _configSyncFailed.v = true;
             }
         };
-        _initSync();
+        _initSync().catch(e => console.error('VoiceToText: initSync failed:', e));
 
         // Custom words for fuzzy correction — list widget
         const customWordsGroup = new Adw.PreferencesGroup({
@@ -516,10 +532,11 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 css_classes: ['flat', 'error'],
                 valign: Gtk.Align.CENTER,
             });
-            deleteButton.connect('clicked', async () => {
+            deleteButton.connect('clicked', () => {
                 customWordsList.remove(row);
+                // eslint-disable-next-line no-use-before-define
                 settings.set_strv('custom-words', _getCustomWordsFromList());
-                await _syncAllToConfig();
+                _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
             });
             row.add_suffix(deleteButton);
             return row;
@@ -604,15 +621,18 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             const doAdd = async () => {
                 const text = entry.get_text().trim();
                 if (text) {
-                    customWordsList.insert_child_before(createWordRow(text), addWordRow);
+                    // GTK4 Gtk.ListBox has no insert_child_before; remove/re-add to insert before addWordRow
+                    customWordsList.remove(addWordRow);
+                    customWordsList.append(createWordRow(text));
+                    customWordsList.append(addWordRow);
                     settings.set_strv('custom-words', _getCustomWordsFromList());
                     await _syncAllToConfig();
                 }
                 dialog.close();
             };
             cancelButton.connect('clicked', () => dialog.close());
-            addButton.connect('clicked', () => doAdd());
-            entry.connect('activate', () => doAdd());
+            addButton.connect('clicked', () => doAdd().catch(e => console.error('VoiceToText: doAdd failed:', e)));
+            entry.connect('activate', () => doAdd().catch(e => console.error('VoiceToText: doAdd failed:', e)));
 
             dialog.present();
         });
