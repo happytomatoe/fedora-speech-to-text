@@ -92,7 +92,7 @@ async function syncFromConfig(settings) {
             if (gsetStr !== cfgStr) drifted.push(gkey);
         } else if (type === 'int') {
             gsetVal = settings.get_int(gkey);
-            if (gsetVal === 0 && cfgVal !== 0) {
+            if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
                 settings.set_int(gkey, cfgVal);
                 gsetVal = cfgVal;
             }
@@ -507,6 +507,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 syncWarningRow.visible = true;
                 _configSyncFailed.v = true;
             }
+            _populateCustomWords();
         };
         _initSync().catch(e => console.error('VoiceToText: initSync failed:', e));
 
@@ -547,7 +548,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             const words = [];
             let child = customWordsList.get_first_child();
             while (child) {
-                if (child instanceof Adw.ActionRow && child.title && child.title !== _('Add Word…')) {
+                if (child instanceof Adw.ActionRow && child !== addWordRow && child.title) {
                     words.push(child.title);
                 }
                 child = child.get_next_sibling();
@@ -562,7 +563,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 if (word) customWordsList.append(createWordRow(word));
             }
         };
-        _populateCustomWords();
+        // populated by _initSync() after config.yaml seeding completes
 
         // "Add Word…" row at the bottom
         const addWordRow = new Adw.ActionRow({

@@ -11,7 +11,7 @@ declare const console: {
 
 declare class TextDecoder {
     constructor(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean });
-    decode(input?: BufferSource, options?: { stream?: boolean }): string;
+    decode(input?: Uint8Array | ArrayBuffer, options?: { stream?: boolean }): string;
 }
 
 declare class TextEncoder {

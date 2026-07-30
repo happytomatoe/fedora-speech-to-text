@@ -410,9 +410,15 @@ class RecordingEngine:
             if filepath:
                 try:
                     postprocess_cfg = config_mgr.config.get("postprocess", {})
-                    custom_words = config.get("custom_words") or postprocess_cfg.get("custom_words", [])
-                    custom_words_threshold = config.get("custom_words_threshold") or postprocess_cfg.get(
-                        "custom_words_threshold", 0.5
+                    raw_custom_words = config.get("custom_words")
+                    custom_words = (
+                        raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
+                    )
+                    raw_threshold = config.get("custom_words_threshold")
+                    custom_words_threshold = (
+                        raw_threshold
+                        if raw_threshold is not None
+                        else postprocess_cfg.get("custom_words_threshold", 0.5)
                     )
                     if transcriber:
                         text = await transcriber.on_recording_stop(filepath, language, custom_words)
