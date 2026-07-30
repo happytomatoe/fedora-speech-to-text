@@ -34,7 +34,7 @@ OBJECT_PATH = "/com/happytomatoe/VoiceToText"
 # We stash the current value on the interface and the signal method reads it.
 
 
-def list_input_devices() -> list[tuple[str, str]]:
+def list_input_devices() -> list[list[str]]:
     """Return available input devices as (id, label) pairs.
 
     Only devices that support 16 kHz mono capture (what the recorder uses)
