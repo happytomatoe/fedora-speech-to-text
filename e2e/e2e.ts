@@ -11,7 +11,16 @@ import { execSync } from "node:child_process";
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
 const KEEP_RUNNING = args.includes("--keep-running");
-const RECORD_MODE = args.includes("--record");
+const NO_RECORD = args.includes("--no-record");
+const RECORD_MODE = !NO_RECORD; // enabled by default
+const TIMING_MODE = args.includes("--timing");
+
+function timing(label: string, startMs: number): void {
+  if (TIMING_MODE) {
+    const ms = Date.now() - startMs;
+    console.log(`  [time] ${label}: ${ms}ms`);
+  }
+}
 
 // Paths
 const PROJECT_ROOT = join(import.meta.dir, "..");
@@ -23,11 +32,11 @@ const SSH_KEY = join(VM_DIR, "id_ed25519");
 const SSH_PORT = 2222;
 const SSH_USER = "testuser";
 const REFERENCES_DIR = join(import.meta.dir, "expected-qemu");
-const OUTPUT_DIR = join(import.meta.dir, "output-qemu");
+const OUTPUT_DIR = join(import.meta.dir, "output");
 const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
 const TEST_AUDIO = join(import.meta.dir, "fixtures/test-audio.wav");
 const EXPECTED_FILE = join(import.meta.dir, "fixtures/expected-text.txt");
-const RECORDING_DIR = join(import.meta.dir, "output-qemu", "recording");
+const RECORDING_DIR = join(import.meta.dir, "output", "recording");
 const PARAKEET_PORT = 5092;
 const PARAKEET_SCRIPT = join(PROJECT_ROOT, "parakeet-v2.sh");
 
@@ -328,7 +337,7 @@ class VmManager {
     }
   }
 
-  private async pollUntil(
+  async pollUntil(
     desc: string,
     check: () => Promise<boolean>,
     timeoutMs: number,
@@ -393,18 +402,32 @@ async function preflight(): Promise<void> {
 
 async function runTestFlow(vm: VmManager): Promise<void> {
   const shell = vm.shell;
+  let t: number;
 
+  t = Date.now();
   await vm.captureFrame("01-desktop");
+  timing("capture-frame", t);
 
   // Step 1: Dismiss Activities overview if open
+  t = Date.now();
   console.log("Dismissing Activities...");
   await shell.dotoolCommand("key Escape");
   await Bun.sleep(1000);
+  timing("dismiss-activities", t);
 
   // Step 2: Open terminal and wait for it to be ready
+  t = Date.now();
   console.log("Opening terminal...");
   await shell.exec("nohup gnome-terminal &>/dev/null &");
-  await Bun.sleep(3000);
+  // Poll until terminal process appears
+  await vm.pollUntil(
+    "terminal",
+    async () => {
+      const output = await shell.exec("pgrep -x gnome-terminal");
+      return output.trim().length > 0;
+    },
+    10000
+  );
   // Click on the terminal to ensure it has focus
   await shell.dotoolCommand("mousemove 640 400");
   await Bun.sleep(200);
@@ -412,24 +435,36 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   await Bun.sleep(100);
   await shell.dotoolCommand("buttonup 1");
   await Bun.sleep(1000);
+  timing("open-terminal", t);
 
+  t = Date.now();
   await vm.captureFrame("02-terminal-open");
+  timing("capture-frame", t);
 
   // Step 3: Type echo command
+  t = Date.now();
   console.log("Typing echo command...");
   await shell.dotoolCommand('type echo "');
   await Bun.sleep(1000);
+  timing("type-echo", t);
 
+  t = Date.now();
   await vm.captureFrame("03-echo-typed");
+  timing("capture-frame", t);
 
   // Step 4: Start recording via hotkey
+  t = Date.now();
   console.log("Starting recording via hotkey...");
   await shell.sendHotkey();
-  await Bun.sleep(2000);
+  await shell.waitForRecordingStart();
+  timing("start-recording", t);
 
+  t = Date.now();
   await vm.captureFrame("04-recording-started");
+  timing("capture-frame", t);
 
-  // Step 4: Wait for transcription
+  // Step 5: Wait for transcription
+  t = Date.now();
   console.log("Waiting for transcription...");
   let transcription = "";
   try {
@@ -438,17 +473,25 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   } catch {
     console.log("  TIMEOUT - continuing anyway");
   }
+  timing("transcription", t);
 
+  t = Date.now();
   await vm.captureFrame("05-transcription-received");
+  timing("capture-frame", t);
 
-  // Step 5: Stop recording
+  // Step 6: Stop recording
+  t = Date.now();
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
-  await Bun.sleep(2000);
+  await Bun.sleep(500); // Brief pause for hotkey processing
+  timing("stop-recording", t);
 
+  t = Date.now();
   await vm.captureFrame("06-recording-stopped");
+  timing("capture-frame", t);
 
-  // Step 6: Write result to file
+  // Step 7: Write result to file
+  t = Date.now();
   console.log("Writing result to file...");
   if (transcription) {
     await shell.exec(`echo '${transcription}' > /tmp/file.txt`);
@@ -457,6 +500,7 @@ async function runTestFlow(vm: VmManager): Promise<void> {
     await shell.exec("echo '' > /tmp/file.txt");
   }
   await Bun.sleep(1000);
+  timing("write-result", t);
 }
 
 async function verifyResult(vm: VmManager): Promise<{ passed: boolean; message: string }> {
@@ -515,25 +559,6 @@ async function main(): Promise<void> {
     } else {
       console.log("\nVM kept running (--keep-running flag)");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost`);
-    }
-  }
-
-  // Assemble recording into video
-  if (RECORD_MODE && vm.frameCount > 0) {
-    const videoFile = join(RECORDING_DIR, "e2e-recording.mp4");
-    console.log(`\nAssembling ${vm.frameCount} frames into video...`);
-    try {
-      // Use ffmpeg to create video from PPM frames
-      // Each frame is named like: frame-0000-01-desktop.ppm
-      // We need to sort them and create a video
-      const framePattern = join(RECORDING_DIR, "frame-%04d-*.ppm");
-      execSync(
-        `ffmpeg -y -framerate 1 -i "${join(RECORDING_DIR, "frame-%04d-*.ppm")}" -vf "scale=1280:720" -c:v libx264 -pix_fmt yuv420p "${videoFile}" 2>/dev/null`,
-        { stdio: "inherit" }
-      );
-      console.log(`Recording saved: ${videoFile}`);
-    } catch {
-      console.log("  ffmpeg assembly failed (frames still available as PPM files)");
     }
   }
 

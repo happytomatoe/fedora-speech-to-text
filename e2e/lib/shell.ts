@@ -73,6 +73,23 @@ export class ShellHelper {
     await this.dotoolCommand("key super+w");
   }
 
+  async waitForRecordingStart(timeoutMs = 10000): Promise<void> {
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const output = await this.exec(
+        `grep -q 'DEBUG MODE: Simulating audio capture' /tmp/voice-service.log 2>/dev/null && echo started`
+      );
+
+      if (output.includes("started")) {
+        return;
+      }
+
+      await Bun.sleep(100);
+    }
+    // Fall through - recording may have started but log check didn't catch it
+  }
+
   async waitForTranscription(timeoutMs = 30000): Promise<string> {
     const start = Date.now();
 

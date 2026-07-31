@@ -607,12 +607,12 @@ qemu-e2e-record-host:
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
-    cd e2e && bun run qemu-snapshot.ts
+    cd e2e && bun run e2e.ts
 
 # @category e2e-qemu
 # Update E2E reference images via TypeScript (bun)
 qemu-e2e-update-ts:
-    cd e2e && bun run qemu-snapshot.ts --update
+    cd e2e && bun run e2e.ts --update
 
 
 # @category e2e-qemu
@@ -620,4 +620,4 @@ qemu-e2e-update-ts:
 e2e:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd e2e && bun run qemu-snapshot.ts
+    cd e2e && bun run e2e.ts
