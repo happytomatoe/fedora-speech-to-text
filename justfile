@@ -607,9 +607,9 @@ qemu-e2e-record-host:
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
-    cd tests/e2e && bun run qemu-snapshot.ts
+    cd e2e && bun run qemu-snapshot.ts
 
 # @category e2e-qemu
 # Update E2E reference images via TypeScript (bun)
 qemu-e2e-update-ts:
-    cd tests/e2e && bun run qemu-snapshot.ts --update
+    cd e2e && bun run qemu-snapshot.ts --update
