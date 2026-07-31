@@ -1,0 +1,17 @@
+{
+  "name": "voice-to-text-e2e",
+  "type": "module",
+  "scripts": {
+    "test": "bun run qemu-snapshot.ts",
+    "test:update": "bun run qemu-snapshot.ts --update"
+  },
+  "dependencies": {
+    "@microsoft/shell-use": "0.0.1-beta.5",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/ssh2": "^1.15.5",
+    "bun-types": "latest",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,147 @@
+import net from "node:net";
+import { EventEmitter } from "node:events";
+
+/**
+ * QEMU Human Monitor (HMP) client via Unix socket.
+ * Uses a persistent net.Socket connection for reliable command execution.
+ */
+export class QemuMonitor extends EventEmitter {
+  private sock: net.Socket | null = null;
+  private sockPath: string;
+  private buffer = "";
+  private waitingForPrompt = false;
+  private promptCallback: ((output: string) => void) | null = null;
+
+  constructor(sockPath: string) {
+    super();
+    this.sockPath = sockPath;
+  }
+
+  /**
+   * Connect to the QEMU monitor socket.
+   * Waits for the initial "(qemu) " prompt.
+   */
+  async connect(timeoutMs = 10000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const sock = net.createConnection(this.sockPath);
+
+      const timer = setTimeout(() => {
+        sock.destroy();
+        reject(new Error(`Connection timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      sock.on("connect", () => {
+        this.sock = sock;
+        // Wait for the initial "(qemu) " prompt
+        this.waitingForPrompt = true;
+        this.promptCallback = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+
+      sock.on("data", (data) => this.onData(data));
+
+      sock.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  private onData(data: Buffer): void {
+    const text = data.toString();
+    this.buffer += text;
+
+    // Check for prompt — indicates QEMU is ready
+    if (this.buffer.includes("(qemu) ")) {
+      const output = this.buffer;
+      this.buffer = "";
+
+      if (this.waitingForPrompt && this.promptCallback) {
+        this.waitingForPrompt = false;
+        const cb = this.promptCallback;
+        this.promptCallback = null;
+        cb(output);
+      }
+    }
+  }
+
+  /**
+   * Execute an HMP command and return the response text.
+   * Strips ANSI escape codes, echo, and prompt from output.
+   */
+  async execute(command: string, timeoutMs = 10000): Promise<string> {
+    if (!this.sock) throw new Error("Not connected — call connect() first");
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Command "${command}" timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      this.waitingForPrompt = true;
+      this.promptCallback = (output) => {
+        clearTimeout(timer);
+
+        // Strip ANSI escape codes and carriage returns
+        const clean = output
+          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+          .replace(/\r/g, "");
+
+        // The echo of the command appears as concatenated partial commands
+        // (typewriter effect). Remove everything up to the first newline
+        // after stripping, which is where the actual response begins.
+        const firstNl = clean.indexOf("\n");
+        const afterEcho = firstNl >= 0 ? clean.slice(firstNl + 1) : clean;
+
+        // Filter lines: remove QEMU header, prompt, empty lines
+        const lines = afterEcho.split("\n").filter((line) => {
+          const trimmed = line.trim();
+          return (
+            trimmed &&
+            !trimmed.startsWith("QEMU") &&
+            !trimmed.startsWith("(qemu)")
+          );
+        });
+
+        resolve(lines.join("\n").trim());
+      };
+
+      this.sock!.write(command + "\n");
+    });
+  }
+
+  async screendump(path: string): Promise<void> {
+    await this.execute(`screendump ${path}`);
+  }
+
+  async savevm(tag: string): Promise<void> {
+    await this.execute(`savevm ${tag}`);
+  }
+
+  async loadvm(tag: string): Promise<void> {
+    await this.execute(`loadvm ${tag}`);
+  }
+
+  async systemPowerdown(): Promise<void> {
+    await this.execute("system_powerdown");
+  }
+
+  async queryStatus(): Promise<string> {
+    return await this.execute("info status");
+  }
+
+  async infoSnapshots(): Promise<string> {
+    return await this.execute("info snapshots");
+  }
+
+  close(): void {
+    if (this.sock) {
+      this.sock.destroy();
+      this.sock = null;
+    }
+    this.buffer = "";
+    this.waitingForPrompt = false;
+    this.promptCallback = null;
+  }
+}
