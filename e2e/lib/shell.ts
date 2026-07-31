@@ -32,7 +32,7 @@ export class ShellHelper {
     );
 
     // Wait for shell prompt
-    await shell.waitText("$", { timeout: 15000 });
+    await shell.waitText("$", { timeout: 60000 });
 
     this.session = { shell, ...opts, host };
     return this.session;

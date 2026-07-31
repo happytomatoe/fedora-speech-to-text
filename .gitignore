@@ -80,3 +80,4 @@ tests/gnome-references/*.zip
 
 
 node_modules/
+qemu.pid

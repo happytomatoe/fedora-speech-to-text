@@ -3,6 +3,7 @@ import { Deployer } from "./lib/deploy.js";
 import { ShellHelper } from "./lib/shell.js";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import net from "node:net";
 
 
 // Parse CLI args
@@ -24,6 +25,22 @@ const OUTPUT_DIR = join(import.meta.dir, "output-qemu");
 const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
 const TEST_AUDIO = join(import.meta.dir, "fixtures/test-audio.wav");
 const EXPECTED_FILE = join(import.meta.dir, "fixtures/expected-text.txt");
+
+/** Check if QEMU monitor socket is responsive. */
+async function isVmRunning(): Promise<boolean> {
+  if (!existsSync(SOCKET_PATH)) return false;
+  try {
+    const sock = net.createConnection(SOCKET_PATH);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { sock.destroy(); reject(); }, 2000);
+      sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(); });
+      sock.on("error", () => { clearTimeout(timer); reject(); });
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface Step {
   name: string;
@@ -52,6 +69,7 @@ class StepRunner {
 
 class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
+  booted = false;
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
@@ -68,6 +86,17 @@ class VmManager {
   }
 
   async boot(): Promise<void> {
+    // Check if VM is already running
+    if (await isVmRunning()) {
+      console.log("VM already running, connecting...");
+      await this.qemu.connect();
+      this.booted = false;
+      return;
+    }
+
+    // Remove stale socket
+    Bun.spawnSync(["rm", "-f", SOCKET_PATH]);
+
     // Create overlay
     if (UPDATE_MODE || !existsSync(OVERLAY_IMAGE)) {
       console.log("Creating fresh VM overlay...");
@@ -79,9 +108,6 @@ class VmManager {
     } else {
       console.log("Reusing existing overlay...");
     }
-
-    // Remove old socket
-    Bun.spawnSync(["rm", "-f", SOCKET_PATH]);
 
     // Start QEMU
     this.process = Bun.spawn([
@@ -103,6 +129,14 @@ class VmManager {
       stdout: "inherit",
       stderr: "inherit",
     });
+
+    this.booted = true;
+
+    // Wait for socket to appear
+    for (let i = 0; i < 30; i++) {
+      if (existsSync(SOCKET_PATH)) break;
+      await Bun.sleep(500);
+    }
 
     // Connect QMP
     await this.qemu.connect();
@@ -251,6 +285,13 @@ class VmManager {
   }
 
   async shutdown(): Promise<void> {
+    if (!this.booted) {
+      console.log("VM was not started by this run, skipping shutdown");
+      this.qemu.close();
+      await this.shell.close();
+      await this.deployer.disconnect();
+      return;
+    }
     try {
       await this.qemu.systemPowerdown();
       await Bun.sleep(5000);

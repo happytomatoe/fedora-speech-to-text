@@ -613,3 +613,11 @@ qemu-e2e-test-ts:
 # Update E2E reference images via TypeScript (bun)
 qemu-e2e-update-ts:
     cd e2e && bun run qemu-snapshot.ts --update
+
+
+# @category e2e-qemu
+# Run E2E tests (boots VM if needed, executes test, shuts down unless --keep-running)
+e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e && bun run qemu-snapshot.ts
