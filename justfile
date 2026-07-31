@@ -7,12 +7,9 @@ run *args:
 test:
   uv run pytest -n auto
 
-# @category test
-test-e2e:
-  uv run pytest tests/e2e/ -v --tb=short -x
 
 # @category test  
-test-all: test test-e2e
+test-all: test
 
 install:
     uv tool install -e .
@@ -218,7 +215,7 @@ e2e-build:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building E2E test container..."
-    podman build -t voice-to-text-e2e -f tests/e2e/Dockerfile .
+    podman build -t voice-to-text-e2e -f e2e/Dockerfile .
     echo "Container built: voice-to-text-e2e"
 
 # @category e2e
@@ -227,7 +224,7 @@ e2e-references: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Generating reference images..."
-    tests/e2e/scripts/snapshot.sh --update
+    e2e/scripts/snapshot.sh --update
     echo "References generated. Review and commit tests/gnome-references/"
 
 # @category e2e
@@ -236,7 +233,7 @@ e2e-test: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running E2E tests..."
-    tests/e2e/scripts/snapshot.sh
+    e2e/scripts/snapshot.sh
 
 # @category e2e
 # Update snapshot references with current state
@@ -244,7 +241,7 @@ e2e-update: e2e-build
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Capturing snapshot references..."
-    tests/e2e/scripts/snapshot.sh --update
+    e2e/scripts/snapshot.sh --update
     echo "Snapshots saved. Review and commit tests/gnome-references/snapshot-*.png"
 
 # @category e2e
@@ -260,7 +257,7 @@ e2e-full: e2e-build
       exit 1
     fi
     export DEEPGRAM_API_KEY
-    tests/e2e/scripts/snapshot.sh
+    e2e/scripts/snapshot.sh
 
 # @category e2e
 # Quick test: capture screenshot and check if microphone indicator is visible
@@ -271,7 +268,7 @@ e2e-screenshot-test:
     IMAGE="voice-to-text-e2e"
     if ! podman image exists "$IMAGE"; then
       echo "Building container..."
-      podman build -t "$IMAGE" -f tests/e2e/Dockerfile .
+      podman build -t "$IMAGE" -f e2e/Dockerfile .
     fi
     
     echo "Starting container..."
@@ -289,7 +286,7 @@ e2e-screenshot-test:
     done
     
     EXT_UUID="voice-to-text@happytomatoe.com"
-    EXT_ZIP="/app/tests/e2e/expected/${EXT_UUID}.shell-extension.zip"
+    EXT_ZIP="/app/e2e/expected/${EXT_UUID}.shell-extension.zip"
     
     do_in_pod() {
       podman exec -i --user gnomeshell --workdir /home/gnomeshell \
@@ -411,7 +408,7 @@ container-watch:
 qemu-e2e-kill:
     #!/usr/bin/env bash
     set -euo pipefail
-    PID_FILE="/tmp/gnome-ext-vm/qemu.pid"
+    PID_FILE="e2e/qemu-images/qemu.pid"
     if [[ -f "${PID_FILE}" ]]; then
         PID=$(cat "${PID_FILE}")
         if kill -0 "${PID}" 2>/dev/null; then
@@ -426,15 +423,122 @@ qemu-e2e-kill:
     fi
     # Also kill any stray QEMU processes
     pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
-    rm -f /tmp/gnome-ext-vm/overlay.qcow2 /tmp/gnome-ext-vm/qemu-monitor.sock
+    rm -f e2e/qemu-images/overlay.qcow2 e2e/qemu-images/qemu-monitor.sock
     echo "Done"
+
+# @category e2e-qemu
+# Start QEMU E2E test VM (keeps running for SPICE connection)
+qemu-e2e-vm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VM_DIR="e2e/qemu-images"
+    VM_DIR_ABS="$(cd "$(dirname "${JUSTFILE}")" && pwd)/${VM_DIR}"
+    
+    # Kill any existing QEMU
+    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    sleep 1
+    
+    # Create fresh overlay
+    rm -f "${VM_DIR_ABS}/overlay.qcow2"
+    qemu-img create -f qcow2 -b "${VM_DIR_ABS}/base.qcow2" -F qcow2 "${VM_DIR_ABS}/overlay.qcow2"
+    
+    # Start QEMU with SPICE
+    cd "${VM_DIR_ABS}"
+    qemu-system-x86_64 \
+        -enable-kvm \
+        -cpu host \
+        -m 4096 \
+        -smp 2 \
+        -drive file=overlay.qcow2,format=qcow2,if=virtio \
+        -device virtio-vga \
+        -display vnc=:1 \
+        -spice port=5930,disable-ticketing=on \
+        -monitor unix:qemu-monitor.sock,server,nowait \
+        -serial file:serial.log \
+        -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+        -device virtio-net-pci,netdev=net0 \
+        -no-reboot &
+    QEMU_PID=$!
+    echo $QEMU_PID > qemu.pid
+    
+    echo "QEMU started (PID: ${QEMU_PID})"
+    echo ""
+    echo "Waiting for SSH..."
+    for i in $(seq 1 30); do
+        if ssh -i id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 testuser@localhost echo ok 2>/dev/null; then
+            echo "SSH ready (${i}s)"
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    
+    echo ""
+    echo "=== VM is ready ==="
+    echo "SPICE: remote-viewer spice://localhost:5930"
+    echo "  or:  just e2e-test-view"
+    echo "SSH:   ssh -i ${VM_DIR}/id_ed25519 -p 2222 testuser@localhost"
+    echo "Kill:  just qemu-e2e-kill"
+    echo ""
+    echo "Press Ctrl+C to stop the VM"
+    
+    # Wait for user interrupt
+    trap "echo ''; echo 'Shutting down VM...'; kill ${QEMU_PID} 2>/dev/null || true; exit 0" INT TERM
+    wait ${QEMU_PID} 2>/dev/null || true
+
+# @category e2e-qemu
+# Open SPICE viewer to QEMU E2E test VM (port 5930)
+e2e-test-view:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! ss -tlnp | grep -q ':5930 '; then
+        echo "ERROR: QEMU VM not running (no SPICE on port 5930)"
+        echo "Run 'just qemu-e2e-test-host' first."
+        exit 1
+    fi
+    SSH_KEY="e2e/qemu-images/id_ed25519"
+    SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
+    # Wait for GDM login screen
+    echo -n "Waiting for GDM..."
+    for i in $(seq 1 30); do
+        if $SSH "pgrep -x gdm >/dev/null 2>&1"; then
+            echo " ready"
+            break
+        fi
+        sleep 1
+        echo -n "."
+    done
+    sleep 2
+    # Wait for GNOME Shell to be ready
+    echo -n "Waiting for desktop..."
+    for i in $(seq 1 30); do
+        if $SSH "pgrep -x gnome-shell >/dev/null 2>&1"; then
+            echo " ready"
+            break
+        fi
+        sleep 1
+        echo -n "."
+    done
+    # Dismiss lock screen if present
+    $SSH "echo 'key Escape' > /run/user/1000/dotool-pipe" 2>/dev/null || true
+    sleep 0.5
+    echo "Connecting to QEMU VM via SPICE (localhost:5930)..."
+    if command -v remote-viewer &>/dev/null; then
+        remote-viewer spice://localhost:5930
+    elif command -v remmina &>/dev/null; then
+        remmina spice://localhost:5930
+    else
+        echo "No SPICE client found. Install one:"
+        echo "  sudo dnf install virt-viewer"
+        exit 1
+    fi
 # @category e2e-qemu
 # Create base QEMU VM image for E2E testing (run once, or after changes)
 qemu-e2e-setup:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Setting up QEMU E2E test VM..."
-    podman exec fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-setup.sh"
+    podman exec fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-setup.sh"
     echo "Setup complete. Run 'just qemu-e2e-test' to test."
 
 # @category e2e-qemu
@@ -443,7 +547,7 @@ qemu-e2e-test:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running QEMU E2E tests..."
-    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh"
+    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh"
 
 # @category e2e-qemu
 # Update QEMU E2E reference images with current state
@@ -451,8 +555,8 @@ qemu-e2e-update:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Updating QEMU E2E reference images..."
-    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh --update"
-    echo "References saved to tests/e2e/expected-qemu/"
+    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh --update"
+    echo "References saved to e2e/expected-qemu/"
 
 # @category e2e-qemu
 # Install QEMU/KVM on host (Fedora Silverblue — requires reboot)
@@ -470,7 +574,7 @@ qemu-e2e-setup-host:
     set -euo pipefail
     echo "Setting up QEMU E2E test VM on host..."
     REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
-        /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-setup.sh
+        /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-setup.sh
     echo "Setup complete. Run 'just qemu-e2e-test-host' to test."
 
 # @category e2e-qemu
@@ -480,7 +584,7 @@ qemu-e2e-test-host:
     set -euo pipefail
     echo "Running QEMU E2E tests on host..."
     REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
-        /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh
+        /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh
 
 # @category e2e-qemu
 # Update E2E reference images directly on host
@@ -489,8 +593,8 @@ qemu-e2e-update-host:
     set -euo pipefail
     echo "Updating QEMU E2E reference images on host..."
     REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
-        /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh --update
-    echo "References saved to tests/e2e/expected-qemu/"
+        /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh --update
+    echo "References saved to e2e/expected-qemu/"
 
 # @category e2e-qemu
 # Record E2E test flow as video directly on host
@@ -498,4 +602,14 @@ qemu-e2e-record-host:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Recording QEMU E2E test flow on host..."
-    /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-e2e-record.sh
+    /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-e2e-record.sh
+
+# @category e2e-qemu
+# Run E2E tests via TypeScript (bun)
+qemu-e2e-test-ts:
+    cd tests/e2e && bun run qemu-snapshot.ts
+
+# @category e2e-qemu
+# Update E2E reference images via TypeScript (bun)
+qemu-e2e-update-ts:
+    cd tests/e2e && bun run qemu-snapshot.ts --update

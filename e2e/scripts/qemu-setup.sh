@@ -1,6 +1,6 @@
 #!/bin/bash
 # QEMU VM setup for E2E testing.
-# Creates a Fedora 42 VM with GNOME Shell, audio loopback, Python backend,
+# Creates a Fedora 44 VM with GNOME Shell, audio loopback, Python backend,
 # and the voice-to-text extension ready for testing.
 #
 # Runs inside the fedora-toolbox-44 container where QEMU is installed.
@@ -8,9 +8,9 @@
 
 set -euo pipefail
 
-VM_DIR="/tmp/gnome-ext-vm"
+VM_DIR="${REPO_ROOT}/e2e/qemu-images"
 BASE_IMAGE="${VM_DIR}/base.qcow2"
-CLOUD_IMAGE="${VM_DIR}/fedora42.qcow2"
+CLOUD_IMAGE="${VM_DIR}/fedora44.qcow2"
 SEED_ISO="${VM_DIR}/seed.iso"
 USER_DATA="${VM_DIR}/user-data"
 META_DATA="${VM_DIR}/meta-data"
@@ -25,13 +25,13 @@ SSH_PORT=2222
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 SCP_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-Fedora_CLOUD_URL="https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-42-1.1.qcow2"
+Fedora_CLOUD_URL="https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2"
 
 mkdir -p "${VM_DIR}"
 
 # ─── Step 1: Download Fedora cloud image ────────────────────────────────
 if [[ ! -f "${CLOUD_IMAGE}" ]]; then
-    echo "Downloading Fedora 42 cloud image..."
+    echo "Downloading Fedora 44 cloud image..."
     curl -L -o "${CLOUD_IMAGE}" "${Fedora_CLOUD_URL}"
 fi
 
@@ -57,13 +57,11 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
-      - ssh-ed25519 REPLACE_SSH_KEY_PLACEHOLDER qemu-e2e
+      - REPLACE_SSH_KEY_PLACEHOLDER
 
 packages:
   - spice-vdagent
   - openssh-server
-  - xdotool
-  - dotool
   - gnome-shell
   - gnome-session
   - gnome-terminal
@@ -78,6 +76,8 @@ packages:
   - git
   - make
   - gcc
+  - tmux
+  - gcc
 
 runcmd:
   - systemctl stop sshd.socket
@@ -86,10 +86,11 @@ runcmd:
   - systemctl enable sshd.service
   - systemctl restart sshd.service
   - systemctl set-default multi-user.target
+  - grubby --update-kernel=ALL --args="rd.device.wait=0"
   - echo "testuser:fedoraci" | chpasswd
 USERDATA
 
-# Inject actual SSH key
+# Inject actual SSH key (PUB_KEY includes type prefix, e.g. ssh-ed25519 AAAA...)
 PUB_KEY=$(cat "${SSH_KEY}.pub")
 sed -i "s|REPLACE_SSH_KEY_PLACEHOLDER|${PUB_KEY}|" "${USER_DATA}"
 
@@ -101,7 +102,7 @@ METADATA
 # ─── Step 5: Create cloud-init seed ISO ────────────────────────────────
 if [[ ! -f "${SEED_ISO}" ]]; then
     echo "Creating cloud-init seed ISO..."
-    genisoimage -output "${SEED_ISO}" -volid cidata -joliet -rock \
+    mkisofs -output "${SEED_ISO}" -volid cidata -joliet -rock \
         "${USER_DATA}" "${META_DATA}"
 fi
 
@@ -158,15 +159,30 @@ ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost \
 # ─── Step 7b: Ensure required packages are installed ─────────────────
 echo "Ensuring required packages..."
 ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost \
-    "sudo dnf install -y gnome-shell gnome-terminal dbus-x11 xdotool dotool xorg-x11-server-Xorg pipewire-utils pulseaudio-utils python3-pip python3-devel portaudio-devel" 2>/dev/null || true
+    "sudo dnf install -y gnome-shell gnome-terminal dbus-x11 xorg-x11-server-Xorg pipewire-utils pulseaudio-utils python3-pip python3-devel portaudio-devel git make gcc libev-devel systemd-devel golang libxkbcommon-devel" 2>/dev/null || true
 
-# ─── Step 7d: Configure dotool permissions ─────────────────────────────
-echo "Configuring dotool permissions..."
+# ─── Step 7d: Build and install dotool from source ──────────────────────
+echo "Building dotool from source..."
 ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost << 'DTOOL_SETUP'
+# Build dependencies are already installed via dnf above
+
+# Clone and build dotool (clean slate for idempotency)
+rm -rf /tmp/dotool
+cd /tmp
+git clone --branch 1.6 --depth 1 https://git.sr.ht/~geb/dotool
+cd dotool && ./build.sh
+
+# Install to ~/.local/bin
+mkdir -p ~/.local/bin
+cp dotool dotoolc dotoold ~/.local/bin/
+
+# Configure permissions for /dev/uinput
 sudo groupadd -f input
 sudo usermod -aG input testuser
 echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/80-dotool.rules
 sudo udevadm control --reload && sudo udevadm trigger
+
+echo "dotool installed"
 DTOOL_SETUP
 # ─── Step 7c: Disable GNOME welcome tour ────────────────────────────
 echo "Disabling GNOME welcome tour..."
@@ -177,6 +193,19 @@ echo "welcome-dialog-last-shown-version='4294967295'" | sudo tee -a /etc/dconf/d
 echo "development-tools=true" | sudo tee -a /etc/dconf/db/local.d/00-gnome-shell > /dev/null
 sudo dconf update
 TOUR_DISABLE
+
+# ─── Step 7e: Configure GDM auto-login and graphical target ──────────
+echo "Configuring GDM auto-login..."
+ssh -i "${SSH_KEY}" ${SSH_OPTS} -p ${SSH_PORT} ${SSH_USER}@localhost << 'GDM_SETUP'
+sudo systemctl set-default graphical.target
+sudo tee /etc/gdm/custom.conf > /dev/null << 'EOF'
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin=testuser
+WaylandEnable=true
+EOF
+sudo systemctl enable gdm
+GDM_SETUP
 
 # ─── Step 8: Install Python dependencies ───────────────────────────────
 echo "Installing Python dependencies..."
@@ -191,7 +220,7 @@ scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} -r \
 # ─── Step 10: Copy test audio file ────────────────────────────────────
 echo "Copying test audio..."
 scp -i "${SSH_KEY}" ${SCP_OPTS} -P ${SSH_PORT} \
-    "${REPO_ROOT}/tests/e2e/fixtures/test-audio.wav" ${SSH_USER}@localhost:/tmp/test-audio.wav
+    "${REPO_ROOT}/e2e/fixtures/test-audio.wav" ${SSH_USER}@localhost:/tmp/test-audio.wav
 
 # ─── Step 11: Install audio packages ──────────────────────────────────
 echo "Installing audio packages..."
@@ -259,7 +288,7 @@ eval $(dbus-launch --sh-syntax)
 echo "$DBUS_SESSION_BUS_ADDRESS" > /tmp/dbus-address
 
 # Start GNOME Shell
-nohup dbus-launch gnome-shell --x11 &
+nohup gnome-shell --mode=user &>/tmp/gnome-shell.log &
 sleep 3
 
 # Enable extension

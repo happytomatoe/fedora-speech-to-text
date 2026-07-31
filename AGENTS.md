@@ -111,3 +111,16 @@ This project uses [python-semantic-release](https://python-semantic-release.read
 - **Use `catch { }` (no parameter)** when intentionally ignoring — signals intent and avoids unused-variable lint errors.
 - **Don't just swallow errors** — this makes debugging impossible and hides production failures.
 - **Use `finally` for cleanup** (disconnect signals, close connections, release locks).
+
+## Interacting with the QEMU E2E VM
+
+- **Always use `shell-use`** for SSH sessions into the QEMU E2E VM — never raw `ssh` commands in bash.
+- `shell-use` provides persistent PTY sessions, screen inspection, keystroke injection, and assertion support.
+- For the E2E VM:
+  ```sh
+  shell-use open --env SSH_KEY=tests/e2e/qemu-images/id_ed25519 --env SSH_PORT=2222
+  shell-use submit "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $SSH_PORT testuser@localhost '<command>'"
+  shell-use wait text "<expected output>"
+  ```
+- Use `shell-use wait text` / `shell-use expect text` to poll for output instead of `sleep` loops.
+- For screenshots: `shell-use screenshot /path/to/output.png`.

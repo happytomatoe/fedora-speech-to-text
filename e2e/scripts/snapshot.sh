@@ -12,7 +12,7 @@ REFERENCES_DIR="${SCRIPT_DIR}/../expected"
 OUTPUT_DIR="${SCRIPT_DIR}/../output"
 FIXTURES_DIR="${SCRIPT_DIR}/../fixtures"
 EXTENSION_UUID="voice-to-text@happytomatoe.com"
-EXTENSION_ZIP="/app/tests/e2e/expected/${EXTENSION_UUID}.shell-extension.zip"
+EXTENSION_ZIP="/app/e2e/expected/${EXTENSION_UUID}.shell-extension.zip"
 
 UPDATE_MODE=false
 if [[ "${1:-}" == "--update" ]]; then
@@ -25,7 +25,7 @@ cd "${PROJECT_ROOT}"
 IMAGE="voice-to-text-e2e"
 if ! podman image exists "${IMAGE}"; then
   echo "Building test container..."
-  podman build -t "${IMAGE}" -f tests/e2e/Dockerfile .
+  podman build -t "${IMAGE}" -f e2e/Dockerfile .
 fi
 
 # Run container
@@ -34,7 +34,7 @@ fi
 echo "Starting container..."
 POD=$(podman run --rm --privileged \
   -e PIPEWIRE_RUNTIME_DIR= \
-  -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
+  -e VOICE_TO_TEXT_DEBUG_FILE=/app/e2e/fixtures/test-audio.wav \
   -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
   -td "${IMAGE}")
 
@@ -54,7 +54,7 @@ trap cleanup EXIT
 do_in_pod() {
   podman exec --user gnomeshell --workdir /home/gnomeshell \
     -e PIPEWIRE_RUNTIME_DIR= \
-    -e VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav \
+    -e VOICE_TO_TEXT_DEBUG_FILE=/app/e2e/fixtures/test-audio.wav \
     -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" \
     "${POD}" set-env.sh "$@"
 }
@@ -188,7 +188,7 @@ do_in_pod dconf write /org/gnome/shell/enabled-extensions "['${EXTENSION_UUID}']
 echo "Writing environment variables to container..."
 do_in_pod bash -c "cat > /home/gnomeshell/.config/voice-to-text/env << 'EOF'
 export DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
-export VOICE_TO_TEXT_DEBUG_FILE=/app/tests/e2e/fixtures/test-audio.wav
+export VOICE_TO_TEXT_DEBUG_FILE=/app/e2e/fixtures/test-audio.wav
 EOF"
 sleep 1  # Ensure file is written before service reads it
 
@@ -428,8 +428,8 @@ do_in_pod journalctl --user --no-pager 2>/dev/null | grep -i "voice_to_text\|Voi
 
 # Copy test audio file into container
 # Use repo-relative path for host operations, container path for in-container operations
-TEST_AUDIO_HOST="${PROJECT_ROOT}/tests/e2e/fixtures/test-audio.wav"
-TEST_AUDIO_CONTAINER="/app/tests/e2e/fixtures/test-audio.wav"
+TEST_AUDIO_HOST="${PROJECT_ROOT}/e2e/fixtures/test-audio.wav"
+TEST_AUDIO_CONTAINER="/app/e2e/fixtures/test-audio.wav"
 echo "  Copying test audio file..."
 if [[ -f "${TEST_AUDIO_HOST}" ]]; then
   podman cp "${TEST_AUDIO_HOST}" "${POD}:/home/gnomeshell/test-audio.wav" 2>/dev/null || true

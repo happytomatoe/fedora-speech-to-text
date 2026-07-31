@@ -17,7 +17,7 @@ downloads/
 eggs/
 .eggs/
 lib/
-!tests/e2e/lib/
+!e2e/lib/
 lib64/
 parts/
 sdist/
@@ -66,16 +66,16 @@ build/
 src/voice_to_text/_build_info.py
 .pi*/
 docs/
-!tests/e2e/docs/
+!e2e/docs/
 thoughts/
 
 # Visual regression test output
 tests/gnome-snapshots/
 tests/gnome-output/
 tests/e2e-output/
-tests/e2e/output/
-tests/e2e/output-qemu/
-tests/e2e/qemu-images/
+e2e/output/
+e2e/output-qemu/
+e2e/qemu-images/
 tests/gnome-references/*.zip
 
 

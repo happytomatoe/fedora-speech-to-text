@@ -13,7 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/../../.."
-VM_DIR="/tmp/gnome-ext-vm"
+VM_DIR="${PROJECT_ROOT}/e2e/qemu-images"
 OUTPUT_DIR="/tmp/e2e-recordings"
 RECORDINGS_DIR="${OUTPUT_DIR}"
 RECORDINGS_DIR="${OUTPUT_DIR}/recordings"
@@ -168,7 +168,7 @@ fi
 
 podman exec -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}" fedora-toolbox-44 \
     bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
-    /var/home/l/git/voice-to-text-test-pod/tests/e2e/scripts/qemu-snapshot.sh ${TEST_ARGS}" 2>&1
+    /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh ${TEST_ARGS}" 2>&1
 
 TEST_EXIT=$?
 

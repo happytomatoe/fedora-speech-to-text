@@ -11,19 +11,19 @@ const UPDATE_MODE = args.includes("--update");
 const KEEP_RUNNING = args.includes("--keep-running");
 
 // Paths
-const PROJECT_ROOT = join(import.meta.dir, "../..");
-const VM_DIR = join(PROJECT_ROOT, "tests/e2e/qemu-images");
+const PROJECT_ROOT = join(import.meta.dir, "..");
+const VM_DIR = join(import.meta.dir, "qemu-images");
 const BASE_IMAGE = join(VM_DIR, "base.qcow2");
 const OVERLAY_IMAGE = join(VM_DIR, "overlay.qcow2");
 const SOCKET_PATH = "/tmp/qemu-monitor.sock";
 const SSH_KEY = join(VM_DIR, "id_ed25519");
 const SSH_PORT = 2222;
 const SSH_USER = "testuser";
-const REFERENCES_DIR = join(PROJECT_ROOT, "tests/e2e/expected-qemu");
-const OUTPUT_DIR = join(PROJECT_ROOT, "tests/e2e/output-qemu");
+const REFERENCES_DIR = join(import.meta.dir, "expected-qemu");
+const OUTPUT_DIR = join(import.meta.dir, "output-qemu");
 const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
-const TEST_AUDIO = join(PROJECT_ROOT, "tests/e2e/fixtures/test-audio.wav");
-const EXPECTED_FILE = join(PROJECT_ROOT, "tests/e2e/fixtures/expected-text.txt");
+const TEST_AUDIO = join(import.meta.dir, "fixtures/test-audio.wav");
+const EXPECTED_FILE = join(import.meta.dir, "fixtures/expected-text.txt");
 
 interface Step {
   name: string;

@@ -153,11 +153,11 @@ export default class VoiceToTextExtension extends Extension {
                 (proxy, name, [state]) => {
                     console.log('VoiceToText: state changed to', state);
                     if (state === 'recording') {
-                        this._indicator.setRecordingActive();
+                        this._indicator?.setRecordingActive();
                     } else if (state === 'processing') {
-                        this._indicator.setProcessing();
+                        this._indicator?.setProcessing();
                     } else if (state === 'idle') {
-                        this._indicator.setRecording(false);
+                        this._indicator?.setRecording(false);
                         this._recording = false;
                         this._releaseInhibitor();
                     }
@@ -168,7 +168,7 @@ export default class VoiceToTextExtension extends Extension {
             const levelId = this._proxy.connectSignal(
                 'AudioLevel',
                 (proxy, name, [level]) => {
-                    this._indicator.updateLevel(level);
+                    this._indicator?.updateLevel(level);
                 }
             );
             this._signalIds.push(levelId);
@@ -232,6 +232,11 @@ export default class VoiceToTextExtension extends Extension {
             return;
         }
 
+        if (!this._indicator) {
+            console.log('VoiceToText: indicator not available');
+            return;
+        }
+
         this._indicator.setProcessing();
         this._recording = true;
 
@@ -281,7 +286,7 @@ export default class VoiceToTextExtension extends Extension {
             return;
         }
 
-        this._indicator.setProcessing();
+        this._indicator?.setProcessing();
 
         this._proxy.StopRecordingAsync().then(
             () => console.log('VoiceToText: StopRecording called via D-Bus'),
