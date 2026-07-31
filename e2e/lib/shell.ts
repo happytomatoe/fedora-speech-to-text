@@ -41,10 +41,26 @@ export class ShellHelper {
   async exec(command: string, timeoutMs = 30000): Promise<string> {
     if (!this.session) throw new Error("No session");
 
+    // Capture screen text before command
+    const before = await this.session.shell.text();
+    const beforeLen = before.length;
+    
     await this.session.shell.submit(command);
     await this.session.shell.waitCommand({ timeout: timeoutMs });
-    const output = await this.session.shell.getOutput();
-    return output ?? "";
+    
+    // Get full screen text after command
+    const after = await this.session.shell.text();
+    
+    // Extract only the NEW text that appeared after the command
+    // Find where the command appears in the after text
+    const cmdIdx = after.lastIndexOf(command);
+    if (cmdIdx >= 0) {
+      const output = after.slice(cmdIdx + command.length);
+      // Remove trailing prompt and whitespace
+      return output.replace(/\n[^\n]*\$[ ]?$/, "").trim();
+    }
+    // Fallback: return everything after the before text length
+    return after.slice(beforeLen).trim();
   }
 
   async dotoolCommand(command: string): Promise<void> {

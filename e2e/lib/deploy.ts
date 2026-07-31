@@ -37,6 +37,13 @@ export class Deployer {
   async uploadFile(localPath: string, remotePath: string): Promise<void> {
     await this.connect();
 
+    // Resolve ~ in remote path for SFTP (doesn't expand ~)
+    let resolvedRemote = remotePath;
+    if (remotePath.startsWith("~/")) {
+      const home = await this.exec("echo $HOME");
+      resolvedRemote = home.stdout.trim() + remotePath.slice(1);
+    }
+
     return new Promise((resolve, reject) => {
       this.client!.sftp((err, sftp) => {
         if (err) {
@@ -45,7 +52,7 @@ export class Deployer {
         }
 
         const data = readFileSync(localPath);
-        sftp.writeFile(remotePath, data, (err) => {
+        sftp.writeFile(resolvedRemote, data, (err) => {
           if (err) {
             reject(err);
           } else {
@@ -58,11 +65,22 @@ export class Deployer {
 
   async uploadDir(localDir: string, remoteDir: string): Promise<void> {
     await this.connect();
+
+    // Resolve ~ in remote path
+    let resolvedRemote = remoteDir;
+    if (remoteDir.startsWith("~/")) {
+      const home = await this.exec("echo $HOME");
+      resolvedRemote = home.stdout.trim() + remoteDir.slice(1);
+    }
+
+    // Ensure remote directory exists
+    await this.exec(`mkdir -p ${resolvedRemote}`);
+
     const entries = readdirSync(localDir);
 
     for (const entry of entries) {
       const local = join(localDir, entry);
-      const remote = `${remoteDir}/${entry}`;
+      const remote = `${resolvedRemote}/${entry}`;
       const stat = statSync(local);
 
       if (stat.isDirectory()) {

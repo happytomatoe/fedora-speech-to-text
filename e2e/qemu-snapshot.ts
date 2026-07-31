@@ -4,12 +4,14 @@ import { ShellHelper } from "./lib/shell.js";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import net from "node:net";
+import { execSync } from "node:child_process";
 
 
 // Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
 const KEEP_RUNNING = args.includes("--keep-running");
+const RECORD_MODE = args.includes("--record");
 
 // Paths
 const PROJECT_ROOT = join(import.meta.dir, "..");
@@ -25,6 +27,41 @@ const OUTPUT_DIR = join(import.meta.dir, "output-qemu");
 const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
 const TEST_AUDIO = join(import.meta.dir, "fixtures/test-audio.wav");
 const EXPECTED_FILE = join(import.meta.dir, "fixtures/expected-text.txt");
+const RECORDING_DIR = join(import.meta.dir, "output-qemu", "recording");
+const PARAKEET_PORT = 5092;
+const PARAKEET_SCRIPT = join(PROJECT_ROOT, "parakeet-v2.sh");
+
+/** Check if Parakeet server is running on the host. */
+async function ensureParakeet(): Promise<void> {
+  // Check if port 5092 is listening
+  try {
+    const sock = net.createConnection(PARAKEET_PORT, "localhost");
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { sock.destroy(); reject(); }, 2000);
+      sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(); });
+      sock.on("error", () => { clearTimeout(timer); reject(); });
+    });
+    console.log("  Parakeet already running on port " + PARAKEET_PORT);
+    return;
+  } catch {
+    // Not running
+  }
+
+  // Try to start Parakeet
+  if (existsSync(PARAKEET_SCRIPT)) {
+    console.log("  Starting Parakeet server...");
+    try {
+      execSync(`bash ${PARAKEET_SCRIPT}`, { stdio: "inherit", timeout: 120_000 });
+      console.log("  Parakeet started");
+    } catch (err) {
+      console.log("  WARNING: Failed to start Parakeet:", err);
+      console.log("  Transcription will use cloud provider (Deepgram) if available");
+    }
+  } else {
+    console.log("  WARNING: Parakeet script not found at " + PARAKEET_SCRIPT);
+    console.log("  Transcription will use cloud provider (Deepgram) if available");
+  }
+}
 
 /** Check if QEMU monitor socket is responsive. */
 async function isVmRunning(): Promise<boolean> {
@@ -73,6 +110,7 @@ class VmManager {
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
+  frameCount = 0;
 
   constructor() {
     this.qemu = new QemuMonitor(SOCKET_PATH);
@@ -83,6 +121,20 @@ class VmManager {
       privateKey: readFileSync(SSH_KEY),
     });
     this.shell = new ShellHelper();
+    if (RECORD_MODE) {
+      mkdirSync(RECORDING_DIR, { recursive: true });
+    }
+  }
+
+  async captureFrame(label: string): Promise<void> {
+    if (!RECORD_MODE) return;
+    const path = join(RECORDING_DIR, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.ppm`);
+    try {
+      await this.qemu.screendump(path);
+      console.log(`  [rec] ${label}`);
+    } catch {
+      // Ignore screendump errors
+    }
   }
 
   async boot(): Promise<void> {
@@ -118,7 +170,8 @@ class VmManager {
       "-smp", "2",
       "-drive", `file=${OVERLAY_IMAGE},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
-      "-display", "vnc=:1",
+      "-display", "none",
+      "-spice", "port=5930,disable-ticketing=on",
       "-monitor", `unix:${SOCKET_PATH},server,nowait`,
       "-serial", "file:serial.log",
       "-netdev", `user,id=net0,hostfwd=tcp::${SSH_PORT}-:22`,
@@ -158,7 +211,7 @@ class VmManager {
       "GDM session with seat",
       async () => {
         const output = await this.shell.exec(
-          "loginctl list-sessions 2>/dev/null | grep -q seat0"
+          "loginctl list-sessions"
         );
         return output.includes("seat0");
       },
@@ -207,16 +260,37 @@ class VmManager {
       10000
     );
 
-    // Deploy Python source (ssh2 for file transfer)
+    // Deploy GNOME extension
+    const extDir = join(PROJECT_ROOT, "gnome-ext");
+    const extUuid = "voice-to-text@happytomatoe.com";
+    if (existsSync(extDir)) {
+      console.log("Deploying GNOME extension...");
+      await this.shell.exec(`mkdir -p ~/.local/share/gnome-shell/extensions/${extUuid}`);
+      execSync(
+        `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} -r ${extDir}/* ${SSH_USER}@localhost:~/.local/share/gnome-shell/extensions/${extUuid}/`,
+        { stdio: "inherit" }
+      );
+      // Compile schemas and enable extension
+      await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
+      await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
+      await this.shell.exec(`gsettings set org.gnome.shell.extensions.voice-to-text provider deepgram 2>/dev/null || true`);
+    }
+    // Deploy Python source (scp from host side)
     if (existsSync(PYTHON_SRC)) {
       console.log("Deploying Python source...");
-      await this.shell.exec("mkdir -p ~/voice_to_text/src");
-      await this.deployer.uploadDir(PYTHON_SRC, "~/voice_to_text/src/voice_to_text");
+      await this.shell.exec("mkdir -p ~/voice_to_text/src/voice_to_text");
+      execSync(
+        `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} -r ${PYTHON_SRC}/* ${SSH_USER}@localhost:~/voice_to_text/src/voice_to_text/`,
+        { stdio: "inherit" }
+      );
     }
 
-    // Deploy test audio (ssh2 for file transfer)
+    // Deploy test audio (scp from host side)
     if (existsSync(TEST_AUDIO)) {
-      await this.deployer.uploadFile(TEST_AUDIO, "/tmp/test-audio.wav");
+      execSync(
+        `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} ${TEST_AUDIO} ${SSH_USER}@localhost:/tmp/test-audio.wav`,
+        { stdio: "inherit" }
+      );
     }
 
     // Install Python dependencies
@@ -239,7 +313,7 @@ class VmManager {
       "D-Bus service",
       async () => {
         const output = await this.shell.exec(
-          "busctl --user list 2>/dev/null | grep -q com.happytomatoe.VoiceToText"
+          "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText"
         );
         return output.includes("com.happytomatoe.VoiceToText");
       },
@@ -312,29 +386,48 @@ async function preflight(): Promise<void> {
   if (!existsSync(SSH_KEY)) {
     throw new Error(`SSH key not found: ${SSH_KEY}\nRun 'just qemu-e2e-setup' first.`);
   }
+
+  // Ensure Parakeet is available for local transcription
+  await ensureParakeet();
 }
 
 async function runTestFlow(vm: VmManager): Promise<void> {
   const shell = vm.shell;
 
-  // Step 1: Open terminal and attach to tmux
-  console.log("Opening terminal with tmux...");
+  await vm.captureFrame("01-desktop");
+
+  // Step 1: Dismiss Activities overview if open
+  console.log("Dismissing Activities...");
+  await shell.dotoolCommand("key Escape");
+  await Bun.sleep(1000);
+
+  // Step 2: Open terminal and wait for it to be ready
+  console.log("Opening terminal...");
   await shell.exec("nohup gnome-terminal &>/dev/null &");
   await Bun.sleep(3000);
-  await shell.dotoolCommand("type tmux attach -t test");
-  await Bun.sleep(500);
-  await shell.dotoolCommand("key Enter");
-  await Bun.sleep(2000);
+  // Click on the terminal to ensure it has focus
+  await shell.dotoolCommand("mousemove 640 400");
+  await Bun.sleep(200);
+  await shell.dotoolCommand("buttondown 1");
+  await Bun.sleep(100);
+  await shell.dotoolCommand("buttonup 1");
+  await Bun.sleep(1000);
 
-  // Step 2: Type echo command
+  await vm.captureFrame("02-terminal-open");
+
+  // Step 3: Type echo command
   console.log("Typing echo command...");
   await shell.dotoolCommand('type echo "');
   await Bun.sleep(1000);
 
-  // Step 3: Start recording via hotkey
+  await vm.captureFrame("03-echo-typed");
+
+  // Step 4: Start recording via hotkey
   console.log("Starting recording via hotkey...");
   await shell.sendHotkey();
   await Bun.sleep(2000);
+
+  await vm.captureFrame("04-recording-started");
 
   // Step 4: Wait for transcription
   console.log("Waiting for transcription...");
@@ -346,10 +439,14 @@ async function runTestFlow(vm: VmManager): Promise<void> {
     console.log("  TIMEOUT - continuing anyway");
   }
 
+  await vm.captureFrame("05-transcription-received");
+
   // Step 5: Stop recording
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
   await Bun.sleep(2000);
+
+  await vm.captureFrame("06-recording-stopped");
 
   // Step 6: Write result to file
   console.log("Writing result to file...");
@@ -418,6 +515,25 @@ async function main(): Promise<void> {
     } else {
       console.log("\nVM kept running (--keep-running flag)");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost`);
+    }
+  }
+
+  // Assemble recording into video
+  if (RECORD_MODE && vm.frameCount > 0) {
+    const videoFile = join(RECORDING_DIR, "e2e-recording.mp4");
+    console.log(`\nAssembling ${vm.frameCount} frames into video...`);
+    try {
+      // Use ffmpeg to create video from PPM frames
+      // Each frame is named like: frame-0000-01-desktop.ppm
+      // We need to sort them and create a video
+      const framePattern = join(RECORDING_DIR, "frame-%04d-*.ppm");
+      execSync(
+        `ffmpeg -y -framerate 1 -i "${join(RECORDING_DIR, "frame-%04d-*.ppm")}" -vf "scale=1280:720" -c:v libx264 -pix_fmt yuv420p "${videoFile}" 2>/dev/null`,
+        { stdio: "inherit" }
+      );
+      console.log(`Recording saved: ${videoFile}`);
+    } catch {
+      console.log("  ffmpeg assembly failed (frames still available as PPM files)");
     }
   }
 

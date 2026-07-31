@@ -320,7 +320,7 @@ e2e-screenshot-test:
     sleep 2
     
     # Capture screenshot
-    OUTPUT_DIR="tests/e2e-output"
+    OUTPUT_DIR="e2e/output"
     mkdir -p "$OUTPUT_DIR"
     FULL_SCREENSHOT="${OUTPUT_DIR}/screenshot-full.png"
     INDICATOR_SCREENSHOT="${OUTPUT_DIR}/screenshot-indicator.png"
@@ -432,7 +432,7 @@ qemu-e2e-vm:
     #!/usr/bin/env bash
     set -euo pipefail
     VM_DIR="e2e/qemu-images"
-    VM_DIR_ABS="$(cd "$(dirname "${JUSTFILE}")" && pwd)/${VM_DIR}"
+    VM_DIR_ABS="$(pwd)/${VM_DIR}"
     
     # Kill any existing QEMU
     pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
