@@ -1,16 +1,16 @@
 import { QemuMonitor } from "./lib/qemu.js";
 import { Deployer } from "./lib/deploy.js";
 import { ShellHelper } from "./lib/shell.js";
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import net from "node:net";
 import { execSync } from "node:child_process";
-import { appendFileSync, mkdirSync } from "node:fs";
 
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
 mkdirSync(LOG_DIR, { recursive: true });
-const LOG_FILE = join(LOG_DIR, `e2e-${new Date().toISOString().replace(/[:.]/g, "-")}.log`);
+const LOG_FILE = join(LOG_DIR, "e2e.log");
+// Clear log file at start of run
+writeFileSync(LOG_FILE, "");
 
 const origLog = console.log;
 const origError = console.error;
