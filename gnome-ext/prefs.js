@@ -4,7 +4,7 @@ import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gdk from 'gi://Gdk';
-import {load as yamlLoad, dump as yamlDump} from './js-yaml.mjs';
+import {load as yamlLoad, dump as yamlDump} from './vendor/js-yaml.mjs';
 import {
     ExtensionPreferences,
     gettext as _,
