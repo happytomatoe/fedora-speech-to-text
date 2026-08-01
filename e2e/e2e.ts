@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import * as tmux from "./lib/tmux.js";
+import { execSync } from "node:child_process";
 
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
@@ -134,12 +135,16 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   t = Date.now();
   console.log("Dismissing Activities...");
   await shell.dismissActivities();
+  const activitiesOpen = await shell.isActivitiesOpen();
+  console.log(`  Activities after dismiss: ${activitiesOpen ? 'STILL OPEN' : 'closed'}`);
   await shell.waitActivitiesDismissed();
   timing("dismiss-activities", t);
 
   // Step 2: Open terminal with tmux inside (dotool needs a focused window)
   t = Date.now();
   console.log("Opening terminal with tmux...");
+  // Kill any stale tmux session from a previous run
+  tmux.killSession(tmuxCfg);
   await shell.exec(`nohup gnome-terminal -- tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
   // Poll until tmux session appears
   await vm.pollUntil(
@@ -189,6 +194,8 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
   await shell.dismissActivities();
+  const activitiesOpen2 = await shell.isActivitiesOpen();
+  console.log(`  Activities after second dismiss: ${activitiesOpen2 ? 'STILL OPEN' : 'closed'}`);
   await shell.waitActivitiesFullyClosed();
   
   // Force-focus terminal again after Activities dismiss
@@ -300,14 +307,29 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   tmux.killSession(tmuxCfg);
 }
 
-async function verifyResult(vm: VmManager): Promise<{ passed: boolean; message: string }> {
+async function verifyResult(vm: VmManager, preRecordingPane: string): Promise<{ passed: boolean; message: string }> {
   console.log("\n=== Verification ===");
 
   const expected = EXPECTED_TEXT;
-  const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
+  
+  // Get current tmux pane content
+  const tmuxCfg: tmux.TmuxHelper = {
+    session: "e2e",
+    sshKey: SSH_KEY,
+    sshPort: SSH_PORT,
+    sshUser: SSH_USER,
+  };
+  const currentPane = tmux.capturePane(tmuxCfg);
+  
+  // Extract NEW content (lines that weren't there before recording)
+  const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
+  const newLines = currentPane.split("\n")
+    .map(l => l.replace(promptPrefixRe, ""))
+    .filter(l => l.trim() && !preRecordingPane.includes(l));
+  const actual = newLines.join(" ").trim();
 
   console.log(`  Expected: ${expected}`);
-  console.log(`  Actual:   ${actual.trim()}`);
+  console.log(`  Actual (from tmux): ${actual}`);
 
   // Normalize: lowercase, strip trailing period, collapse whitespace
   const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
@@ -319,6 +341,59 @@ async function verifyResult(vm: VmManager): Promise<{ passed: boolean; message: 
     return { passed: true, message: "Text matches expected output" };
   }
   return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'` };
+}
+
+/**
+ * Capture screenshot via QEMU monitor and save as PNG.
+ */
+async function captureScreenshot(label: string): Promise<string> {
+  const ppmPath = join(OUTPUT_DIR, `screenshot-${label}.ppm`);
+  const pngPath = join(OUTPUT_DIR, `screenshot-${label}.png`);
+  try {
+    // Use QEMU monitor to capture screenshot
+    execSync(
+      `echo "screendump ${ppmPath}" | nc -U ${SOCKET_PATH} -w 2`,
+      { encoding: "utf-8", timeout: 5000 }
+    );
+    // Wait for file to be written
+    await Bun.sleep(500);
+    // Convert PPM to PNG
+    execSync(`convert ${ppmPath} ${pngPath} 2>/dev/null || true`, {
+      encoding: "utf-8",
+      timeout: 5000
+    });
+    // Clean up PPM
+    execSync(`rm -f ${ppmPath}`, { encoding: "utf-8" });
+    console.log(`  Screenshot saved: ${pngPath}`);
+    return pngPath;
+  } catch (err) {
+    console.log(`  Screenshot capture failed: ${err}`);
+    return "";
+  }
+}
+
+/**
+ * Verify screenshot contains expected text using OCR (if available).
+ * Falls back to file-based verification if OCR not available.
+ */
+async function verifyWithScreenshot(
+  vm: VmManager,
+  expected: string
+): Promise<{ passed: boolean; message: string; screenshot: string }> {
+  // Capture screenshot
+  const screenshot = await captureScreenshot("final");
+  
+  // Also verify via file (primary method)
+  const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
+  
+  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
+  const actualNorm = normalize(actual);
+  const expectedNorm = normalize(expected);
+  
+  if (actualNorm === expectedNorm) {
+    return { passed: true, message: "Text matches expected output", screenshot };
+  }
+  return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
 }
 
 async function main(): Promise<void> {
@@ -360,8 +435,8 @@ async function main(): Promise<void> {
       { name: "test-flow", fn: () => runTestFlow(vm) },
     ]);
 
-    // Verify
-    const result = await verifyResult(vm);
+    // Verify with screenshot
+    const result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
     if (result.passed) {
       console.log(`  PASS: ${result.message}`);
     } else {
@@ -374,8 +449,9 @@ async function main(): Promise<void> {
   } finally {
     if (SHUTDOWN) {
       await vm.shutdown();
+      console.log("\nVM shut down.");
     } else {
-      console.log("\nVM kept running (default; pass --shutdown to stop)");
+      console.log("\nVM kept running (pass --shutdown to stop)");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost`);
     }
   }

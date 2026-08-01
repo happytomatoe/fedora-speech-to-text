@@ -92,10 +92,18 @@ export class ShellHelper {
   }
 
   private async getShellDbusAddr(): Promise<string> {
-    const raw = await this.exec(
-      `cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
-    );
-    return raw.trim();
+    if (!this.session) return "";
+    try {
+      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+      const sshHost = `${this.session.sshUser}@${this.session.host}`;
+      const raw = execSync(
+        `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
+        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      );
+      return raw.trim();
+    } catch {
+      return "";
+    }
   }
 
   async isActivitiesOpen(): Promise<boolean> {
@@ -142,20 +150,19 @@ export class ShellHelper {
    * Force-focus the terminal window using gio launch.
    * This ensures the terminal receives keyboard input after Activities dismiss.
    */
+  /**
+   * Focus the terminal window by clicking on it.
+   * Does NOT use gio launch (that opens a new window).
+   */
   async focusTerminal(): Promise<void> {
-    if (!this.session) return;
-    try {
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
-      // Use gio launch to bring existing terminal window to foreground
-      execSync(
-        `ssh ${sshOpts} ${sshHost} "gio launch /usr/share/applications/org.gnome.Terminal.desktop" 2>/dev/null`,
-        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-      );
-      await Bun.sleep(500); // Wait for window manager to complete focus transition
-    } catch {
-      // Ignore — terminal may already be focused
-    }
+    // Click on the terminal area to ensure it has focus
+    await this.dotoolCommand("mousemove 640 400");
+    await this.dotoolCommand("buttondown 1");
+    await this.dotoolCommand("buttonup 1");
+    await Bun.sleep(300);
+    // Send Escape to dismiss any popup/search that might be open
+    await this.dotoolCommand("key Escape");
+    await Bun.sleep(200);
   }
 
   /**
@@ -192,7 +199,7 @@ export class ShellHelper {
       ).trim();
 
       // Type a test character
-      await this.dotoolCommand("key shift+space");
+      await this.dotoolCommand("key shift+a");  // 'A' is visible, unlike space
       await Bun.sleep(200);
 
       // Get tmux content after

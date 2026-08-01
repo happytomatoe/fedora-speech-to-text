@@ -84,10 +84,21 @@ export class VmManager {
     const { socketPath, baseImage, overlayImage, vmDir, sshPort, updateMode } = this.config;
 
     if (await this.isVmRunning()) {
-      console.log("VM already running, connecting...");
+      console.log("VM already running, shutting down for clean restart...");
       await this.qemu.connect();
-      this.booted = false;
-      return;
+      try {
+        await this.qemu.systemPowerdown();
+        await Bun.sleep(3000);
+      } catch {
+        // Force kill if powerdown fails
+      }
+      // Force kill QEMU process if still running
+      try {
+        Bun.spawnSync(["pkill", "-f", `qemu-system.*${overlayImage}`]);
+        await Bun.sleep(1000);
+      } catch {
+        // Ignore
+      }
     }
 
     Bun.spawnSync(["rm", "-f", socketPath]);
