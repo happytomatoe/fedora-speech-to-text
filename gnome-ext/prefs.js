@@ -99,8 +99,6 @@ async function syncFromConfig(settings) {
             if (gsetVal !== cfgVal) drifted.push(gkey);
         } else if (type === 'double') {
             gsetVal = settings.get_double(gkey);
-            const defaultVar = settings.get_default_value(gkey);
-            const schemaDefault = defaultVar ? defaultVar.get_double() : 0.0;
             if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
                 settings.set_double(gkey, cfgVal);
                 gsetVal = cfgVal;
@@ -501,17 +499,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             }
         };
 
-        // Seed GSettings from config.yaml on load
-        const _initSync = async () => {
-            const { config, drifted } = await syncFromConfig(settings);
-            if (config && drifted.length > 0) {
-                syncWarningRow.visible = true;
-                _configSyncFailed.v = true;
-            }
-            _populateCustomWords();
-        };
-        _initSync().catch(e => console.error('VoiceToText: initSync failed:', e));
-
         // Custom words for fuzzy correction — list widget
         const customWordsGroup = new Adw.PreferencesGroup({
             title: _('Custom Words'),
@@ -642,10 +629,21 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         customWordsList.append(addWordRow);
 
+        // Seed GSettings from config.yaml on load
+        const _initSync = async () => {
+            const { config, drifted } = await syncFromConfig(settings);
+            if (config && drifted.length > 0) {
+                syncWarningRow.visible = true;
+                _configSyncFailed.v = true;
+            }
+            _populateCustomWords();
+        };
+        _initSync().catch(e => console.error('VoiceToText: initSync failed:', e));
+
         // Custom words threshold
         const thresholdRow = new Adw.SpinRow({
             title: _('Matching Threshold'),
-            subtitle: _('How strict fuzzy matching is (0=exact, 1=any match)'),
+            subtitle: _('How strict fuzzy matching is (0=any match, 1=exact)'),
             digits: 2,
             adjustment: new Gtk.Adjustment({
                 lower: 0.0,

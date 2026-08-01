@@ -86,10 +86,10 @@ export class AudioLevelWidget {
             const seg = this._segments[i];
             const shouldBeActive = i < activeCount;
 
-            // Determine color tier based on segment position within active range
+            // Determine color tier based on absolute segment position
             let targetClass = 'idle';
             if (shouldBeActive) {
-                const ratio = activeCount > 0 ? i / activeCount : 0;
+                const ratio = i / NUM_SEGMENTS;
                 if (ratio < 0.5) {
                     targetClass = 'green';
                 } else if (ratio < 0.7) {
