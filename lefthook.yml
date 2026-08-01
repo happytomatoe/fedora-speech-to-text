@@ -38,3 +38,9 @@ commit-msg:
   commands:
     no-co-authored-by:
       run: bash scripts/no-co-authored-by.sh {1}
+
+pre-push:
+  commands:
+    e2e-test:
+      run: bash -c 'if [ -f e2e/qemu-images/base.qcow2 ]; then cd e2e && bun run e2e.ts --shutdown; else echo "Skipping e2e test (VM image not found)"; fi'
+      interactive: true

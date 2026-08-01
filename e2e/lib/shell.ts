@@ -1,4 +1,5 @@
 import { ShellUse } from "@microsoft/shell-use";
+import { execSync } from "node:child_process";
 
 export interface ShellSession {
   shell: ShellUse;
@@ -44,7 +45,6 @@ export class ShellHelper {
 
     // Capture screen text before command
     const before = await this.session.shell.text();
-    const beforeLines = before.split("\n");
     const beforeLen = before.length;
 
     await this.session.shell.submit(command);
@@ -71,7 +71,7 @@ export class ShellHelper {
       // Remove trailing prompt lines (lines ending with $ or #)
       while (
         outputLines.length > 0 &&
-        /^\s*(?:\[[^\]]*\]\s*)?[a-zA-Z0-9_-]+@[\w.-]+(?:\s+[:\w/\-~]+)?\s*[#$]\s*$/.test(outputLines[outputLines.length - 1])
+        /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+(?:\s+\S+)*\s*[#$]\s*$/.test(outputLines[outputLines.length - 1])
       ) {
         outputLines.pop();
       }
@@ -91,12 +91,95 @@ export class ShellHelper {
     );
   }
 
+  private async getShellDbusAddr(): Promise<string> {
+    const raw = await this.exec(
+      `cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+    );
+    return raw.trim();
+  }
+
+  async isActivitiesOpen(): Promise<boolean> {
+    try {
+      const addr = await this.getShellDbusAddr();
+      if (!addr) return false;
+      const result = await this.exec(
+        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive`
+      );
+      return result.includes('(<true>,)');
+    } catch {
+      return false;
+    }
+  }
+
+  async dismissActivities(): Promise<void> {
+    if (!this.session) return;
+    try {
+      const addr = await this.getShellDbusAddr();
+      if (!addr) return;
+      // Use execSync directly (like tmuxCmd) to avoid shell.exec() screen capture
+      // interference during Activities dismiss
+      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+      const sshHost = `${this.session.sshUser}@${this.session.host}`;
+      execSync(
+        `ssh ${sshOpts} ${sshHost} "DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'" 2>/dev/null`,
+        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      );
+    } catch {
+      // Ignore — may already be dismissed
+    }
+  }
+
+  async waitActivitiesDismissed(timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (!(await this.isActivitiesOpen())) return;
+      await Bun.sleep(200);
+    }
+    // Fall through — may already be dismissed
+  }
+
+  /**
+   * Verify terminal has focus by typing a test character.
+   * Returns true if tmux content changed (terminal was focused).
+   */
+  async verifyTerminalFocus(tmuxSession: string, sshKey: string, sshPort: number): Promise<boolean> {
+    try {
+      // Get tmux content before
+      const before = execSync(
+        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort} ${this.session?.sshUser}@${this.session?.host} "tmux capture-pane -t ${tmuxSession} -p"`,
+        { encoding: "utf-8", timeout: 5000 }
+      ).trim();
+
+      // Type a test character
+      await this.dotoolCommand("key shift+space");
+      await Bun.sleep(200);
+
+      // Get tmux content after
+      const after = execSync(
+        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort} ${this.session?.sshUser}@${this.session?.host} "tmux capture-pane -t ${tmuxSession} -p"`,
+        { encoding: "utf-8", timeout: 5000 }
+      ).trim();
+
+      return before !== after;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Click to focus a window at given coordinates.
+   */
+  async clickToFocus(x: number, y: number): Promise<void> {
+    await this.dotoolCommand(`mousemove ${x} ${y}`);
+    await this.dotoolCommand('buttondown 1');
+    await this.dotoolCommand('buttonup 1');
+    await Bun.sleep(300);
+  }
+
   async sendHotkey(): Promise<void> {
     // Use D-Bus instead of dotool - dotool key presses don't propagate through Wayland
-    const dbusAddr = await this.exec(
-      `cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
-    );
-    const dbusBase = `DBUS_SESSION_BUS_ADDRESS=${dbusAddr.trim()} dbus-send --session --type=method_call --dest=com.happytomatoe.VoiceToText /com/happytomatoe/VoiceToText`;
+    const dbusAddr = await this.getShellDbusAddr();
+    const dbusBase = `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} dbus-send --session --type=method_call --dest=com.happytomatoe.VoiceToText /com/happytomatoe/VoiceToText`;
 
     if (this.isRecording) {
       await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);
@@ -132,8 +215,10 @@ export class ShellHelper {
         `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
       );
 
-      if (output.trim()) {
-        return output.trim();
+      const trimmed = output.trim();
+      // Filter out shell prompts that weren't stripped
+      if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
+        return trimmed;
       }
 
       await Bun.sleep(500);

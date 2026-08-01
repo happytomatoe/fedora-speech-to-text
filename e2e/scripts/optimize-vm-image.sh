@@ -46,6 +46,7 @@ virt-customize -a "$BASE_IMAGE" \
     --run-command 'touch /etc/cloud/cloud-init.disabled' \
     --run-command 'sed -i "s/^#*UseDNS .*/UseDNS no/" /etc/ssh/sshd_config 2>/dev/null || echo "UseDNS no" >> /etc/ssh/sshd_config' \
     --run-command 'rm -f /etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service' \
+    --install tmux \
     --selinux-relabel 2>&1
 
 echo ""

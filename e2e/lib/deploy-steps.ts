@@ -36,6 +36,7 @@ export interface DeployConfig {
   sshPort: number;
   sshUser: string;
   extensionUuid: string;
+  testAudioFile: string;
 }
 
 // --- Deployment steps ---
@@ -130,9 +131,9 @@ export function deployPythonSource(cfg: DeployConfig): void {
 }
 
 export function deployTestAudio(cfg: DeployConfig): void {
-  const testAudio = join(cfg.fixtureDir, "test-audio.wav");
+  const testAudio = cfg.testAudioFile;
   if (!existsSync(testAudio)) return;
-  console.log("Deploying test audio...");
+  console.log(`Deploying test audio: ${testAudio}`);
   scpToVm(testAudio, "/tmp/test-audio.wav", cfg.sshKey, cfg.sshPort, cfg.sshUser);
 }
 

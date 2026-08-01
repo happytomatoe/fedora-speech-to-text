@@ -353,6 +353,11 @@ container-watch:
     while true; do sleep 3600; done
 
 # @category e2e-qemu
+# Install SPICE viewer (Remote Viewer) via Flatpak
+install-spice-client:
+    flatpak install -y flathub org.virt_manager.virt-viewer
+
+# @category e2e-qemu
 # Kill any running QEMU E2E test VM
 qemu-e2e-kill:
     #!/usr/bin/env bash
@@ -482,12 +487,15 @@ e2e-test-view:
     $SSH "echo 'key Escape' > /run/user/1000/dotool-pipe" 2>/dev/null || true
     sleep 0.5
     echo "Connecting to QEMU VM via SPICE (localhost:5930)..."
-    if command -v remote-viewer &>/dev/null; then
+    if flatpak list --app 2>/dev/null | grep -q org.virt_manager.virt-viewer; then
+        flatpak run org.virt_manager.virt-viewer spice://localhost:5930
+    elif command -v remote-viewer &>/dev/null; then
         remote-viewer spice://localhost:5930
     elif command -v remmina &>/dev/null; then
         remmina spice://localhost:5930
     else
         echo "No SPICE client found. Install one:"
+        echo "  just install-spice-client"
         echo "  sudo dnf install virt-viewer"
         exit 1
     fi

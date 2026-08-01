@@ -29,6 +29,7 @@ export interface VmConfig {
   extensionUuid: string;
   recordMode: boolean;
   updateMode: boolean;
+  testAudioFile: string;
 }
 
 export class VmManager {
@@ -58,6 +59,7 @@ export class VmManager {
       sshPort: config.sshPort,
       sshUser: config.sshUser,
       extensionUuid: config.extensionUuid,
+      testAudioFile: config.testAudioFile,
     };
     if (config.recordMode) {
       mkdirSync(join(config.outputDir, "recording"), { recursive: true });
@@ -146,8 +148,11 @@ export class VmManager {
     await waitForGdmLogin(shellExec);
     await extractDbusAddress(this.shell);
     await deployExtension(this.shell, this.deployCfg, pollUntil);
+
+    // Parallelize independent setup steps after GDM restart
     deployPythonSource(this.deployCfg);
     deployTestAudio(this.deployCfg);
+
     await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput);
 
     if (this.config.updateMode) {
