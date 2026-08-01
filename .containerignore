@@ -1,0 +1,24 @@
+# Keep the build context small
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.pi/
+thoughts/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+tests/test_*.py
+tests/conftest.py
+tests/__init__.py
+tests/gnome-output/
+tests/gnome-snapshots/
+tests/e2e-output/
+e2e/output/
+e2e/output-qemu/
+e2e/qemu-images/
+.github/
+.env
+config.yaml

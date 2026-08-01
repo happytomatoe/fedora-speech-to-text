@@ -59,13 +59,16 @@ export default class VoiceToTextExtension extends Extension {
         this._recording = false;
         this._hotkeySignalId = null;
         this._signalIds = [];
-
         // Log audio level widget setting on startup
-        const showAudioLevel = this._settings.get_boolean('show-audio-level-widget');
+        let showAudioLevel = false;
+        try {
+            showAudioLevel = this._settings.get_boolean('show-audio-level-widget');
+        } catch {
+            // Key may not exist in older schema versions
+            showAudioLevel = true; // default to showing
+        }
         console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
-        this._audioLevelWidget = showAudioLevel
-            ? new AudioLevelWidget()
-            : null;
+        this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
@@ -183,12 +186,12 @@ export default class VoiceToTextExtension extends Extension {
                 (proxy, name, [state]) => {
                     console.log('VoiceToText: state changed to', state);
                     if (state === 'recording') {
-                        this._indicator.setRecordingActive();
+                        this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
                     } else if (state === 'processing') {
-                        this._indicator.setProcessing();
+                        this._indicator?.setProcessing();
                     } else if (state === 'idle') {
-                        this._indicator.setRecording(false);
+                        this._indicator?.setRecording(false);
                         this._audioLevelWidget?.hide();
                         this._recording = false;
                         this._releaseInhibitor();
@@ -217,15 +220,18 @@ export default class VoiceToTextExtension extends Extension {
             console.log('VoiceToText: D-Bus proxy connected');
 
             // Sync state on (re)enable — engine may already be recording
+            const proxyRef = this._proxy;
             this._proxy.GetStatusAsync().then(
                 state => {
+                    // Guard: extension may have been disabled or re-enabled while promise was pending
+                    if (this._proxy !== proxyRef) return;
                     console.log('VoiceToText: initial state:', state);
                     if (state === 'recording' || state === 'processing') {
                         this._recording = true;
                         if (state === 'processing') {
-                            this._indicator.setProcessing();
+                            this._indicator?.setProcessing();
                         } else {
-                            this._indicator.setRecordingActive();
+                            this._indicator?.setRecordingActive();
                         }
                         this._ensureInhibitor();
                     }
@@ -261,6 +267,11 @@ export default class VoiceToTextExtension extends Extension {
         if (!this._proxy) {
             console.log('VoiceToText: D-Bus proxy not available');
             this._showNotification('Voice-to-Text D-Bus service not available');
+            return;
+        }
+
+        if (!this._indicator) {
+            console.log('VoiceToText: indicator not available');
             return;
         }
 

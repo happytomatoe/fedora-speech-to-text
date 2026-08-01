@@ -1,6 +1,14 @@
 default:
     @just --list
 
+# @category e2e-qemu
+# Install SPICE viewer (Remote Viewer) via Flatpak
+install-spice-client:
+    flatpak install -y flathub org.virt_manager.virt-viewer
+    # Block GNOME Shell portal to suppress "Allow inhibiting shortcuts" dialog
+    # This prevents the app from requesting shortcut inhibition via the portal
+    flatpak override --user --no-talk-name=org.gnome.Shell org.virt_manager.virt-viewer
+
 # @category setup
 # Install npm deps (lefthook) and set up git hooks
 setup:
@@ -12,6 +20,9 @@ run *args:
 
 test:
   uv run pytest -n auto
+
+# @category test  
+test-all: test
 
 install:
     uv tool install -e .
@@ -31,7 +42,85 @@ reinstall:
 # @category setup
 # Store an API key in the OS keyring (service=voice-to-text)
 store-secret:
+    #!/usr/bin/env bash
+    set -euo pipefail
     ./scripts/store-api-keys.sh
+
+# @category setup
+# Full development setup: system deps + Python dev deps
+dev-setup: setup-deps dev-sync
+    @echo "Development environment ready."
+
+# @category setup
+# Install system dependencies for development and E2E testing
+setup-deps:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    # Package mappings: command to check -> package name
+    declare -A FEDORA_PKGS=(
+        [rsync]="rsync"
+        [qemu-system-x86_64]="qemu-kvm"
+        [virsh]="libvirt"
+        [virt-install]="virt-install"
+        [qemu-img]="qemu-img"
+        [ssh]="openssh-clients"
+    )
+    
+    declare -A UBUNTU_PKGS=(
+        [rsync]="rsync"
+        [qemu-system-x86_64]="qemu-kvm"
+        [virsh]="libvirt-daemon-system"
+        [virt-install]="virtinst"
+        [qemu-img]="qemu-utils"
+        [ssh]="openssh-client"
+    )
+    
+    # Detect package manager
+    if command -v rpm-ostree &>/dev/null; then
+        PKG_MGR="rpm-ostree"
+    elif command -v dnf &>/dev/null; then
+        PKG_MGR="dnf"
+    elif command -v apt &>/dev/null; then
+        PKG_MGR="apt"
+    else
+        echo "ERROR: Unsupported package manager"
+        exit 1
+    fi
+    
+    # Check which packages are missing
+    MISSING=()
+    for cmd in "${!FEDORA_PKGS[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            if [ "$PKG_MGR" = "apt" ]; then
+                MISSING+=("${UBUNTU_PKGS[$cmd]}")
+            else
+                MISSING+=("${FEDORA_PKGS[$cmd]}")
+            fi
+        fi
+    done
+    
+    if [ ${#MISSING[@]} -eq 0 ]; then
+        echo "All system dependencies already installed."
+        exit 0
+    fi
+    
+    echo "Missing packages: ${MISSING[*]}"
+    echo "Installing..."
+    
+    case "$PKG_MGR" in
+        rpm-ostree) sudo rpm-ostree install -y "${MISSING[@]}" ;;
+        dnf)        sudo dnf install -y "${MISSING[@]}" ;;
+        apt)        sudo apt install -y "${MISSING[@]}" ;;
+    esac
+    
+    echo "System dependencies installed."
+
+# @category setup
+# Sync Python dev dependencies (pytest, ruff, pyright, etc.)
+dev-sync:
+    uv sync
+    @echo "Dev dependencies synced."
 
 build-python:
     uv build --out-dir dist
@@ -267,3 +356,253 @@ gnome-ext-pack:
     glib-compile-schemas "dist/$UUID/schemas/"
     cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
     echo "Extension packed to dist/$UUID.shell-extension.zip"
+
+
+
+# @category e2e
+# Watch container via VNC (real-time live view)
+# Usage: just container-watch
+container-watch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    # Find running container
+    POD=$(podman ps --filter ancestor=voice-to-text-e2e --format '{'{'.ID'}'}' | head -1)
+    if [ -z "$POD" ]; then
+      echo "No running voice-to-text-e2e container found."
+      echo "Start one with: just e2e-full (in background) or podman run..."
+      exit 1
+    fi
+    
+    echo "Found container: $POD"
+    
+    # Install x11vnc as root (not gnomeshell user)
+    echo "Installing x11vnc..."
+    podman exec $POD dnf install -y --nogpgcheck x11vnc 2>/dev/null || true
+    
+    # Kill any existing VNC server
+    podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true
+    sleep 1
+    
+    # Start VNC server with -noshm to fix MIT-SHM error
+    echo "Starting VNC server on port 5900..."
+    podman exec --user gnomeshell -e DISPLAY=:100 -d $POD bash -c "nohup /usr/bin/x11vnc -display :100 -nopw -forever -shared -rfbport 5900 -noshm > /tmp/x11vnc.log 2>&1 &"
+    sleep 3
+    
+    # Verify it started
+    echo "Checking VNC server..."
+    podman exec --user gnomeshell $POD cat /tmp/x11vnc.log 2>/dev/null | tail -5 || echo "No log yet"
+    
+    echo ""
+    echo "========================================="
+    echo "VNC server is running!"
+    echo "Connect with any VNC client to: localhost:5900"
+    echo ""
+    echo "Suggested viewers:"
+    echo "  - GNOME Connections"
+    echo "  - Remmina"
+    echo "  - TigerVNC Viewer"
+    echo "  - macOS Screen Sharing (vnc://localhost:5900)"
+    echo "========================================="
+    echo ""
+    echo "Press Ctrl+C to stop the VNC server"
+    
+    # Keep script running and cleanup on exit
+    trap "podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true; echo 'VNC server stopped.'" EXIT
+    # Block until user presses Ctrl+C (wait won't work since no background jobs in this shell)
+    while true; do sleep 3600; done
+
+# @category e2e-qemu
+# Kill any running QEMU E2E test VM
+qemu-e2e-kill:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PID_FILE="e2e/qemu-images/qemu.pid"
+    if [[ -f "${PID_FILE}" ]]; then
+        PID=$(cat "${PID_FILE}")
+        if kill -0 "${PID}" 2>/dev/null; then
+            echo "Killing QEMU (PID ${PID})..."
+            kill "${PID}" 2>/dev/null || true
+            sleep 2
+            kill -9 "${PID}" 2>/dev/null || true
+        else
+            echo "QEMU PID ${PID} not running"
+        fi
+        rm -f "${PID_FILE}"
+    fi
+    # Also kill any stray QEMU processes
+    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
+    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    rm -f e2e/qemu-images/overlay.qcow2 e2e/qemu-images/qemu-monitor.sock
+    echo "Done"
+
+# @category e2e-qemu
+# Start QEMU E2E test VM (keeps running for SPICE connection)
+qemu-e2e-vm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VM_DIR="e2e/qemu-images"
+    VM_DIR_ABS="$(pwd)/${VM_DIR}"
+    
+    # Kill any existing QEMU
+    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
+    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    sleep 1
+    
+    # Create fresh overlay
+    rm -f "${VM_DIR_ABS}/overlay.qcow2"
+    qemu-img create -f qcow2 -b "${VM_DIR_ABS}/base.qcow2" -F qcow2 "${VM_DIR_ABS}/overlay.qcow2"
+    
+    # Start QEMU with SPICE
+    cd "${VM_DIR_ABS}"
+    qemu-system-x86_64 \
+        -enable-kvm \
+        -cpu host \
+        -m 4096 \
+        -smp 2 \
+        -drive file=overlay.qcow2,format=qcow2,if=virtio \
+        -device virtio-vga \
+        -display vnc=:1 \
+        -spice port=5930,disable-ticketing=on \
+        -monitor unix:qemu-monitor.sock,server,nowait \
+        -serial file:serial.log \
+        -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+        -device virtio-net-pci,netdev=net0 \
+        -no-reboot &
+    QEMU_PID=$!
+    echo $QEMU_PID > qemu.pid
+    
+    echo "QEMU started (PID: ${QEMU_PID})"
+    echo ""
+    echo "Waiting for SSH..."
+    ssh_ready=false
+    for i in $(seq 1 30); do
+        if ssh -i id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 testuser@localhost echo ok 2>/dev/null; then
+            echo "SSH ready (${i}s)"
+            ssh_ready=true
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    
+    if [ "$ssh_ready" = false ]; then
+        echo ""
+        echo "❌ ERROR: SSH connection failed after 60 seconds"
+        kill "${QEMU_PID}" 2>/dev/null || true
+        rm -f "${VM_DIR_ABS}/qemu.pid"
+        exit 1
+    fi
+    
+    echo ""
+    echo "=== VM is ready ==="
+    echo "SPICE: remote-viewer spice://localhost:5930"
+    echo "  or:  just e2e-test-view"
+    echo "SSH:   ssh -i ${VM_DIR}/id_ed25519 -p 2222 testuser@localhost"
+    echo "Kill:  just qemu-e2e-kill"
+    echo ""
+    echo "Press Ctrl+C to stop the VM"
+    
+    # Wait for user interrupt
+    trap "echo ''; echo 'Shutting down VM...'; kill ${QEMU_PID} 2>/dev/null || true; exit 0" INT TERM
+    wait ${QEMU_PID} 2>/dev/null || true
+
+# @category e2e-qemu
+# Open SPICE viewer to QEMU E2E test VM (port 5930)
+e2e-test-view:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! ss -tlnp | grep -q ':5930 '; then
+        echo "ERROR: QEMU VM not running (no SPICE on port 5930)"
+        echo "Run 'just qemu-e2e-test-host' first."
+        exit 1
+    fi
+    SSH_KEY="e2e/qemu-images/id_ed25519"
+    SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
+    # Wait for GDM login screen
+    echo -n "Waiting for GDM..."
+    for i in $(seq 1 30); do
+        if $SSH "pgrep -x gdm >/dev/null 2>&1"; then
+            echo " ready"
+            break
+        fi
+        sleep 1
+        echo -n "."
+    done
+    sleep 2
+    # Wait for GNOME Shell to be ready
+    echo -n "Waiting for desktop..."
+    for i in $(seq 1 30); do
+        if $SSH "pgrep -x gnome-shell >/dev/null 2>&1"; then
+            echo " ready"
+            break
+        fi
+        sleep 1
+        echo -n "."
+    done
+    # Dismiss lock screen if present
+    $SSH "echo 'key Escape' > /run/user/1000/dotool-pipe" 2>/dev/null || true
+    sleep 0.5
+    echo "Connecting to QEMU VM via SPICE (localhost:5930)..."
+    if flatpak list --app 2>/dev/null | grep -q org.virt_manager.virt-viewer; then
+        flatpak run org.virt_manager.virt-viewer spice://localhost:5930 &
+    elif command -v remote-viewer &>/dev/null; then
+        remote-viewer spice://localhost:5930 &
+    elif command -v remmina &>/dev/null; then
+        remmina spice://localhost:5930 &
+    else
+        echo "No SPICE client found. Install one:"
+        echo "  just install-spice-client"
+        echo "  sudo dnf install virt-viewer"
+        exit 1
+    fi
+    SPICE_PID=$!
+    # Wait for window to appear, then tile to right half
+    sleep 2
+    if command -v dotool &>/dev/null; then
+        echo "Tiling window to right half..."
+        printf 'keydown leftmeta\nkey right\nkeyup leftmeta\n' | dotool
+        sleep 0.5
+        # Click on left side of screen to focus terminal
+        printf 'mouseto 0.25 0.5\nclick left\n' | dotool
+    fi
+    wait $SPICE_PID 2>/dev/null || true
+
+# @category e2e-qemu
+# Install QEMU/KVM on host (Fedora Silverblue — requires reboot)
+qemu-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Installing QEMU/KVM on host via rpm-ostree..."
+    rpm-ostree install qemu-kvm libvirt virt-install qemu-img
+    echo "Packages staged. Run 'systemctl reboot' to activate."
+
+
+# @category e2e-qemu
+# Run E2E tests via TypeScript (bun)
+qemu-e2e-test-ts:
+    cd e2e && bun run e2e.ts
+
+# @category e2e-qemu
+# Update E2E reference images via TypeScript (bun)
+qemu-e2e-update-ts:
+    cd e2e && bun run e2e.ts --update
+
+
+# @category e2e-qemu
+# Run E2E tests (boots VM if needed, executes test, shuts down unless --keep-running)
+e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e && bun run e2e.ts
+
+
+# @category e2e-qemu
+# Run E2E tests with snapshot restore (retry on failure)
+e2e-snapshot:
+    cd e2e && bun run e2e.ts --snapshot
+
+# @category e2e-qemu
+# Update E2E reference images in snapshot mode
+e2e-update-snapshot:
+    cd e2e && bun run e2e.ts --snapshot --update

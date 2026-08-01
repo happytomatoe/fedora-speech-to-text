@@ -1,9 +1,53 @@
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+
+// Custom spinner for GNOME 50+ (St.Spinner was removed)
+const Spinner = GObject.registerClass(
+    class Spinner extends St.Widget {
+        _init(params) {
+            super._init({ ...params, reactive: false });
+            this._icon = new St.Icon({
+                icon_name: 'process-working-symbolic',
+                style_class: 'system-status-icon',
+            });
+            this.add_child(this._icon);
+            this._rotation = 0;
+            this._timeoutId = null;
+        }
+
+        vfunc_map() {
+            super.vfunc_map();
+            this._startAnimation();
+        }
+
+        vfunc_unmap() {
+            this._stopAnimation();
+            super.vfunc_unmap();
+        }
+
+        _startAnimation() {
+            this._stopAnimation();
+            this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+                this._rotation = (this._rotation + 15) % 360;
+                this._icon.set_pivot_point(0.5, 0.5);
+                this._icon.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, this._rotation);
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+
+        _stopAnimation() {
+            if (this._timeoutId) {
+                GLib.source_remove(this._timeoutId);
+                this._timeoutId = null;
+            }
+        }
+    }
+);
 
 export const VoiceIndicator = GObject.registerClass(
     class VoiceIndicator extends PanelMenu.Button {
@@ -42,11 +86,10 @@ export const VoiceIndicator = GObject.registerClass(
             });
             this._box.add_child(this._icon);
 
-            this._spinner = new St.Widget({
+            this._spinner = new Spinner({
                 style_class: 'system-status-icon',
                 visible: false,
             });
-            this._spinner.set_content(new St.SpinnerContent());
             this._box.add_child(this._spinner);
 
             const spacer1 = new St.Widget({x_expand: true});

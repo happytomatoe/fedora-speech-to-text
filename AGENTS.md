@@ -16,9 +16,8 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 ## Layout
 
-- `src/voice_to_text/` — Python package (engine, audio, bluetooth, config, dbus_service, typer, providers/).
-- `gnome-ext/` — GNOME Shell extension JS/JSON/CSS.
-  - Now TypeScript-based; compile with `bun run build` before installing.
+- `src/voice_to_text/` — Python package (engine, audio, config, dbus_service, debug, hybrid, postprocess, profiling, typer, vad, providers/).
+- `gnome-ext/` — GNOME Shell extension (plain JS, no build step needed).
 - `tests/` — pytest suite (mirrors `src/` modules).
 - `service/` — D-Bus service definition.
 - `scripts/` — dev/setup helpers.
@@ -39,7 +38,7 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).
 - **pyright** for types: `pyright .`.
-- **bun** for GNOME extension JS/TS: `bun install` + `bun run build`.
+- **bun** + **eslint** for GNOME extension JS linting (see `eslint.config.cjs`).
 - **lefthook** is configured (see `lefthook.yml`); run `lefthook run pre-commit` or `just setup` to install hooks.
 
 ## Testing
@@ -47,6 +46,14 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 - Tests use pytest with `pytest-asyncio` (auto mode) and `pytest-xdist` (`-n auto`).
 - `testpaths = tests`, `pythonpath = src` (set in `pyproject.toml`).
 - Run a single test file with `uv run pytest tests/test_audio.py`.
+
+### E2E / Snapshot tests
+
+See `e2e/AGENTS.md` for detailed instructions.
+
+**Key commands:**
+- Update references: `just qemu-e2e-update-ts` or `cd e2e && bun run e2e.ts --update`
+- Run tests: `just e2e` or `cd e2e && bun run e2e.ts`
 
 ## Conventions
 
@@ -90,3 +97,16 @@ This project uses [python-semantic-release](https://python-semantic-release.read
 - **Use `catch { }` (no parameter)** when intentionally ignoring — signals intent and avoids unused-variable lint errors.
 - **Don't just swallow errors** — this makes debugging impossible and hides production failures.
 - **Use `finally` for cleanup** (disconnect signals, close connections, release locks).
+
+## Interacting with the QEMU E2E VM
+
+- **Always use `shell-use`** for SSH sessions into the QEMU E2E VM — never raw `ssh` commands in bash.
+- `shell-use` provides persistent PTY sessions, screen inspection, keystroke injection, and assertion support.
+- For the E2E VM:
+  ```sh
+  shell-use open --env SSH_KEY=e2e/qemu-images/id_ed25519 --env SSH_PORT=2222
+  shell-use submit "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $SSH_PORT testuser@localhost '<command>'"
+  shell-use wait text "<expected output>"
+  ```
+- Use `shell-use wait text` / `shell-use expect text` to poll for output instead of `sleep` loops.
+- For screenshots: `shell-use screenshot /path/to/output.png`.

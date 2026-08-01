@@ -177,16 +177,6 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             logger.warning("Error sending audio to 60db stream: %s", e)
             self._ws = None
             raise RuntimeError("Streaming connection lost") from e
-
-    async def get_partial_result(self) -> str | None:
-        if self._partial_result:
-            return (
-                (self._finalized_text + " " + self._partial_result).strip()
-                if self._finalized_text
-                else self._partial_result
-            )
-        return self._finalized_text or None
-
     async def finalize_stream(self) -> str:
         if self._ws is not None:
             try:

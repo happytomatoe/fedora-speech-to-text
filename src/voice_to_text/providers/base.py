@@ -36,7 +36,16 @@ class BatchProvider(ABC):
 
 
 class StreamingProvider(ABC):
-    """Provider that transcribes audio in real-time via streaming."""
+    """Provider that transcribes audio in real-time via streaming.
+
+    Subclasses that use the default `get_partial_result` should set:
+        _partial_result: str | None
+        _finalized_text: str
+    Subclasses that override `get_partial_result` may not need these.
+    """
+
+    _partial_result: str | None
+    _finalized_text: str
 
     @abstractmethod
     def __init__(self, config: dict[str, Any]):
@@ -52,10 +61,15 @@ class StreamingProvider(ABC):
         """Send an audio chunk for processing."""
         pass
 
-    @abstractmethod
     async def get_partial_result(self) -> str | None:
         """Get latest partial transcript (may change)."""
-        pass
+        if self._partial_result:
+            return (
+                (self._finalized_text + " " + self._partial_result).strip()
+                if self._finalized_text
+                else self._partial_result
+            )
+        return self._finalized_text or None
 
     @abstractmethod
     async def finalize_stream(self) -> str:
