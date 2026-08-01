@@ -37,7 +37,7 @@ export class QemuMonitor extends EventEmitter {
         sock.removeListener("error", onError);
         this.sock = sock;
         // Keep a persistent error handler for post-connection errors
-        this.sock.on("error", (err) => this.emit("error", err));
+        this.sock.on("error", (err) => { if (this.listenerCount("error") > 0) this.emit("error", err); });
         // Wait for the initial "(qemu) " prompt
         this.waitingForPrompt = true;
         this.promptCallback = () => {
