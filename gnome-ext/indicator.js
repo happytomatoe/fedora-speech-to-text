@@ -1,5 +1,6 @@
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -31,17 +32,17 @@ const Spinner = GObject.registerClass(
 
         _startAnimation() {
             this._stopAnimation();
-            this._timeoutId = Clutter.Timeout.add(Clutter.DEFAULT, 80, () => {
+            this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
                 this._rotation = (this._rotation + 15) % 360;
                 this._icon.set_pivot_point(0.5, 0.5);
                 this._icon.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, this._rotation);
-                return Clutter.CONTINUE;
+                return GLib.SOURCE_CONTINUE;
             });
         }
 
         _stopAnimation() {
             if (this._timeoutId) {
-                Clutter.Timeout.remove(this._timeoutId);
+                GLib.source_remove(this._timeoutId);
                 this._timeoutId = null;
             }
         }
