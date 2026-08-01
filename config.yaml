@@ -70,5 +70,13 @@ logging:
 engine:
   stop_timeout: 120  # seconds to wait for transcription to complete after stop
 
+# Text post-processing
+postprocess:
+  enabled: true
+  language: null  # null falls back to the recording language
+  custom_words: []  # words for fuzzy correction, e.g. ["R&D", "API", "OAuth"]
+  custom_words_threshold: 0.5  # 0.0=exact, 0.5=moderate, 1.0=any match
+  # custom_filler_words: null  # override filler list; null=language defaults, []=disable
+
 # Performance profiling (logs timing for each startup step)
 profiling: false

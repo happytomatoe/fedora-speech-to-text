@@ -1,6 +1,12 @@
 default:
     @just --list
 
+# @category setup
+# Install npm deps (lefthook) and set up git hooks
+setup:
+    npm install
+    lefthook install
+
 run *args:
     PYTHONPATH=src .venv/bin/python -m voice_to_text.__main__ {{args}}
 
@@ -44,6 +50,31 @@ service-uninstall:
     rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
     rm -f ~/.local/bin/voice-to-text-dbus-wrapper
     @echo "D-Bus service uninstalled."
+
+# @category service
+# Install parakeet-v2 as a Quadlet service (starts on boot)
+parakeet-start-on-boot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p ~/.config/containers/systemd
+    cp parakeet-v2.container ~/.config/containers/systemd/parakeet-v2.container
+    systemctl --user daemon-reload
+    systemctl --user enable --now parakeet-v2.service
+    echo "Parakeet v2 Quadlet service installed and started."
+    echo "It will auto-start on boot."
+
+# @category service
+# Uninstall parakeet-v2 Quadlet service (stops and removes it)
+parakeet-dont-start-on-boot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    systemctl --user stop parakeet-v2.service 2>/dev/null || true
+    systemctl --user disable parakeet-v2.service 2>/dev/null || true
+    rm -f ~/.config/containers/systemd/parakeet-v2.container
+    systemctl --user daemon-reload
+    podman rm -f parakeet-v2 2>/dev/null || true
+    echo "Parakeet v2 Quadlet service removed."
+    echo "Model files in ~/parakeet/models/ were kept."
 
 # @category service
 # Start the service (runs in background via D-Bus activation or directly)
@@ -129,8 +160,10 @@ gnome-ext-dev: reinstall gnome-ext-install
         echo "Error: Cannot start a development GNOME Shell from within a toolbox container. Run this command on the host system." >&2
         exit 1
     fi
-    echo "" > /tmp/gnome-shell-nested.log
-    echo "" > /tmp/voice-to-text.log
+    LOG_DIR="$PWD/logs"
+    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    mkdir -p "$LOG_DIR"
+    echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing..."
         if command -v rpm-ostree &>/dev/null; then
@@ -164,13 +197,13 @@ gnome-ext-dev: reinstall gnome-ext-install
     # GNOME extension can find and call it on real hardware.
     # Trap EXIT/INT/TERM to kill the background service when the shell exits,
     dbus-run-session -- sh -c "
-      voice-to-text-dbus > /tmp/voice-to-text.log 2>&1 &
+      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
       DBUS_PID=\$!
       sleep 1
       trap 'kill \$DBUS_PID 2>/dev/null || true' EXIT INT TERM
       gnome-shell --wayland $DEVKIT_FLAG
-    " 2>&1 | tee /tmp/gnome-shell-nested.log
-
+    " 2>&1 | tee -a "$LOG_FILE"
+    echo "Logs written to $LOG_FILE"
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash
@@ -181,6 +214,8 @@ gnome-ext-install:
     mkdir -p "$DEST/schemas"
     # Copy JS files from gnome-ext/
     cp gnome-ext/*.js "$DEST/"
+    # Copy vendor directory (js-yaml)
+    cp -r gnome-ext/vendor "$DEST/"
     # Copy other files from gnome-ext/
     cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
@@ -192,6 +227,24 @@ gnome-ext-uninstall:
     rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
     echo "Extension uninstalled"
 
+# @category gnome-ext
+# Verify GTK4 widget APIs used in prefs.js actually exist (catches GTK3→GTK4 regressions)
+gtk4-api-check:
+    gjs gnome-ext/tests/test-gtk4-api.js
+# Validate GNOME extension (syntax + schema)
+gnome-ext-lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking JS syntax..."
+    for f in gnome-ext/*.js; do
+        node --input-type=module --check < "$f" || exit 1
+    done
+    echo "Checking GTK4 API compatibility..."
+    gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
+    echo "Validating GSettings schema..."
+    python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
+    glib-compile-schemas --strict gnome-ext/schemas/ 2>&1 || exit 1
+    echo "All checks passed!"
 # Reinstall files and reset in GNOME Shell
 gnome-ext-reload:
     ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
@@ -206,6 +259,8 @@ gnome-ext-pack:
     # No TypeScript build needed — extension is plain JS
     # Copy JS files from gnome-ext/
     cp "$SRC"/*.js "dist/$UUID/"
+    # Copy vendor directory (js-yaml)
+    cp -r "$SRC"/vendor "dist/$UUID/"
     # Copy other files from gnome-ext/
     cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
     cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"

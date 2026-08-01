@@ -39,7 +39,7 @@ class HybridTranscriber:
             logger.warning("Streaming connection lost, continuing without live text: %s", e)
         return self.partial_text
 
-    async def on_recording_stop(self, audio_path: str, language: str) -> str:
+    async def on_recording_stop(self, audio_path: str, language: str, custom_words: list[str] | None = None) -> str:
         """Called when recording stops. Returns accurate batch text."""
         try:
             finalized = await self.streaming.finalize_stream()
@@ -48,7 +48,7 @@ class HybridTranscriber:
         except Exception as e:
             logger.warning("Error finalizing stream: %s", e)
         try:
-            return await self.batch.transcribe_file(audio_path, language=language)
+            return await self.batch.transcribe_file(audio_path, language=language, custom_words=custom_words)
         except Exception as e:
             logger.warning("Batch transcription failed, falling back to streaming transcript: %s", e)
             return self.partial_text

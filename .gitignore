@@ -69,3 +69,5 @@ src/voice_to_text/_build_info.py
 docs/
 thoughts/
 opensrc/
+logs/
+gnome-ext/schemas/gschemas.compiled

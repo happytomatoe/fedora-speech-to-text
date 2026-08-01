@@ -1,10 +1,8 @@
 import St from 'gi://St';
-import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const WIDGET_WIDTH = 300;
-const WIDGET_HEIGHT = 12;
+const NUM_SEGMENTS = 10;
 const MARGIN_BOTTOM = 60;
 const SMOOTH = 0.6;
 const SHOW_DELAY_MS = 300;
@@ -12,6 +10,7 @@ const SHOW_DELAY_MS = 300;
 export class AudioLevelWidget {
     constructor() {
         this._widget = null;
+        this._segments = [];
         this._smoothedLevel = 0;
         this._visible = false;
         this._showTimeoutId = 0;
@@ -35,13 +34,25 @@ export class AudioLevelWidget {
     _createWidget() {
         if (this._widget) return;
 
-        this._widget = new St.DrawingArea({
-            width: WIDGET_WIDTH,
-            height: WIDGET_HEIGHT,
-            style_class: 'audio-level-widget',
+        this._widget = new St.BoxLayout({
+            style_class: 'osd-widget',
+            vertical: false,
         });
 
-        this._widget.connect('repaint', () => this._draw());
+        const micIcon = new St.Icon({
+            icon_name: 'audio-input-microphone-symbolic',
+            style_class: 'osd-mic-icon',
+        });
+        this._widget.add_child(micIcon);
+
+        this._segments = [];
+        for (let i = 0; i < NUM_SEGMENTS; i++) {
+            const seg = new St.Widget({
+                style_class: 'osd-segment idle',
+            });
+            this._widget.add_child(seg);
+            this._segments.push(seg);
+        }
 
         Main.layoutManager.addTopChrome(this._widget);
         this._positionWidget();
@@ -60,6 +71,7 @@ export class AudioLevelWidget {
         Main.layoutManager.removeChrome(this._widget);
         this._widget.destroy();
         this._widget = null;
+        this._segments = [];
         this._smoothedLevel = 0;
         this._visible = false;
     }
@@ -67,9 +79,37 @@ export class AudioLevelWidget {
     updateLevel(level) {
         if (!this._widget || !this._visible) return;
 
-        this._smoothedLevel =
-            SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
-        this._widget.queue_repaint();
+        this._smoothedLevel = SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
+
+        const activeCount = Math.round(this._smoothedLevel * NUM_SEGMENTS);
+        for (let i = 0; i < NUM_SEGMENTS; i++) {
+            const seg = this._segments[i];
+            const shouldBeActive = i < activeCount;
+
+            // Determine color tier based on absolute segment position
+            let targetClass = 'idle';
+            if (shouldBeActive) {
+                const ratio = i / NUM_SEGMENTS;
+                if (ratio < 0.5) {
+                    targetClass = 'green';
+                } else if (ratio < 0.7) {
+                    targetClass = 'yellow';
+                } else {
+                    targetClass = 'red';
+                }
+            }
+
+            // Only update if class changed
+            const currentClass = seg.has_style_class_name('green')
+                ? 'green' : seg.has_style_class_name('yellow')
+                ? 'yellow' : seg.has_style_class_name('red')
+                ? 'red' : 'idle';
+
+            if (targetClass !== currentClass) {
+                seg.remove_style_class_name(currentClass);
+                seg.add_style_class_name(targetClass);
+            }
+        }
     }
 
     _positionWidget() {
@@ -78,61 +118,13 @@ export class AudioLevelWidget {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor) return;
 
-        const x = monitor.x + (monitor.width - WIDGET_WIDTH) / 2;
-        const y = monitor.y + monitor.height - WIDGET_HEIGHT - MARGIN_BOTTOM;
+        const [, widgetWidth] = this._widget.get_preferred_width(-1);
+        const [, widgetHeight] = this._widget.get_preferred_height(-1);
+
+        const x = monitor.x + (monitor.width - widgetWidth) / 2;
+        const y = monitor.y + monitor.height - widgetHeight - MARGIN_BOTTOM;
 
         this._widget.set_position(x, y);
-    }
-
-    _draw() {
-        if (!this._widget) return;
-
-        const cr = this._widget.get_context();
-        try {
-            const level = Math.min(1, Math.max(0, this._smoothedLevel));
-            const w = this._widget.width;
-            const h = this._widget.height;
-            const fillW = level * w;
-            const radius = 4;
-
-            // Background
-            cr.setSourceRGBA(0.12, 0.12, 0.12, 0.85);
-            this._roundedRect(cr, 0, 0, w, h, radius);
-            cr.fill();
-
-            // Fill
-            if (fillW > 0) {
-                if (level < 0.13) {
-                    cr.setSourceRGBA(0.4, 0.4, 0.4, 0.9);
-                } else if (level < 0.5) {
-                    cr.setSourceRGBA(0.2, 0.85, 0.2, 0.9);
-                } else if (level < 0.7) {
-                    cr.setSourceRGBA(0.95, 0.8, 0.1, 0.9);
-                } else {
-                    cr.setSourceRGBA(0.95, 0.2, 0.2, 0.9);
-                }
-
-                const fillRadius = Math.min(radius, fillW / 2);
-                this._roundedRect(cr, 0, 0, fillW, h, fillRadius);
-                cr.fill();
-            }
-        } finally {
-            cr.$dispose();
-        }
-    }
-
-    _roundedRect(cr, x, y, w, h, r) {
-        cr.newPath();
-        cr.moveTo(x + r, y);
-        cr.lineTo(x + w - r, y);
-        cr.arc(x + w - r, y + r, r, -Math.PI / 2, 0);
-        cr.lineTo(x + w, y + h - r);
-        cr.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
-        cr.lineTo(x + r, y + h);
-        cr.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
-        cr.lineTo(x, y + r);
-        cr.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
-        cr.closePath();
     }
 
     destroy() {
