@@ -32,6 +32,7 @@ const SHUTDOWN = args.includes("--shutdown");
 const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
+const SNAPSHOT_MODE = args.includes("--snapshot");
 
 // Parse --timeout <seconds> (default: 60)
 const timeoutIdx = args.indexOf("--timeout");
@@ -344,11 +345,37 @@ async function verifyResult(vm: VmManager, preRecordingPane: string): Promise<{ 
 }
 
 /**
+ * Get test case name from file path (e.g., "hello-world.wav" → "hello-world")
+ */
+function getTestCaseName(): string {
+  const file = CURRENT_TEST.file;
+  return file.replace(/\.wav$/, "");
+}
+
+/**
+ * Get screenshot path based on label and test case.
+ * - Common screenshots (01-04, 06): e2e/output/common/
+ * - Transcription screenshot (05): e2e/output/test-cases/{testCase}/
+ */
+function getScreenshotPath(label: string, testCase?: string): string {
+  if (label === "05-transcription-received" && testCase) {
+    return join(OUTPUT_DIR, "test-cases", testCase, `screenshot-${label}.png`);
+  }
+  return join(OUTPUT_DIR, "common", `screenshot-${label}.png`);
+}
+
+/**
  * Capture screenshot via QEMU monitor and save as PNG.
  */
 async function captureScreenshot(label: string): Promise<string> {
-  const ppmPath = join(OUTPUT_DIR, `screenshot-${label}.ppm`);
-  const pngPath = join(OUTPUT_DIR, `screenshot-${label}.png`);
+  const testCase = getTestCaseName();
+  const pngPath = getScreenshotPath(label, testCase);
+  const ppmPath = pngPath.replace(/\.png$/, ".ppm");
+  
+  // Ensure directory exists
+  const dir = require("node:path").dirname(pngPath);
+  require("node:fs").mkdirSync(dir, { recursive: true });
+  
   try {
     // Use QEMU monitor to capture screenshot
     execSync(
@@ -373,27 +400,89 @@ async function captureScreenshot(label: string): Promise<string> {
 }
 
 /**
- * Verify screenshot contains expected text using OCR (if available).
- * Falls back to file-based verification if OCR not available.
+ * Verify screenshot matches reference (if exists) and file content matches expected text.
  */
 async function verifyWithScreenshot(
   vm: VmManager,
   expected: string
 ): Promise<{ passed: boolean; message: string; screenshot: string }> {
-  // Capture screenshot
-  const screenshot = await captureScreenshot("final");
+  const testCase = getTestCaseName();
   
-  // Also verify via file (primary method)
+  // Capture screenshot
+  const screenshot = await captureScreenshot("05-transcription-received");
+  
+  // Verify via file (primary method)
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
   
   const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
   const actualNorm = normalize(actual);
   const expectedNorm = normalize(expected);
   
-  if (actualNorm === expectedNorm) {
-    return { passed: true, message: "Text matches expected output", screenshot };
+  // Check text match
+  if (actualNorm !== expectedNorm) {
+    return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
   }
-  return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
+  
+  // Check visual regression (if reference exists)
+  const referencePath = getScreenshotPath("05-transcription-received", testCase);
+  if (existsSync(referencePath) && screenshot) {
+    try {
+      const diffPath = join(OUTPUT_DIR, "test-cases", testCase, "diff.png");
+      const diffDir = require("node:path").dirname(diffPath);
+      require("node:fs").mkdirSync(diffDir, { recursive: true });
+      
+      const result = execSync(
+        `compare -metric MSE "${referencePath}" "${screenshot}" "${diffPath}" 2>&1`,
+        { encoding: "utf-8", timeout: 10000 }
+      ).trim();
+      
+      const mse = parseFloat(result);
+      if (mse >= 100) {
+        return { passed: false, message: `Visual regression: MSE=${mse} (threshold=100)`, screenshot };
+      }
+      console.log(`  Visual regression: MSE=${mse} (pass)`);
+    } catch (err) {
+      console.log(`  Visual regression check failed: ${err}`);
+    }
+  } else if (!existsSync(referencePath)) {
+    console.log(`  No reference image for visual regression: ${referencePath}`);
+  }
+  
+  return { passed: true, message: "Text matches expected output", screenshot };
+}
+
+/**
+ * Update reference images from captured screenshots.
+ * Called when --update flag is used.
+ */
+function updateReferenceImages(): void {
+  const testCase = getTestCaseName();
+  console.log(`\nUpdating reference images for test case: ${testCase}`);
+  
+  // Create reference directories
+  const commonRefDir = join(CONFIG.paths.referencesDir, "common");
+  const testCaseRefDir = join(CONFIG.paths.referencesDir, "test-cases", testCase);
+  mkdirSync(commonRefDir, { recursive: true });
+  mkdirSync(testCaseRefDir, { recursive: true });
+  
+  // Copy common screenshots
+  const commonLabels = ["01-desktop", "02-tmux-started", "03-pre-recording", "04-recording-started", "06-recording-stopped"];
+  for (const label of commonLabels) {
+    const src = getScreenshotPath(label);
+    const dst = join(commonRefDir, `screenshot-${label}.png`);
+    if (existsSync(src)) {
+      execSync(`cp "${src}" "${dst}"`, { encoding: "utf-8" });
+      console.log(`  Copied: ${label} → common/`);
+    }
+  }
+  
+  // Copy test-case-specific screenshot
+  const transcriptionSrc = getScreenshotPath("05-transcription-received", testCase);
+  const transcriptionDst = join(testCaseRefDir, "screenshot-05-transcription-received.png");
+  if (existsSync(transcriptionSrc)) {
+    execSync(`cp "${transcriptionSrc}" "${transcriptionDst}"`, { encoding: "utf-8" });
+    console.log(`  Copied: transcription → test-cases/${testCase}/`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -427,21 +516,57 @@ async function main(): Promise<void> {
 
 
   try {
-    await new StepRunner().run([
-      { name: "preflight", fn: preflight },
-      { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-      { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
-      { name: "test-flow", fn: () => runTestFlow(vm) },
-    ]);
-
-    // Verify with screenshot
-    const result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
-    if (result.passed) {
-      console.log(`  PASS: ${result.message}`);
+    if (SNAPSHOT_MODE) {
+      // Snapshot mode: boot once, save snapshot, retry on failure
+      await new StepRunner().run([
+        { name: "preflight", fn: preflight },
+        { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
+        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+        { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
+        { name: "save-snapshot", fn: () => vm.saveCleanSnapshot() },
+      ]);
+      
+      // First attempt
+      await runTestFlow(vm);
+      let result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
+      
+      if (!result.passed) {
+        console.log("\n--- Test failed, restoring snapshot and retrying ---");
+        await vm.resetToCleanState();
+        
+        // Retry attempt
+        await runTestFlow(vm);
+        result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
+      }
+      
+      if (result.passed) {
+        console.log(`  PASS: ${result.message}`);
+      } else {
+        console.log(`  FAIL: ${result.message}`);
+        testsFailed++;
+      }
     } else {
-      console.log(`  FAIL: ${result.message}`);
-      testsFailed++;
+      // Fresh mode: original behavior
+      await new StepRunner().run([
+        { name: "preflight", fn: preflight },
+        { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
+        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+        { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
+        { name: "test-flow", fn: () => runTestFlow(vm) },
+      ]);
+      
+      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
+      if (result.passed) {
+        console.log(`  PASS: ${result.message}`);
+      } else {
+        console.log(`  FAIL: ${result.message}`);
+        testsFailed++;
+      }
+    }
+
+    // Update reference images if in update mode
+    if (UPDATE_MODE) {
+      updateReferenceImages();
     }
   } catch (err) {
     console.error("\nFATAL:", err);

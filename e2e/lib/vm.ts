@@ -177,6 +177,79 @@ export class VmManager {
     }
   }
 
+  // --- Snapshot management ---
+
+  async saveCleanSnapshot(): Promise<void> {
+    console.log("Preparing clean snapshot...");
+    
+    // 1. Ensure Activities is closed
+    await this.shell.dismissActivities();
+    await this.shell.waitActivitiesFullyClosed();
+    await Bun.sleep(500);
+    
+    // 2. Close any open windows (show desktop)
+    await this.shell.dotoolCommand("key super+d");
+    await Bun.sleep(500);
+    
+    // 3. Wait for GNOME Shell to settle
+    await Bun.sleep(1000);
+    
+    // 4. Save the snapshot
+    await this.qemu.savevm("clean");
+    console.log("  Saved 'clean' snapshot");
+    
+    // 5. Verify snapshot exists
+    const info = await this.qemu.infoSnapshots();
+    if (!info.includes("clean")) {
+      throw new Error("Snapshot save failed — not found in info snapshots");
+    }
+  }
+
+  async resetToCleanState(retries = 2): Promise<void> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        console.log(`Restoring clean snapshot (attempt ${attempt + 1})...`);
+        
+        // 1. Restore snapshot
+        await this.qemu.loadvm("clean");
+        
+        // 2. Wait for guest OS to settle
+        await Bun.sleep(2000);
+        
+        // 3. Reconnect SSH session (TCP connections are stale after restore)
+        await this.shell.close();
+        await this.shell.openSshSession({
+          sshKey: this.config.sshKey,
+          sshPort: this.config.sshPort,
+          sshUser: this.config.sshUser,
+        });
+        
+        // 4. Verify voice service is accessible
+        await this.pollForCommandOutput(
+          "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
+          "com.happytomatoe.VoiceToText",
+          10000
+        );
+        
+        console.log("  Snapshot restored successfully");
+        return;
+      } catch (err) {
+        console.error(`  Attempt ${attempt + 1} failed:`, err);
+        if (attempt === retries) throw err;
+        await Bun.sleep(1000);
+      }
+    }
+  }
+
+  async hasSnapshot(name: string): Promise<boolean> {
+    try {
+      const info = await this.qemu.infoSnapshots();
+      return info.includes(name);
+    } catch {
+      return false;
+    }
+  }
+
   async shutdown(): Promise<void> {
     if (!this.booted) {
       console.log("VM was not started by this run, skipping shutdown");
@@ -185,6 +258,16 @@ export class VmManager {
       await this.deployer.disconnect();
       return;
     }
+    
+    // Delete snapshot if it exists
+    try {
+      if (await this.hasSnapshot("clean")) {
+        await this.qemu.delvm("clean");
+      }
+    } catch {
+      // Ignore — snapshot may not exist
+    }
+    
     try {
       await this.qemu.systemPowerdown();
       await Bun.sleep(5000);

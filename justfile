@@ -593,3 +593,14 @@ e2e:
     #!/usr/bin/env bash
     set -euo pipefail
     cd e2e && bun run e2e.ts
+
+
+# @category e2e-qemu
+# Run E2E tests with snapshot restore (retry on failure)
+e2e-snapshot:
+    cd e2e && bun run e2e.ts --snapshot
+
+# @category e2e-qemu
+# Update E2E reference images in snapshot mode
+e2e-update-snapshot:
+    cd e2e && bun run e2e.ts --snapshot --update
