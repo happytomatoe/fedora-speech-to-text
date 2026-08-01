@@ -233,26 +233,29 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   let transcription = "";
   try {
     // Poll the voice service log for the transcription result (most reliable source)
-    const startWait = Date.now();
-    const maxWaitMs = 20000;
-    while (Date.now() - startWait < maxWaitMs) {
-      const logOutput = await shell.exec(
-        `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
-      );
-      const trimmed = logOutput.trim();
-      if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
-        transcription = trimmed;
-        console.log(`  Got from log: ${transcription}`);
-        break;
-      }
-      await Bun.sleep(500);
-    }
+    await vm.pollUntil(
+      "transcription",
+      async () => {
+        const logOutput = await shell.exec(
+          `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
+        );
+        const trimmed = logOutput.trim();
+        if (trimmed && !/^\\s*(?:\\[[^\\]]*\\]\\s*)?\\S+@\\S+/.test(trimmed)) {
+          transcription = trimmed;
+          console.log(`  Got from log: ${transcription}`);
+          return true;
+        }
+        return false;
+      },
+      20000,
+      500
+    );
     // If log didn't have it, try tmux capture as fallback
     if (!transcription) {
       console.log("  Log poll timed out, trying tmux capture...");
       const paneContent = tmux.capturePane(tmuxCfg);
       // Strip prompt prefix from lines that contain it
-      const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
+      const promptPrefixRe = /^\\s*(?:\\[[^\\]]*\\]\\s*)?\\S+@\\S+\\s+\\S*\\s*[#$]\\s*/;
       const newLines = paneContent.split("\n")
         .map(l => l.replace(promptPrefixRe, ""))
         .filter(l => l.trim() && !preRecordingPane.includes(l));
@@ -264,8 +267,8 @@ async function runTestFlow(vm: VmManager): Promise<void> {
     if (!transcription) {
       console.log("  No transcription found");
     }
-  } catch (err) {
-    console.log("  ERROR:", err);
+  } catch {
+    console.log("  Transcription polling timed out");
   }
   timing("transcription", t);
 
