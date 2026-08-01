@@ -35,9 +35,13 @@ const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 const SNAPSHOT_MODE = args.includes("--snapshot");
 
-// Parse --timeout <seconds> (default: 60)
+// Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? parseInt(args[timeoutIdx + 1]) * 1000 : 60_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? parseInt(args[timeoutIdx + 1]) * 1000 : 180_000;
+
+// Parse --case <name> (select specific test case instead of random)
+const caseIdx = args.indexOf("--case");
+const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 
 function timing(label: string, startMs: number): void {
   if (TIMING_MODE) {
@@ -94,8 +98,17 @@ interface TestCase {
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
   const cases: TestCase[] = data["test-cases"];
-  const picked = cases[Math.floor(Math.random() * cases.length)];
-  console.log(`  Selected test case: ${picked.file}`);
+  let picked: TestCase;
+  if (SELECTED_CASE) {
+    picked = cases.find(c => c.file.includes(SELECTED_CASE))!;
+    if (!picked) {
+      throw new Error(`Test case '${SELECTED_CASE}' not found. Available: ${cases.map(c => c.file).join(", ")}`);
+    }
+    console.log(`  Selected test case (by name): ${picked.file}`);
+  } else {
+    picked = cases[Math.floor(Math.random() * cases.length)];
+    console.log(`  Selected test case (random): ${picked.file}`);
+  }
   return picked;
 }
 
@@ -238,7 +251,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
           `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
         );
         const trimmed = logOutput.trim();
-        if (trimmed && !/^\\s*(?:\\[[^\\]]*\\]\\s*)?\\S+@\\S+/.test(trimmed)) {
+        if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
           transcription = trimmed;
           console.log(`  Got from log: ${transcription}`);
           return true;
@@ -253,7 +266,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log("  Log poll timed out, trying tmux capture...");
       const paneContent = tmux.capturePane(tmuxCfg);
       // Strip prompt prefix from lines that contain it
-      const promptPrefixRe = /^\\s*(?:\\[[^\\]]*\\]\\s*)?\\S+@\\S+\\s+\\S*\\s*[#$]\\s*/;
+      const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
       const newLines = paneContent.split("\n")
         .map(l => l.replace(promptPrefixRe, ""))
         .filter(l => l.trim() && !preRecordingPane.includes(l));
@@ -307,42 +320,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Cleanup: kill tmux session
   tmux.killSession(tmuxCfg);
-}
-
-async function verifyResult(vm: VmManager, preRecordingPane: string, run: RunContext): Promise<{ passed: boolean; message: string }> {
-  console.log("\n=== Verification ===");
-
-  const expected = EXPECTED_TEXT;
-  
-  // Get current tmux pane content
-  const tmuxCfg: tmux.TmuxHelper = {
-    session: `e2e-${run.id}`,
-    sshKey: SSH_KEY,
-    sshPort: run.sshPort,
-    sshUser: SSH_USER,
-  };
-  const currentPane = tmux.capturePane(tmuxCfg);
-  
-  // Extract NEW content (lines that weren't there before recording)
-  const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
-  const newLines = currentPane.split("\n")
-    .map(l => l.replace(promptPrefixRe, ""))
-    .filter(l => l.trim() && !preRecordingPane.includes(l));
-  const actual = newLines.join(" ").trim();
-
-  console.log(`  Expected: ${expected}`);
-  console.log(`  Actual (from tmux): ${actual}`);
-
-  // Normalize: lowercase, strip trailing period, collapse whitespace
-  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
-  const actualNorm = normalize(actual);
-  const expectedNorm = normalize(expected);
-  console.log(`  Normalized expected: ${expectedNorm}`);
-  console.log(`  Normalized actual:   ${actualNorm}`);
-  if (actualNorm === expectedNorm) {
-    return { passed: true, message: "Text matches expected output" };
-  }
-  return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'` };
 }
 
 /**
@@ -523,11 +500,12 @@ async function main(): Promise<void> {
   const startTime = Date.now();
   let testsFailed = 0;
 
-  // Global timeout watchdog
+  // Global timeout watchdog — sets a flag instead of process.exit so cleanup runs
+  let timedOut = false;
   const timeoutTimer = setTimeout(() => {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     console.error(`\nTIMEOUT: Test exceeded ${GLOBAL_TIMEOUT_MS / 1000}s limit (${elapsed}s elapsed)`);
-    process.exit(1);
+    timedOut = true;
   }, GLOBAL_TIMEOUT_MS);
 
 
@@ -583,6 +561,11 @@ async function main(): Promise<void> {
     // Update reference images if in update mode
     if (UPDATE_MODE) {
       updateReferenceImages(run);
+    }
+
+    // Check if watchdog timed out during execution
+    if (timedOut) {
+      testsFailed++;
     }
   } catch (err) {
     console.error("\nFATAL:", err);

@@ -8,6 +8,7 @@ import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import {
   DeployConfig,
   waitForGdmLogin,
+  installDependencies,
   deployExtension,
   deployPythonSource,
   deployTestAudio,
@@ -32,6 +33,7 @@ export interface VmConfig {
 export class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
   booted = false;
+  private freshlyBooted = false;
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
@@ -138,6 +140,7 @@ export class VmManager {
     });
 
     this.booted = true;
+    this.freshlyBooted = true;
 
     for (let i = 0; i < 30; i++) {
       if (existsSync(socketPath)) break;
@@ -148,6 +151,7 @@ export class VmManager {
     }
 
     await this.qemu.connect();
+    await this.verifySpice();
   }
 
   async waitForSsh(): Promise<void> {
@@ -158,10 +162,45 @@ export class VmManager {
     });
   }
 
+  /** Verify Spice display is accessible */
+  async verifySpice(): Promise<void> {
+    const spicePort = this.config.run.spicePort;
+    const net = await import("node:net");
+    
+    await pollUntil(
+      `Spice port ${spicePort} listening`,
+      async () => {
+        return new Promise<boolean>((resolve) => {
+          const sock = net.createConnection(spicePort, "localhost");
+          const timer = setTimeout(() => {
+            sock.destroy();
+            resolve(false);
+          }, 2000);
+          sock.on("connect", () => {
+            clearTimeout(timer);
+            sock.destroy();
+            resolve(true);
+          });
+          sock.on("error", () => {
+            clearTimeout(timer);
+            resolve(false);
+          });
+        });
+      },
+      10000
+    );
+  }
+
   async setup(): Promise<void> {
     const shellExec = this.shell.exec.bind(this.shell);
 
-    await waitForGdmLogin(shellExec);
+    if (this.freshlyBooted) {
+      await waitForGdmLogin(shellExec);
+    } else {
+      console.log("VM already booted, skipping GDM wait...");
+    }
+
+    await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     await deployExtension(this.shell, this.deployCfg, pollUntil);
 
@@ -227,6 +266,9 @@ export class VmManager {
           "com.happytomatoe.VoiceToText",
           10000
         );
+
+        // 5. Reset JS-side recording state (snapshot restore doesn't reset this)
+        this.shell.resetRecordingState();
         
         console.log("  Snapshot restored successfully");
         return;

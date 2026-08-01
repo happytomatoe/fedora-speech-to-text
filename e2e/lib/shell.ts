@@ -238,6 +238,10 @@ export class ShellHelper {
     }
   }
 
+  /** Reset recording state flag (used after snapshot restore) */
+  resetRecordingState(): void {
+    this.isRecording = false;
+  }
   async waitForRecordingStart(timeoutMs = 10000): Promise<void> {
     const start = Date.now();
 
