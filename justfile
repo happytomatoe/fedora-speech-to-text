@@ -34,6 +34,9 @@ reinstall:
 # @category setup
 # Store an API key in the OS keyring (service=voice-to-text)
 store-secret:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ./scripts/store-api-keys.sh
 
 # @category setup
 # Install system dependencies for development and E2E testing
@@ -58,7 +61,6 @@ setup-deps:
         exit 1
     fi
     echo "Dependencies installed."
-    ./scripts/store-api-keys.sh
 
 build-python:
     uv build --out-dir dist
@@ -509,7 +511,8 @@ qemu-e2e-kill:
         rm -f "${PID_FILE}"
     fi
     # Also kill any stray QEMU processes
-    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
+    pkill -9 -f "qemu-system-x86.*$(pwd)/e2e/qemu-images/overlay.qcow2" 2>/dev/null || true
     rm -f e2e/qemu-images/overlay.qcow2 e2e/qemu-images/qemu-monitor.sock
     echo "Done"
 
@@ -522,7 +525,8 @@ qemu-e2e-vm:
     VM_DIR_ABS="$(pwd)/${VM_DIR}"
     
     # Kill any existing QEMU
-    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
+    pkill -9 -f "qemu-system-x86.*$(pwd)/e2e/qemu-images/overlay.qcow2" 2>/dev/null || true
     sleep 1
     
     # Create fresh overlay
@@ -625,7 +629,8 @@ qemu-e2e-setup:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Setting up QEMU E2E test VM..."
-    podman exec fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-setup.sh"
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    podman exec fedora-toolbox-44 bash -c "REPO_ROOT=$REPO_ROOT $REPO_ROOT/e2e/scripts/qemu-setup.sh"
     echo "Setup complete. Run 'just qemu-e2e-test' to test."
 
 # @category e2e-qemu
@@ -634,7 +639,8 @@ qemu-e2e-test:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running QEMU E2E tests..."
-    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh"
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=$REPO_ROOT $REPO_ROOT/e2e/scripts/qemu-snapshot.sh"
 
 # @category e2e-qemu
 # Update QEMU E2E reference images with current state
@@ -642,7 +648,8 @@ qemu-e2e-update:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Updating QEMU E2E reference images..."
-    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=/var/home/l/git/voice-to-text-test-pod /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh --update"
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    podman exec -e DEEPGRAM_API_KEY fedora-toolbox-44 bash -c "REPO_ROOT=$REPO_ROOT $REPO_ROOT/e2e/scripts/qemu-snapshot.sh --update"
     echo "References saved to e2e/expected-qemu/"
 
 # @category e2e-qemu
@@ -660,7 +667,7 @@ qemu-e2e-setup-host:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Setting up QEMU E2E test VM on host..."
-    REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
+    REPO_ROOT="$(git rev-parse --show-toplevel)" \
         /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-setup.sh
     echo "Setup complete. Run 'just qemu-e2e-test-host' to test."
 
@@ -670,7 +677,7 @@ qemu-e2e-test-host:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running QEMU E2E tests on host..."
-    REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
+    REPO_ROOT="$(git rev-parse --show-toplevel)" \
         /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh
 
 # @category e2e-qemu
@@ -679,7 +686,7 @@ qemu-e2e-update-host:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Updating QEMU E2E reference images on host..."
-    REPO_ROOT=/var/home/l/git/voice-to-text-test-pod \
+    REPO_ROOT="$(git rev-parse --show-toplevel)" \
         /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh --update
     echo "References saved to e2e/expected-qemu/"
 

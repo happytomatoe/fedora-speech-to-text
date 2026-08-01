@@ -74,7 +74,7 @@ export class Deployer {
     }
 
     // Ensure remote directory exists
-    await this.exec(`mkdir -p ${resolvedRemote}`);
+    await this.exec(`mkdir -p "${resolvedRemote}"`);
 
     const entries = readdirSync(localDir);
 
@@ -84,7 +84,7 @@ export class Deployer {
       const stat = statSync(local);
 
       if (stat.isDirectory()) {
-        await this.exec(`mkdir -p ${remote}`);
+        await this.exec(`mkdir -p "${remote}"`);
         await this.uploadDir(local, remote);
       } else {
         await this.uploadFile(local, remote);

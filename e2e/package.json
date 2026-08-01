@@ -2,8 +2,8 @@
   "name": "voice-to-text-e2e",
   "type": "module",
   "scripts": {
-    "test": "bun run qemu-snapshot.ts",
-    "test:update": "bun run qemu-snapshot.ts --update"
+    "test": "bun run e2e.ts",
+    "test:update": "bun run e2e.ts --update"
   },
   "dependencies": {
     "@microsoft/shell-use": "0.0.1-beta.5",

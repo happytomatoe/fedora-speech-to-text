@@ -188,7 +188,7 @@ $SSH "export XDG_RUNTIME_DIR=/run/user/\$(id -u); export DOTOOL_PIPE=/run/user/\
 ```bash
 DBUS_ADDR=$($SSH "cat /proc/\$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-")
 
-$SSH "export DBUS_SESSION_BUS_ADDRESS='$DBUS_ADDR'; export DEEPGRAM_API_KEY='f2a3d5573d61cee4401f567b8cf9746540b2454c'; export VOICE_TO_TEXT_DEBUG_FILE='/tmp/test-audio.wav'; export PYTHONPATH=~/voice_to_text/src; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &"
+$SSH "export DBUS_SESSION_BUS_ADDRESS='$DBUS_ADDR'; export DEEPGRAM_API_KEY='$DEEPGRAM_API_KEY'; export VOICE_TO_TEXT_DEBUG_FILE='/tmp/test-audio.wav'; export PYTHONPATH=~/voice_to_text/src; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &"
 ```
 
 ### Enable extension
