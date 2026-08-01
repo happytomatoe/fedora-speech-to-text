@@ -40,7 +40,7 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).
 - **pyright** for types: `pyright .`.
 - **bun** for GNOME extension JS/TS: `bun install` + `bun run build`.
-- **pre-commit** is configured (see `.pre-commit-config.yaml`); run `pre-commit run --all-files`.
+- **lefthook** is configured (see `lefthook.yml`); run `lefthook run pre-commit` or `just setup` to install hooks.
 
 ## Testing
 
@@ -75,7 +75,7 @@ E2E tests run in a containerized GNOME Shell (Xvfb + Podman) and capture screens
 
 - Python imports stay at module level (see above).
 - Match existing style; ruff/pyright must pass before committing.
-- Commit messages follow Conventional Commits (the repo rejects `Co-Authored-By` trailers in pre-commit).
+- Commit messages follow Conventional Commits (the repo rejects `Co-Authored-By` trailers via lefthook commit-msg hook).
 
 ## Changelog
 

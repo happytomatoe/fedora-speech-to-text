@@ -83,3 +83,5 @@ tests/gnome-references/*.zip
 node_modules/
 qemu.pid
 opensrc/
+logs/
+gnome-ext/schemas/gschemas.compiled

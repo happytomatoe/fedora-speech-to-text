@@ -1,15 +1,21 @@
 const googleRules = require('eslint-config-google');
+const promisePlugin = require('eslint-plugin-promise');
+const tsParser = require('@typescript-eslint/parser');
+const tsPlugin = require('@typescript-eslint/eslint-plugin');
 
 module.exports = [
   {
     files: ["gnome-ext/**/*.js"],
     languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        project: './tsconfig.json',
+      },
       ecmaVersion: 2022,
       sourceType: "module",
       globals: {
         imports: "readonly",
-        GLib: "readonly",
-        Gio: "readonly",
+        // GNOME Shell APIs (no @girs types available)
         Main: "readonly",
         MessageTray: "readonly",
         St: "readonly",
@@ -17,15 +23,26 @@ module.exports = [
         Meta: "readonly",
         Shell: "readonly",
         Atk: "readonly",
-        Gdk: "readonly",
-        Gtk: "readonly",
-        Pango: "readonly",
-        cairo: "readonly",
+        // Built-in globals
         console: "readonly",
+        TextDecoder: "readonly",
+        TextEncoder: "readonly",
       },
+    },
+    plugins: {
+      promise: promisePlugin,
+      '@typescript-eslint': tsPlugin,
     },
     rules: {
       ...googleRules.rules,
+      ...promisePlugin.configs.recommended.rules,
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      // Disable noisy TypeScript rules for plain JS
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off',
       // Disable rules that conflict with Prettier (4-space indent)
       "indent": "off",
       "max-len": ["error", { code: 120, tabWidth: 4, ignoreUrls: true }],

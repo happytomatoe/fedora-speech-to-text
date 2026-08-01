@@ -53,7 +53,9 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
     # ── Batch ──────────────────────────────────────────────────────────
 
-    async def transcribe_file(self, audio_path: str, language: str = "en") -> str:
+    async def transcribe_file(
+        self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
+    ) -> str:
         """Transcribe audio file using Voxtral batch transcription API."""
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
         try:
