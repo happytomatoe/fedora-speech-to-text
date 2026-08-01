@@ -21,23 +21,40 @@ export class ShellHelper {
     cols?: number;
     rows?: number;
   }): Promise<ShellSession> {
-    const shell = new ShellUse("e2e-ssh");
+    // Retry shell-use daemon connection — it can crash after GDM restart
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const shell = new ShellUse("e2e-ssh");
+        await shell.open({
+          cols: opts.cols ?? 120,
+          rows: opts.rows ?? 40,
+        });
 
-    await shell.open({
-      cols: opts.cols ?? 120,
-      rows: opts.rows ?? 40,
-    });
+        const host = opts.host ?? "localhost";
+        await shell.submit(
+          `ssh -i ${opts.sshKey} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${opts.sshPort} ${opts.sshUser}@${host}`
+        );
 
-    const host = opts.host ?? "localhost";
-    await shell.submit(
-      `ssh -i ${opts.sshKey} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${opts.sshPort} ${opts.sshUser}@${host}`
-    );
+        // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
+        await shell.waitText(`${opts.sshUser}@`, { timeout: 60000 });
 
-    // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
-    await shell.waitText(`${opts.sshUser}@`, { timeout: 60000 });
-
-    this.session = { shell, ...opts, host };
-    return this.session;
+        this.session = { shell, ...opts, host };
+        return this.session;
+      } catch (err) {
+        lastErr = err as Error;
+        console.log(`  SSH session attempt ${attempt + 1} failed: ${lastErr.message}`);
+        if (attempt < 2) {
+          // Kill any stale daemon session and wait before retry
+          try {
+            const { execSync } = await import("node:child_process");
+            execSync("pkill -f 'shell-use.*e2e-ssh' 2>/dev/null || true", { stdio: "pipe" });
+          } catch { /* ignore */ }
+          await Bun.sleep(3000);
+        }
+      }
+    }
+    throw lastErr ?? new Error("Failed to open SSH session after 3 attempts");
   }
 
   async exec(command: string, timeoutMs = 30000): Promise<string> {
