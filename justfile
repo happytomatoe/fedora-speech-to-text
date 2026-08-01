@@ -28,6 +28,30 @@ reinstall:
 # @category setup
 # Store an API key in the OS keyring (service=voice-to-text)
 store-secret:
+
+# @category setup
+# Install system dependencies for development and E2E testing
+setup-deps:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Installing system dependencies..."
+    PACKAGES="rsync qemu-kvm libvirt virt-install qemu-img openssh-clients socat ImageMagick espeak-ng"
+    if command -v rpm-ostree &>/dev/null; then
+        # Fedora Silverblue/Kinoite (immutable)
+        sudo rpm-ostree install -y $PACKAGES
+        echo "Packages staged. Run 'systemctl reboot' to activate."
+    elif command -v dnf &>/dev/null; then
+        # Fedora/RHEL/CentOS
+        sudo dnf install -y $PACKAGES
+    elif command -v apt &>/dev/null; then
+        # Ubuntu/Debian
+        sudo apt install -y rsync qemu-kvm libvirt-daemon-system qemu-utils openssh-client socat imagemagick espeak-ng
+    else
+        echo "Unknown package manager. Install manually:"
+        echo "  $PACKAGES"
+        exit 1
+    fi
+    echo "Dependencies installed."
     ./scripts/store-api-keys.sh
 
 build-python:
