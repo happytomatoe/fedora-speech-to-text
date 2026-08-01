@@ -316,14 +316,7 @@ class VmManager {
 
   private async waitForGdmLogin(): Promise<void> {
     console.log("Waiting for GDM auto-login...");
-    await this.pollUntil(
-      "GDM session with seat",
-      async () => {
-        const output = await this.shell.exec("loginctl list-sessions");
-        return output.includes("seat0");
-      },
-      60000
-    );
+    await this.pollForCommandOutput("loginctl list-sessions", "seat0", 60000);
   }
 
   private async extractDbusAddress(): Promise<void> {
@@ -357,14 +350,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     await this.shell.openSshSession({ sshKey: SSH_KEY, sshPort: SSH_PORT, sshUser: SSH_USER });
 
     // Wait for GNOME Shell
-    await this.pollUntil(
-      "GNOME Shell after restart",
-      async () => {
-        const output = await this.shell.exec("pgrep -f 'gnome-shell --mode=user'");
-        return output.trim().length > 0;
-      },
-      30000
-    );
+    await this.pollForProcess("gnome-shell --mode=user", 30000);
 
     // Wait for extension to be available
     console.log("Waiting for extension to be available...");
@@ -440,12 +426,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
     );
 
-    await this.pollUntil(
-      "D-Bus service",
-      async () => {
-        const output = await this.shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
-        return output.includes("com.happytomatoe.VoiceToText");
-      },
+    await this.pollForCommandOutput(
+      "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
+      "com.happytomatoe.VoiceToText",
       15000
     );
   }
@@ -470,6 +453,40 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
     console.log(` TIMEOUT after ${Math.round(timeoutMs / 1000)}s`);
     throw new Error(`Timeout waiting for ${desc}`);
+  }
+
+  // Helper methods for common polling patterns
+  async pollForProcess(processName: string, timeoutMs = 10000): Promise<void> {
+    await this.pollUntil(
+      `${processName} running`,
+      async () => {
+        const output = await this.shell.exec(`pgrep -f '${processName}'`);
+        return output.trim().length > 0;
+      },
+      timeoutMs
+    );
+  }
+
+  async pollForCommandOutput(command: string, expected: string, timeoutMs = 10000): Promise<void> {
+    await this.pollUntil(
+      `command output contains '${expected}'`,
+      async () => {
+        const output = await this.shell.exec(command);
+        return output.includes(expected);
+      },
+      timeoutMs
+    );
+  }
+
+  async pollForCommandSuccess(command: string, timeoutMs = 10000): Promise<void> {
+    await this.pollUntil(
+      `command succeeds`,
+      async () => {
+        const output = await this.shell.exec(command);
+        return output.length === 0;
+      },
+      timeoutMs
+    );
   }
 
   async openShell(): Promise<void> {
