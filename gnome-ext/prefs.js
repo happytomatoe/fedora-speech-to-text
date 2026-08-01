@@ -81,8 +81,8 @@ async function syncFromConfig(settings) {
         let gsetVal;
         if (type === 'strv') {
             gsetVal = settings.get_strv(gkey);
-            // If GSettings is empty but config has values, seed from config
-            if (gsetVal.length === 0 && cfgVal.length > 0) {
+            // Only seed from config if GSettings has no user value (not explicitly set)
+            if (settings.get_user_value(gkey) === null && gsetVal.length === 0 && cfgVal.length > 0) {
                 settings.set_strv(gkey, cfgVal);
                 gsetVal = cfgVal;
             }
@@ -120,7 +120,8 @@ async function syncFromConfig(settings) {
 
 // Write all mapped settings from GSettings to config.yaml
 async function syncToConfig(settings) {
-    const config = await readConfigYaml() || {};
+    const config = await readConfigYaml();
+    if (!config) return; // Don't overwrite config on parse failure
     for (const [gkey, { path, type }] of Object.entries(CONFIG_SYNC_MAP)) {
         let value;
         if (type === 'strv') value = settings.get_strv(gkey);

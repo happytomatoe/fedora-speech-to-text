@@ -197,7 +197,7 @@ gnome-ext-dev: reinstall gnome-ext-install
     # GNOME extension can find and call it on real hardware.
     # Trap EXIT/INT/TERM to kill the background service when the shell exits,
     dbus-run-session -- sh -c "
-      voice-to-text-dbus >> "$LOG_FILE" 2>&1 &
+      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
       DBUS_PID=\$!
       sleep 1
       trap 'kill \$DBUS_PID 2>/dev/null || true' EXIT INT TERM
@@ -235,7 +235,7 @@ gnome-ext-lint:
     set -euo pipefail
     echo "Checking JS syntax..."
     for f in gnome-ext/*.js; do
-        node --check "$f" || exit 1
+        node --input-type=module --check < "$f" || exit 1
     done
     echo "Checking GTK4 API compatibility..."
     gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1

@@ -6,7 +6,7 @@ pre-commit:
   commands:
     check-merge-conflict:
       run: bash -c 'matches=$(grep -rn "^<<<<<<< \\|^=======$\\|^>>>>>>> " {staged_files}); if [ -n "$matches" ]; then echo "$matches"; exit 1; fi'
-      glob: "*.{py,js,css,json,xml,yaml,yml,toml,md}"
+      glob: "*.{py,js,sh,css,json,xml,yaml,yml,toml,md}"
     uv-sync:
       run: uv sync
     ruff-lint-format:
@@ -17,7 +17,7 @@ pre-commit:
       run: bash -c 'npm ci 2>/dev/null || npm install 2>/dev/null; for f in {staged_files}; do npx eslint --stdin --stdin-filename="$f" < "$f"; done'
       glob: "gnome-ext/**/*.js"
     gjs-syntax:
-      run: node --check {staged_files}
+      run: bash -c 'for f in {staged_files}; do node --input-type=module --check < "$f" || exit 1; done'
       glob: "gnome-ext/**/*.js"
     gtk4-api-check:
       run: gjs gnome-ext/tests/test-gtk4-api.js
@@ -30,7 +30,7 @@ pre-commit:
       glob: "gnome-ext/**/*.{js,css,json}"
     pytest:
       run: uv run pytest -n auto
-      glob: "*.{py,js}"
+      glob: "*.{py,js,toml,lock}"
       interactive: true
 
 commit-msg:

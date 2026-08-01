@@ -67,7 +67,7 @@
       <default>0.5</default>
       <range min="0.0" max="1.0"/>
       <summary>Custom words matching threshold</summary>
-      <description>How strict the fuzzy matching is (0.0=exact, 1.0=any match)</description>
+      <description>How strict the fuzzy matching is (0.0=any match, 1.0=exact)</description>
     </key>
   </schema>
 </schemalist>
