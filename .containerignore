@@ -17,3 +17,5 @@ tests/gnome-output/
 e2e/output/
 e2e/output-qemu/
 .github/
+.env
+config.yaml
