@@ -100,15 +100,15 @@ async function syncFromConfig(settings) {
         } else if (type === 'double') {
             gsetVal = settings.get_double(gkey);
             const defaultVar = settings.get_default_value(gkey);
-            const schemaDefault = defaultVar ? defaultVar.get_value() : 0.0;
-            if (gsetVal === schemaDefault && cfgVal !== schemaDefault) {
+            const schemaDefault = defaultVar ? defaultVar.get_double() : 0.0;
+            if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
                 settings.set_double(gkey, cfgVal);
                 gsetVal = cfgVal;
             }
             if (gsetVal !== cfgVal) drifted.push(gkey);
         } else {
             gsetVal = settings.get_string(gkey);
-            if (!gsetVal && cfgVal) {
+            if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
                 settings.set_string(gkey, cfgVal);
                 gsetVal = cfgVal;
             }
@@ -558,10 +558,12 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
         // Populate existing words from GSettings
         const _populateCustomWords = () => {
+            customWordsList.remove(addWordRow);
             const customWords = settings.get_strv('custom-words');
             for (const word of customWords) {
                 if (word) customWordsList.append(createWordRow(word));
             }
+            customWordsList.append(addWordRow);
         };
         // populated by _initSync() after config.yaml seeding completes
 

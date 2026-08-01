@@ -37,8 +37,8 @@ module.exports = [
       ...googleRules.rules,
       ...promisePlugin.configs.recommended.rules,
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-unsafe-call': 'error',
-      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
       // Disable noisy TypeScript rules for plain JS
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'off',

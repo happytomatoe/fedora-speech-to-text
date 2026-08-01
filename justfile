@@ -256,7 +256,7 @@ gnome-ext-pack:
     mkdir -p "dist/$UUID/schemas"
     # No TypeScript build needed — extension is plain JS
     # Copy JS files from gnome-ext/
-    cp "$SRC"/*.js "dist/$UUID/"
+    cp "$SRC"/*.js "$SRC"/*.mjs "dist/$UUID/"
     # Copy other files from gnome-ext/
     cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
     cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"

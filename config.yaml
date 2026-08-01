@@ -73,7 +73,7 @@ engine:
 # Text post-processing
 postprocess:
   enabled: true
-  language: "en"  # fallback if not set in transcription section
+  language: null  # null falls back to the recording language
   custom_words: []  # words for fuzzy correction, e.g. ["R&D", "API", "OAuth"]
   custom_words_threshold: 0.5  # 0.0=exact, 0.5=moderate, 1.0=any match
   # custom_filler_words: null  # override filler list; null=language defaults, []=disable

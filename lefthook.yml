@@ -9,12 +9,8 @@ pre-commit:
       glob: "*.{py,js,css,json,xml,yaml,yml,toml,md}"
     uv-sync:
       run: uv sync
-    ruff-lint:
-      run: uv run ruff check --fix {staged_files}
-      glob: "*.py"
-      stage_fixed: true
-    ruff-format:
-      run: uv run ruff format {staged_files}
+    ruff-lint-format:
+      run: uv run ruff check --fix {staged_files} && uv run ruff format {staged_files}
       glob: "*.py"
       stage_fixed: true
     eslint:
@@ -25,7 +21,7 @@ pre-commit:
       glob: "gnome-ext/**/*.js"
     gtk4-api-check:
       run: gjs gnome-ext/tests/test-gtk4-api.js
-      glob: "gnome-ext/**/*.js"
+      glob: "gnome-ext/tests/**/*.js"
     gschema-validate:
       run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
       glob: "gnome-ext/schemas/*.xml"

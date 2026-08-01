@@ -85,6 +85,7 @@ export default class VoiceToTextExtension extends Extension {
                 console.log(`VoiceToText: show-audio-level-widget changed to ${enabled}`);
                 if (enabled && !this._audioLevelWidget) {
                     this._audioLevelWidget = new AudioLevelWidget();
+                    if (this._recording) this._audioLevelWidget.show();
                     console.log('VoiceToText: AudioLevelWidget created');
                 } else if (!enabled && this._audioLevelWidget) {
                     this._audioLevelWidget.destroy();
