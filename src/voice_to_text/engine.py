@@ -24,8 +24,10 @@ import sounddevice as sd
 from voice_to_text.audio import SpeakerVolumeManager
 from voice_to_text.config import ConfigManager
 from voice_to_text.hybrid import HybridTranscriber
+from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
 from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError
+from voice_to_text.vad import SmoothedVAD
 
 CLIPBOARD_CMDS = [
     ["wl-copy", "--type", "text/plain"],
@@ -83,6 +85,14 @@ class AsyncAudioRecorder:
         self._queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=1000)
         self._wav_file = None
         self._filepath: str | None = None
+        # Voice Activity Detection
+        self._vad = SmoothedVAD(
+            onset_frames=2,
+            hangover_frames=15,
+            prefill_frames=15,
+            threshold=0.01,
+            sample_rate=self.sample_rate,
+        )
 
     async def start(self, filepath: str) -> None:
         import wave
@@ -145,6 +155,8 @@ class AsyncAudioRecorder:
         float_data = indata[:, 0].astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(float_data**2)))
         self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * rms
+        # Feed VAD with float32 samples
+        self._vad.push_frame(float_data)
 
         def _safe_put():
             try:
@@ -432,6 +444,18 @@ class RecordingEngine:
                         assert batch_provider is not None
                         text = await batch_provider.transcribe_file(filepath, language)
                     _step("transcription_done")
+                    # Apply text post-processing
+                    if text:
+                        postprocess_cfg = config_mgr.config.get("postprocess", {})
+                        if postprocess_cfg.get("enabled", True):
+                            text = postprocess(
+                                text,
+                                lang=postprocess_cfg.get("language") or language,
+                                custom_words=postprocess_cfg.get("custom_words", []),
+                                custom_words_threshold=postprocess_cfg.get("custom_words_threshold", 0.5),
+                                custom_filler_words=postprocess_cfg.get("custom_filler_words"),
+                            )
+                    _step("postprocess_done")
 
                     # If we were typing incrementally, apply final corrections
                     if text and typer:

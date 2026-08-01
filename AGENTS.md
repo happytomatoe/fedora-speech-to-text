@@ -18,6 +18,7 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 - `src/voice_to_text/` — Python package (engine, audio, bluetooth, config, dbus_service, typer, providers/).
 - `gnome-ext/` — GNOME Shell extension JS/JSON/CSS.
+  - Now TypeScript-based; compile with `bun run build` before installing.
 - `tests/` — pytest suite (mirrors `src/` modules).
 - `service/` — D-Bus service definition.
 - `scripts/` — dev/setup helpers.
@@ -38,6 +39,7 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).
 - **pyright** for types: `pyright .`.
+- **bun** for GNOME extension JS/TS: `bun install` + `bun run build`.
 - **pre-commit** is configured (see `.pre-commit-config.yaml`); run `pre-commit run --all-files`.
 
 ## Testing

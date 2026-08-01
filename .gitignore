@@ -61,6 +61,8 @@ coverage.xml
 .flaskenv
 
 *.log
+node_modules/
+bun.lock
 build/
 
 src/voice_to_text/_build_info.py
@@ -68,7 +70,6 @@ src/voice_to_text/_build_info.py
 docs/
 !e2e/docs/
 thoughts/
-
 # Visual regression test output
 tests/gnome-snapshots/
 tests/gnome-output/
@@ -81,3 +82,4 @@ tests/gnome-references/*.zip
 
 node_modules/
 qemu.pid
+opensrc/

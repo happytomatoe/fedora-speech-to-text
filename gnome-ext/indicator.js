@@ -5,30 +5,11 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const METER_WIDTH = 50;
-const METER_HEIGHT = 6;
-const SMOOTH = 0.6;
-
-/** Draw a rounded rectangle path on the cairo context. */
-function _drawRoundedRect(cr, x, y, w, h, radius) {
-    cr.moveTo(x + radius, y);
-    cr.lineTo(x + w - radius, y);
-    cr.arc(x + w - radius, y + radius, radius, -Math.PI / 2, 0);
-    cr.lineTo(x + w, y + h - radius);
-    cr.arc(x + w - radius, y + h - radius, radius, 0, Math.PI / 2);
-    cr.lineTo(x + radius, y + h);
-    cr.arc(x + radius, y + h - radius, radius, Math.PI / 2, Math.PI);
-    cr.lineTo(x, y + radius);
-    cr.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
-    cr.closePath();
-}
-
 export const VoiceIndicator = GObject.registerClass(
     class VoiceIndicator extends PanelMenu.Button {
         _init() {
             super._init(0.0, 'Voice to Text');
             this._destroyed = false;
-            this._smoothedLevel = 0;
             this._buildUI();
             this._recording = false;
             this.onStart = null;
@@ -70,15 +51,6 @@ export const VoiceIndicator = GObject.registerClass(
 
             const spacer1 = new St.Widget({x_expand: true});
             this._box.add_child(spacer1);
-
-            this._meter = new St.DrawingArea({
-                width: METER_WIDTH,
-                height: METER_HEIGHT,
-                x_expand: false,
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            this._meter.connect('repaint', () => this._drawMeter());
-            this._box.add_child(this._meter);
 
             const spacer2 = new St.Widget({x_expand: true});
             this._box.add_child(spacer2);
@@ -133,10 +105,7 @@ export const VoiceIndicator = GObject.registerClass(
             this._recording = false;
             this._icon.visible = false;
             this._spinner.visible = true;
-            this._meter.visible = false;
             this._stopBtn.visible = false;
-            this._smoothedLevel = 0;
-            this._meter.queue_repaint();
         }
 
         setRecordingActive() {
@@ -147,76 +116,13 @@ export const VoiceIndicator = GObject.registerClass(
         _setIdleUI() {
             this._icon.visible = true;
             this._spinner.visible = false;
-            this._meter.visible = false;
             this._stopBtn.visible = false;
-            this._smoothedLevel = 0;
-            this._meter.queue_repaint();
         }
 
         _setRecordingUI() {
             this._icon.visible = false;
             this._spinner.visible = false;
-            this._meter.visible = true;
             this._stopBtn.visible = true;
-            this._meter.queue_repaint();
-        }
-
-        updateLevel(level) {
-            if (this._destroyed) return;
-            this._smoothedLevel =
-                SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
-            this._meter.queue_repaint();
-        }
-
-        _drawMeter() {
-            if (this._destroyed) return;
-            const cr = this._meter.get_context();
-            try {
-                const level = Math.min(1, Math.max(0, this._smoothedLevel));
-                const w = this._meter.width;
-                const h = this._meter.height;
-                const fillW = level * w;
-
-                cr.setLineWidth(1);
-                cr.setLineJoin(1);
-
-                // Background
-                const radius = 2;
-                _drawRoundedRect(cr, 0, 0, w, h, radius);
-                cr.setSourceRGBA(0.5, 0.5, 0.5, 0.3);
-                cr.fill();
-
-                // Fill
-                if (fillW > 0) {
-                    cr.moveTo(radius, 0);
-                    cr.lineTo(fillW > w - radius ? w - radius : fillW, 0);
-                    if (fillW > w - radius) {
-                        cr.arc(w - radius, radius, radius, -Math.PI / 2, 0);
-                        cr.lineTo(w, h - radius);
-                        cr.arc(w - radius, h - radius, radius, 0, Math.PI / 2);
-                    } else {
-                        cr.lineTo(fillW, h);
-                    }
-                    cr.lineTo(radius, h);
-                    cr.arc(radius, h - radius, radius, Math.PI / 2, Math.PI);
-                    cr.lineTo(0, radius);
-                    cr.arc(radius, radius, radius, Math.PI, Math.PI * 1.5);
-                    cr.closePath();
-
-                    if (level < 0.13) {
-                        cr.setSourceRGBA(0.4, 0.4, 0.4, 0.7);
-                    } else if (level < 0.5) {
-                        cr.setSourceRGBA(0.2, 0.85, 0.2, 0.9);
-                    } else if (level < 0.7) {
-                        cr.setSourceRGBA(0.95, 0.8, 0.1, 0.9);
-                    } else {
-                        cr.setSourceRGBA(0.95, 0.2, 0.2, 0.9);
-                    }
-                    cr.fill();
-                }
-            } finally {
-                cr.$dispose();
-            }
         }
 
         destroy() {
