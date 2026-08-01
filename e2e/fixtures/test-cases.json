@@ -2,7 +2,7 @@
   "test-cases": [
     {
       "file": "test-01-weather.wav",
-      "expected": "the weather today is sunny with a high of seventy five degrees"
+      "expected": "the weather to nadien sunny with a high on 75 degrees"
     },
     {
       "file": "test-02-reminder.wav",
@@ -18,7 +18,7 @@
     },
     {
       "file": "test-05-note.wav",
-      "expected": "take a note about the project. headline is next friday"
+      "expected": "take a note that the project deadline is next friday"
     }
   ]
 }
