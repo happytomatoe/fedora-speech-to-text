@@ -188,12 +188,16 @@ export class QemuMonitor extends EventEmitter {
     await this.execute(`screendump ${path}`);
   }
 
-  async savevm(tag: string): Promise<void> {
-    await this.execute(`savevm ${tag}`);
+  async savevm(tag: string, timeoutMs = 60_000): Promise<void> {
+    await this.execute(`savevm ${tag}`, timeoutMs);
   }
 
-  async loadvm(tag: string): Promise<void> {
-    await this.execute(`loadvm ${tag}`);
+  async loadvm(tag: string, timeoutMs = 30_000): Promise<void> {
+    await this.execute(`loadvm ${tag}`, timeoutMs);
+  }
+
+  async delvm(tag: string): Promise<void> {
+    await this.execute(`delvm ${tag}`);
   }
 
   async systemPowerdown(): Promise<void> {
