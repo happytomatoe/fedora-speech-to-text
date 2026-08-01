@@ -85,3 +85,4 @@ qemu.pid
 opensrc/
 logs/
 gnome-ext/schemas/gschemas.compiled
+.auto-handoff-resuming
