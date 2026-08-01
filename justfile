@@ -47,28 +47,80 @@ store-secret:
     ./scripts/store-api-keys.sh
 
 # @category setup
+# Full development setup: system deps + Python dev deps
+dev-setup: setup-deps dev-sync
+    @echo "Development environment ready."
+
+# @category setup
 # Install system dependencies for development and E2E testing
 setup-deps:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Installing system dependencies..."
-    PACKAGES="rsync qemu-kvm libvirt virt-install qemu-img openssh-clients socat ImageMagick espeak-ng"
+    
+    # Package mappings: command to check -> package name
+    declare -A FEDORA_PKGS=(
+        [rsync]="rsync"
+        [qemu-system-x86_64]="qemu-kvm"
+        [virsh]="libvirt"
+        [virt-install]="virt-install"
+        [qemu-img]="qemu-img"
+        [ssh]="openssh-clients"
+    )
+    
+    declare -A UBUNTU_PKGS=(
+        [rsync]="rsync"
+        [qemu-system-x86_64]="qemu-kvm"
+        [virsh]="libvirt-daemon-system"
+        [virt-install]="virtinst"
+        [qemu-img]="qemu-utils"
+        [ssh]="openssh-client"
+    )
+    
+    # Detect package manager
     if command -v rpm-ostree &>/dev/null; then
-        # Fedora Silverblue/Kinoite (immutable)
-        sudo rpm-ostree install -y $PACKAGES
-        echo "Packages staged. Run 'systemctl reboot' to activate."
+        PKG_MGR="rpm-ostree"
     elif command -v dnf &>/dev/null; then
-        # Fedora/RHEL/CentOS
-        sudo dnf install -y $PACKAGES
+        PKG_MGR="dnf"
     elif command -v apt &>/dev/null; then
-        # Ubuntu/Debian
-        sudo apt install -y rsync qemu-kvm libvirt-daemon-system qemu-utils openssh-client socat imagemagick espeak-ng
+        PKG_MGR="apt"
     else
-        echo "Unknown package manager. Install manually:"
-        echo "  $PACKAGES"
+        echo "ERROR: Unsupported package manager"
         exit 1
     fi
-    echo "Dependencies installed."
+    
+    # Check which packages are missing
+    MISSING=()
+    for cmd in "${!FEDORA_PKGS[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            if [ "$PKG_MGR" = "apt" ]; then
+                MISSING+=("${UBUNTU_PKGS[$cmd]}")
+            else
+                MISSING+=("${FEDORA_PKGS[$cmd]}")
+            fi
+        fi
+    done
+    
+    if [ ${#MISSING[@]} -eq 0 ]; then
+        echo "All system dependencies already installed."
+        exit 0
+    fi
+    
+    echo "Missing packages: ${MISSING[*]}"
+    echo "Installing..."
+    
+    case "$PKG_MGR" in
+        rpm-ostree) sudo rpm-ostree install -y "${MISSING[@]}" ;;
+        dnf)        sudo dnf install -y "${MISSING[@]}" ;;
+        apt)        sudo apt install -y "${MISSING[@]}" ;;
+    esac
+    
+    echo "System dependencies installed."
+
+# @category setup
+# Sync Python dev dependencies (pytest, ruff, pyright, etc.)
+dev-sync:
+    uv sync
+    @echo "Dev dependencies synced."
 
 build-python:
     uv build --out-dir dist
