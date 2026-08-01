@@ -16,9 +16,8 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 ## Layout
 
-- `src/voice_to_text/` — Python package (engine, audio, bluetooth, config, dbus_service, typer, providers/).
-- `gnome-ext/` — GNOME Shell extension JS/JSON/CSS.
-  - Now TypeScript-based; compile with `bun run build` before installing.
+- `src/voice_to_text/` — Python package (engine, audio, config, dbus_service, debug, hybrid, postprocess, profiling, typer, vad, providers/).
+- `gnome-ext/` — GNOME Shell extension (plain JS, no build step needed).
 - `tests/` — pytest suite (mirrors `src/` modules).
 - `service/` — D-Bus service definition.
 - `scripts/` — dev/setup helpers.
@@ -39,7 +38,7 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).
 - **pyright** for types: `pyright .`.
-- **bun** for GNOME extension JS/TS: `bun install` + `bun run build`.
+- **bun** + **eslint** for GNOME extension JS linting (see `eslint.config.cjs`).
 - **lefthook** is configured (see `lefthook.yml`); run `lefthook run pre-commit` or `just setup` to install hooks.
 
 ## Testing
@@ -53,9 +52,8 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 See `e2e/AGENTS.md` for detailed instructions.
 
 **Key commands:**
-- Update references: `just e2e-update` or `cd e2e && bun run e2e.ts --update`
+- Update references: `just qemu-e2e-update-ts` or `cd e2e && bun run e2e.ts --update`
 - Run tests: `just e2e` or `cd e2e && bun run e2e.ts`
-- Requires: `DEEPGRAM_API_KEY` env var for transcription tests.
 
 ## Conventions
 
