@@ -153,7 +153,17 @@ class StepRunner {
       const start = Date.now();
 
       try {
-        await step.fn();
+        if (step.timeout) {
+          // Race the step function against a timeout
+          await Promise.race([
+            step.fn(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Step '${step.name}' timed out after ${step.timeout}ms`)), step.timeout)
+            ),
+          ]);
+        } else {
+          await step.fn();
+        }
         const ms = Date.now() - start;
         console.log(`  ✓ ${step.name} (${(ms / 1000).toFixed(1)}s)`);
       } catch (err) {
@@ -593,10 +603,9 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   t = Date.now();
   console.log("Writing result to file...");
   if (transcription) {
-    await shell.exec(`echo '${transcription}' > /tmp/file.txt`);
-  } else {
-    console.log("  WARNING: No transcription captured");
-    await shell.exec("echo '' > /tmp/file.txt");
+    // Base64 encode to avoid shell injection from apostrophes in speech
+    const encoded = Buffer.from(transcription).toString('base64');
+    await shell.exec(`echo '${encoded}' | base64 -d > /tmp/file.txt`);
   }
   await Bun.sleep(1000);
   timing("write-result", t);
