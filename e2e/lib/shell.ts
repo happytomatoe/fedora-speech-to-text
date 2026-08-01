@@ -11,7 +11,6 @@ export interface ShellSession {
 export class ShellHelper {
   private session: ShellSession | null = null;
   private isRecording = false;
-  private session: ShellSession | null = null;
 
   async openSshSession(opts: {
     sshKey: string;
@@ -33,8 +32,8 @@ export class ShellHelper {
       `ssh -i ${opts.sshKey} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${opts.sshPort} ${opts.sshUser}@${host}`
     );
 
-    // Wait for shell prompt
-    await shell.waitText("$", { timeout: 60000 });
+    // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
+    await shell.waitText(`${opts.sshUser}@`, { timeout: 60000 });
 
     this.session = { shell, ...opts, host };
     return this.session;
@@ -45,36 +44,57 @@ export class ShellHelper {
 
     // Capture screen text before command
     const before = await this.session.shell.text();
+    const beforeLines = before.split("\n");
     const beforeLen = before.length;
-    
+
     await this.session.shell.submit(command);
     await this.session.shell.waitCommand({ timeout: timeoutMs });
-    
+
     // Get full screen text after command
     const after = await this.session.shell.text();
-    
-    // Extract only the NEW text that appeared after the command
-    // Find where the command appears in the after text
-    const cmdIdx = after.lastIndexOf(command);
-    if (cmdIdx >= 0) {
-      const output = after.slice(cmdIdx + command.length);
-      // Remove trailing prompt and whitespace
-      return output.replace(/\n[^\n]*\$[ ]?$/, "").trim();
+    const afterLines = after.split("\n");
+
+    // Find the command in the output - look for the command followed by new output
+    // Use a more robust approach: find the line containing the command
+    let cmdLineIdx = -1;
+    for (let i = afterLines.length - 1; i >= 0; i--) {
+      if (afterLines[i].includes(command) && !afterLines[i].includes(`${command}`)) {
+        cmdLineIdx = i;
+        break;
+      }
     }
+
+    if (cmdLineIdx >= 0) {
+      // Get everything after the command line
+      const outputLines = afterLines.slice(cmdLineIdx + 1);
+
+      // Remove trailing prompt lines (lines ending with $ or #)
+      while (
+        outputLines.length > 0 &&
+        /^\s*[a-zA-Z0-9_-]+@[\w.-]+[#$]\s*$/.test(outputLines[outputLines.length - 1])
+      ) {
+        outputLines.pop();
+      }
+
+      return outputLines.join("\n").trim();
+    }
+
     // Fallback: return everything after the before text length
     return after.slice(beforeLen).trim();
   }
 
   async dotoolCommand(command: string): Promise<void> {
+    // Escape single quotes in the command for safe shell interpolation
+    const escapedCommand = command.replace(/'/g, "'\\''");
     await this.exec(
-      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${command}' | /home/testuser/.local/bin/dotoolc`
+      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | /home/testuser/.local/bin/dotoolc`
     );
   }
 
   async sendHotkey(): Promise<void> {
     // Use D-Bus instead of dotool - dotool key presses don't propagate through Wayland
     const dbusAddr = await this.exec(
-      `cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+      `cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
     );
     const dbusBase = `DBUS_SESSION_BUS_ADDRESS=${dbusAddr.trim()} dbus-send --session --type=method_call --dest=com.happytomatoe.VoiceToText /com/happytomatoe/VoiceToText`;
 

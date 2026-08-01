@@ -37,10 +37,10 @@ export async function ensureParakeet(): Promise<void> {
         }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      console.log("  WARNING: Parakeet not ready after 90s — continuing anyway");
-      return;
+      // Container is stuck — restart it
+      console.log("  WARNING: Parakeet not ready after 90s — restarting container");
+      execSync(`podman rm -f ${containerName} 2>/dev/null || true`, { stdio: "ignore" });
     }
-    execSync(`podman rm -f ${containerName} 2>/dev/null || true`, { stdio: "ignore" });
   } catch {
     // Container doesn't exist
   }
@@ -59,9 +59,9 @@ export async function ensureParakeet(): Promise<void> {
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
-    console.log("  WARNING: Parakeet started but not ready after 90s");
+    throw new Error("Parakeet started but not ready after 90s");
   } catch (err) {
     console.log("  WARNING: Failed to start Parakeet:", err);
-    console.log("  Transcription will use cloud provider (Deepgram) if available");
+    throw new Error(`Failed to start Parakeet: ${err}`);
   }
 }

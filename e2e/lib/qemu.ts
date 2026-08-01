@@ -75,38 +75,73 @@ export class QemuMonitor extends EventEmitter {
     if (!this.sock) throw new Error("Not connected — call connect() first");
 
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.waitingForPrompt = false;
+        this.promptCallback = null;
+        this.buffer = "";
+        this.sock?.removeListener("error", onError);
+        this.sock?.removeListener("close", onClose);
+      };
+
       const timer = setTimeout(() => {
-        reject(new Error(`Command "${command}" timed out after ${timeoutMs}ms`));
+        if (!settled) {
+          settled = true;
+          cleanup();
+          reject(new Error(`Command "${command}" timed out after ${timeoutMs}ms`));
+        }
       }, timeoutMs);
+
+      const onError = (err: Error) => {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          reject(err);
+        }
+      };
+
+      const onClose = () => {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          reject(new Error("Socket closed while waiting for command response"));
+        }
+      };
 
       this.waitingForPrompt = true;
       this.promptCallback = (output) => {
-        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          cleanup();
 
-        // Strip ANSI escape codes and carriage returns
-        const clean = output
-          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
-          .replace(/\r/g, "");
+          // Strip ANSI escape codes and carriage returns
+          const clean = output
+            .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+            .replace(/\r/g, "");
 
-        // The echo of the command appears as concatenated partial commands
-        // (typewriter effect). Remove everything up to the first newline
-        // after stripping, which is where the actual response begins.
-        const firstNl = clean.indexOf("\n");
-        const afterEcho = firstNl >= 0 ? clean.slice(firstNl + 1) : clean;
+          // The echo of the command appears as concatenated partial commands
+          // (typewriter effect). Remove everything up to the first newline
+          // after stripping, which is where the actual response begins.
+          const firstNl = clean.indexOf("\n");
+          const afterEcho = firstNl >= 0 ? clean.slice(firstNl + 1) : clean;
 
-        // Filter lines: remove QEMU header, prompt, empty lines
-        const lines = afterEcho.split("\n").filter((line) => {
-          const trimmed = line.trim();
-          return (
-            trimmed &&
-            !trimmed.startsWith("QEMU") &&
-            !trimmed.startsWith("(qemu)")
-          );
-        });
+          // Filter lines: remove QEMU header, prompt, empty lines
+          const lines = afterEcho.split("\n").filter((line) => {
+            const trimmed = line.trim();
+            return (
+              trimmed &&
+              !trimmed.startsWith("QEMU") &&
+              !trimmed.startsWith("(qemu)")
+            );
+          });
 
-        resolve(lines.join("\n").trim());
+          resolve(lines.join("\n").trim());
+        }
       };
 
+      this.sock!.once("error", onError);
+      this.sock!.once("close", onClose);
       this.sock!.write(command + "\n");
     });
   }
