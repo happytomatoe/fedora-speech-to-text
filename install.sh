@@ -139,7 +139,7 @@ install_dotool() {
   echo "  Attempting direct build..."
   local BUILD_DEPS="gcc make libev-devel systemd-devel"
   case "$PKG_MGR" in
-    apt) BUILD_DEPS="gcc make libev-dev systemd" ;;
+    apt) BUILD_DEPS="gcc make libev-dev libsystemd-dev" ;;
     pacman) BUILD_DEPS="gcc make libev systemd" ;;
   esac
   if sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null; then
