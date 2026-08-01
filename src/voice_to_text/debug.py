@@ -142,6 +142,7 @@ async def handle_debug_recording(
                 text = postprocess(
                     text,
                     lang=postprocess_cfg.get("language") or language,
+                    custom_filler_words=postprocess_cfg.get("custom_filler_words"),
                 )
 
             # Apply custom word corrections (same as normal pipeline)
