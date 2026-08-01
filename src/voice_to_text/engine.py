@@ -320,7 +320,8 @@ class RecordingEngine:
                 self.state = EngineState.RECORDING
                 self._notify_state()
 
-                # Handle debug recording (simulates audio capture, then transcribes test file)
+                # handle_debug_recording is guaranteed non-None when is_debug_mode() is True
+                assert handle_debug_recording is not None, "handle_debug_recording should be set when debug mode is active"
                 text = await handle_debug_recording(config, on_level=self.on_audio_level)
 
                 self.state = EngineState.PROCESSING

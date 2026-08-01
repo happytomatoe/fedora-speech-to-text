@@ -431,7 +431,7 @@ e2e-screenshot-test:
     echo "Indicator area standard deviation: $INDICATOR_STATS"
     
     # A blank black area would have stddev ~0, an area with an icon will be >0.1
-    if (( $(echo "$INDICATOR_STATS > 0.1" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$INDICATOR_STATS > 0.1" | awk '{print ($1 > 0.1) ? 1 : 0}' 2>/dev/null || echo 0) )); then
       echo "✅ PASS: Microphone indicator detected"
       exit 0
     else
@@ -555,14 +555,22 @@ qemu-e2e-vm:
     echo "QEMU started (PID: ${QEMU_PID})"
     echo ""
     echo "Waiting for SSH..."
+    ssh_ready=false
     for i in $(seq 1 30); do
         if ssh -i id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 testuser@localhost echo ok 2>/dev/null; then
             echo "SSH ready (${i}s)"
+            ssh_ready=true
             break
         fi
         echo -n "."
         sleep 2
     done
+    
+    if [ "$ssh_ready" = false ]; then
+        echo ""
+        echo "❌ ERROR: SSH connection failed after 60 seconds"
+        exit 1
+    fi
     
     echo ""
     echo "=== VM is ready ==="

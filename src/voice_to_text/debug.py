@@ -68,7 +68,7 @@ async def handle_debug_recording(
 
     # Get provider config
     config_mgr = _ConfigManager()
-    provider = config.get("provider", "deepgram")
+    provider = config.get("provider", "voxtral")
     provider_config = config_mgr.get_provider_config(provider)
 
     # Create provider
