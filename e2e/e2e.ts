@@ -265,144 +265,131 @@ class VmManager {
   }
 
   async setup(): Promise<void> {
-    // Wait for GDM auto-login
+    await this.waitForGdmLogin();
+    await this.extractDbusAddress();
+    await this.deployExtension();
+    await this.deployPythonSource();
+    await this.deployTestAudio();
+    await this.startVoiceService();
+
+    // Save snapshot for hot boot
+    if (UPDATE_MODE) {
+      console.log("Saving VM snapshot for hot boot...");
+      await this.qemu.savevm("ready");
+      await Bun.sleep(2000);
+    }
+  }
+
+  private async waitForGdmLogin(): Promise<void> {
     console.log("Waiting for GDM auto-login...");
     await this.pollUntil(
       "GDM session with seat",
       async () => {
-        const output = await this.shell.exec(
-          "loginctl list-sessions"
-        );
+        const output = await this.shell.exec("loginctl list-sessions");
         return output.includes("seat0");
       },
       60000
     );
+  }
 
-    // Extract D-Bus address
+  private async extractDbusAddress(): Promise<void> {
     await this.shell.exec(
       `DBUS_ADDR=$(cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep DBUS_SESSION_BUS_ADDRESS | head -1 | cut -d= -f2-); if [ -n "$DBUS_ADDR" ]; then echo "$DBUS_ADDR" > /tmp/dbus-address; fi`
     );
+  }
 
-    // Enable extension
-    await this.shell.exec(
-      "gnome-extensions enable voice-to-text@happytomatoe.com 2>/dev/null || true"
-    );
-
-    // Wait for GNOME Shell
-    await this.pollUntil(
-      "GNOME Shell",
-      async () => {
-        const output = await this.shell.exec(
-          "pgrep -f 'gnome-shell --mode=user'"
-        );
-        return output.trim().length > 0;
-      },
-      10000
-    );
-
-
-    // Deploy GNOME extension
+  private async deployExtension(): Promise<void> {
     const extDir = join(PROJECT_ROOT, "gnome-ext");
     const extUuid = "voice-to-text@happytomatoe.com";
-    if (existsSync(extDir)) {
-      console.log("Deploying GNOME extension...");
-      // Use rsync (reliable, handles permissions, no glob corruption)
-      rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${extUuid}`);
-      // Compile schemas
-      await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
-      // Enable extension in dconf
-      await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
-      // Set provider via dconf (use script file to avoid SSH quoting hell)
-      await this.shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
+    if (!existsSync(extDir)) return;
+
+    console.log("Deploying GNOME extension...");
+    rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${extUuid}`);
+    await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
+    await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
+    await this.shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
 #!/bin/bash
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
-      // Restart GNOME Shell to pick up new extension (gnome-extensions enable doesn't re-scan)
-      console.log("Restarting GNOME Shell to load extension...");
-      await this.shell.exec("sudo systemctl restart gdm");
-      // GDM restart kills the user session and breaks the SSH connection.
-      // Re-establish the SSH session so subsequent shell.exec() calls work.
-      console.log("Re-establishing SSH session after GDM restart...");
-      await this.shell.close();
-      await this.shell.openSshSession({
-        sshKey: SSH_KEY,
-        sshPort: SSH_PORT,
-        sshUser: SSH_USER,
-      });
-      // Wait for GNOME Shell to come back up
-      await this.pollUntil(
-        "GNOME Shell after restart",
-        async () => {
-          const output = await this.shell.exec(
-            "pgrep -f 'gnome-shell --mode=user'"
-          );
-          return output.trim().length > 0;
-        },
-        30000
-      );
-      // Wait for extension to be available (GNOME Shell needs time to scan extensions dir)
-      console.log("Waiting for extension to be available...");
-      await this.pollUntil(
-        "extension available",
-        async () => {
-          try {
-            const result = sshExec(`gnome-extensions show ${extUuid} 2>&1`);
-            return !result.includes("doesn't exist");
-          } catch {
-            return false;
-          }
-        },
-        30000
-      );
-      // Enable the extension
-      sshExec(`gnome-extensions enable ${extUuid} 2>/dev/null || true`);
-      // Verify extension is active
-      const extState = sshExec(`gnome-extensions show ${extUuid} 2>&1`);
-      if (extState.includes("State: ACTIVE")) {
-        console.log("Extension loaded and active");
-      } else {
-        console.log("WARNING: Extension state:", extState.trim());
-      }
 
-      // Restart dotoold (died with GDM restart)
-      console.log("Restarting dotoold...");
-      sshExec("export DOTOOL_PIPE=/run/user/\$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &");
-      await this.pollUntil(
-        "dotool pipe",
-        async () => {
-          const output = await this.shell.exec(
-            "test -p /run/user/$(id -u)/dotool-pipe"
-          );
-          return output.length === 0; // test succeeds with no output
-        },
-        10000
-      );
-    }
-    // Deploy Python source (rsync from host side)
-    if (existsSync(PYTHON_SRC)) {
-      console.log("Deploying Python source...");
-      sshExec("mkdir -p ~/voice_to_text/src/voice_to_text");
-      rsyncToVm(PYTHON_SRC, "~/voice_to_text/src/voice_to_text");
+    // Restart GNOME Shell to load extension
+    console.log("Restarting GNOME Shell to load extension...");
+    await this.shell.exec("sudo systemctl restart gdm");
+
+    // Re-establish SSH session after GDM restart
+    console.log("Re-establishing SSH session after GDM restart...");
+    await this.shell.close();
+    await this.shell.openSshSession({ sshKey: SSH_KEY, sshPort: SSH_PORT, sshUser: SSH_USER });
+
+    // Wait for GNOME Shell
+    await this.pollUntil(
+      "GNOME Shell after restart",
+      async () => {
+        const output = await this.shell.exec("pgrep -f 'gnome-shell --mode=user'");
+        return output.trim().length > 0;
+      },
+      30000
+    );
+
+    // Wait for extension to be available
+    console.log("Waiting for extension to be available...");
+    await this.pollUntil(
+      "extension available",
+      async () => {
+        try {
+          const result = sshExec(`gnome-extensions show ${extUuid} 2>&1`);
+          return !result.includes("doesn't exist");
+        } catch {
+          return false;
+        }
+      },
+      30000
+    );
+
+    sshExec(`gnome-extensions enable ${extUuid} 2>/dev/null || true`);
+    const extState = sshExec(`gnome-extensions show ${extUuid} 2>&1`);
+    if (extState.includes("State: ACTIVE")) {
+      console.log("Extension loaded and active");
+    } else {
+      console.log("WARNING: Extension state:", extState.trim());
     }
 
-    // Deploy test audio (scp from host side)
-    if (existsSync(TEST_AUDIO)) {
-      console.log("Deploying test audio...");
-      scpToVm(TEST_AUDIO, "/tmp/test-audio.wav");
-    }
+    // Restart dotoold
+    console.log("Restarting dotoold...");
+    sshExec("export DOTOOL_PIPE=/run/user/\$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &");
+    await this.pollUntil(
+      "dotool pipe",
+      async () => {
+        const output = await this.shell.exec("test -p /run/user/$(id -u)/dotool-pipe");
+        return output.length === 0;
+      },
+      10000
+    );
+  }
 
-    // Install Python dependencies
+  private async deployPythonSource(): Promise<void> {
+    if (!existsSync(PYTHON_SRC)) return;
+    console.log("Deploying Python source...");
+    sshExec("mkdir -p ~/voice_to_text/src/voice_to_text");
+    rsyncToVm(PYTHON_SRC, "~/voice_to_text/src/voice_to_text");
+  }
+
+  private async deployTestAudio(): Promise<void> {
+    if (!existsSync(TEST_AUDIO)) return;
+    console.log("Deploying test audio...");
+    scpToVm(TEST_AUDIO, "/tmp/test-audio.wav");
+  }
+
+  private async startVoiceService(): Promise<void> {
     console.log("Installing Python dependencies...");
     await this.shell.exec(
       "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets 2>/dev/null || true"
     );
 
-    // Kill any existing voice service (use execSync for reliability after GDM restart)
-    // NOTE: Don't use pkill -f with 'voice_to_text' in the command — it matches the SSH command line itself!
+    // Kill existing voice service
     sshExec("killall -9 python3 2>/dev/null; true");
     await Bun.sleep(1000);
-    // Wait for D-Bus name release
     await this.pollUntil(
       "old voice service to die",
       async () => {
@@ -412,33 +399,21 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       5000
     );
     await Bun.sleep(500);
-    // Start voice service
-    // Parakeet runs on host; VM reaches it via QEMU gateway 10.0.2.2
-    sshExec(`mkdir -p ~/.config/voice-to-text && printf 'transcription:\n  provider: parakeet\nparakeet:\n  http_endpoint: http://10.0.2.2:5092\n' > ~/.config/voice-to-text/config.yaml`);
-    const providerArgs = `export VOICE_TO_TEXT_PROVIDER=parakeet;`;
 
+    // Create config and start service
+    sshExec(`mkdir -p ~/.config/voice-to-text && printf 'transcription:\n  provider: parakeet\nparakeet:\n  http_endpoint: http://10.0.2.2:5092\n' > ~/.config/voice-to-text/config.yaml`);
     await this.shell.exec(
-      `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); ${providerArgs} export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
+      `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
     );
 
-    // Wait for D-Bus service
     await this.pollUntil(
       "D-Bus service",
       async () => {
-        const output = await this.shell.exec(
-          "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText"
-        );
+        const output = await this.shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
         return output.includes("com.happytomatoe.VoiceToText");
       },
       15000
     );
-
-    // Save snapshot for hot boot
-    if (UPDATE_MODE) {
-      console.log("Saving VM snapshot for hot boot...");
-      await this.qemu.savevm("ready");
-      await Bun.sleep(2000);
-    }
   }
 
   async pollUntil(
