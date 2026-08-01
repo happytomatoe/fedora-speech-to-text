@@ -1,6 +1,14 @@
 default:
     @just --list
 
+# @category e2e-qemu
+# Install SPICE viewer (Remote Viewer) via Flatpak
+install-spice-client:
+    flatpak install -y flathub org.virt_manager.virt-viewer
+    # Block GNOME Shell portal to suppress "Allow inhibiting shortcuts" dialog
+    # This prevents the app from requesting shortcut inhibition via the portal
+    flatpak override --user --no-talk-name=org.gnome.Shell org.virt_manager.virt-viewer
+
 # @category setup
 # Install npm deps (lefthook) and set up git hooks
 setup:
@@ -353,11 +361,6 @@ container-watch:
     while true; do sleep 3600; done
 
 # @category e2e-qemu
-# Install SPICE viewer (Remote Viewer) via Flatpak
-install-spice-client:
-    flatpak install -y flathub org.virt_manager.virt-viewer
-
-# @category e2e-qemu
 # Kill any running QEMU E2E test VM
 qemu-e2e-kill:
     #!/usr/bin/env bash
@@ -488,17 +491,28 @@ e2e-test-view:
     sleep 0.5
     echo "Connecting to QEMU VM via SPICE (localhost:5930)..."
     if flatpak list --app 2>/dev/null | grep -q org.virt_manager.virt-viewer; then
-        flatpak run org.virt_manager.virt-viewer spice://localhost:5930
+        flatpak run org.virt_manager.virt-viewer spice://localhost:5930 &
     elif command -v remote-viewer &>/dev/null; then
-        remote-viewer spice://localhost:5930
+        remote-viewer spice://localhost:5930 &
     elif command -v remmina &>/dev/null; then
-        remmina spice://localhost:5930
+        remmina spice://localhost:5930 &
     else
         echo "No SPICE client found. Install one:"
         echo "  just install-spice-client"
         echo "  sudo dnf install virt-viewer"
         exit 1
     fi
+    SPICE_PID=$!
+    # Wait for window to appear, then tile to right half
+    sleep 2
+    if command -v dotool &>/dev/null; then
+        echo "Tiling window to right half..."
+        printf 'keydown leftmeta\nkey right\nkeyup leftmeta\n' | dotool
+        sleep 0.5
+        # Click on left side of screen to focus terminal
+        printf 'mouseto 0.25 0.5\nclick left\n' | dotool
+    fi
+    wait $SPICE_PID 2>/dev/null || true
 
 # @category e2e-qemu
 # Install QEMU/KVM on host (Fedora Silverblue — requires reboot)
