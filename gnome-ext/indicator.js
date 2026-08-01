@@ -42,8 +42,7 @@ export const VoiceIndicator = GObject.registerClass(
             });
             this._box.add_child(this._icon);
 
-            this._spinner = new St.Icon({
-                icon_name: 'process-working-symbolic',
+            this._spinner = new St.Spinner({
                 style_class: 'system-status-icon',
                 visible: false,
             });

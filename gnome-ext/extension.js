@@ -186,12 +186,12 @@ export default class VoiceToTextExtension extends Extension {
                 (proxy, name, [state]) => {
                     console.log('VoiceToText: state changed to', state);
                     if (state === 'recording') {
-                        this._indicator.setRecordingActive();
+                        this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
                     } else if (state === 'idle') {
-                        this._indicator.setRecording(false);
+                        this._indicator?.setRecording(false);
                         this._audioLevelWidget?.hide();
                         this._recording = false;
                         this._releaseInhibitor();
@@ -226,9 +226,9 @@ export default class VoiceToTextExtension extends Extension {
                     if (state === 'recording' || state === 'processing') {
                         this._recording = true;
                         if (state === 'processing') {
-                            this._indicator.setProcessing();
+                            this._indicator?.setProcessing();
                         } else {
-                            this._indicator.setRecordingActive();
+                            this._indicator?.setRecordingActive();
                         }
                         this._ensureInhibitor();
                     }

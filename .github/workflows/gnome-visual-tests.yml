@@ -62,18 +62,20 @@ jobs:
   comment-on-failure:
     name: Comment on PR
     needs: visual-tests
-    if: failure() && github.event_name == 'pull_request'
+    if: failure() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       issues: write
     steps:
       - name: Download test artifacts
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: visual-test-results
           path: e2e/output/
 
       - name: Comment on PR with diff images
+        if: success()  # Only run if download succeeded
         uses: actions/github-script@v7
         with:
           script: |
