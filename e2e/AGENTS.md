@@ -38,11 +38,11 @@ E2E tests verify the GNOME extension's visual appearance using screenshot compar
 ## Running Tests
 
 ```bash
-# Update reference screenshots
-./e2e/scripts/snapshot.sh --update
+# Update reference screenshots (TypeScript-based)
+cd e2e && bun run e2e.ts --update
 
 # Run tests against references
-./e2e/scripts/snapshot.sh
+cd e2e && bun run e2e.ts
 
 # Requires: DEEPGRAM_API_KEY env var for transcription
 export DEEPGRAM_API_KEY=your_key_here

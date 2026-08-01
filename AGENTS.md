@@ -52,23 +52,9 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 See `e2e/AGENTS.md` for detailed instructions.
 
-E2E tests run in a containerized GNOME Shell (Xvfb + Podman) and capture screenshots for visual regression:
-
-- `e2e/scripts/snapshot.sh` — main script. Captures screenshots of desktop, preferences, recording state (with audio level), and transcription result.
-- `e2e/scripts/run-test.sh` — simpler visual regression runner (indicator + prefs).
-- `e2e/scripts/generate-references.sh` — generates baseline reference images.
-- `e2e/scripts/record-test.sh` — records a video of the full e2e flow.
-
-**How screenshots work:**
-1. Container runs GNOME Shell on Xvfb (`/opt/Xvfb_screen0` is the framebuffer).
-2. Screenshots captured via: `podman cp <container>:/opt/Xvfb_screen0 - | tar xf - --to-command "convert xwd:- output.png"` (ImageMagick).
-3. **Extension icon location**: The microphone/recording indicator is in the **top-right corner** of the GNOME top bar.
-4. Audio level captured with crop: `convert xwd:- -crop 80x30+650+0 +repage output.png` (top-right panel area for extension indicator).
-5. Comparison: `compare -metric MSE reference.png actual.png diff.png` — MSE < 100 = pass.
-
 **Key commands:**
-- Update references: `./e2e/scripts/snapshot.sh --update`
-- Run tests: `./e2e/scripts/snapshot.sh`
+- Update references: `just e2e-update` or `cd e2e && bun run e2e.ts --update`
+- Run tests: `just e2e` or `cd e2e && bun run e2e.ts`
 - Requires: `DEEPGRAM_API_KEY` env var for transcription tests.
 
 ## Conventions

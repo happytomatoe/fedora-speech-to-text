@@ -452,8 +452,8 @@ Instead of screenshot comparison, verify:
 | Python service | `$(git rev-parse --show-toplevel)/src/voice_to_text/` | D-Bus backend |
 | Test audio | `e2e/fixtures/test-audio.wav` | Debug mode transcription |
 | Reference images | `e2e/expected-qemu/` | Visual regression baseline |
-| Test script | `e2e/scripts/qemu-snapshot.sh` | Automated test runner |
-| VM setup | `e2e/scripts/qemu-setup.sh` | Build base image |
+| Test script | `e2e/scripts/qemu-snapshot.sh` | Automated test runner (WIP — not yet created) |
+| VM setup | `e2e/scripts/qemu-setup.sh` | Build base image (WIP — not yet created) |
 
 ## Key Variables
 

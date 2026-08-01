@@ -36,6 +36,9 @@ export class QemuMonitor extends EventEmitter {
         clearTimeout(timer);
         sock.removeListener("error", onError);
         this.sock = sock;
+        // Keep a persistent error handler for post-connection errors
+        this.sock.on("error", (err) => this.emit("error", err));
+        this.sock = sock;
         // Wait for the initial "(qemu) " prompt
         this.waitingForPrompt = true;
         this.promptCallback = () => {
@@ -122,6 +125,8 @@ export class QemuMonitor extends EventEmitter {
         if (!settled) {
           settled = true;
           cleanup();
+          // Destroy socket on timeout to prevent dirty state
+          this.sock?.destroy();
           reject(new Error(`Command "${command}" timed out after ${timeoutMs}ms`));
         }
       }, timeoutMs);

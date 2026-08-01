@@ -71,7 +71,7 @@ export class ShellHelper {
       // Remove trailing prompt lines (lines ending with $ or #)
       while (
         outputLines.length > 0 &&
-        /^\s*[a-zA-Z0-9_-]+@[\w.-]+[#$]\s*$/.test(outputLines[outputLines.length - 1])
+        /^\s*(?:\[[^\]]*\]\s*)?[a-zA-Z0-9_-]+@[\w.-]+(?:\s+[:\w/\-~]+)?\s*[#$]\s*$/.test(outputLines[outputLines.length - 1])
       ) {
         outputLines.pop();
       }

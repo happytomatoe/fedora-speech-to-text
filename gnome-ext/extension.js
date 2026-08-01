@@ -220,10 +220,11 @@ export default class VoiceToTextExtension extends Extension {
             console.log('VoiceToText: D-Bus proxy connected');
 
             // Sync state on (re)enable — engine may already be recording
+            const proxyRef = this._proxy;
             this._proxy.GetStatusAsync().then(
                 state => {
-                    // Guard: extension may have been disabled while promise was pending
-                    if (!this._proxy) return;
+                    // Guard: extension may have been disabled or re-enabled while promise was pending
+                    if (this._proxy !== proxyRef) return;
                     console.log('VoiceToText: initial state:', state);
                     if (state === 'recording' || state === 'processing') {
                         this._recording = true;

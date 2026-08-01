@@ -38,9 +38,10 @@ class BatchProvider(ABC):
 class StreamingProvider(ABC):
     """Provider that transcribes audio in real-time via streaming.
 
-    Subclasses must set these attributes:
+    Subclasses that use the default `get_partial_result` should set:
         _partial_result: str | None
         _finalized_text: str
+    Subclasses that override `get_partial_result` may not need these.
     """
 
     _partial_result: str | None

@@ -130,6 +130,25 @@ async def handle_debug_recording(
                     lang=postprocess_cfg.get("language") or language,
                 )
 
+            # Apply custom word corrections (same as normal pipeline)
+            raw_custom_words = config.get("custom_words")
+            custom_words = (
+                raw_custom_words if raw_custom_words is not None
+                else postprocess_cfg.get("custom_words", [])
+            )
+            if custom_words:
+                from voice_to_text.postprocess import apply_custom_words
+                raw_threshold = config.get("custom_words_threshold")
+                custom_words_threshold = (
+                    raw_threshold if raw_threshold is not None
+                    else postprocess_cfg.get("custom_words_threshold", 0.5)
+                )
+                text = apply_custom_words(
+                    text,
+                    custom_words=custom_words,
+                    custom_words_threshold=custom_words_threshold,
+                )
+
         logger.info("DEBUG MODE: Transcription result: %s", text[:100] if text else "(empty)")
         return text
 

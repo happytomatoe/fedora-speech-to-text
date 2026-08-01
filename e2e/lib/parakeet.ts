@@ -16,7 +16,7 @@ function checkPort(): Promise<boolean> {
 
 /** Ensure Parakeet is running. Only starts if not already listening. */
 export async function ensureParakeet(): Promise<void> {
-  const modelsDir = join(process.env.HOME || "/home/l", "parakeet", "models");
+  const modelsDir = join(process.env.HOME || process.env.USERPROFILE || ".", "parakeet", "models");
   const containerName = "parakeet-v2";
 
   // Fast path: already listening

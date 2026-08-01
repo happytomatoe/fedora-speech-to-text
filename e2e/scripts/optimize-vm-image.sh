@@ -44,7 +44,7 @@ echo "Using virt-customize to apply optimizations..."
 
 virt-customize -a "$BASE_IMAGE" \
     --run-command 'touch /etc/cloud/cloud-init.disabled' \
-    --run-command 'grep -q "^UseDNS no" /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config' \
+    --run-command 'sed -i "s/^#*UseDNS .*/UseDNS no/" /etc/ssh/sshd_config 2>/dev/null || echo "UseDNS no" >> /etc/ssh/sshd_config' \
     --run-command 'rm -f /etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service' \
     --selinux-relabel 2>&1
 
