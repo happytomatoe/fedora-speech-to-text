@@ -11,6 +11,8 @@ export class QemuMonitor extends EventEmitter {
   private buffer = "";
   private waitingForPrompt = false;
   private promptCallback: ((output: string) => void) | null = null;
+  private commandQueue: Array<() => void> = [];
+  private executing = false;
 
   constructor(sockPath: string) {
     super();
@@ -31,21 +33,24 @@ export class QemuMonitor extends EventEmitter {
       }, timeoutMs);
 
       sock.on("connect", () => {
+        clearTimeout(timer);
+        sock.removeListener("error", onError);
         this.sock = sock;
         // Wait for the initial "(qemu) " prompt
         this.waitingForPrompt = true;
         this.promptCallback = () => {
-          clearTimeout(timer);
           resolve();
         };
       });
 
       sock.on("data", (data) => this.onData(data));
 
-      sock.on("error", (err) => {
+      const onError = (err: Error) => {
         clearTimeout(timer);
+        sock.destroy();
         reject(err);
-      });
+      };
+      sock.on("error", onError);
     });
   }
 
@@ -74,6 +79,32 @@ export class QemuMonitor extends EventEmitter {
   async execute(command: string, timeoutMs = 10000): Promise<string> {
     if (!this.sock) throw new Error("Not connected — call connect() first");
 
+    // Serialize commands - HMP is strictly request/response
+    return new Promise<string>((resolve, reject) => {
+      const run = async () => {
+        this.executing = true;
+        try {
+          const result = await this._execute(command, timeoutMs);
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        } finally {
+          this.executing = false;
+          // Process next command in queue
+          const next = this.commandQueue.shift();
+          if (next) next();
+        }
+      };
+
+      if (this.executing) {
+        this.commandQueue.push(run);
+      } else {
+        run();
+      }
+    });
+  }
+
+  private async _execute(command: string, timeoutMs: number): Promise<string> {
     return new Promise((resolve, reject) => {
       let settled = false;
       const cleanup = () => {
