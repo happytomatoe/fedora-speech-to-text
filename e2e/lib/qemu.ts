@@ -106,6 +106,8 @@ export class QemuMonitor extends EventEmitter {
 
   private async _execute(command: string, timeoutMs: number): Promise<string> {
     return new Promise((resolve, reject) => {
+      // Reset buffer to avoid stale data from previous commands
+      this.buffer = "";
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);

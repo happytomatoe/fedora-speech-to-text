@@ -1,5 +1,6 @@
 {
   "name": "voice-to-text-e2e",
+  "private": true,
   "type": "module",
   "scripts": {
     "test": "bun run e2e.ts",

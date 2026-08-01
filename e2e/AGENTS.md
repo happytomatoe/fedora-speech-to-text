@@ -31,7 +31,7 @@ E2E tests verify the GNOME extension's visual appearance using screenshot compar
 1. Container runs GNOME Shell on Xvfb (`/opt/Xvfb_screen0` is the framebuffer)
 2. Screenshots captured via: `podman cp <container>:/opt/Xvfb_screen0 - | tar xf - --to-command "convert xwd:- output.png"` (ImageMagick)
 3. **Extension icon location**: The microphone/recording indicator is in the **top-right corner** of the GNOME top bar
-4. Audio level captured with crop: `convert xwd:- -crop 80x25+655+2 +repage output.png` (top-right panel area for extension indicator)
+4. Audio level captured with crop: `convert xwd:- -crop 80x30+650+0 +repage output.png` (top-right panel area for extension indicator)
 5. **Preferences**: Captured via Eval + Shell.Screenshot from inside gnome-shell process. GNOME 47 runs extension prefs in-process via Clutter. We use `org.gnome.Shell.Eval` to call `Shell.Screenshot` which captures the composited output. `--unsafe-mode` is enabled via systemd drop-in to allow Eval access. Falls back to verification-only (window exists + geometry) if Eval screenshot fails.
 6. Comparison: `compare -metric MSE reference.png actual.png diff.png` — MSE < 100 = pass
 

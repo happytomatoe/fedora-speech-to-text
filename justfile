@@ -704,7 +704,7 @@ qemu-e2e-record-host:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Recording QEMU E2E test flow on host..."
-    /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-e2e-record.sh
+    "$(git rev-parse --show-toplevel)/e2e/scripts/qemu-e2e-record.sh"
 
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)

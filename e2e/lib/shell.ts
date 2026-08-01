@@ -58,7 +58,7 @@ export class ShellHelper {
     // Use a more robust approach: find the line containing the command
     let cmdLineIdx = -1;
     for (let i = afterLines.length - 1; i >= 0; i--) {
-      if (afterLines[i].includes(command) && !afterLines[i].includes(`${command}`)) {
+      if (afterLines[i].includes(command)) {
         cmdLineIdx = i;
         break;
       }

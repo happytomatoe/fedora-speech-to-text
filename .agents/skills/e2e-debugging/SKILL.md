@@ -42,7 +42,7 @@ End-to-end testing of the voice-to-text GNOME extension runs in a QEMU VM with S
 ### Start the VM (manual)
 
 ```bash
-cd tests/e2e/qemu-images
+cd e2e/qemu-images
 rm -f overlay.qcow2
 qemu-img create -f qcow2 -b base.qcow2 -F qcow2 overlay.qcow2
 
@@ -133,7 +133,7 @@ shell-use --session vm wait command --timeout 10000
 
 ```bash
 SSH_KEY="e2e/qemu-images/id_ed25519"
-EXT_SRC="/var/home/l/git/voice-to-text/gnome-ext"
+EXT_SRC="$(git rev-parse --show-toplevel)/gnome-ext"
 REMOTE="testuser@localhost"
 
 # Create directory
@@ -149,7 +149,7 @@ scp -r -i $SSH_KEY -P 2222 ${EXT_SRC}/dist/*.js ${EXT_SRC}/metadata.json ${EXT_S
 
 ```bash
 SSH_KEY="e2e/qemu-images/id_ed25519"
-SRC="/var/home/l/git/voice-to-text-test-pod/src/voice_to_text"
+SRC="$(git rev-parse --show-toplevel)/src/voice_to_text"
 
 ssh -i $SSH_KEY -p 2222 testuser@localhost "mkdir -p ~/voice_to_text/src"
 scp -r -i $SSH_KEY -P 2222 $SRC testuser@localhost:~/voice_to_text/src/
@@ -448,8 +448,8 @@ Instead of screenshot comparison, verify:
 | Overlay | `e2e/qemu-images/overlay.qcow2` | Fresh each test run |
 | SSH key | `e2e/qemu-images/id_ed25519` | VM authentication |
 | QEMU monitor | `e2e/qemu-images/qemu-monitor.sock` | Screendump, power control |
-| Extension source | `/var/home/l/git/voice-to-text/gnome-ext/` | JS extension |
-| Python service | `/var/home/l/git/voice-to-text-test-pod/src/voice_to_text/` | D-Bus backend |
+| Extension source | `$(git rev-parse --show-toplevel)/gnome-ext/` | JS extension |
+| Python service | `$(git rev-parse --show-toplevel)/src/voice_to_text/` | D-Bus backend |
 | Test audio | `e2e/fixtures/test-audio.wav` | Debug mode transcription |
 | Reference images | `e2e/expected-qemu/` | Visual regression baseline |
 | Test script | `e2e/scripts/qemu-snapshot.sh` | Automated test runner |

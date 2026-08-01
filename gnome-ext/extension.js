@@ -222,6 +222,8 @@ export default class VoiceToTextExtension extends Extension {
             // Sync state on (re)enable — engine may already be recording
             this._proxy.GetStatusAsync().then(
                 state => {
+                    // Guard: extension may have been disabled while promise was pending
+                    if (!this._proxy) return;
                     console.log('VoiceToText: initial state:', state);
                     if (state === 'recording' || state === 'processing') {
                         this._recording = true;

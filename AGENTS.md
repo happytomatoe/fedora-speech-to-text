@@ -63,7 +63,7 @@ E2E tests run in a containerized GNOME Shell (Xvfb + Podman) and capture screens
 1. Container runs GNOME Shell on Xvfb (`/opt/Xvfb_screen0` is the framebuffer).
 2. Screenshots captured via: `podman cp <container>:/opt/Xvfb_screen0 - | tar xf - --to-command "convert xwd:- output.png"` (ImageMagick).
 3. **Extension icon location**: The microphone/recording indicator is in the **top-right corner** of the GNOME top bar.
-4. Audio level captured with crop: `convert xwd:- -crop 100x30+650+0 +repage output.png` (top-right panel area for extension indicator).
+4. Audio level captured with crop: `convert xwd:- -crop 80x30+650+0 +repage output.png` (top-right panel area for extension indicator).
 5. Comparison: `compare -metric MSE reference.png actual.png diff.png` — MSE < 100 = pass.
 
 **Key commands:**

@@ -2,6 +2,11 @@ import { Client, SFTPWrapper } from "ssh2";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+/** Escape a string for safe use in a shell command */
+function shellEscape(s: string): string {
+  // Use single quotes and escape any single quotes within
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
 export interface DeployConfig {
   host: string;
   port: number;
@@ -113,6 +118,7 @@ export class Deployer {
 
         const data = readFileSync(localPath);
         sftp.writeFile(resolvedRemote, data, (err) => {
+          sftp.end();
           if (err) {
             reject(err);
           } else {
@@ -134,7 +140,7 @@ export class Deployer {
     }
 
     // Ensure remote directory exists
-    await this.exec(`mkdir -p "${resolvedRemote}"`);
+    await this.exec(`mkdir -p ${shellEscape(resolvedRemote)}`);
 
     const entries = readdirSync(localDir);
 
@@ -144,7 +150,7 @@ export class Deployer {
       const stat = statSync(local);
 
       if (stat.isDirectory()) {
-        await this.exec(`mkdir -p "${remote}"`);
+        await this.exec(`mkdir -p ${shellEscape(remote)}`);
         await this.uploadDir(local, remote);
       } else {
         await this.uploadFile(local, remote);
@@ -228,16 +234,16 @@ export class Deployer {
       const client = this.client;
       this.client = null;
 
+      const timer = setTimeout(() => {
+        resolve();
+      }, 1000);
+
       client.once("close", () => {
+        clearTimeout(timer);
         resolve();
       });
 
       client.end();
-
-      // Timeout in case close never fires
-      setTimeout(() => {
-        resolve();
-      }, 1000);
     });
   }
 }

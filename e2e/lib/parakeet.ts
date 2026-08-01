@@ -27,8 +27,8 @@ export async function ensureParakeet(): Promise<void> {
 
   // Container running but still loading models — poll until ready
   try {
-    const running = execSync(`podman inspect -f '{{.State.Running}}' ${containerName} 2>/dev/null`).toString().trim();
-    if (running === "true") {
+    const state = execSync(`podman inspect -f '{{.State.Status}}' ${containerName} 2>/dev/null`).toString().trim();
+    if (state === "running") {
       console.log(`  Parakeet container running, waiting for port ${PORT}...`);
       for (let i = 0; i < 45; i++) {
         if (await checkPort()) {
@@ -40,6 +40,10 @@ export async function ensureParakeet(): Promise<void> {
       // Container is stuck — restart it
       console.log("  WARNING: Parakeet not ready after 90s — restarting container");
       execSync(`podman rm -f ${containerName} 2>/dev/null || true`, { stdio: "ignore" });
+    } else if (state !== "") {
+      // Container exists but is stopped — remove and restart
+      console.log(`  Parakeet container is ${state} — removing and restarting`);
+      execSync(`podman rm -f ${containerName} 2>/dev/null || true`, { stdio: "ignore" });
     }
   } catch {
     // Container doesn't exist
@@ -49,7 +53,7 @@ export async function ensureParakeet(): Promise<void> {
   console.log("  Starting Parakeet container...");
   try {
     execSync(
-      `podman run -d --name ${containerName} -p ${PORT}:5092 -v ${modelsDir}:/models:Z ghcr.io/achetronic/parakeet:latest`,
+      `podman run -d --name ${containerName} -p ${PORT}:5092 -v '${modelsDir}':/models:Z ghcr.io/achetronic/parakeet:latest`,
       { stdio: "inherit", timeout: 60_000 }
     );
     for (let i = 0; i < 45; i++) {

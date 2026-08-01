@@ -16,7 +16,7 @@ fi
 
 failed=0
 for url in $urls; do
-  status=$(curl -s -o /dev/null -w "%{http_code}" "$url" --max-time 5 2>/dev/null || echo "000")
+  status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" --max-time 5 2>/dev/null || echo "000")
   if [ "$status" = "200" ]; then
     echo "  ✓ $url"
   else

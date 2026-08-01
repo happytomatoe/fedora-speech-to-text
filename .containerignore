@@ -14,4 +14,6 @@ tests/test_*.py
 tests/conftest.py
 tests/__init__.py
 tests/gnome-output/
+e2e/output/
+e2e/output-qemu/
 .github/

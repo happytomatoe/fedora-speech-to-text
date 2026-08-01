@@ -137,12 +137,16 @@ install_dotool() {
 
   # Direct build (last resort)
   echo "  Attempting direct build..."
-  if command -v dnf &>/dev/null && sudo dnf install -y gcc make libev-devel systemd-devel git 2>/dev/null; then
+  local BUILD_DEPS="gcc make libev-devel systemd-devel"
+  case "$PKG_MGR" in
+    apt) BUILD_DEPS="gcc make libev-dev systemd" ;;
+    pacman) BUILD_DEPS="gcc make libev systemd" ;;
+  esac
+  if sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null; then
     local TMPDIR
     TMPDIR=$(mktemp -d)
     if git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
-      (cd "$TMPDIR/dotool" && make 2>/dev/null); then
-      cp dotool dotoolc dotoold "$BIN_DIR/"
+      (cd "$TMPDIR/dotool" && make 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/"); then
       rm -rf "$TMPDIR"
       echo "  dotool built successfully from source."
       return 0
@@ -325,7 +329,8 @@ WRAPPER_PATH="$HOME/.local/bin/dotoold-wrapper"
 mkdir -p "$HOME/.local/bin"
 cat > "$WRAPPER_PATH" << WRAPPER_EOF
 #!/bin/bash
-# Wrapper to ensure proper group membership for dotoold
+# Wrapper to ensure proper group membership and PATH for dotoold
+export PATH="$HOME/.local/bin:\$PATH"
 if id -nG "\$USER" | grep -qw input; then
   exec dotoold "\$@"
 else
