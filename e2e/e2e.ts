@@ -3,6 +3,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } fr
 import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
+import { RunContext } from "./lib/run-context.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -79,10 +80,7 @@ const CONFIG = {
 const PROJECT_ROOT = CONFIG.paths.projectRoot;
 const VM_DIR = CONFIG.paths.vmDir;
 const BASE_IMAGE = CONFIG.paths.baseImage;
-const OVERLAY_IMAGE = CONFIG.paths.overlayImage;
-const SOCKET_PATH = CONFIG.paths.socketPath;
 const SSH_KEY = CONFIG.paths.sshKey;
-const SSH_PORT = CONFIG.ssh.port;
 const SSH_USER = CONFIG.ssh.user;
 const OUTPUT_DIR = CONFIG.paths.outputDir;
 const PYTHON_SRC = CONFIG.paths.pythonSrc;
@@ -117,14 +115,14 @@ async function preflight(): Promise<void> {
   await ensureParakeet();
 }
 
-async function runTestFlow(vm: VmManager): Promise<void> {
+async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
   let t: number;
 
   const tmuxCfg: tmux.TmuxHelper = {
-    session: "e2e",
+    session: `e2e-${run.id}`,
     sshKey: SSH_KEY,
-    sshPort: SSH_PORT,
+    sshPort: run.sshPort,
     sshUser: SSH_USER,
   };
 
@@ -204,13 +202,13 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   
   // Verify terminal has focus by typing test character
   console.log("Verifying terminal focus...");
-  let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, SSH_PORT);
+  let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
   if (!isFocused) {
     console.log("  Terminal not focused, trying click + gio launch...");
     await shell.clickToFocus(640, 400);
     await Bun.sleep(500);
     await shell.focusTerminal();
-    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, SSH_PORT);
+    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
     console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {
@@ -311,16 +309,16 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   tmux.killSession(tmuxCfg);
 }
 
-async function verifyResult(vm: VmManager, preRecordingPane: string): Promise<{ passed: boolean; message: string }> {
+async function verifyResult(vm: VmManager, preRecordingPane: string, run: RunContext): Promise<{ passed: boolean; message: string }> {
   console.log("\n=== Verification ===");
 
   const expected = EXPECTED_TEXT;
   
   // Get current tmux pane content
   const tmuxCfg: tmux.TmuxHelper = {
-    session: "e2e",
+    session: `e2e-${run.id}`,
     sshKey: SSH_KEY,
-    sshPort: SSH_PORT,
+    sshPort: run.sshPort,
     sshUser: SSH_USER,
   };
   const currentPane = tmux.capturePane(tmuxCfg);
@@ -360,19 +358,19 @@ function getTestCaseName(): string {
  * - Common screenshots (01-04, 06): e2e/output/common/
  * - Transcription screenshot (05): e2e/output/test-cases/{testCase}/
  */
-function getScreenshotPath(label: string, testCase?: string): string {
+function getScreenshotPath(label: string, testCase?: string, outputDir = OUTPUT_DIR): string {
   if (label === "05-transcription-received" && testCase) {
-    return join(OUTPUT_DIR, "test-cases", testCase, `screenshot-${label}.png`);
+    return join(outputDir, "test-cases", testCase, `screenshot-${label}.png`);
   }
-  return join(OUTPUT_DIR, "common", `screenshot-${label}.png`);
+  return join(outputDir, "common", `screenshot-${label}.png`);
 }
 
 /**
  * Capture screenshot via QEMU monitor and save as PNG.
  */
-async function captureScreenshot(label: string): Promise<string> {
+async function captureScreenshot(label: string, run: RunContext): Promise<string> {
   const testCase = getTestCaseName();
-  const pngPath = getScreenshotPath(label, testCase);
+  const pngPath = getScreenshotPath(label, testCase, run.outputDir);
   const ppmPath = pngPath.replace(/\.png$/, ".ppm");
   
   // Ensure directory exists
@@ -382,7 +380,7 @@ async function captureScreenshot(label: string): Promise<string> {
   try {
     // Use QEMU monitor to capture screenshot
     execSync(
-      `echo "screendump ${ppmPath}" | nc -U ${SOCKET_PATH} -w 2`,
+      `echo "screendump ${ppmPath}" | nc -U ${run.socketPath} -w 2`,
       { encoding: "utf-8", timeout: 5000 }
     );
     // Wait for file to be written
@@ -407,12 +405,13 @@ async function captureScreenshot(label: string): Promise<string> {
  */
 async function verifyWithScreenshot(
   vm: VmManager,
-  expected: string
+  expected: string,
+  run: RunContext
 ): Promise<{ passed: boolean; message: string; screenshot: string }> {
   const testCase = getTestCaseName();
   
   // Capture screenshot
-  const screenshot = await captureScreenshot("05-transcription-received");
+  const screenshot = await captureScreenshot("05-transcription-received", run);
   
   // Verify via file (primary method)
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
@@ -427,10 +426,10 @@ async function verifyWithScreenshot(
   }
   
   // Check visual regression (if reference exists)
-  const referencePath = getScreenshotPath("05-transcription-received", testCase);
+  const referencePath = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
   if (existsSync(referencePath) && screenshot) {
     try {
-      const diffPath = join(OUTPUT_DIR, "test-cases", testCase, "diff.png");
+      const diffPath = join(run.outputDir, "test-cases", testCase, "diff.png");
       const diffDir = require("node:path").dirname(diffPath);
       require("node:fs").mkdirSync(diffDir, { recursive: true });
       
@@ -458,7 +457,7 @@ async function verifyWithScreenshot(
  * Update reference images from captured screenshots.
  * Called when --update flag is used.
  */
-function updateReferenceImages(): void {
+function updateReferenceImages(run: RunContext): void {
   const testCase = getTestCaseName();
   console.log(`\nUpdating reference images for test case: ${testCase}`);
   
@@ -471,7 +470,7 @@ function updateReferenceImages(): void {
   // Copy common screenshots
   const commonLabels = ["01-desktop", "02-tmux-started", "03-pre-recording", "04-recording-started", "06-recording-stopped"];
   for (const label of commonLabels) {
-    const src = getScreenshotPath(label);
+    const src = getScreenshotPath(label, undefined, run.outputDir);
     const dst = join(commonRefDir, `screenshot-${label}.png`);
     if (existsSync(src)) {
       execSync(`cp "${src}" "${dst}"`, { encoding: "utf-8" });
@@ -480,7 +479,7 @@ function updateReferenceImages(): void {
   }
   
   // Copy test-case-specific screenshot
-  const transcriptionSrc = getScreenshotPath("05-transcription-received", testCase);
+  const transcriptionSrc = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
   const transcriptionDst = join(testCaseRefDir, "screenshot-05-transcription-received.png");
   if (existsSync(transcriptionSrc)) {
     execSync(`cp "${transcriptionSrc}" "${transcriptionDst}"`, { encoding: "utf-8" });
@@ -489,18 +488,32 @@ function updateReferenceImages(): void {
 }
 
 async function main(): Promise<void> {
-  const vmCfg: VmConfig = {
-    socketPath: SOCKET_PATH,
+  const run = new RunContext({
     baseImage: BASE_IMAGE,
-    overlayImage: OVERLAY_IMAGE,
-    vmDir: VM_DIR,
     sshKey: SSH_KEY,
-    sshPort: SSH_PORT,
     sshUser: SSH_USER,
     projectRoot: PROJECT_ROOT,
     pythonSrc: PYTHON_SRC,
     fixtureDir: join(import.meta.dir, "fixtures"),
-    outputDir: OUTPUT_DIR,
+    extensionUuid: CONFIG.extension.uuid,
+    testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
+    recordMode: RECORD_MODE,
+    updateMode: UPDATE_MODE,
+  });
+  console.log(`Run ID: ${run.id}`);
+  console.log(`Run directory: ${run.runDir}`);
+  console.log(`SSH port: ${run.sshPort}`);
+  console.log(`Spice port: ${run.spicePort}`);
+
+  const vmCfg: VmConfig = {
+    run,
+    baseImage: BASE_IMAGE,
+    vmDir: VM_DIR,
+    sshKey: SSH_KEY,
+    sshUser: SSH_USER,
+    projectRoot: PROJECT_ROOT,
+    pythonSrc: PYTHON_SRC,
+    fixtureDir: join(import.meta.dir, "fixtures"),
     extensionUuid: CONFIG.extension.uuid,
     recordMode: RECORD_MODE,
     updateMode: UPDATE_MODE,
@@ -530,16 +543,16 @@ async function main(): Promise<void> {
       ]);
       
       // First attempt
-      await runTestFlow(vm);
-      let result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
+      await runTestFlow(vm, run);
+      let result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
       
       if (!result.passed) {
         console.log("\n--- Test failed, restoring snapshot and retrying ---");
         await vm.resetToCleanState();
         
         // Retry attempt
-        await runTestFlow(vm);
-        result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
+        await runTestFlow(vm, run);
+        result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
       }
       
       if (result.passed) {
@@ -555,10 +568,10 @@ async function main(): Promise<void> {
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
         { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
-        { name: "test-flow", fn: () => runTestFlow(vm) },
+        { name: "test-flow", fn: () => runTestFlow(vm, run) },
       ]);
       
-      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT);
+      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
       if (result.passed) {
         console.log(`  PASS: ${result.message}`);
       } else {
@@ -569,7 +582,7 @@ async function main(): Promise<void> {
 
     // Update reference images if in update mode
     if (UPDATE_MODE) {
-      updateReferenceImages();
+      updateReferenceImages(run);
     }
   } catch (err) {
     console.error("\nFATAL:", err);
@@ -577,10 +590,12 @@ async function main(): Promise<void> {
   } finally {
     if (SHUTDOWN) {
       await vm.shutdown();
+      run.cleanup();
       console.log("\nVM shut down.");
     } else {
       console.log("\nVM kept running (pass --shutdown to stop)");
-      console.log(`SSH: ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost`);
+      console.log(`SSH: ssh -i ${SSH_KEY} -p ${run.sshPort} ${SSH_USER}@localhost`);
+      console.log(`Spice: spice://localhost:${run.spicePort}`);
     }
   }
 

@@ -1,13 +1,13 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { QemuMonitor } from "./qemu.js";
+import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import {
   DeployConfig,
   waitForGdmLogin,
-  extractDbusAddress,
   deployExtension,
   deployPythonSource,
   deployTestAudio,
@@ -15,17 +15,14 @@ import {
 } from "./deploy-steps.js";
 
 export interface VmConfig {
-  socketPath: string;
+  run: RunContext;
   baseImage: string;
-  overlayImage: string;
   vmDir: string;
   sshKey: string;
-  sshPort: number;
   sshUser: string;
   projectRoot: string;
   pythonSrc: string;
   fixtureDir: string;
-  outputDir: string;
   extensionUuid: string;
   recordMode: boolean;
   updateMode: boolean;
@@ -43,10 +40,10 @@ export class VmManager {
   private deployCfg: DeployConfig;
 
   constructor(private config: VmConfig) {
-    this.qemu = new QemuMonitor(config.socketPath);
+    this.qemu = new QemuMonitor(config.run.socketPath);
     this.deployer = new Deployer({
       host: "localhost",
-      port: config.sshPort,
+      port: config.run.sshPort,
       username: config.sshUser,
       privateKey: readFileSync(config.sshKey),
     });
@@ -56,13 +53,13 @@ export class VmManager {
       pythonSrc: config.pythonSrc,
       fixtureDir: config.fixtureDir,
       sshKey: config.sshKey,
-      sshPort: config.sshPort,
+      sshPort: config.run.sshPort,
       sshUser: config.sshUser,
       extensionUuid: config.extensionUuid,
       testAudioFile: config.testAudioFile,
     };
     if (config.recordMode) {
-      mkdirSync(join(config.outputDir, "recording"), { recursive: true });
+      mkdirSync(join(config.run.outputDir, "recording"), { recursive: true });
     }
   }
 
@@ -70,7 +67,7 @@ export class VmManager {
 
   async captureFrame(label: string): Promise<void> {
     if (!this.config.recordMode) return;
-    const dir = join(this.config.outputDir, "recording");
+    const dir = join(this.config.run.outputDir, "recording");
     const path = join(dir, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.ppm`);
     try {
       await this.qemu.screendump(path);
@@ -81,7 +78,8 @@ export class VmManager {
   }
 
   async boot(): Promise<void> {
-    const { socketPath, baseImage, overlayImage, vmDir, sshPort, updateMode } = this.config;
+    const { baseImage, vmDir, updateMode } = this.config;
+    const { socketPath, overlayImage, sshPort } = this.config.run;
 
     if (await this.isVmRunning()) {
       console.log("VM already running, shutting down for clean restart...");
@@ -124,9 +122,9 @@ export class VmManager {
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
       "-display", "none",
-      "-spice", `port=5930,disable-ticketing=on`,
+      "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
       "-monitor", `unix:${socketPath},server,nowait`,
-      "-serial", "file:serial.log",
+      "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-no-reboot",
@@ -145,6 +143,9 @@ export class VmManager {
       if (existsSync(socketPath)) break;
       await Bun.sleep(500);
     }
+    if (!existsSync(socketPath)) {
+      throw new Error("QEMU monitor socket never appeared — QEMU may have failed to start");
+    }
 
     await this.qemu.connect();
   }
@@ -152,7 +153,7 @@ export class VmManager {
   async waitForSsh(): Promise<void> {
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
-      sshPort: this.config.sshPort,
+      sshPort: this.config.run.sshPort,
       sshUser: this.config.sshUser,
     });
   }
@@ -161,20 +162,16 @@ export class VmManager {
     const shellExec = this.shell.exec.bind(this.shell);
 
     await waitForGdmLogin(shellExec);
-    await extractDbusAddress(this.shell);
+    // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     await deployExtension(this.shell, this.deployCfg, pollUntil);
 
-    // Parallelize independent setup steps after GDM restart
+    // Deploy Python source and test audio (sequential, sync operations)
     deployPythonSource(this.deployCfg);
     deployTestAudio(this.deployCfg);
 
     await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput);
 
-    if (this.config.updateMode) {
-      console.log("Saving VM snapshot for hot boot...");
-      await this.qemu.savevm("ready");
-      await Bun.sleep(2000);
-    }
+    // Note: snapshot save/restore is handled by saveCleanSnapshot/resetToCleanState
   }
 
   // --- Snapshot management ---
@@ -220,7 +217,7 @@ export class VmManager {
         await this.shell.close();
         await this.shell.openSshSession({
           sshKey: this.config.sshKey,
-          sshPort: this.config.sshPort,
+          sshPort: this.config.run.sshPort,
           sshUser: this.config.sshUser,
         });
         
@@ -302,9 +299,9 @@ export class VmManager {
 
   private async isVmRunning(): Promise<boolean> {
     const net = await import("node:net");
-    if (!existsSync(this.config.socketPath)) return false;
+    if (!existsSync(this.config.run.socketPath)) return false;
     try {
-      const sock = net.createConnection(this.config.socketPath);
+      const sock = net.createConnection(this.config.run.socketPath);
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => { sock.destroy(); reject(); }, 2000);
         sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(); });
