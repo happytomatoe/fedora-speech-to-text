@@ -89,6 +89,7 @@ install_dotool() {
 
   local BIN_DIR="$HOME/.local/bin"
   mkdir -p "$BIN_DIR"
+  export PATH="$BIN_DIR:$PATH"
 
   # Try Toolbox first (recommended for rpm-ostree/Silverblue)
   if command_exists toolbox; then
@@ -140,7 +141,7 @@ install_dotool() {
     local TMPDIR
     TMPDIR=$(mktemp -d)
     if git clone https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
-      cd "$TMPDIR/dotool" && make 2>/dev/null; then
+      (cd "$TMPDIR/dotool" && make 2>/dev/null); then
       cp dotool dotoolc dotoold "$BIN_DIR/"
       rm -rf "$TMPDIR"
       echo "  dotool built successfully from source."
