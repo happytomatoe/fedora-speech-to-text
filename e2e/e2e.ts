@@ -1,10 +1,12 @@
 import { QemuMonitor } from "./lib/qemu.js";
 import { Deployer } from "./lib/deploy.js";
 import { ShellHelper } from "./lib/shell.js";
-import { readFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import net from "node:net";
 import { execSync } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
+
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
 mkdirSync(LOG_DIR, { recursive: true });
@@ -54,7 +56,6 @@ const TEST_CASES_FILE = join(import.meta.dir, "fixtures/test-cases.json");
 interface TestCase {
   file: string;
   expected: string;
-  alternatives?: string[]; // Additional acceptable transcriptions
 }
 
 function pickRandomTestCase(): TestCase {
@@ -612,140 +613,25 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   timing("write-result", t);
 }
 
-/** Levenshtein distance for fuzzy matching */
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
-  }
-  return dp[m][n];
-}
-
-/** Calculate similarity ratio (0.0 to 1.0) */
-function similarity(a: string, b: string): number {
-  const maxLen = Math.max(a.length, b.length);
-  if (maxLen === 0) return 1.0;
-  const dist = levenshtein(a, b);
-  return 1.0 - dist / maxLen;
-}
-
-/**
- * Normalize text for comparison:
- * - Lowercase
- * - Strip all punctuation (keep only alphanumeric and spaces)
- * - Collapse whitespace
- * - Normalize number words to digits (seventy five -> 75)
- */
-function normalizeText(s: string): string {
-  // Number word to digit mapping
-  const numberWords: Record<string, string> = {
-    zero: "0", one: "1", two: "2", three: "3", four: "4",
-    five: "5", six: "6", seven: "7", eight: "8", nine: "9",
-    ten: "10", eleven: "11", twelve: "12", thirteen: "13", fourteen: "14",
-    fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19",
-    twenty: "20", thirty: "30", forty: "40", fifty: "50",
-    sixty: "60", seventy: "70", eighty: "80", ninety: "90",
-  };
-
-  let result = s.trim().toLowerCase();
-  // Strip all punctuation except alphanumeric and spaces
-  result = result.replace(/[^a-z0-9\s]/g, " ");
-  // Collapse whitespace
-  result = result.replace(/\s+/g, " ").trim();
-
-  // Normalize number words ("seventy five" -> "75", "three pm" -> "3 pm")
-  // Handle compound numbers like "seventy five"
-  result = result.replace(
-    /(seventy|eighty|ninety|forty|fifty|sixty|twenty|thirty)\s+(one|two|three|four|five|six|seven|eight|nine)/g,
-    (_, tens, ones) => {
-      const tensVal = numberWords[tens] ?? "0";
-      const onesVal = numberWords[ones] ?? "0";
-      return String(parseInt(tensVal) + parseInt(onesVal));
-    }
-  );
-  // Replace remaining number words
-  for (const [word, digit] of Object.entries(numberWords)) {
-    result = result.replace(new RegExp(`\\b${word}\\b`, "g"), digit);
-  }
-  // Normalize time formats: "3 pm" -> "3pm", "3 am" -> "3am"
-  result = result.replace(/(\d+)\s+(am|pm)/g, "$1$2");
-
-  return result;
-}
-
-/** Check if actual matches expected or any alternative */
-function checkMatch(actual: string, expected: string, alternatives?: string[]): { passed: boolean; message: string } {
-  const actualNorm = normalizeText(actual);
-  const expectedNorm = normalizeText(expected);
-
-  console.log(`  Normalized expected: ${expectedNorm}`);
-  console.log(`  Normalized actual:   ${actualNorm}`);
-
-  // Exact match after normalization
-  if (actualNorm === expectedNorm) {
-    return { passed: true, message: "Text matches expected output (exact)" };
-  }
-
-  // Check alternatives
-  if (alternatives) {
-    for (const alt of alternatives) {
-      const altNorm = normalizeText(alt);
-      if (actualNorm === altNorm) {
-        return { passed: true, message: `Text matches alternative: '${alt}'` };
-      }
-    }
-  }
-
-  // Fuzzy match: check if similarity >= 80%
-  const simExpected = similarity(actualNorm, expectedNorm);
-  console.log(`  Similarity to expected: ${(simExpected * 100).toFixed(1)}%`);
-
-  if (simExpected >= 0.8) {
-    return { passed: true, message: `Text closely matches expected (${(simExpected * 100).toFixed(1)}% similar)` };
-  }
-
-  // Check similarity to alternatives
-  if (alternatives) {
-    for (const alt of alternatives) {
-      const altNorm = normalizeText(alt);
-      const simAlt = similarity(actualNorm, altNorm);
-      console.log(`  Similarity to alternative '${alt}': ${(simAlt * 100).toFixed(1)}%`);
-      if (simAlt >= 0.8) {
-        return { passed: true, message: `Text closely matches alternative (${(simAlt * 100).toFixed(1)}% similar)` };
-      }
-    }
-  }
-
-  return {
-    passed: false,
-    message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}' (${(simExpected * 100).toFixed(1)}% similar)`,
-  };
-}
-
 async function verifyResult(vm: VmManager): Promise<{ passed: boolean; message: string }> {
   console.log("\n=== Verification ===");
 
   const expected = EXPECTED_TEXT;
-  const alternatives = CURRENT_TEST.alternatives;
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
 
   console.log(`  Expected: ${expected}`);
-  if (alternatives) {
-    console.log(`  Alternatives: ${alternatives.join(" | ")}`);
-  }
   console.log(`  Actual:   ${actual.trim()}`);
 
-  return checkMatch(actual, expected, alternatives);
+  // Normalize: lowercase, strip trailing period, collapse whitespace
+  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
+  const actualNorm = normalize(actual);
+  const expectedNorm = normalize(expected);
+  console.log(`  Normalized expected: ${expectedNorm}`);
+  console.log(`  Normalized actual:   ${actualNorm}`);
+  if (actualNorm === expectedNorm) {
+    return { passed: true, message: "Text matches expected output" };
+  }
+  return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'` };
 }
 
 async function main(): Promise<void> {

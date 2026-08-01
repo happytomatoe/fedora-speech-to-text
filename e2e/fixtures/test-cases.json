@@ -2,12 +2,7 @@
   "test-cases": [
     {
       "file": "test-01-weather.wav",
-      "expected": "the weather today is sunny with a high of seventy five degrees",
-      "alternatives": [
-        "the weather to nadien sunny with a high on 75 degrees",
-        "the weather today is sunny with a high of 75 degrees",
-        "the weather today is sunny with a high on seventy five degrees"
-      ]
+      "expected": "the weather today is sunny with a high of seventy five degrees"
     },
     {
       "file": "test-02-reminder.wav",
@@ -15,26 +10,15 @@
     },
     {
       "file": "test-03-hello.wav",
-      "expected": "good morning how are you today",
-      "alternatives": [
-        "good morning how are you doing today"
-      ]
+      "expected": "good morning, how are you today?"
     },
     {
       "file": "test-04-calendar.wav",
-      "expected": "our meeting is scheduled for 3pm on monday",
-      "alternatives": [
-        "our meeting is scheduled for 3 pm on monday",
-        "our meeting is scheduled for three pm on monday"
-      ]
+      "expected": "our meeting is scheduled for 3pm on monday"
     },
     {
       "file": "test-05-note.wav",
-      "expected": "take a note about the project headline is next friday",
-      "alternatives": [
-        "take a note that the project deadline is next friday",
-        "take a note about the project the headline is next friday"
-      ]
+      "expected": "take a note about the project. headline is next friday"
     }
   ]
 }
