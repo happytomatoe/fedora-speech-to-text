@@ -1,6 +1,7 @@
 import { QemuMonitor } from "./lib/qemu.js";
 import { Deployer } from "./lib/deploy.js";
 import { ShellHelper } from "./lib/shell.js";
+import { ensureParakeet, PORT as PARAKEET_PORT, ENDPOINT as PARAKEET_ENDPOINT } from "./lib/parakeet.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -60,10 +61,6 @@ const CONFIG = {
   ssh: {
     port: 2222,
     user: "testuser",
-  },
-  parakeet: {
-    port: 5092,
-    endpoint: "http://10.0.2.2:5092",
   },
   extension: {
     uuid: "voice-to-text@happytomatoe.com",
@@ -126,40 +123,6 @@ const CURRENT_TEST = pickRandomTestCase();
 const TEST_AUDIO = join(import.meta.dir, "fixtures", CURRENT_TEST.file);
 const EXPECTED_TEXT = CURRENT_TEST.expected;
 const RECORDING_DIR = join(import.meta.dir, "output", "recording");
-const PARAKEET_PORT = 5092;
-const PARAKEET_SCRIPT = join(PROJECT_ROOT, "parakeet-v2.sh");
-
-/** Check if Parakeet server is running on the host. */
-async function ensureParakeet(): Promise<void> {
-  // Check if port 5092 is listening
-  try {
-    const sock = net.createConnection(PARAKEET_PORT, "localhost");
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { sock.destroy(); reject(); }, 2000);
-      sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(); });
-      sock.on("error", () => { clearTimeout(timer); reject(); });
-    });
-    console.log("  Parakeet already running on port " + PARAKEET_PORT);
-    return;
-  } catch {
-    // Not running
-  }
-
-  // Try to start Parakeet
-  if (existsSync(PARAKEET_SCRIPT)) {
-    console.log("  Starting Parakeet server...");
-    try {
-      execSync(`bash ${PARAKEET_SCRIPT}`, { stdio: "inherit", timeout: 120_000 });
-      console.log("  Parakeet started");
-    } catch (err) {
-      console.log("  WARNING: Failed to start Parakeet:", err);
-      console.log("  Transcription will use cloud provider (Deepgram) if available");
-    }
-  } else {
-    console.log("  WARNING: Parakeet script not found at " + PARAKEET_SCRIPT);
-    console.log("  Transcription will use cloud provider (Deepgram) if available");
-  }
-}
 
 /** Check if QEMU monitor socket is responsive. */
 async function isVmRunning(): Promise<boolean> {
@@ -338,6 +301,7 @@ class VmManager {
     rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${extUuid}`);
     await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
     await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
+    await this.shell.exec(`dconf write /org/gnome/shell/disable-user-extensions false`);
     await this.shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
 #!/bin/bash
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
@@ -408,7 +372,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   private async startVoiceService(): Promise<void> {
     console.log("Installing Python dependencies...");
     await this.shell.exec(
-      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets 2>/dev/null || true"
+      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>/dev/null || true"
     );
 
     // Kill existing voice service
@@ -424,8 +388,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     );
     await Bun.sleep(500);
 
-    // Create config and start service
-    sshExec(`mkdir -p ~/.config/voice-to-text && printf 'transcription:\n  provider: parakeet\nparakeet:\n  http_endpoint: http://10.0.2.2:5092\n' > ~/.config/voice-to-text/config.yaml`);
+    // Copy config and start service
+    sshExec("mkdir -p ~/.config/voice-to-text");
+    scpToVm(join(import.meta.dir, "fixtures", "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml");
     await this.shell.exec(
       `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
     );

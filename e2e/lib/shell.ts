@@ -10,6 +10,8 @@ export interface ShellSession {
 
 export class ShellHelper {
   private session: ShellSession | null = null;
+  private isRecording = false;
+  private session: ShellSession | null = null;
 
   async openSshSession(opts: {
     sshKey: string;
@@ -70,7 +72,19 @@ export class ShellHelper {
   }
 
   async sendHotkey(): Promise<void> {
-    await this.dotoolCommand("key super+w");
+    // Use D-Bus instead of dotool - dotool key presses don't propagate through Wayland
+    const dbusAddr = await this.exec(
+      `cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+    );
+    const dbusBase = `DBUS_SESSION_BUS_ADDRESS=${dbusAddr.trim()} dbus-send --session --type=method_call --dest=com.happytomatoe.VoiceToText /com/happytomatoe/VoiceToText`;
+
+    if (this.isRecording) {
+      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);
+      this.isRecording = false;
+    } else {
+      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording string:'{"provider":"parakeet","language":"en","output_method":"type"}'`);
+      this.isRecording = true;
+    }
   }
 
   async waitForRecordingStart(timeoutMs = 10000): Promise<void> {
