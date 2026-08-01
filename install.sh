@@ -334,7 +334,14 @@ export PATH="$HOME/.local/bin:\$PATH"
 if id -nG "\$USER" | grep -qw input; then
   exec dotoold "\$@"
 else
-  exec sg input -c "dotoold \$@"
+  # sg input -c requires a terminal; warn if running headless (e.g., via systemd)
+  if [ -t 1 ]; then
+    exec sg input -c "dotoold \$@"
+  else
+    echo "WARNING: dotoold needs 'input' group access but no terminal is available."
+    echo "  Run: sudo usermod -aG input \$USER && logout"
+    exec dotoold "\$@"
+  fi
 fi
 WRAPPER_EOF
 chmod +x "$WRAPPER_PATH"
