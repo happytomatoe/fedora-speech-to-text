@@ -28,8 +28,8 @@ End-to-end testing of the voice-to-text GNOME extension runs in a QEMU VM with S
 |------|---------|
 | Start VM | `just qemu-e2e-test-host` (full E2E) or manual QEMU |
 | Stop VM | `kill $(pgrep qemu-system-x86)` |
-| Screenshot (host) | `echo 'screendump /tmp/s.ppm' \| socat - UNIX-CONNECT:tests/e2e/qemu-images/qemu-monitor.sock` |
-| SSH into VM | `ssh -i tests/e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost` |
+| Screenshot (host) | `echo 'screendump /tmp/s.ppm' \| socat - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock` |
+| SSH into VM | `ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost` |
 | SPICE viewer | `remote-viewer spice://localhost:5930` |
 | View service log | `ssh ... "tail -20 /tmp/voice-service.log"` |
 | Persistent SSH | `shell-use --session vm open` + `submit "ssh ..."` |
@@ -63,7 +63,7 @@ qemu-system-x86_64 \
 ```bash
 kill $(pgrep qemu-system-x86)
 # Or graceful shutdown via monitor:
-echo 'system_powerdown' | socat - UNIX-CONNECT:tests/e2e/qemu-images/qemu-monitor.sock
+echo 'system_powerdown' | socat - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock
 ```
 
 ### Rebuild base image
@@ -80,7 +80,7 @@ just qemu-e2e-setup-host
 
 ```bash
 # Capture screenshot
-echo 'screendump /tmp/screenshot.ppm' | socat -t 5 - UNIX-CONNECT:tests/e2e/qemu-images/qemu-monitor.sock
+echo 'screendump /tmp/screenshot.ppm' | socat -t 5 - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock
 
 # Convert to PNG
 convert /tmp/screenshot.ppm /tmp/screenshot.png
@@ -100,20 +100,20 @@ convert /tmp/screenshot.ppm /tmp/screenshot.png
 
 ```bash
 # 1. Take screenshot
-echo 'screendump /tmp/s.ppm' | socat -t 5 - UNIX-CONNECT:tests/e2e/qemu-images/qemu-monitor.sock
+echo 'screendump /tmp/s.ppm' | socat -t 5 - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock
 convert /tmp/s.ppm /tmp/s.png
 
 # 2. View with read tool
 # read /tmp/s.png
 
 # 3. Compare with reference
-compare /tmp/s.png tests/e2e/expected-qemu/snapshot-desktop-indicator.png /tmp/diff.png
+compare /tmp/s.png e2e/expected-qemu/snapshot-desktop-indicator.png /tmp/diff.png
 ```
 
 ## SSH Access
 
 ```bash
-SSH_KEY="tests/e2e/qemu-images/id_ed25519"
+SSH_KEY="e2e/qemu-images/id_ed25519"
 SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
 
 $SSH "command here"
@@ -123,7 +123,7 @@ Or use shell-use for persistent session:
 
 ```bash
 shell-use --session vm open --shell bash
-shell-use --session vm submit "ssh -i tests/e2e/qemu-images/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
+shell-use --session vm submit "ssh -i e2e/qemu-images/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
 shell-use --session vm wait command --timeout 10000
 ```
 
@@ -132,7 +132,7 @@ shell-use --session vm wait command --timeout 10000
 ### Deploy extension (from host)
 
 ```bash
-SSH_KEY="tests/e2e/qemu-images/id_ed25519"
+SSH_KEY="e2e/qemu-images/id_ed25519"
 EXT_SRC="/var/home/l/git/voice-to-text/gnome-ext"
 REMOTE="testuser@localhost"
 
@@ -148,7 +148,7 @@ scp -r -i $SSH_KEY -P 2222 ${EXT_SRC}/dist/*.js ${EXT_SRC}/metadata.json ${EXT_S
 ### Deploy Python service (from host)
 
 ```bash
-SSH_KEY="tests/e2e/qemu-images/id_ed25519"
+SSH_KEY="e2e/qemu-images/id_ed25519"
 SRC="/var/home/l/git/voice-to-text-test-pod/src/voice_to_text"
 
 ssh -i $SSH_KEY -p 2222 testuser@localhost "mkdir -p ~/voice_to_text/src"
@@ -236,7 +236,7 @@ The test verifies: D-Bus call → recording → transcription → text typed int
 1. **Connect via shell-use** (persistent SSH):
    ```bash
    shell-use --session vm open --cols 120 --rows 40
-   shell-use --session vm submit "ssh -i tests/e2e/qemu-images/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
+   shell-use --session vm submit "ssh -i e2e/qemu-images/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
    shell-use --session vm wait text "testuser@e2e-vm" --timeout 10000
    ```
 
@@ -444,22 +444,22 @@ Instead of screenshot comparison, verify:
 
 | File | Location | Purpose |
 |------|----------|---------|
-| Base VM image | `tests/e2e/qemu-images/base.qcow2` | Fedora 44 with all deps |
-| Overlay | `tests/e2e/qemu-images/overlay.qcow2` | Fresh each test run |
-| SSH key | `tests/e2e/qemu-images/id_ed25519` | VM authentication |
-| QEMU monitor | `tests/e2e/qemu-images/qemu-monitor.sock` | Screendump, power control |
+| Base VM image | `e2e/qemu-images/base.qcow2` | Fedora 44 with all deps |
+| Overlay | `e2e/qemu-images/overlay.qcow2` | Fresh each test run |
+| SSH key | `e2e/qemu-images/id_ed25519` | VM authentication |
+| QEMU monitor | `e2e/qemu-images/qemu-monitor.sock` | Screendump, power control |
 | Extension source | `/var/home/l/git/voice-to-text/gnome-ext/` | JS extension |
 | Python service | `/var/home/l/git/voice-to-text-test-pod/src/voice_to_text/` | D-Bus backend |
-| Test audio | `tests/e2e/fixtures/test-audio.wav` | Debug mode transcription |
-| Reference images | `tests/e2e/expected-qemu/` | Visual regression baseline |
-| Test script | `tests/e2e/scripts/qemu-snapshot.sh` | Automated test runner |
-| VM setup | `tests/e2e/scripts/qemu-setup.sh` | Build base image |
+| Test audio | `e2e/fixtures/test-audio.wav` | Debug mode transcription |
+| Reference images | `e2e/expected-qemu/` | Visual regression baseline |
+| Test script | `e2e/scripts/qemu-snapshot.sh` | Automated test runner |
+| VM setup | `e2e/scripts/qemu-setup.sh` | Build base image |
 
 ## Key Variables
 
 | Variable | Value | Notes |
 |----------|-------|-------|
-| `SSH_KEY` | `tests/e2e/qemu-images/id_ed25519` | SSH private key |
+| `SSH_KEY` | `e2e/qemu-images/id_ed25519` | SSH private key |
 | `SSH_PORT` | `2222` | Host port → VM:22 |
 | `SPICE_PORT` | `5930` | SPICE display |
 | `SSH_USER` | `testuser` | VM user |

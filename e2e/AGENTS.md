@@ -23,7 +23,7 @@ E2E tests verify the GNOME extension's visual appearance using screenshot compar
 
 1. Debug mode is enabled via `VOICE_TO_TEXT_DEBUG_FILE` environment variable
 2. When recording starts, debug mode simulates audio levels for 3 seconds (visual feedback)
-3. Debug mode transcribes the pre-recorded WAV file (`tests/e2e/fixtures/test-audio.wav`) using Deepgram API
+3. Debug mode transcribes the pre-recorded WAV file (`e2e/fixtures/test-audio.wav`) using Deepgram API
 4. The transcription result is typed into a terminal window
 5. Screenshots capture each state for visual regression testing
 ## How Screenshots Work
@@ -39,10 +39,10 @@ E2E tests verify the GNOME extension's visual appearance using screenshot compar
 
 ```bash
 # Update reference screenshots
-./tests/e2e/scripts/snapshot.sh --update
+./e2e/scripts/snapshot.sh --update
 
 # Run tests against references
-./tests/e2e/scripts/snapshot.sh
+./e2e/scripts/snapshot.sh
 
 # Requires: DEEPGRAM_API_KEY env var for transcription
 export DEEPGRAM_API_KEY=your_key_here

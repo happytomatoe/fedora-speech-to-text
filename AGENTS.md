@@ -50,14 +50,14 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 
 ### E2E / Snapshot tests
 
-See `tests/e2e/AGENTS.md` for detailed instructions.
+See `e2e/AGENTS.md` for detailed instructions.
 
 E2E tests run in a containerized GNOME Shell (Xvfb + Podman) and capture screenshots for visual regression:
 
-- `tests/e2e/snapshot.sh` — main script. Captures screenshots of desktop, preferences, recording state (with audio level), and transcription result.
-- `tests/e2e/run-test.sh` — simpler visual regression runner (indicator + prefs).
-- `tests/e2e/generate-references.sh` — generates baseline reference images.
-- `tests/e2e/record-test.sh` — records a video of the full e2e flow.
+- `e2e/scripts/snapshot.sh` — main script. Captures screenshots of desktop, preferences, recording state (with audio level), and transcription result.
+- `e2e/scripts/run-test.sh` — simpler visual regression runner (indicator + prefs).
+- `e2e/scripts/generate-references.sh` — generates baseline reference images.
+- `e2e/scripts/record-test.sh` — records a video of the full e2e flow.
 
 **How screenshots work:**
 1. Container runs GNOME Shell on Xvfb (`/opt/Xvfb_screen0` is the framebuffer).
@@ -67,8 +67,8 @@ E2E tests run in a containerized GNOME Shell (Xvfb + Podman) and capture screens
 5. Comparison: `compare -metric MSE reference.png actual.png diff.png` — MSE < 100 = pass.
 
 **Key commands:**
-- Update references: `./tests/e2e/snapshot.sh --update`
-- Run tests: `./tests/e2e/snapshot.sh`
+- Update references: `./e2e/scripts/snapshot.sh --update`
+- Run tests: `./e2e/scripts/snapshot.sh`
 - Requires: `DEEPGRAM_API_KEY` env var for transcription tests.
 
 ## Conventions
@@ -120,7 +120,7 @@ This project uses [python-semantic-release](https://python-semantic-release.read
 - `shell-use` provides persistent PTY sessions, screen inspection, keystroke injection, and assertion support.
 - For the E2E VM:
   ```sh
-  shell-use open --env SSH_KEY=tests/e2e/qemu-images/id_ed25519 --env SSH_PORT=2222
+  shell-use open --env SSH_KEY=e2e/qemu-images/id_ed25519 --env SSH_PORT=2222
   shell-use submit "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $SSH_PORT testuser@localhost '<command>'"
   shell-use wait text "<expected output>"
   ```
