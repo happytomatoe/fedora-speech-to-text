@@ -42,6 +42,17 @@ DEBUG_RECORDING_DURATION = 3
 async def handle_debug_recording(
     config: dict[str, Any],
     on_level: "Callable[[float], None] | None" = None,
+    _cancel_event: "asyncio.Event | None" = None,
+    """Handle debug mode recording with a test file.
+
+    Args:
+        config: Recording configuration from D-Bus
+        on_level: Optional callback to emit audio levels (0.0-1.0)
+        _cancel_event: Optional cancellation event to allow early exit
+
+    Returns:
+        Transcription text if successful, None otherwise
+    """
 ) -> str | None:
     """Handle debug mode recording with a test file.
 
@@ -85,6 +96,9 @@ async def handle_debug_recording(
         # Emit fake audio levels to show the indicator is working
         level = 0.0
         for i in range(DEBUG_RECORDING_DURATION * 10):  # 10 updates per second
+            if _cancel_event and _cancel_event.is_set():
+                logger.info("DEBUG MODE: Cancelled during simulation")
+                return None
             await asyncio.sleep(0.1)
             # Ramp up, hold, then ramp down
             progress = i / (DEBUG_RECORDING_DURATION * 10)
