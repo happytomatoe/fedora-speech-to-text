@@ -101,7 +101,7 @@ install_dotool() {
     if toolbox run -c "$TOOLBOX_NAME" sh -c "
       sudo dnf install -y gcc make libev-devel systemd-devel git
       rm -rf /tmp/dotool-build
-      git clone https://git.sr.ht/~geb/dotool /tmp/dotool-build
+      git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool-build
       cd /tmp/dotool-build && make
       cp dotool dotoolc dotoold \"$BIN_DIR/\"
     " 2>/dev/null; then
@@ -125,7 +125,7 @@ install_dotool() {
       -v "$BIN_DIR:/out:Z" \
       fedora:latest sh -c "
         dnf install -y gcc make libev-devel systemd-devel git
-        git clone https://git.sr.ht/~geb/dotool /tmp/dotool
+        git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool
         cd /tmp/dotool && make
         cp dotool dotoolc dotoold /out/
       " 2>/dev/null; then
@@ -140,7 +140,7 @@ install_dotool() {
   if command -v dnf &>/dev/null && sudo dnf install -y gcc make libev-devel systemd-devel git 2>/dev/null; then
     local TMPDIR
     TMPDIR=$(mktemp -d)
-    if git clone https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
+    if git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
       (cd "$TMPDIR/dotool" && make 2>/dev/null); then
       cp dotool dotoolc dotoold "$BIN_DIR/"
       rm -rf "$TMPDIR"
@@ -326,7 +326,11 @@ mkdir -p "$HOME/.local/bin"
 cat > "$WRAPPER_PATH" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper to ensure proper group membership for dotoold
-exec sg input -c "dotoold \$@"
+if id -nG "\$USER" | grep -qw input; then
+  exec dotoold "\$@"
+else
+  exec sg input -c "dotoold \$@"
+fi
 WRAPPER_EOF
 chmod +x "$WRAPPER_PATH"
 echo "dotoold-wrapper created at $WRAPPER_PATH"

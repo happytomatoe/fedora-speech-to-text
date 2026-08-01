@@ -119,6 +119,17 @@ async def handle_debug_recording(
         language = config.get("language", "en")
         text = await batch_provider.transcribe_file(debug_file, language)
 
+        # Apply post-processing (same as normal pipeline)
+        if text:
+            postprocess_cfg = config_mgr.config.get("postprocess", {})
+            if postprocess_cfg.get("enabled", True):
+                from voice_to_text.postprocess import postprocess
+
+                text = postprocess(
+                    text,
+                    lang=postprocess_cfg.get("language") or language,
+                )
+
         logger.info("DEBUG MODE: Transcription result: %s", text[:100] if text else "(empty)")
         return text
 

@@ -361,7 +361,7 @@ e2e-screenshot-test:
     fi
     
     echo "Starting container..."
-    POD=$(podman run --rm -td "$IMAGE")
+    POD=$(podman run --rm -td -p 5900:5900 "$IMAGE")
     trap "podman rm -f $POD >/dev/null 2>&1 || true" EXIT
     
     # Wait for user bus
@@ -676,7 +676,7 @@ qemu-e2e-setup-host:
     set -euo pipefail
     echo "Setting up QEMU E2E test VM on host..."
     REPO_ROOT="$(git rev-parse --show-toplevel)" \
-        /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-setup.sh
+        "$(git rev-parse --show-toplevel)/e2e/scripts/qemu-setup.sh"
     echo "Setup complete. Run 'just qemu-e2e-test-host' to test."
 
 # @category e2e-qemu
@@ -686,7 +686,7 @@ qemu-e2e-test-host:
     set -euo pipefail
     echo "Running QEMU E2E tests on host..."
     REPO_ROOT="$(git rev-parse --show-toplevel)" \
-        /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh
+        "$(git rev-parse --show-toplevel)/e2e/scripts/qemu-snapshot.sh"
 
 # @category e2e-qemu
 # Update E2E reference images directly on host
@@ -695,7 +695,7 @@ qemu-e2e-update-host:
     set -euo pipefail
     echo "Updating QEMU E2E reference images on host..."
     REPO_ROOT="$(git rev-parse --show-toplevel)" \
-        /var/home/l/git/voice-to-text-test-pod/e2e/scripts/qemu-snapshot.sh --update
+        "$(git rev-parse --show-toplevel)/e2e/scripts/qemu-snapshot.sh" --update
     echo "References saved to e2e/expected-qemu/"
 
 # @category e2e-qemu
