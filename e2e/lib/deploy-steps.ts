@@ -48,13 +48,7 @@ export async function waitForGdmLogin(
   await pollForCommandOutput(shellExec, "loginctl list-sessions", "seat0", 60000);
 }
 
-export async function extractDbusAddress(
-  shell: ShellHelper
-): Promise<void> {
-  await shell.exec(
-    `DBUS_ADDR=$(cat /proc/$(pgrep -f 'gnome-shell --mode=user' | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep DBUS_SESSION_BUS_ADDRESS | head -1 | cut -d= -f2-); if [ -n "$DBUS_ADDR" ]; then echo "$DBUS_ADDR" > /tmp/dbus-address; fi`
-  );
-}
+// extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
 
 export async function deployExtension(
   shell: ShellHelper,
@@ -112,12 +106,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
   // Restart dotoold
   console.log("Restarting dotoold...");
-  sshExec("export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
   await pollUntilFn(
     "dotool pipe",
     async () => {
-      const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe");
-      return output.length === 0;
+      const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
+      return output.includes("ready");
     },
     10000
   );
@@ -144,9 +138,12 @@ export async function startVoiceService(
   pollForCommandOutputFn: typeof pollForCommandOutput
 ): Promise<void> {
   console.log("Installing Python dependencies...");
-  await shell.exec(
-    "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>/dev/null || true"
+  const pipResult = await shell.exec(
+    "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
   );
+  if (pipResult.includes("ERROR") || pipResult.includes("Failed")) {
+    console.log("  WARNING: pip install issues:", pipResult.trim());
+  }
 
   // Kill existing voice service
   sshExec("killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);

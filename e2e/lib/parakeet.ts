@@ -1,16 +1,18 @@
-import net from "node:net";
+import http from "node:http";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 
 export const PORT = 5092;
 export const ENDPOINT = "http://10.0.2.2:5092";
 
-function checkPort(): Promise<boolean> {
+function checkHealth(): Promise<boolean> {
   return new Promise((resolve) => {
-    const s = net.createConnection(PORT, "localhost");
-    const t = setTimeout(() => { s.destroy(); resolve(false); }, 3000);
-    s.on("connect", () => { clearTimeout(t); s.destroy(); resolve(true); });
-    s.on("error", () => { clearTimeout(t); resolve(false); });
+    const req = http.get(`http://localhost:${PORT}/health`, (res) => {
+      resolve(res.statusCode === 200);
+      res.resume();
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(3000, () => { req.destroy(); resolve(false); });
   });
 }
 
@@ -20,7 +22,7 @@ export async function ensureParakeet(): Promise<void> {
   const containerName = "parakeet-v2";
 
   // Fast path: already listening
-  if (await checkPort()) {
+  if (await checkHealth()) {
     console.log("  Parakeet already running on port " + PORT);
     return;
   }
@@ -31,7 +33,7 @@ export async function ensureParakeet(): Promise<void> {
     if (state === "running") {
       console.log(`  Parakeet container running, waiting for port ${PORT}...`);
       for (let i = 0; i < 45; i++) {
-        if (await checkPort()) {
+        if (await checkHealth()) {
           console.log("  Parakeet ready on port " + PORT);
           return;
         }
@@ -57,7 +59,7 @@ export async function ensureParakeet(): Promise<void> {
       { stdio: "inherit", timeout: 60_000 }
     );
     for (let i = 0; i < 45; i++) {
-      if (await checkPort()) {
+      if (await checkHealth()) {
         console.log("  Parakeet ready on port " + PORT);
         return;
       }
@@ -66,6 +68,6 @@ export async function ensureParakeet(): Promise<void> {
     throw new Error("Parakeet started but not ready after 90s");
   } catch (err) {
     console.log("  WARNING: Failed to start Parakeet:", err);
-    throw new Error(`Failed to start Parakeet: ${err}`);
+    throw new Error(`Failed to start Parakeet: ${err instanceof Error ? err.message : err}`, { cause: err });
   }
 }

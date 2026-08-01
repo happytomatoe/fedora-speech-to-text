@@ -20,9 +20,9 @@ if [[ ! -f "$BASE_IMAGE" ]]; then
     exit 1
 fi
 
-# Check if guestfish is available
-if ! command -v guestfish &>/dev/null; then
-    echo "Error: guestfish not found. Install with:"
+# Check if virt-customize is available
+if ! command -v virt-customize &>/dev/null; then
+    echo "Error: virt-customize not found. Install with:"
     echo "  sudo dnf install -y libguestfs-tools"
     exit 1
 fi
@@ -44,7 +44,7 @@ echo "Using virt-customize to apply optimizations..."
 
 virt-customize -a "$BASE_IMAGE" \
     --run-command 'touch /etc/cloud/cloud-init.disabled' \
-    --run-command 'sed -i "s/^#*UseDNS .*/UseDNS no/" /etc/ssh/sshd_config 2>/dev/null || echo "UseDNS no" >> /etc/ssh/sshd_config' \
+    --run-command 'grep -q "^#*UseDNS" /etc/ssh/sshd_config && sed -i "s/^#*UseDNS .*/UseDNS no/" /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config' \
     --run-command 'rm -f /etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service' \
     --install tmux \
     --selinux-relabel 2>&1

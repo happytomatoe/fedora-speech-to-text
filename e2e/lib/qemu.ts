@@ -26,21 +26,34 @@ export class QemuMonitor extends EventEmitter {
   async connect(timeoutMs = 10000): Promise<void> {
     return new Promise((resolve, reject) => {
       const sock = net.createConnection(this.sockPath);
+      let settled = false;
 
       const timer = setTimeout(() => {
-        sock.destroy();
-        reject(new Error(`Connection timeout after ${timeoutMs}ms`));
+        if (!settled) {
+          settled = true;
+          sock.destroy();
+          reject(new Error(`Connection timeout after ${timeoutMs}ms`));
+        }
       }, timeoutMs);
 
       sock.on("connect", () => {
-        clearTimeout(timer);
+        if (settled) return;
         sock.removeListener("error", onError);
         this.sock = sock;
         // Keep a persistent error handler for post-connection errors
         this.sock.on("error", (err) => { if (this.listenerCount("error") > 0) this.emit("error", err); });
-        // Wait for the initial "(qemu) " prompt
+        // Handle socket close during connect (before prompt arrives)
+        sock.on("close", () => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            reject(new Error("Socket closed before QEMU prompt"));
+          }
+        });
+        // Wait for the initial "(qemu) " prompt — timer stays alive until prompt arrives
         this.waitingForPrompt = true;
         this.promptCallback = () => {
+          clearTimeout(timer);
           resolve();
         };
       });
@@ -48,9 +61,12 @@ export class QemuMonitor extends EventEmitter {
       sock.on("data", (data) => this.onData(data));
 
       const onError = (err: Error) => {
-        clearTimeout(timer);
-        sock.destroy();
-        reject(err);
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          sock.destroy();
+          reject(err);
+        }
       };
       sock.on("error", onError);
     });

@@ -26,7 +26,7 @@ End-to-end testing of the voice-to-text GNOME extension runs in a QEMU VM with S
 
 | Task | Command |
 |------|---------|
-| Start VM | `just qemu-e2e-test-host` (full E2E) or manual QEMU |
+| Start VM | `just qemu-e2e-vm` (interactive) or `just e2e` (full E2E) |
 | Stop VM | `kill $(pgrep qemu-system-x86)` |
 | Screenshot (host) | `echo 'screendump /tmp/s.ppm' \| socat - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock` |
 | SSH into VM | `ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost` |
@@ -69,7 +69,7 @@ echo 'system_powerdown' | socat - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock
 ### Rebuild base image
 
 ```bash
-just qemu-e2e-setup-host
+just qemu-install
 ```
 
 ## Taking Screenshots
@@ -158,7 +158,7 @@ scp -r -i $SSH_KEY -P 2222 $SRC testuser@localhost:~/voice_to_text/src/
 ### Install Python dependencies
 
 ```bash
-$SSH "pip3 install --user --break-system-packages --force-reinstall dbus-next numpy httpx sounddevice"
+$SSH "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz"
 ```
 
 ## Starting Services
@@ -242,7 +242,7 @@ The test verifies: D-Bus call → recording → transcription → text typed int
 
 2. **Type `echo "`** via dotool (works for simple text):
    ```bash
-   shell-use --session vm submit "echo 'type echo \"' > /run/user/1000/dotool-pipe"
+   shell-use --session vm submit "echo 'type echo \"' > /run/user/$(id -u)/dotool-pipe"
    ```
 
 3. **Start recording via D-Bus** (bypasses broken hotkey):
@@ -254,13 +254,13 @@ The test verifies: D-Bus call → recording → transcription → text typed int
 
 5. **Complete the command** via SSH (bypasses dotool quoting issues):
    ```bash
-   shell-use --session vm submit "echo 'Hello. This is a test on the MoistoText system.' > /tmp/file.txt"
+   shell-use --session vm submit "echo 'Hello. This is a test on the VoiceToText system.' > /tmp/file.txt"
    ```
 
 6. **Verify result**:
    ```bash
    shell-use --session vm submit "cat /tmp/file.txt"
-   # Expected: Hello. This is a test on the MoistoText system.
+   # Expected: Hello. This is a test on the VoiceToText system.
    ```
 
 ### Alternative: Use tmux for visibility
@@ -285,10 +285,10 @@ shell-use --session vm submit "tmux capture-pane -t test -p > /tmp/tmux-output.t
 
 ```bash
 # Full E2E test (boots VM, runs test, shuts down)
-just qemu-e2e-test-host
+just e2e
 
 # Update reference screenshots
-just qemu-e2e-update-host
+just qemu-e2e-update-ts
 
 # Interactive SPICE viewer
 remote-viewer spice://localhost:5930
@@ -324,7 +324,7 @@ $SSH "export XDG_RUNTIME_DIR=/run/user/\$(id -u); export DOTOOL_PIPE=/run/user/\
 Force reinstall in the VM:
 
 ```bash
-$SSH "pip3 install --user --break-system-packages --force-reinstall httpx dbus-next numpy"
+$SSH "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz"
 ```
 
 ### "Typed text goes to wrong window"
@@ -332,7 +332,7 @@ $SSH "pip3 install --user --break-system-packages --force-reinstall httpx dbus-n
 The Activities overview or search might be focused. Press Escape first:
 
 ```bash
-$SSH "echo 'key Escape' > /run/user/1000/dotool-pipe"
+$SSH "echo 'key Escape' > /run/user/$(id -u)/dotool-pipe"
 sleep 0.5
 # Then send input
 ```

@@ -432,7 +432,7 @@ qemu-e2e-kill:
     fi
     # Also kill any stray QEMU processes
     # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
-    pkill -9 -f "qemu-system-x86.*$(pwd)/e2e/qemu-images/overlay.qcow2" 2>/dev/null || true
+    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
     rm -f e2e/qemu-images/overlay.qcow2 e2e/qemu-images/qemu-monitor.sock
     echo "Done"
 
@@ -446,7 +446,7 @@ qemu-e2e-vm:
     
     # Kill any existing QEMU
     # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
-    pkill -9 -f "qemu-system-x86.*$(pwd)/e2e/qemu-images/overlay.qcow2" 2>/dev/null || true
+    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
     sleep 1
     
     # Create fresh overlay
@@ -489,6 +489,8 @@ qemu-e2e-vm:
     if [ "$ssh_ready" = false ]; then
         echo ""
         echo "❌ ERROR: SSH connection failed after 60 seconds"
+        kill "${QEMU_PID}" 2>/dev/null || true
+        rm -f "${VM_DIR_ABS}/qemu.pid"
         exit 1
     fi
     

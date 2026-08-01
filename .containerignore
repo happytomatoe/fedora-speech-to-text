@@ -14,8 +14,11 @@ tests/test_*.py
 tests/conftest.py
 tests/__init__.py
 tests/gnome-output/
+tests/gnome-snapshots/
+tests/e2e-output/
 e2e/output/
 e2e/output-qemu/
+e2e/qemu-images/
 .github/
 .env
 config.yaml

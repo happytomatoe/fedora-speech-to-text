@@ -7,17 +7,23 @@ export async function pollUntil(
   const start = Date.now();
   process.stdout.write(`Waiting for ${desc}`);
 
-  while (Date.now() - start < timeoutMs) {
-    if (await check()) {
-      console.log(` ready (${Math.round((Date.now() - start) / 1000)}s)`);
-      return;
+  try {
+    while (Date.now() - start < timeoutMs) {
+      if (await check()) {
+        console.log(` ready (${Math.round((Date.now() - start) / 1000)}s)`);
+        return;
+      }
+      process.stdout.write(".");
+      await Bun.sleep(intervalMs);
     }
-    process.stdout.write(".");
-    await Bun.sleep(intervalMs);
-  }
 
-  console.log(` TIMEOUT after ${Math.round(timeoutMs / 1000)}s`);
-  throw new Error(`Timeout waiting for ${desc}`);
+    console.log(` TIMEOUT after ${Math.round(timeoutMs / 1000)}s`);
+    throw new Error(`Timeout waiting for ${desc}`);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Timeout")) throw err;
+    process.stdout.write("\n");
+    throw err;
+  }
 }
 
 export async function pollForProcess(
@@ -28,8 +34,12 @@ export async function pollForProcess(
   await pollUntil(
     `${processName} running`,
     async () => {
-      const output = await shellExec(`pgrep -f '${processName}'`);
-      return output.trim().length > 0;
+      try {
+        const output = await shellExec(`pgrep -f '${processName}'`);
+        return output.trim().length > 0;
+      } catch {
+        return false;
+      }
     },
     timeoutMs
   );
@@ -44,8 +54,12 @@ export async function pollForCommandOutput(
   await pollUntil(
     `command output contains '${expected}'`,
     async () => {
-      const output = await shellExec(command);
-      return output.includes(expected);
+      try {
+        const output = await shellExec(command);
+        return output.includes(expected);
+      } catch {
+        return false;
+      }
     },
     timeoutMs
   );

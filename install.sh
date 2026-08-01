@@ -142,11 +142,17 @@ install_dotool() {
     apt) BUILD_DEPS="gcc make libev-dev libsystemd-dev" ;;
     pacman) BUILD_DEPS="gcc make libev systemd" ;;
   esac
-  if sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null; then
+  install_ok=false
+  if [ "$PKG_MGR" = "pacman" ]; then
+    sudo pacman -S --noconfirm $BUILD_DEPS git 2>/dev/null && install_ok=true
+  else
+    sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null && install_ok=true
+  fi
+  if [ "$install_ok" = true ]; then
     local TMPDIR
     TMPDIR=$(mktemp -d)
     if git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
-      (cd "$TMPDIR/dotool" && ./build.sh 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/");
+      (cd "$TMPDIR/dotool" && ./build.sh 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/"); then
       rm -rf "$TMPDIR"
       echo "  dotool built successfully from source."
       return 0

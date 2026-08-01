@@ -12,12 +12,13 @@ export class StepRunner {
 
       try {
         if (step.timeout) {
+          let timer: ReturnType<typeof setTimeout>;
           await Promise.race([
             step.fn(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Step '${step.name}' timed out after ${step.timeout}ms`)), step.timeout)
-            ),
-          ]);
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error(`Step '${step.name}' timed out after ${step.timeout}ms`)), step.timeout!);
+            }),
+          ]).finally(() => clearTimeout(timer));
         } else {
           await step.fn();
         }
