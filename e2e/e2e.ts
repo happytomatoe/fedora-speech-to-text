@@ -32,6 +32,10 @@ const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 
+// Parse --timeout <seconds> (default: 60)
+const timeoutIdx = args.indexOf("--timeout");
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? parseInt(args[timeoutIdx + 1]) * 1000 : 60_000;
+
 function timing(label: string, startMs: number): void {
   if (TIMING_MODE) {
     const ms = Date.now() - startMs;
@@ -659,6 +663,14 @@ async function main(): Promise<void> {
   const startTime = Date.now();
   let testsFailed = 0;
 
+  // Global timeout watchdog
+  const timeoutTimer = setTimeout(() => {
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    console.error(`\nTIMEOUT: Test exceeded ${GLOBAL_TIMEOUT_MS / 1000}s limit (${elapsed}s elapsed)`);
+    process.exit(1);
+  }, GLOBAL_TIMEOUT_MS);
+
+
   try {
     await new StepRunner().run([
       { name: "preflight", fn: preflight },
@@ -694,13 +706,16 @@ async function main(): Promise<void> {
   console.log(`  Total: ${(elapsed / 1000).toFixed(1)}s`);
   console.log("");
 
+  // Clear the timeout timer
+  clearTimeout(timeoutTimer);
+
   if (testsFailed === 0) {
     console.log("All tests passed!");
     process.exit(0);
   } else {
     console.log(`${testsFailed} test(s) failed.`);
     process.exit(1);
-  }
+}
 }
 
 main();
