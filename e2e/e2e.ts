@@ -5,6 +5,23 @@ import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import net from "node:net";
 import { execSync } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
+
+// Log to file
+const LOG_DIR = join(import.meta.dir, "output");
+mkdirSync(LOG_DIR, { recursive: true });
+const LOG_FILE = join(LOG_DIR, `e2e-${new Date().toISOString().replace(/[:.]/g, "-")}.log`);
+
+const origLog = console.log;
+const origError = console.error;
+console.log = (...args: any[]) => {
+  origLog(...args);
+  appendFileSync(LOG_FILE, args.join(" ") + "\n");
+};
+console.error = (...args: any[]) => {
+  origError(...args);
+  appendFileSync(LOG_FILE, "ERROR: " + args.join(" ") + "\n");
+};
 
 
 // Parse CLI args
@@ -236,9 +253,6 @@ class VmManager {
     await this.shell.exec(
       "gnome-extensions enable voice-to-text@happytomatoe.com 2>/dev/null || true"
     );
-    await this.shell.exec(
-      "gsettings set org.gnome.shell.extensions.voice-to-text provider deepgram 2>/dev/null || true"
-    );
 
     // Wait for GNOME Shell
     await this.pollUntil(
@@ -282,7 +296,8 @@ class VmManager {
       // Compile schemas and enable extension
       await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
       await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
-      await this.shell.exec(`gsettings set org.gnome.shell.extensions.voice-to-text provider deepgram 2>/dev/null || true`);
+      console.log("Setting provider to deepgram via dconf...");
+      await this.shell.exec(`dconf write /org/gnome/shell/extensions/voice-to-text/provider "'deepgram'"`);
     }
     // Deploy Python source (scp from host side)
     if (existsSync(PYTHON_SRC)) {
@@ -296,6 +311,7 @@ class VmManager {
 
     // Deploy test audio (scp from host side)
     if (existsSync(TEST_AUDIO)) {
+      console.log("Deploying test audio...");
       execSync(
         `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} ${TEST_AUDIO} ${SSH_USER}@localhost:/tmp/test-audio.wav`,
         { stdio: "inherit" }
@@ -308,6 +324,9 @@ class VmManager {
       "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets 2>/dev/null || true"
     );
 
+    // Kill any existing voice service
+    await this.shell.exec("pkill -f 'python3 -m voice_to_text' 2>/dev/null || true");
+    await Bun.sleep(500);
     // Start voice service
     const providerArgs = process.env.PARAKEET_MODEL_PATH
       ? `export PARAKEET_MODEL_PATH=${process.env.PARAKEET_MODEL_PATH}; export VOICE_TO_TEXT_PROVIDER=parakeet;`
