@@ -213,7 +213,9 @@ gnome-ext-install:
     # No TypeScript build needed — extension is plain JS
     mkdir -p "$DEST/schemas"
     # Copy JS files from gnome-ext/
-    cp gnome-ext/*.js gnome-ext/*.mjs "$DEST/"
+    cp gnome-ext/*.js "$DEST/"
+    # Copy vendor directory (js-yaml)
+    cp -r gnome-ext/vendor "$DEST/"
     # Copy other files from gnome-ext/
     cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
@@ -256,7 +258,9 @@ gnome-ext-pack:
     mkdir -p "dist/$UUID/schemas"
     # No TypeScript build needed — extension is plain JS
     # Copy JS files from gnome-ext/
-    cp "$SRC"/*.js "$SRC"/*.mjs "dist/$UUID/"
+    cp "$SRC"/*.js "dist/$UUID/"
+    # Copy vendor directory (js-yaml)
+    cp -r "$SRC"/vendor "dist/$UUID/"
     # Copy other files from gnome-ext/
     cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
     cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"
