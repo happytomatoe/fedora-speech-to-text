@@ -102,7 +102,7 @@ install_dotool() {
       sudo dnf install -y gcc make libev-devel systemd-devel git
       rm -rf /tmp/dotool-build
       git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool-build
-      cd /tmp/dotool-build && make
+      cd /tmp/dotool-build && ./build.sh
       cp dotool dotoolc dotoold \"$BIN_DIR/\"
     " 2>/dev/null; then
       echo "  dotool built successfully via Toolbox."
@@ -126,7 +126,7 @@ install_dotool() {
       fedora:latest sh -c "
         dnf install -y gcc make libev-devel systemd-devel git
         git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool
-        cd /tmp/dotool && make
+        cd /tmp/dotool && ./build.sh
         cp dotool dotoolc dotoold /out/
       " 2>/dev/null; then
       echo "  dotool built successfully via $CONTAINER_BIN."
@@ -146,7 +146,7 @@ install_dotool() {
     local TMPDIR
     TMPDIR=$(mktemp -d)
     if git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
-      (cd "$TMPDIR/dotool" && make 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/"); then
+      (cd "$TMPDIR/dotool" && ./build.sh 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/");
       rm -rf "$TMPDIR"
       echo "  dotool built successfully from source."
       return 0
