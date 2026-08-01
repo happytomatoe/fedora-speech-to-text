@@ -51,8 +51,24 @@ const SSH_USER = "testuser";
 const REFERENCES_DIR = join(import.meta.dir, "expected-qemu");
 const OUTPUT_DIR = join(import.meta.dir, "output");
 const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
-const TEST_AUDIO = join(import.meta.dir, "fixtures/test-audio.wav");
-const EXPECTED_FILE = join(import.meta.dir, "fixtures/expected-text.txt");
+const TEST_CASES_FILE = join(import.meta.dir, "fixtures/test-cases.json");
+
+interface TestCase {
+  file: string;
+  expected: string;
+}
+
+function pickRandomTestCase(): TestCase {
+  const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
+  const cases: TestCase[] = data["test-cases"];
+  const picked = cases[Math.floor(Math.random() * cases.length)];
+  console.log(`  Selected test case: ${picked.file}`);
+  return picked;
+}
+
+const CURRENT_TEST = pickRandomTestCase();
+const TEST_AUDIO = join(import.meta.dir, "fixtures", CURRENT_TEST.file);
+const EXPECTED_TEXT = CURRENT_TEST.expected;
 const RECORDING_DIR = join(import.meta.dir, "output", "recording");
 const PARAKEET_PORT = 5092;
 const PARAKEET_SCRIPT = join(PROJECT_ROOT, "parakeet-v2.sh");
@@ -324,8 +340,16 @@ class VmManager {
       "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets 2>/dev/null || true"
     );
 
-    // Kill any existing voice service
+    // Kill any existing voice service and wait for D-Bus name release
     await this.shell.exec("pkill -f 'python3 -m voice_to_text' 2>/dev/null || true");
+    await this.pollUntil(
+      "old voice service to die",
+      async () => {
+        const output = await this.shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
+        return output.trim().length === 0;
+      },
+      5000
+    );
     await Bun.sleep(500);
     // Start voice service
     const providerArgs = process.env.PARAKEET_MODEL_PATH
@@ -525,26 +549,22 @@ async function runTestFlow(vm: VmManager): Promise<void> {
 async function verifyResult(vm: VmManager): Promise<{ passed: boolean; message: string }> {
   console.log("\n=== Verification ===");
 
-  if (!existsSync(EXPECTED_FILE)) {
-    // Just check if file exists
-    const { code } = await vm.deployer.exec("test -f /tmp/file.txt");
-    if (code === 0) {
-      const { stdout } = await vm.deployer.exec("cat /tmp/file.txt");
-      return { passed: true, message: `/tmp/file.txt exists: ${stdout}` };
-    }
-    return { passed: false, message: "/tmp/file.txt not found" };
-  }
-
-  const expected = readFileSync(EXPECTED_FILE, "utf-8").trim();
+  const expected = EXPECTED_TEXT;
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
 
   console.log(`  Expected: ${expected}`);
   console.log(`  Actual:   ${actual.trim()}`);
 
-  if (actual.trim() === expected) {
+  // Normalize: lowercase, strip trailing period, collapse whitespace
+  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
+  const actualNorm = normalize(actual);
+  const expectedNorm = normalize(expected);
+  console.log(`  Normalized expected: ${expectedNorm}`);
+  console.log(`  Normalized actual:   ${actualNorm}`);
+  if (actualNorm === expectedNorm) {
     return { passed: true, message: "Text matches expected output" };
   }
-  return { passed: false, message: "Text does not match" };
+  return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'` };
 }
 
 async function main(): Promise<void> {

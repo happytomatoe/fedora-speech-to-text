@@ -59,11 +59,14 @@ export default class VoiceToTextExtension extends Extension {
         this._recording = false;
         this._hotkeySignalId = null;
         this._signalIds = [];
-        this._audioLevelWidget = this._settings.get_boolean(
-            'show-audio-level-widget'
-        )
-            ? new AudioLevelWidget()
-            : null;
+        let showAudioLevel = false;
+        try {
+            showAudioLevel = this._settings.get_boolean('show-audio-level-widget');
+        } catch {
+            // Key may not exist in older schema versions
+            showAudioLevel = true; // default to showing
+        }
+        this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
 
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
