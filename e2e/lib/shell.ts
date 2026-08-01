@@ -139,6 +139,47 @@ export class ShellHelper {
   }
 
   /**
+   * Force-focus the terminal window using gio launch.
+   * This ensures the terminal receives keyboard input after Activities dismiss.
+   */
+  async focusTerminal(): Promise<void> {
+    if (!this.session) return;
+    try {
+      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+      const sshHost = `${this.session.sshUser}@${this.session.host}`;
+      // Use gio launch to bring existing terminal window to foreground
+      execSync(
+        `ssh ${sshOpts} ${sshHost} "gio launch /usr/share/applications/org.gnome.Terminal.desktop" 2>/dev/null`,
+        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      );
+      await Bun.sleep(500); // Wait for window manager to complete focus transition
+    } catch {
+      // Ignore — terminal may already be focused
+    }
+  }
+
+  /**
+   * Wait for Activities overview to be fully closed (including animation).
+   * Polls until OverviewActive is false AND waits for animation to settle.
+   */
+  async waitActivitiesFullyClosed(timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    let wasOpen = false;
+    
+    while (Date.now() - start < timeoutMs) {
+      const isOpen = await this.isActivitiesOpen();
+      if (wasOpen && !isOpen) {
+        // Activities just closed — wait for animation to complete
+        await Bun.sleep(500);
+        return;
+      }
+      wasOpen = isOpen;
+      await Bun.sleep(100);
+    }
+    // Fall through — may already be closed
+  }
+
+  /**
    * Verify terminal has focus by typing a test character.
    * Returns true if tmux content changed (terminal was focused).
    */

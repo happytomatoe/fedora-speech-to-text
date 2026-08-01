@@ -103,7 +103,8 @@ export class VmManager {
       console.log("Reusing existing overlay...");
     }
 
-    this.process = Bun.spawn([
+    // Use setsid to run QEMU in a new session so it survives parent abort/timeout
+    const qemuArgs = [
       "qemu-system-x86_64",
       "-enable-kvm",
       "-cpu", "host",
@@ -112,13 +113,16 @@ export class VmManager {
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
       "-display", "none",
-      "-spice", "port=5930,disable-ticketing=on",
+      "-spice", `port=5930,disable-ticketing=on`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", "file:serial.log",
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-no-reboot",
-    ], {
+    ];
+    // Wrap in setsid + nohup to detach from parent process group
+    const wrappedCmd = `setsid nohup ${qemuArgs.join(" ")} &>/dev/null &`;
+    this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
       cwd: vmDir,
       stdout: "inherit",
       stderr: "inherit",

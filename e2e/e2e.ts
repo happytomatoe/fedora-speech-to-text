@@ -189,21 +189,21 @@ async function runTestFlow(vm: VmManager): Promise<void> {
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
   await shell.dismissActivities();
-  // Longer settle wait for window manager to fully transition
-  await Bun.sleep(1000);
-
+  await shell.waitActivitiesFullyClosed();
+  
+  // Force-focus terminal again after Activities dismiss
+  await shell.focusTerminal();
+  
   // Verify terminal has focus by typing test character
   console.log("Verifying terminal focus...");
   let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, SSH_PORT);
   if (!isFocused) {
-    console.log("  Terminal not focused, trying multiple click attempts...");
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await shell.clickToFocus(640, 400);
-      await Bun.sleep(800);
-      isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, SSH_PORT);
-      console.log(`  Attempt ${attempt + 1}: focused=${isFocused}`);
-      if (isFocused) break;
-    }
+    console.log("  Terminal not focused, trying click + gio launch...");
+    await shell.clickToFocus(640, 400);
+    await Bun.sleep(500);
+    await shell.focusTerminal();
+    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, SSH_PORT);
+    console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {
     console.log("  WARNING: Terminal may not be focused");
