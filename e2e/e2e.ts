@@ -53,6 +53,24 @@ const OUTPUT_DIR = join(import.meta.dir, "output");
 const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
 const TEST_CASES_FILE = join(import.meta.dir, "fixtures/test-cases.json");
 
+// SSH helpers
+const SSH_OPTS = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}`;
+const SSH_HOST = `${SSH_USER}@localhost`;
+
+function sshExec(command: string): string {
+  return execSync(`ssh ${SSH_OPTS} ${SSH_HOST} "${command}"`).toString();
+}
+
+function rsyncToVm(src: string, dest: string): void {
+  execSync(`rsync -avz --delete -e "ssh ${SSH_OPTS}" ${src}/ ${SSH_HOST}:${dest}/`, { stdio: "inherit" });
+}
+
+function scpToVm(src: string, dest: string): void {
+  // scp uses -P for port, not -p
+  const scpOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT}`;
+  execSync(`scp ${scpOpts} ${src} ${SSH_HOST}:${dest}`, { stdio: "inherit" });
+}
+
 interface TestCase {
   file: string;
   expected: string;
@@ -289,10 +307,7 @@ class VmManager {
     if (existsSync(extDir)) {
       console.log("Deploying GNOME extension...");
       // Use rsync (reliable, handles permissions, no glob corruption)
-      execSync(
-        `rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}" ${extDir}/ ${SSH_USER}@localhost:~/.local/share/gnome-shell/extensions/${extUuid}/`,
-        { stdio: "inherit" }
-      );
+      rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${extUuid}`);
       // Compile schemas
       await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
       // Enable extension in dconf
@@ -332,10 +347,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         "extension available",
         async () => {
           try {
-            const result = execSync(
-              `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "gnome-extensions show ${extUuid} 2>&1"`,
-              { timeout: 5000 }
-            ).toString();
+            const result = sshExec(`gnome-extensions show ${extUuid} 2>&1`);
             return !result.includes("doesn't exist");
           } catch {
             return false;
@@ -344,13 +356,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         30000
       );
       // Enable the extension
-      execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "gnome-extensions enable ${extUuid} 2>/dev/null || true"`
-      );
+      sshExec(`gnome-extensions enable ${extUuid} 2>/dev/null || true`);
       // Verify extension is active
-      const extState = execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "gnome-extensions show ${extUuid} 2>&1"`
-      ).toString();
+      const extState = sshExec(`gnome-extensions show ${extUuid} 2>&1`);
       if (extState.includes("State: ACTIVE")) {
         console.log("Extension loaded and active");
       } else {
@@ -359,9 +367,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
       // Restart dotoold (died with GDM restart)
       console.log("Restarting dotoold...");
-      execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "export DOTOOL_PIPE=/run/user/\$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &"`
-      );
+      sshExec("export DOTOOL_PIPE=/run/user/\$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &");
       await this.pollUntil(
         "dotool pipe",
         async () => {
@@ -376,22 +382,14 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     // Deploy Python source (rsync from host side)
     if (existsSync(PYTHON_SRC)) {
       console.log("Deploying Python source...");
-      execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "mkdir -p ~/voice_to_text/src/voice_to_text"`
-      );
-      execSync(
-        `rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}" ${PYTHON_SRC}/ ${SSH_USER}@localhost:~/voice_to_text/src/voice_to_text/`,
-        { stdio: "inherit" }
-      );
+      sshExec("mkdir -p ~/voice_to_text/src/voice_to_text");
+      rsyncToVm(PYTHON_SRC, "~/voice_to_text/src/voice_to_text");
     }
 
     // Deploy test audio (scp from host side)
     if (existsSync(TEST_AUDIO)) {
       console.log("Deploying test audio...");
-      execSync(
-        `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} ${TEST_AUDIO} ${SSH_USER}@localhost:/tmp/test-audio.wav`,
-        { stdio: "inherit" }
-      );
+      scpToVm(TEST_AUDIO, "/tmp/test-audio.wav");
     }
 
     // Install Python dependencies
@@ -402,9 +400,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
     // Kill any existing voice service (use execSync for reliability after GDM restart)
     // NOTE: Don't use pkill -f with 'voice_to_text' in the command — it matches the SSH command line itself!
-    execSync(
-      `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "killall -9 python3 2>/dev/null; true"`
-    );
+    sshExec("killall -9 python3 2>/dev/null; true");
     await Bun.sleep(1000);
     // Wait for D-Bus name release
     await this.pollUntil(
@@ -418,9 +414,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     await Bun.sleep(500);
     // Start voice service
     // Parakeet runs on host; VM reaches it via QEMU gateway 10.0.2.2
-    execSync(
-      `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "mkdir -p ~/.config/voice-to-text && printf 'transcription:\n  provider: parakeet\nparakeet:\n  http_endpoint: http://10.0.2.2:5092\n' > ~/.config/voice-to-text/config.yaml"`
-    );
+    sshExec(`mkdir -p ~/.config/voice-to-text && printf 'transcription:\n  provider: parakeet\nparakeet:\n  http_endpoint: http://10.0.2.2:5092\n' > ~/.config/voice-to-text/config.yaml`);
     const providerArgs = `export VOICE_TO_TEXT_PROVIDER=parakeet;`;
 
     await this.shell.exec(
