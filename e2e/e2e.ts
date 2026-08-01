@@ -39,19 +39,53 @@ function timing(label: string, startMs: number): void {
   }
 }
 
-// Paths
-const PROJECT_ROOT = join(import.meta.dir, "..");
-const VM_DIR = join(import.meta.dir, "qemu-images");
-const BASE_IMAGE = join(VM_DIR, "base.qcow2");
-const OVERLAY_IMAGE = join(VM_DIR, "overlay.qcow2");
-const SOCKET_PATH = "/tmp/qemu-monitor.sock";
-const SSH_KEY = join(VM_DIR, "id_ed25519");
-const SSH_PORT = 2222;
-const SSH_USER = "testuser";
-const REFERENCES_DIR = join(import.meta.dir, "expected-qemu");
-const OUTPUT_DIR = join(import.meta.dir, "output");
-const PYTHON_SRC = join(PROJECT_ROOT, "src/voice_to_text");
-const TEST_CASES_FILE = join(import.meta.dir, "fixtures/test-cases.json");
+// Configuration
+const CONFIG = {
+  paths: {
+    projectRoot: join(import.meta.dir, ".."),
+    vmDir: join(import.meta.dir, "qemu-images"),
+    baseImage: join(import.meta.dir, "qemu-images/base.qcow2"),
+    overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
+    socketPath: "/tmp/qemu-monitor.sock",
+    sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
+    referencesDir: join(import.meta.dir, "expected-qemu"),
+    outputDir: join(import.meta.dir, "output"),
+    pythonSrc: join(import.meta.dir, "../src/voice_to_text"),
+    testCasesFile: join(import.meta.dir, "fixtures/test-cases.json"),
+  },
+  ssh: {
+    port: 2222,
+    user: "testuser",
+  },
+  parakeet: {
+    port: 5092,
+    endpoint: "http://10.0.2.2:5092",
+  },
+  extension: {
+    uuid: "voice-to-text@happytomatoe.com",
+  },
+  timeouts: {
+    gdm: 60000,
+    gnomeShell: 30000,
+    dbus: 15000,
+    dotool: 10000,
+    vmBoot: 120000,
+  },
+};
+
+// Derived constants
+const PROJECT_ROOT = CONFIG.paths.projectRoot;
+const VM_DIR = CONFIG.paths.vmDir;
+const BASE_IMAGE = CONFIG.paths.baseImage;
+const OVERLAY_IMAGE = CONFIG.paths.overlayImage;
+const SOCKET_PATH = CONFIG.paths.socketPath;
+const SSH_KEY = CONFIG.paths.sshKey;
+const SSH_PORT = CONFIG.ssh.port;
+const SSH_USER = CONFIG.ssh.user;
+const REFERENCES_DIR = CONFIG.paths.referencesDir;
+const OUTPUT_DIR = CONFIG.paths.outputDir;
+const PYTHON_SRC = CONFIG.paths.pythonSrc;
+const TEST_CASES_FILE = CONFIG.paths.testCasesFile;
 
 // SSH helpers
 const SSH_OPTS = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}`;
