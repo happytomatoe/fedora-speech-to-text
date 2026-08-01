@@ -27,7 +27,7 @@ console.error = (...args: any[]) => {
 // Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
-const KEEP_RUNNING = args.includes("--keep-running");
+const SHUTDOWN = args.includes("--shutdown");
 const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
@@ -304,23 +304,46 @@ class VmManager {
     const extUuid = "voice-to-text@happytomatoe.com";
     if (existsSync(extDir)) {
       console.log("Deploying GNOME extension...");
-      await this.shell.exec(`mkdir -p ~/.local/share/gnome-shell/extensions/${extUuid}`);
+      // Use rsync (reliable, handles permissions, no glob corruption)
       execSync(
-        `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} -r ${extDir}/* ${SSH_USER}@localhost:~/.local/share/gnome-shell/extensions/${extUuid}/`,
+        `rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}" ${extDir}/ ${SSH_USER}@localhost:~/.local/share/gnome-shell/extensions/${extUuid}/`,
         { stdio: "inherit" }
       );
-      // Compile schemas and enable extension
+      // Compile schemas
       await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
+      // Enable extension in dconf
       await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
       console.log("Setting provider to deepgram via dconf...");
       await this.shell.exec(`dconf write /org/gnome/shell/extensions/voice-to-text/provider "'deepgram'"`);
+      // Restart GNOME Shell to pick up new extension (gnome-extensions enable doesn't re-scan)
+      console.log("Restarting GNOME Shell to load extension...");
+      await this.shell.exec("sudo systemctl restart gdm");
+      // Wait for GNOME Shell to come back up
+      await this.pollUntil(
+        "GNOME Shell after restart",
+        async () => {
+          const output = await this.shell.exec(
+            "pgrep -f 'gnome-shell --mode=user'"
+          );
+          return output.trim().length > 0;
+        },
+        30000
+      );
+      // Now enable the extension
+      await this.shell.exec(`gnome-extensions enable ${extUuid} 2>/dev/null || true`);
+      // Verify extension is active
+      const extState = await this.shell.exec(`gnome-extensions show ${extUuid} 2>&1`);
+      if (extState.includes("State: ACTIVE")) {
+        console.log("Extension loaded and active");
+      } else {
+        console.log("WARNING: Extension state:", extState);
+      }
     }
-    // Deploy Python source (scp from host side)
+    // Deploy Python source (rsync from host side)
     if (existsSync(PYTHON_SRC)) {
       console.log("Deploying Python source...");
-      await this.shell.exec("mkdir -p ~/voice_to_text/src/voice_to_text");
       execSync(
-        `scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P ${SSH_PORT} -r ${PYTHON_SRC}/* ${SSH_USER}@localhost:~/voice_to_text/src/voice_to_text/`,
+        `rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}" ${PYTHON_SRC}/ ${SSH_USER}@localhost:~/voice_to_text/src/voice_to_text/`,
         { stdio: "inherit" }
       );
     }
@@ -593,10 +616,10 @@ async function main(): Promise<void> {
     console.error("\nFATAL:", err);
     testsFailed++;
   } finally {
-    if (!KEEP_RUNNING) {
+    if (SHUTDOWN) {
       await vm.shutdown();
     } else {
-      console.log("\nVM kept running (--keep-running flag)");
+      console.log("\nVM kept running (default; pass --shutdown to stop)");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost`);
     }
   }
