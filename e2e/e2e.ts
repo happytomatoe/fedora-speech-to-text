@@ -282,22 +282,6 @@ class VmManager {
       10000
     );
 
-    // Start dotoold
-    console.log("Starting dotoold...");
-    await this.shell.exec(
-      "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &"
-    );
-
-    await this.pollUntil(
-      "dotool pipe",
-      async () => {
-        const output = await this.shell.exec(
-          "test -p /run/user/$(id -u)/dotool-pipe"
-        );
-        return output.length === 0; // test succeeds with no output
-      },
-      10000
-    );
 
     // Deploy GNOME extension
     const extDir = join(PROJECT_ROOT, "gnome-ext");
@@ -313,11 +297,24 @@ class VmManager {
       await this.shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${extUuid}/schemas/ 2>/dev/null || true`);
       // Enable extension in dconf
       await this.shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${extUuid}']"`);
-      console.log("Setting provider to deepgram via dconf...");
-      await this.shell.exec(`dconf write /org/gnome/shell/extensions/voice-to-text/provider "'deepgram'"`);
+      // Set provider via dconf (use script file to avoid SSH quoting hell)
+      await this.shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
+#!/bin/bash
+dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
+SCRIPT
+chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // Restart GNOME Shell to pick up new extension (gnome-extensions enable doesn't re-scan)
       console.log("Restarting GNOME Shell to load extension...");
       await this.shell.exec("sudo systemctl restart gdm");
+      // GDM restart kills the user session and breaks the SSH connection.
+      // Re-establish the SSH session so subsequent shell.exec() calls work.
+      console.log("Re-establishing SSH session after GDM restart...");
+      await this.shell.close();
+      await this.shell.openSshSession({
+        sshKey: SSH_KEY,
+        sshPort: SSH_PORT,
+        sshUser: SSH_USER,
+      });
       // Wait for GNOME Shell to come back up
       await this.pollUntil(
         "GNOME Shell after restart",
@@ -329,19 +326,59 @@ class VmManager {
         },
         30000
       );
-      // Now enable the extension
-      await this.shell.exec(`gnome-extensions enable ${extUuid} 2>/dev/null || true`);
+      // Wait for extension to be available (GNOME Shell needs time to scan extensions dir)
+      console.log("Waiting for extension to be available...");
+      await this.pollUntil(
+        "extension available",
+        async () => {
+          try {
+            const result = execSync(
+              `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "gnome-extensions show ${extUuid} 2>&1"`,
+              { timeout: 5000 }
+            ).toString();
+            return !result.includes("doesn't exist");
+          } catch {
+            return false;
+          }
+        },
+        30000
+      );
+      // Enable the extension
+      execSync(
+        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "gnome-extensions enable ${extUuid} 2>/dev/null || true"`
+      );
       // Verify extension is active
-      const extState = await this.shell.exec(`gnome-extensions show ${extUuid} 2>&1`);
+      const extState = execSync(
+        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "gnome-extensions show ${extUuid} 2>&1"`
+      ).toString();
       if (extState.includes("State: ACTIVE")) {
         console.log("Extension loaded and active");
       } else {
-        console.log("WARNING: Extension state:", extState);
+        console.log("WARNING: Extension state:", extState.trim());
       }
+
+      // Restart dotoold (died with GDM restart)
+      console.log("Restarting dotoold...");
+      execSync(
+        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "export DOTOOL_PIPE=/run/user/\$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &"`
+      );
+      await this.pollUntil(
+        "dotool pipe",
+        async () => {
+          const output = await this.shell.exec(
+            "test -p /run/user/$(id -u)/dotool-pipe"
+          );
+          return output.length === 0; // test succeeds with no output
+        },
+        10000
+      );
     }
     // Deploy Python source (rsync from host side)
     if (existsSync(PYTHON_SRC)) {
       console.log("Deploying Python source...");
+      execSync(
+        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "mkdir -p ~/voice_to_text/src/voice_to_text"`
+      );
       execSync(
         `rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT}" ${PYTHON_SRC}/ ${SSH_USER}@localhost:~/voice_to_text/src/voice_to_text/`,
         { stdio: "inherit" }
@@ -363,8 +400,13 @@ class VmManager {
       "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets 2>/dev/null || true"
     );
 
-    // Kill any existing voice service and wait for D-Bus name release
-    await this.shell.exec("pkill -f 'python3 -m voice_to_text' 2>/dev/null || true");
+    // Kill any existing voice service (use execSync for reliability after GDM restart)
+    // NOTE: Don't use pkill -f with 'voice_to_text' in the command — it matches the SSH command line itself!
+    execSync(
+      `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "killall -9 python3 2>/dev/null; true"`
+    );
+    await Bun.sleep(1000);
+    // Wait for D-Bus name release
     await this.pollUntil(
       "old voice service to die",
       async () => {
@@ -375,9 +417,11 @@ class VmManager {
     );
     await Bun.sleep(500);
     // Start voice service
-    const providerArgs = process.env.PARAKEET_MODEL_PATH
-      ? `export PARAKEET_MODEL_PATH=${process.env.PARAKEET_MODEL_PATH}; export VOICE_TO_TEXT_PROVIDER=parakeet;`
-      : `export DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ?? ""};`;
+    // Parakeet runs on host; VM reaches it via QEMU gateway 10.0.2.2
+    execSync(
+      `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@localhost "mkdir -p ~/.config/voice-to-text && printf 'transcription:\n  provider: parakeet\nparakeet:\n  http_endpoint: http://10.0.2.2:5092\n' > ~/.config/voice-to-text/config.yaml"`
+    );
+    const providerArgs = `export VOICE_TO_TEXT_PROVIDER=parakeet;`;
 
     await this.shell.exec(
       `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); ${providerArgs} export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`

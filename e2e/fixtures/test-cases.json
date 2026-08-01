@@ -10,15 +10,15 @@
     },
     {
       "file": "test-03-hello.wav",
-      "expected": "good morning how are you today"
+      "expected": "good morning, how are you today?"
     },
     {
       "file": "test-04-calendar.wav",
-      "expected": "our meeting is scheduled for three pm on monday"
+      "expected": "our meeting is scheduled for 3pm on monday"
     },
     {
       "file": "test-05-note.wav",
-      "expected": "take a note about the project headline is next friday"
+      "expected": "take a note about the project. headline is next friday"
     }
   ]
 }
