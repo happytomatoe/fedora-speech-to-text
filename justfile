@@ -441,15 +441,17 @@ qemu-e2e-kill:
 
 # @category e2e-qemu
 # Start QEMU E2E test VM (keeps running for SPICE connection)
-qemu-e2e-vm:
+qemu-e2e-vm port='5930':
     #!/usr/bin/env bash
     set -euo pipefail
     VM_DIR="e2e/qemu-images"
     VM_DIR_ABS="$(pwd)/${VM_DIR}"
 
-    # Kill any existing QEMU
-    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
-    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    # Kill any existing QEMU for this VM (use specific path to avoid killing unrelated VMs)
+    if [ -f "${VM_DIR_ABS}/qemu.pid" ]; then
+        kill -9 $(cat "${VM_DIR_ABS}/qemu.pid") 2>/dev/null || true
+        rm -f "${VM_DIR_ABS}/qemu.pid"
+    fi
     sleep 1
 
     # Create fresh overlay
@@ -466,7 +468,7 @@ qemu-e2e-vm:
         -drive file=overlay.qcow2,format=qcow2,if=virtio \
         -device virtio-vga \
         -display vnc=:1 \
-        -spice port=5930,disable-ticketing=on \
+        -spice port={{ port }},disable-ticketing=on \
         -monitor unix:qemu-monitor.sock,server,nowait \
         -serial file:serial.log \
         -netdev user,id=net0,hostfwd=tcp::2222-:22 \

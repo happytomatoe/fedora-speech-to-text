@@ -46,12 +46,13 @@ const CONFIG_SYNC_MAP = {
 };
 
 function readConfigYaml() {
+    const file = Gio.File.new_for_path(CONFIG_PATH);
+    if (!file.query_exists(null)) return {};
     try {
-        const file = Gio.File.new_for_path(CONFIG_PATH);
         const [ok, contents] = file.load_contents(null);
         if (!ok) return null;
         const decoder = new TextDecoder('utf-8');
-        return yamlLoad(decoder.decode(contents));
+        return yamlLoad(decoder.decode(contents)) ?? {};
     } catch (e) {
         console.error('VoiceToText: failed to read config.yaml:', e.message);
         return null;

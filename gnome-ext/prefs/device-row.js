@@ -38,19 +38,23 @@ export function createDeviceRow(settings) {
     // Create D-Bus proxy for listing input devices
     const DeviceListProxy = Gio.DBusProxy.makeProxyWrapper(DeviceListIface);
     let deviceProxy = null;
-    try {
-        // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
-        deviceProxy = new DeviceListProxy(
-            Gio.DBus.session,
-            'com.happytomatoe.VoiceToText',
-            '/com/happytomatoe/VoiceToText'
-        );
-    } catch (e) {
-        console.error(
-            'VoiceToText: failed to create device list proxy:',
-            e.message
-        );
-    }
+    // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
+    deviceProxy = new DeviceListProxy(
+        Gio.DBus.session,
+        'com.happytomatoe.VoiceToText',
+        '/com/happytomatoe/VoiceToText',
+        (proxy, error) => {
+            if (error) {
+                console.error(
+                    'VoiceToText: failed to create device list proxy:',
+                    error.message
+                );
+                deviceProxy = null;
+            }
+        },
+        null,
+        Gio.DBusProxyFlags.DO_NOT_AUTO_START
+    );
 
     const populate = () => {
         if (!deviceProxy) {
