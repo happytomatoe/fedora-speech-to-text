@@ -41,12 +41,10 @@ echo "Creating overlay..."
 qemu-img create -f qcow2 -b "$SOURCE_IMAGE" -F qcow2 "$OUTPUT_IMAGE" >/dev/null
 
 # Install uv and Python dependencies in the image
-PYTHON_DEPS="httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz"
-
 echo "Installing uv and Python dependencies..."
 virt-customize -a "$OUTPUT_IMAGE" \
     --run-command 'curl -LsSf https://astral.sh/uv/install.sh | sh' \
-    --run-command "$HOME/.local/bin/uv pip install --system --quiet $PYTHON_DEPS" \
+    --run-command '$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz' \
     --selinux-relabel 2>&1
 
 echo ""

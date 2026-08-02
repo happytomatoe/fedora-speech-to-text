@@ -43,6 +43,10 @@ const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 1
 const caseIdx = args.indexOf("--case");
 const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 
+// Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual)
+const outputMethodIdx = args.indexOf("--output-method");
+const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
+
 function timing(label: string, startMs: number): void {
   if (TIMING_MODE) {
     const ms = Date.now() - startMs;
