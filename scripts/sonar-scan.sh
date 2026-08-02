@@ -6,6 +6,7 @@
 #   scripts/sonar-scan.sh                  # scan and tear down
 #   scripts/sonar-scan.sh --keep-server    # scan but keep SonarQube running
 #   scripts/sonar-scan.sh --tear-down      # stop a previously kept server
+#   scripts/sonar-scan.sh --fail-on-gate   # exit non-zero if quality gate fails (for CI)
 #   scripts/sonar-scan.sh --reports-dir /tmp/reports  # custom output dir
 set -euo pipefail
 
@@ -23,17 +24,20 @@ REPORTS_DIR="${SONAR_REPORTS_DIR:-sonar-reports}"
 # ── Parse args ─────────────────────────────────────────────────────────
 KEEP_SERVER=false
 TEAR_DOWN=false
+FAIL_ON_GATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --keep-server)  KEEP_SERVER=true; shift ;;
         --tear-down)    TEAR_DOWN=true; shift ;;
+        --fail-on-gate) FAIL_ON_GATE=true; shift ;;
         --reports-dir)  REPORTS_DIR="$2"; shift 2 ;;
         --help|-h)
-            echo "Usage: $0 [--keep-server] [--tear-down] [--reports-dir DIR]"
+            echo "Usage: $0 [--keep-server] [--tear-down] [--fail-on-gate] [--reports-dir DIR]"
             echo ""
             echo "  --keep-server   Keep SonarQube running after scan (for web UI)"
             echo "  --tear-down     Stop a previously kept SonarQube server"
+            echo "  --fail-on-gate  Exit non-zero if quality gate fails (for CI)"
             echo "  --reports-dir   Output directory for reports (default: sonar-reports/)"
             exit 0
             ;;
@@ -235,7 +239,11 @@ fi
 # ── Summary ────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ok "Scan complete!"
+if [[ "$GATE_STATUS" == "OK" ]]; then
+    ok "Scan complete! Quality gate PASSED"
+else
+    fail "Scan complete! Quality gate FAILED (${GATE_STATUS})"
+fi
 echo ""
 echo "  Quality Gate:  ${GATE_STATUS}"
 echo "  Reports:       ${REPORTS_DIR}/"
@@ -266,4 +274,9 @@ if [[ -f "$REPORT_HTML" ]]; then
     else
         echo "  Open manually: $REPORT_HTML"
     fi
+fi
+
+# ── Exit with non-zero if quality gate fails ──────────────────────────
+if [[ "$FAIL_ON_GATE" == true ]] && [[ "$GATE_STATUS" != "OK" ]]; then
+    exit 1
 fi

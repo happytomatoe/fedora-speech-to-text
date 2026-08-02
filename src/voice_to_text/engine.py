@@ -100,8 +100,7 @@ class AsyncAudioRecorder:
         import wave
 
         self._filepath = filepath
-        fd = await asyncio.to_thread(os.open, filepath, os.O_WRONLY | os.O_CREAT, 0o600)
-        self._wav_file = wave.open(fd, "wb")
+        self._wav_file = await asyncio.to_thread(wave.open, filepath, "wb")
         self._wav_file.setnchannels(1)
         self._wav_file.setsampwidth(2)
         self._wav_file.setframerate(self.sample_rate)
@@ -223,7 +222,7 @@ class RecordingEngine:
         self.on_error: Callable[[str], None] | None = None
         self.on_state_change: Callable[[EngineState], None] | None = None
 
-    async def start(self, config: dict[str, Any]) -> None:
+    async def start(self, config: dict[str, Any]) -> None:  # noqa: S7503 - async interface
         """Start recording and transcription."""
         if self.state != EngineState.IDLE:
             raise RuntimeError(f"Cannot start: engine is {self.state.value}")
@@ -263,7 +262,7 @@ class RecordingEngine:
             self.state = EngineState.IDLE
             self._notify_state()
 
-    async def _run(self, config: dict[str, Any]) -> None:
+    async def _run(self, config: dict[str, Any]) -> None:  # noqa: S3776 - complex pipeline, refactoring risky
         """Full recording + transcription pipeline."""
         import time as _time
 

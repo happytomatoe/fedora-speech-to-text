@@ -61,7 +61,7 @@ class StreamingProvider(ABC):
         """Send an audio chunk for processing."""
         pass
 
-    async def get_partial_result(self) -> str | None:
+    async def get_partial_result(self) -> str | None:  # noqa: S7503 - async interface
         """Get latest partial transcript (may change)."""
         if self._partial_result:
             return (

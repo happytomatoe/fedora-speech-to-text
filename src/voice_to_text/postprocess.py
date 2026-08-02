@@ -169,7 +169,7 @@ def _preserve_case_pattern(original: str, replacement: str) -> str:
     return replacement
 
 
-def _find_best_match(
+def _find_best_match(  # noqa: S3776 - fuzzy matching logic
     candidate: str,
     custom_words: list[str],
     custom_keys: list[tuple[int, str]],
@@ -216,7 +216,7 @@ def _find_best_match(
     return (best_match, best_score) if best_match is not None else None
 
 
-def apply_custom_words(
+def apply_custom_words(  # noqa: S3776 - n-gram matching logic
     text: str,
     custom_words: list[str],
     threshold: float = 0.5,

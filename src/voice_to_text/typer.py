@@ -185,7 +185,7 @@ class ContinuousTyper:
             logger.error("Failed to stream text to dotoolc: %s", e)
             self._usable = False
 
-    async def stream_backspace(self, count: int) -> None:
+    async def stream_backspace(self, count: int) -> None:  # noqa: S3776 - optimized backspace logic
         """Backspace ``count`` characters via the dotoolc pipe.
 
         Optimized to use line-deletion (shift+home) and word-deletion (ctrl+backspace)

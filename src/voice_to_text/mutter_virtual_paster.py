@@ -73,7 +73,7 @@ class MutterVirtualPaster:
             self._usable = False
             return False
 
-    async def stop(self) -> None:
+    async def stop(self) -> None:  # noqa: S7503 - async interface
         """Cleanup."""
         if self._bus:
             self._bus.disconnect()

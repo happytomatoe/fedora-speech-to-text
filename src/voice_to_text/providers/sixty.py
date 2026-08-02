@@ -40,7 +40,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
 
     # ── Batch ──────────────────────────────────────────────────────────
 
-    async def transcribe_file(
+    async def transcribe_file(  # noqa: S3776 - API error handling
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
         logger.info("Transcribing %s with 60db", audio_path)

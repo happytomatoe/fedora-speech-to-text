@@ -763,6 +763,11 @@ sonar-scan-keep:
     scripts/sonar-scan.sh --keep-server
 
 # @category sonarqube
+# Run SonarQube scan with quality gate check (exits non-zero if gate fails)
+sonar-scan-ci:
+    scripts/sonar-scan.sh --fail-on-gate
+
+# @category sonarqube
 # Stop a previously kept SonarQube server
 sonar-stop:
     scripts/sonar-scan.sh --tear-down
