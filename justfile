@@ -516,12 +516,12 @@ qemu-e2e-vm port='5930':
 # Open SPICE viewer to QEMU E2E test VM
 # Usage: just e2e-test-view [spice_port] [ssh_port]
 # If no ports specified, auto-detects from listening QEMU processes
-e2e-test-view spice_port='' ssh_port='' :
+e2e-test-view spice_port='' ssh_port='':
     #!/usr/bin/env bash
     set -euo pipefail
-    
+
     # Auto-detect ports if not specified
-    if [ -z "{{spice_port}}" ]; then
+    if [ -z "{{ spice_port }}" ]; then
         # Find SPICE port from QEMU processes (look for -spice port=XXXX)
         SPICE_PORT=$(ps aux | grep -oP 'qemu.*-spice port=\K\d+' | head -1 || true)
         if [ -z "$SPICE_PORT" ]; then
@@ -534,27 +534,27 @@ e2e-test-view spice_port='' ssh_port='' :
             exit 1
         fi
     else
-        SPICE_PORT="{{spice_port}}"
+        SPICE_PORT="{{ spice_port }}"
     fi
-    
-    if [ -z "{{ssh_port}}" ]; then
+
+    if [ -z "{{ ssh_port }}" ]; then
         # Find SSH port from QEMU processes (look for hostfwd=tcp::XXXX-:22)
         SSH_PORT=$(ps aux | grep -oP 'hostfwd=tcp::\K\d+' | head -1 || true)
         if [ -z "$SSH_PORT" ]; then
             SSH_PORT="2222"  # Default fallback
         fi
     else
-        SSH_PORT="{{ssh_port}}"
+        SSH_PORT="{{ ssh_port }}"
     fi
-    
+
     echo "Using SPICE port: $SPICE_PORT, SSH port: $SSH_PORT"
-    
+
     if ! ss -tlnp | grep -q ":$SPICE_PORT "; then
         echo "ERROR: QEMU VM not running (no SPICE on port $SPICE_PORT)"
         echo "Run 'just e2e' or 'just qemu-e2e-test-host' first."
         exit 1
     fi
-    
+
     SSH_KEY="e2e/qemu-images/id_ed25519"
     SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT testuser@localhost"
     # Wait for GDM login screen
