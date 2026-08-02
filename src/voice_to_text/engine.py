@@ -31,7 +31,7 @@ from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError, MutterVir
 from voice_to_text.vad import SmoothedVAD
 
 CLIPBOARD_CMDS = [
-    ["wl-copy", "-p", "--type", "text/plain"],
+    ["wl-copy", "--type", "text/plain"],
     ["xclip", "-selection", "clipboard"],
     ["xsel", "--clipboard", "--input"],
 ]
@@ -78,7 +78,7 @@ def _copy_and_paste(text: str) -> bool:
     previous_clipboard = ""
     try:
         result = subprocess.run(
-            ["wl-paste", "-p", "--no-newline"],
+            ["wl-paste", "--no-newline"],
             capture_output=True,
             text=True,
             timeout=2.0,
@@ -103,7 +103,7 @@ def _copy_and_paste(text: str) -> bool:
     if previous_clipboard:
         try:
             subprocess.run(
-                ["wl-copy", "-p"],
+                ["wl-copy"],
                 input=previous_clipboard.encode(),
                 timeout=2.0,
             )
