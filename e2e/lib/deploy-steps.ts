@@ -45,8 +45,43 @@ export interface DeployConfig {
 export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
-  console.log("Waiting for GDM auto-login...");
-  await pollForCommandOutput(shellExec, "loginctl list-sessions", "seat0", 60000);
+  const t0 = Date.now();
+  console.log("Waiting for GNOME Shell to register on D-Bus...");
+  // Use gdbus wait to get shell on D-Bus quickly
+  await shellExec("gdbus wait --session --timeout=60 org.gnome.Shell");
+  console.log(`  gdbus wait: ${Date.now() - t0}ms`);
+  
+  // Poll until SessionManager is ready (indicates full session is up)
+  const t1 = Date.now();
+  let ready = false;
+  for (let i = 0; i < 20; i++) {
+    const result = await shellExec(
+      `busctl --user get-property org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager SessionIsActive 2>&1 || true`
+    );
+    if (result.includes("b true")) {
+      ready = true;
+      break;
+    }
+    await Bun.sleep(100);
+  }
+  console.log(`  session ready: ${Date.now() - t1}ms`);
+  
+  if (ready) {
+    // Verify session is actually ready for commands
+    try {
+      const testResult = await shellExec("echo ok");
+      if (testResult.trim() !== "ok") {
+        console.log("  WARNING: Session test command failed");
+      }
+    } catch (e) {
+      console.log("  WARNING: Session test command failed:", e);
+    }
+  }
+  console.log(`  GDM login total: ${Date.now() - t0}ms`);
+  
+  if (!ready) {
+    console.log("WARNING: Session did not become ready in time, continuing anyway");
+  }
 }
 
 export async function installDependencies(
@@ -125,71 +160,105 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   
   // Fall back to GDM restart if D-Bus loading failed
   if (!extensionLoaded) {
-    console.log("D-Bus loading failed, restarting GDM...");
+    console.log("D-Bus loading failed, restarting GNOME Shell via reexec...");
     
-    // Restart GDM to load the extension (with retry)
-    // Use sshExec (not shell.exec) because shell.exec uses a PTY that hangs
-    // when GDM restart drops the SSH connection.
+    // Try global.reexec_self() first (faster than GDM restart)
     let extensionFound = false;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      console.log(`Restarting GDM to load extension (attempt ${attempt + 1})...`);
-      try {
-        sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      } catch {
-        // Expected: GDM restart drops the SSH connection mid-command
-      }
-
-      // Wait for GDM to fully restart and create a new user session
-      console.log("Waiting for GDM to stabilize...");
-      await Bun.sleep(5000);
-
-      // Poll for GDM to be active (new session created)
-      await pollUntilFn(
-        "GDM active after restart",
-        async () => {
-          try {
-            const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-            return result.trim() === "active";
-          } catch {
-            return false;
-          }
-        },
-        30000
+    try {
+      await shell.exec(
+        `gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+          --method org.gnome.Shell.Eval \
+          'global.reexec_self()' 2>&1 || true`
       );
-
-      // Re-establish SSH session
-      console.log("Re-establishing SSH session after GDM restart...");
+      
+      // Wait for GNOME Shell to restart
+      await Bun.sleep(5000);
+      
+      // Re-establish SSH session (shell may have dropped)
       await shell.close();
       await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
-
-      // Wait for GNOME Shell
-      const t2 = Date.now();
+      
+      // Wait for GNOME Shell to be ready
       await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
-
-      // Give GNOME Shell time to initialize extension system
       await Bun.sleep(3000);
-      console.log(`  GDM restart+SSH: ${Date.now() - t2}ms`);
+      
+      // Check if extension is now available
+      const verifyResult = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (!verifyResult.includes("doesn't exist")) {
+        extensionFound = true;
+        console.log("Extension loaded via reexec");
+      }
+    } catch {
+      // reexec failed, will try GDM restart
+    }
+    
+    // Fall back to GDM restart if reexec didn't work
+    if (!extensionFound) {
+      console.log("reexec failed, restarting GDM...");
+      
+      // Restart GDM to load the extension (with retry)
+      // Use sshExec (not shell.exec) because shell.exec uses a PTY that hangs
+      // when GDM restart drops the SSH connection.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        console.log(`Restarting GDM to load extension (attempt ${attempt + 1})...`);
+        try {
+          sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        } catch {
+          // Expected: GDM restart drops the SSH connection mid-command
+        }
 
-      // Wait for extension to be available
-      console.log("Waiting for extension to be available...");
-      try {
+        // Wait for GDM to fully restart and create a new user session
+        console.log("Waiting for GDM to stabilize...");
+        await Bun.sleep(5000);
+
+        // Poll for GDM to be active (new session created)
         await pollUntilFn(
-          "extension available",
+          "GDM active after restart",
           async () => {
             try {
-              const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-              return !result.includes("doesn't exist");
+              const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+              return result.trim() === "active";
             } catch {
               return false;
             }
           },
           30000
         );
-        extensionFound = true;
-        break;
-      } catch {
-        // Extension not found — try again
-        console.log("Extension not found, retrying...");
+
+        // Re-establish SSH session
+        console.log("Re-establishing SSH session after GDM restart...");
+        await shell.close();
+        await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+
+        // Wait for GNOME Shell
+        const t2 = Date.now();
+        await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+
+        // Give GNOME Shell time to initialize extension system
+        await Bun.sleep(3000);
+        console.log(`  GDM restart+SSH: ${Date.now() - t2}ms`);
+
+        // Wait for extension to be available
+        console.log("Waiting for extension to be available...");
+        try {
+          await pollUntilFn(
+            "extension available",
+            async () => {
+              try {
+                const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+                return !result.includes("doesn't exist");
+              } catch {
+                return false;
+              }
+            },
+            30000
+          );
+          extensionFound = true;
+          break;
+        } catch {
+          // Extension not found — try again
+          console.log("Extension not found, retrying...");
+        }
       }
     }
 
