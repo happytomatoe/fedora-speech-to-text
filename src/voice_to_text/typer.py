@@ -402,9 +402,7 @@ class MutterVirtualTyper:
         try:
             bus = await MessageBus(bus_type=BusType.SESSION).connect()
             introspection = await bus.introspect(self.DBUS_NAME, self.DBUS_PATH)
-            proxy = bus.get_proxy_object(
-                self.DBUS_NAME, self.DBUS_PATH, introspection
-            )
+            proxy = bus.get_proxy_object(self.DBUS_NAME, self.DBUS_PATH, introspection)
             self._proxy = proxy.get_interface(self.DBUS_INTERFACE)
             self._bus = bus
             logger.info("MutterVirtualTyper: TypeText D-Bus service available")
@@ -442,7 +440,10 @@ class MutterVirtualTyper:
 
         logger.debug(
             "MutterVirtualTyper: stream_diff: backspaces=%d, new_suffix=%d chars, old=%d, new=%d",
-            backspace_count, len(new_suffix), len(old_text), len(new_text),
+            backspace_count,
+            len(new_suffix),
+            len(old_text),
+            len(new_text),
         )
         try:
             # Send backspaces if needed
@@ -480,3 +481,72 @@ class MutterVirtualTyper:
         if self._fallback:
             return self._fallback.typed_text
         return self._typed_text
+
+
+class MutterVirtualPaster:
+    """Paste text via GNOME Shell extension's PasteText D-Bus method.
+
+    Sets clipboard via St.Clipboard and sends Shift+Insert via virtual keyboard,
+    all inside the compositor. Avoids the timing issues of wl-copy + dotool paste.
+    """
+
+    DBUS_NAME = "com.happytomatoe.TypeText"
+    DBUS_PATH = "/com/happytomatoe/TypeText"
+    DBUS_INTERFACE = "com.happytomatoe.TypeText"
+
+    def __init__(self):
+        self._usable: bool = True
+        self._proxy = None
+        self._bus: MessageBus | None = None
+
+    async def start(self) -> None:
+        """Check if the PasteText D-Bus service is available."""
+        try:
+            bus = await MessageBus(bus_type=BusType.SESSION).connect()
+            introspection = await bus.introspect(self.DBUS_NAME, self.DBUS_PATH)
+            proxy = bus.get_proxy_object(self.DBUS_NAME, self.DBUS_PATH, introspection)
+            self._proxy = proxy.get_interface(self.DBUS_INTERFACE)
+            self._bus = bus
+            logger.info("MutterVirtualPaster: PasteText D-Bus service available")
+            return
+        except Exception as e:
+            logger.debug("MutterVirtualPaster: D-Bus check failed: %s", e)
+            self._usable = False
+
+    async def paste(self, text: str) -> bool:
+        """Paste text via PasteText D-Bus method with clipboard save/restore."""
+        if not self._proxy or not self._usable:
+            return False
+
+        try:
+            # Save current clipboard
+            await self._proxy.call_save_clipboard()
+            logger.debug("MutterVirtualPaster: Clipboard saved")
+
+            # Paste the new text
+            await self._proxy.call_paste_text(text)
+            logger.debug("MutterVirtualPaster: Pasted %d chars via D-Bus", len(text))
+
+            # Small delay to let paste happen
+            await asyncio.sleep(0.1)
+
+            # Restore previous clipboard
+            await self._proxy.call_restore_clipboard()
+            logger.debug("MutterVirtualPaster: Clipboard restored")
+
+            return True
+        except Exception as e:
+            logger.warning("MutterVirtualPaster: D-Bus call failed: %s", e)
+            self._usable = False
+            return False
+
+    async def stop(self) -> None:
+        """Cleanup."""
+        if self._bus:
+            self._bus.disconnect()
+            self._bus = None
+        self._proxy = None
+
+    @property
+    def is_running(self) -> bool:
+        return self._usable and self._proxy is not None

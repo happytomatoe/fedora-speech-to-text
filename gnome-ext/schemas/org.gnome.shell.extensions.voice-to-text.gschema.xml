@@ -24,7 +24,7 @@
       <summary>Language code for transcription</summary>
     </key>
     <key name="output-method" type="s">
-      <default>"type"</default>
+      <default>"mutter-virtual"</default>
       <summary>Output method for transcribed text (type, wl-paste, mutter-virtual, clipboard, or none)</summary>
     </key>
     <key name="inhibit-sleep" type="b">
