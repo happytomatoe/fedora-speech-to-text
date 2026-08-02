@@ -120,7 +120,7 @@ class VoiceToTextInterface(ServiceInterface):
           device (str|None): sounddevice device name (e.g. "pipewire"),
             or "__system_default__"/None to let PortAudio choose
           decrease_speaker_volume (int): 0-100
-          output_method (str): "type", "type-fallback-clipboard", "wl-paste", "mutter-virtual", "clipboard", or "none"
+          output_method (str): "mutter-virtual", "wl-paste", or "none"
         """
         if self._engine.state != EngineState.IDLE:
             raise DBusError(
