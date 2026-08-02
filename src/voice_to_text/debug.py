@@ -43,22 +43,13 @@ async def handle_debug_recording(
     config: dict[str, Any],
     on_level: "Callable[[float], None] | None" = None,
     _cancel_event: "asyncio.Event | None" = None,
-    """Handle debug mode recording with a test file.
-
-    Args:
-        config: Recording configuration from D-Bus
-        on_level: Optional callback to emit audio levels (0.0-1.0)
-        _cancel_event: Optional cancellation event to allow early exit
-
-    Returns:
-        Transcription text if successful, None otherwise
-    """
 ) -> str | None:
     """Handle debug mode recording with a test file.
 
     Args:
         config: Recording configuration from D-Bus
         on_level: Optional callback to emit audio levels (0.0-1.0)
+        _cancel_event: Optional cancellation event to allow early exit
 
     Returns:
         Transcription text if successful, None otherwise
