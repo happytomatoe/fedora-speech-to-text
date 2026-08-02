@@ -37,6 +37,7 @@ export interface DeployConfig {
   sshUser: string;
   extensionUuid: string;
   testAudioFile: string;
+  outputMethod?: string; // Output method to test: type, clipboard, mutter-virtual
 }
 
 // --- Deployment steps ---
@@ -81,71 +82,97 @@ dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
-  // Restart GDM to load the extension (with retry)
-  // Use sshExec (not shell.exec) because shell.exec uses a PTY that hangs
-  // when GDM restart drops the SSH connection.
-  let extensionFound = false;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    console.log(`Restarting GDM to load extension (attempt ${attempt + 1})...`);
-    try {
-      sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    } catch {
-      // Expected: GDM restart drops the SSH connection mid-command
-    }
-
-    // Wait for GDM to fully restart and create a new user session
-    console.log("Waiting for GDM to stabilize...");
-    await Bun.sleep(5000);
-
-    // Poll for GDM to be active (new session created)
-    await pollUntilFn(
-      "GDM active after restart",
-      async () => {
-        try {
-          const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-          return result.trim() === "active";
-        } catch {
-          return false;
-        }
-      },
-      30000
+  // Try to load extension dynamically via D-Bus (faster than GDM restart)
+  // Falls back to GDM restart if D-Bus method not available
+  console.log("Loading extension via D-Bus...");
+  let extensionLoaded = false;
+  
+  try {
+    // Try D-Bus method to load extension
+    const dbusResult = await shell.exec(
+      `gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.gnome.Shell.Eval \
+        "Main.extensionManager.loadExtension '${cfg.extensionUuid}'" 2>&1 || true`
     );
+    
+    if (dbusResult.includes("true") || dbusResult.includes("(true, ''))")) {
+      console.log("Extension loaded via D-Bus");
+      extensionLoaded = true;
+    }
+  } catch {
+    // D-Bus method not available, will try GDM restart
+  }
+  
+  // Fall back to GDM restart if D-Bus loading failed
+  if (!extensionLoaded) {
+    console.log("D-Bus loading failed, restarting GDM...");
+    
+    // Restart GDM to load the extension (with retry)
+    // Use sshExec (not shell.exec) because shell.exec uses a PTY that hangs
+    // when GDM restart drops the SSH connection.
+    let extensionFound = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      console.log(`Restarting GDM to load extension (attempt ${attempt + 1})...`);
+      try {
+        sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      } catch {
+        // Expected: GDM restart drops the SSH connection mid-command
+      }
 
-    // Re-establish SSH session
-    console.log("Re-establishing SSH session after GDM restart...");
-    await shell.close();
-    await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+      // Wait for GDM to fully restart and create a new user session
+      console.log("Waiting for GDM to stabilize...");
+      await Bun.sleep(5000);
 
-    // Wait for GNOME Shell
-    await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
-
-    // Give GNOME Shell time to initialize extension system
-    await Bun.sleep(3000);
-
-    // Wait for extension to be available
-    console.log("Waiting for extension to be available...");
-    try {
+      // Poll for GDM to be active (new session created)
       await pollUntilFn(
-        "extension available",
+        "GDM active after restart",
         async () => {
           try {
-            const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-            return !result.includes("doesn't exist");
+            const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+            return result.trim() === "active";
           } catch {
             return false;
           }
         },
         30000
       );
-      extensionFound = true;
-      break;
-    } catch {
-      // Extension not found — try again
-      console.log("Extension not found, retrying...");
-    }
-  }
 
-  if (!extensionFound) throw new Error("Extension failed to load after two GDM restarts");
+      // Re-establish SSH session
+      console.log("Re-establishing SSH session after GDM restart...");
+      await shell.close();
+      await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+
+      // Wait for GNOME Shell
+      await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+
+      // Give GNOME Shell time to initialize extension system
+      await Bun.sleep(3000);
+
+      // Wait for extension to be available
+      console.log("Waiting for extension to be available...");
+      try {
+        await pollUntilFn(
+          "extension available",
+          async () => {
+            try {
+              const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+              return !result.includes("doesn't exist");
+            } catch {
+              return false;
+            }
+          },
+          30000
+        );
+        extensionFound = true;
+        break;
+      } catch {
+        // Extension not found — try again
+        console.log("Extension not found, retrying...");
+      }
+    }
+
+    if (!extensionFound) throw new Error("Extension failed to load after two GDM restarts");
+  }
 
   sshExec(`gnome-extensions enable ${cfg.extensionUuid} 2>/dev/null || true`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   const extState = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
@@ -220,8 +247,13 @@ export async function startVoiceService(
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   scpToVm(join(cfg.fixtureDir, "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  
+  // Set output method from config (default to 'type')
+  const outputMethod = cfg.outputMethod || 'type';
+  console.log(`  Using output method: ${outputMethod}`);
+  
   await shell.exec(
-    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
+    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
   );
 
   await pollForCommandOutputFn(

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Create a new base image with uv and tmux pre-installed.
+# Create a new base image with uv, tmux, and Python dependencies pre-installed.
 # This image is based on the existing optimized base.qcow2
-# and adds uv for faster Python dependency installation.
+# and adds uv + Python packages for faster E2E testing.
 #
 # Usage: ./create-base-with-uv.sh
 # Output: e2e/qemu-images/base-with-uv.qcow2
@@ -40,11 +40,13 @@ fi
 echo "Creating overlay..."
 qemu-img create -f qcow2 -b "$SOURCE_IMAGE" -F qcow2 "$OUTPUT_IMAGE" >/dev/null
 
-# Install uv in the image
-echo "Installing uv..."
+# Install uv and Python dependencies in the image
+PYTHON_DEPS="httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz"
+
+echo "Installing uv and Python dependencies..."
 virt-customize -a "$OUTPUT_IMAGE" \
     --run-command 'curl -LsSf https://astral.sh/uv/install.sh | sh' \
-    --run-command 'ln -sf /root/.local/bin/uv /usr/local/bin/uv' \
+    --run-command "$HOME/.local/bin/uv pip install --system --quiet $PYTHON_DEPS" \
     --selinux-relabel 2>&1
 
 echo ""
@@ -54,8 +56,9 @@ echo ""
 echo "Features:"
 echo "  - tmux (from base.qcow2)"
 echo "  - uv (Python package manager)"
+echo "  - Python dependencies pre-installed (httpx, dbus-next, numpy, etc.)"
 echo "  - cloud-init disabled"
 echo "  - UseDNS no in sshd"
 echo "  - NetworkManager-wait-online disabled"
 echo ""
-echo "To use: Update e2e/lib/vm.ts to use this image as baseImage"
+echo "To use: The E2E tests will automatically detect and use this image if available"
