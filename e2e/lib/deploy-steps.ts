@@ -201,8 +201,15 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     );
     console.log(`  user session ready: ${Date.now() - t2}ms [time]`);
 
-    // Now wait for GNOME Shell (user session is ready, gnome-shell should start shortly)
-    await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+    // Now wait for GNOME Shell to register on D-Bus (same method as initial login)
+    const t3 = Date.now();
+    try {
+      await shell.exec("gdbus wait --session --timeout=60 org.gnome.Shell");
+    } catch {
+      // gdbus wait may fail if shell is already up — check pgrep as fallback
+      await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+    }
+    console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
 
     // Poll for GNOME Shell extension system to be ready
     await pollUntilFn(
