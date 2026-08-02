@@ -109,9 +109,17 @@ class TypeTextService {
             console.log('VoiceToText: TypeText virtual keyboard not available');
             return;
         }
-        console.log(`VoiceToText: TypeText typing ${text.length} chars`);
+        const preview = text.length > 20 ? text.substring(0, 20) + '...' : text;
+        console.log(`VoiceToText: TypeText called with ${text.length} chars: "${preview}"`);
         try {
-            let time = Clutter.get_current_event_time() || Date.now();
+            let time = Clutter.get_current_event_time();
+            const fallbackTime = Date.now();
+            if (time === 0) {
+                console.log('VoiceToText: No active Clutter event, using Date.now() fallback');
+                time = fallbackTime;
+            } else {
+                console.log(`VoiceToText: Using Clutter event time: ${time}`);
+            }
             for (const char of text) {
                 if (char === '\n') {
                     this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.PRESSED);

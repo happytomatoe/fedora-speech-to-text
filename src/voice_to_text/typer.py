@@ -20,8 +20,8 @@ import logging
 import os
 import shutil
 
-from dbus_next.aio import MessageBus
 from dbus_next import BusType
+from dbus_next.aio import MessageBus
 
 logger = logging.getLogger(__name__)
 
@@ -440,6 +440,10 @@ class MutterVirtualTyper:
         backspace_count = len(old_text) - common_len
         new_suffix = new_text[common_len:]
 
+        logger.debug(
+            "MutterVirtualTyper: stream_diff: backspaces=%d, new_suffix=%d chars, old=%d, new=%d",
+            backspace_count, len(new_suffix), len(old_text), len(new_text),
+        )
         try:
             # Send backspaces if needed
             if backspace_count > 0:
@@ -449,6 +453,7 @@ class MutterVirtualTyper:
             # Send new text
             if new_suffix:
                 await self._proxy.call_type_text(new_suffix)
+                logger.debug("MutterVirtualTyper: Sending %d chars via D-Bus", len(new_suffix))
 
             self._typed_text = new_text
         except Exception as e:

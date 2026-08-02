@@ -54,13 +54,13 @@ def _copy_to_clipboard(text: str) -> bool:
 
 
 def _paste_via_dotool() -> bool:
-    """Paste from clipboard via dotool key ctrl+v."""
+    """Paste from clipboard via dotool key shift+insert (universal paste)."""
     import subprocess
 
     try:
         proc = subprocess.run(
             ["dotool"],
-            input=b"key ctrl+v\n",
+            input=b"key shift+insert\n",
             timeout=5.0,
         )
         return proc.returncode == 0
@@ -541,7 +541,10 @@ class RecordingEngine:
 
                     # If we were typing incrementally, apply final corrections
                     if text and typer and typer._usable:
-                        logger.info("Applying final stream_diff with typer=%s, text_len=%d", type(typer).__name__, len(text))
+                        logger.info(
+                            "Applying final stream_diff with typer=%s, text_len=%d",
+                            type(typer).__name__, len(text),
+                        )
                         await typer.stream_diff(text)
                     elif text and typer and not typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
