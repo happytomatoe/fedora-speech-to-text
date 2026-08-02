@@ -87,3 +87,8 @@ opensrc/
 logs/
 gnome-ext/schemas/gschemas.compiled
 .auto-handoff-resuming
+
+# Test scripts
+scripts/test-*.sh
+scripts/test-*.py
+scripts/wait-for-*.sh

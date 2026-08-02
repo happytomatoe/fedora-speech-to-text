@@ -19,22 +19,8 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-# Lazy imports to avoid circular dependencies
-# These are resolved at runtime when handle_debug_recording is called
-_get_batch_provider = None
-_ConfigManager = None
-
-
-def _lazy_imports():
-    """Import provider dependencies lazily to avoid circular imports."""
-    global _get_batch_provider, _ConfigManager
-    if _get_batch_provider is None:
-        from voice_to_text.config import ConfigManager
-        from voice_to_text.providers import get_batch_provider
-
-        _get_batch_provider = get_batch_provider
-        _ConfigManager = ConfigManager
-
+from voice_to_text.config import ConfigManager
+from voice_to_text.providers import get_batch_provider
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +38,7 @@ async def handle_debug_recording(
     Args:
         config: Recording configuration from D-Bus
         on_level: Optional callback to emit audio levels (0.0-1.0)
+        _cancel_event: Optional cancellation event to allow early exit
 
     Returns:
         Transcription text if successful, None otherwise
@@ -67,16 +54,13 @@ async def handle_debug_recording(
     logger.info("DEBUG MODE: Using test file %s instead of microphone", debug_file)
     logger.info("DEBUG MODE: Will show audio level for %d seconds", DEBUG_RECORDING_DURATION)
 
-    # Lazy import to avoid circular dependencies
-    _lazy_imports()
-
     # Get provider config
-    config_mgr = _ConfigManager()
+    config_mgr = ConfigManager()
     provider = config.get("provider", "voxtral")
     provider_config = config_mgr.get_provider_config(provider)
 
     # Create provider
-    batch_provider = await asyncio.to_thread(_get_batch_provider, provider, provider_config)
+    batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
 
     try:
         # Simulate audio level feedback for a few seconds

@@ -6,6 +6,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
+import {TypeTextService} from './type-text-service.js';
+import Clutter from 'gi://Clutter';
 
 const VoiceToTextIface = `
 <node>
@@ -30,6 +32,7 @@ const VoiceToTextIface = `
 </node>`;
 
 const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
+
 
 const SessionManagerIface =
     '<node>\
@@ -69,6 +72,8 @@ export default class VoiceToTextExtension extends Extension {
         }
         console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
         this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
+        this._typeTextService = new TypeTextService();
+        this._typeTextService.enable();
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
@@ -130,6 +135,8 @@ export default class VoiceToTextExtension extends Extension {
         this._sessionManager = null;
         this._proxy = null;
 
+        this._typeTextService?.disable();
+        this._typeTextService = null;
         this._audioLevelWidget?.destroy();
         this._audioLevelWidget = null;
         this._indicator?.destroy();

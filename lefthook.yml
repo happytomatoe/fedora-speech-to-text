@@ -29,6 +29,9 @@ pre-commit:
     prettier-check:
       run: npx prettier@3.8.4 --check {staged_files}
       glob: "gnome-ext/**/*.{js,css,json}"
+    justfile-format:
+      run: just --fmt --check 2>/dev/null || just --fmt
+      glob: "justfile"
     pytest:
       run: uv run pytest -n auto
       glob: "*.{py,js,toml,lock}"
