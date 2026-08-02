@@ -127,7 +127,7 @@ class TypeTextService {
                     this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
                 } else {
                     const charCode = char.charCodeAt(0);
-                    const keyval = Clutter.unicode_to_keyval(charCode);
+                    const keyval = Clutter.unicode_to_keysym(charCode);
                     if (keyval !== 0) {
                         this._virtualKeyboard.notify_keyval(time_us, keyval, Clutter.KeyState.PRESSED);
                         this._virtualKeyboard.notify_keyval(time_us, keyval, Clutter.KeyState.RELEASED);
