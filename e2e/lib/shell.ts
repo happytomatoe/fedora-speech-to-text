@@ -13,6 +13,14 @@ export class ShellHelper {
   private session: ShellSession | null = null;
   private isRecording = false;
 
+  private dbusAddr: string | null = null;
+  private _deployer: import("./deploy.js").Deployer | null = null;
+
+  /** Set deployer for fast SSH commands (avoids per-call connection overhead) */
+  setDeployer(deployer: import("./deploy.js").Deployer): void {
+    this._deployer = deployer;
+  }
+
   async openSshSession(opts: {
     sshKey: string;
     sshPort: number;
@@ -21,23 +29,45 @@ export class ShellHelper {
     cols?: number;
     rows?: number;
   }): Promise<ShellSession> {
-    const shell = new ShellUse("e2e-ssh");
+    // Retry shell-use daemon connection — it can crash after GDM restart
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let shell: ShellUse | null = null;
+      try {
+        shell = new ShellUse("e2e-ssh");
+        await shell.open({
+          cols: opts.cols ?? 120,
+          rows: opts.rows ?? 40,
+        });
 
-    await shell.open({
-      cols: opts.cols ?? 120,
-      rows: opts.rows ?? 40,
-    });
+        const host = opts.host ?? "localhost";
+        await shell.submit(
+          `ssh -i ${opts.sshKey} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${opts.sshPort} ${opts.sshUser}@${host}`
+        );
 
-    const host = opts.host ?? "localhost";
-    await shell.submit(
-      `ssh -i ${opts.sshKey} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${opts.sshPort} ${opts.sshUser}@${host}`
-    );
+        // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
+        await shell.waitText(`${opts.sshUser}@localhost`, { timeout: 60000 });
 
-    // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
-    await shell.waitText(`${opts.sshUser}@`, { timeout: 60000 });
-
-    this.session = { shell, ...opts, host };
-    return this.session;
+        this.session = { shell, ...opts, host };
+        return this.session;
+      } catch (err) {
+        lastErr = err as Error;
+        console.log(`  SSH session attempt ${attempt + 1} failed: ${lastErr.message}`);
+        // Close the failed instance to avoid resource leak
+        try {
+          await shell?.close();
+        } catch { /* ignore */ }
+        if (attempt < 2) {
+          // Kill any stale daemon session and wait before retry
+          // Scope the pkill to this specific session to avoid killing unrelated sessions
+          try {
+            execSync(`pkill -f 'shell-use.*e2e-ssh' 2>/dev/null || true`, { stdio: "pipe" });
+          } catch { /* ignore */ }
+          await Bun.sleep(3000);
+        }
+      }
+    }
+    throw lastErr ?? new Error("Failed to open SSH session after 3 attempts");
   }
 
   async exec(command: string, timeoutMs = 30000): Promise<string> {
@@ -92,15 +122,30 @@ export class ShellHelper {
   }
 
   private async getShellDbusAddr(): Promise<string> {
+    // Return cached address (D-Bus session address never changes after GNOME Shell starts)
+    if (this.dbusAddr) return this.dbusAddr;
     if (!this.session) return "";
     try {
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
-      const raw = execSync(
-        `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
-        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-      );
-      return raw.trim();
+      let raw: string;
+      if (this._deployer) {
+        // Fast path: use persistent SSH connection (avoids ~6s per-call overhead)
+        const result = await this._deployer.exec(
+          `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+        );
+        raw = result.stdout.trim();
+      } else {
+        // Fallback: spawn new SSH connection
+        const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+        const sshHost = `${this.session.sshUser}@${this.session.host}`;
+        raw = execSync(
+          `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
+          { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+        ).trim();
+      }
+      if (raw) {
+        this.dbusAddr = raw;
+      }
+      return raw;
     } catch {
       return "";
     }
@@ -238,6 +283,10 @@ export class ShellHelper {
     }
   }
 
+  /** Reset recording state flag (used after snapshot restore) */
+  resetRecordingState(): void {
+    this.isRecording = false;
+  }
   async waitForRecordingStart(timeoutMs = 10000): Promise<void> {
     const start = Date.now();
 
@@ -286,9 +335,11 @@ export class ShellHelper {
   }
 
   async close(): Promise<void> {
+    this.dbusAddr = null;  // Invalidate cached address
     if (this.session) {
       await this.session.shell.close();
       this.session = null;
     }
-  }
+
+}
 }

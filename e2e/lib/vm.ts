@@ -8,6 +8,7 @@ import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import {
   DeployConfig,
   waitForGdmLogin,
+  installDependencies,
   deployExtension,
   deployPythonSource,
   deployTestAudio,
@@ -27,11 +28,13 @@ export interface VmConfig {
   recordMode: boolean;
   updateMode: boolean;
   testAudioFile: string;
+  outputMethod?: string;
 }
 
 export class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
   booted = false;
+  private freshlyBooted = false;
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
@@ -57,6 +60,7 @@ export class VmManager {
       sshUser: config.sshUser,
       extensionUuid: config.extensionUuid,
       testAudioFile: config.testAudioFile,
+      outputMethod: config.outputMethod,
     };
     if (config.recordMode) {
       mkdirSync(join(config.run.outputDir, "recording"), { recursive: true });
@@ -127,6 +131,7 @@ export class VmManager {
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
+      "-device", "virtio-rng-pci",
       "-no-reboot",
     ];
     // Wrap in setsid + nohup to detach from parent process group
@@ -138,6 +143,7 @@ export class VmManager {
     });
 
     this.booted = true;
+    this.freshlyBooted = true;
 
     for (let i = 0; i < 30; i++) {
       if (existsSync(socketPath)) break;
@@ -148,6 +154,7 @@ export class VmManager {
     }
 
     await this.qemu.connect();
+    await this.verifySpice();
   }
 
   async waitForSsh(): Promise<void> {
@@ -158,19 +165,68 @@ export class VmManager {
     });
   }
 
-  async setup(): Promise<void> {
-    const shellExec = this.shell.exec.bind(this.shell);
+  /** Verify Spice display is accessible */
+  async verifySpice(): Promise<void> {
+    const spicePort = this.config.run.spicePort;
+    const net = await import("node:net");
+    
+    await pollUntil(
+      `Spice port ${spicePort} listening`,
+      async () => {
+        return new Promise<boolean>((resolve) => {
+          const sock = net.createConnection(spicePort, "localhost");
+          const timer = setTimeout(() => {
+            sock.destroy();
+            resolve(false);
+          }, 2000);
+          sock.on("connect", () => {
+            clearTimeout(timer);
+            sock.destroy();
+            resolve(true);
+          });
+          sock.on("error", () => {
+            clearTimeout(timer);
+            resolve(false);
+          });
+        });
+      },
+      10000
+    );
+  }
 
-    await waitForGdmLogin(shellExec);
+  async setup(): Promise<void> {
+    const t0 = Date.now();
+    const shellExec = this.shell.exec.bind(this.shell);
+    if (this.freshlyBooted) {
+      await waitForGdmLogin(shellExec);
+    } else {
+      console.log("VM already booted, skipping GDM wait...");
+    }
+    console.log(`  GDM login: ${Date.now() - t0}ms`);
+
+    // Establish deployer SSH connection (after GDM login, before deployment)
+    await this.deployer.connect();
+
+    const t1 = Date.now();
+    await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
-    await deployExtension(this.shell, this.deployCfg, pollUntil);
+    console.log(`  installDependencies: ${Date.now() - t1}ms`);
+
+    const t2 = Date.now();
+    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    console.log(`  deployExtension: ${Date.now() - t2}ms`);
 
     // Deploy Python source and test audio (sequential, sync operations)
+    const t3 = Date.now();
     deployPythonSource(this.deployCfg);
     deployTestAudio(this.deployCfg);
+    console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
+    const t4 = Date.now();
     await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput);
+    console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 
+    console.log(`  setup total: ${Date.now() - t0}ms`);
     // Note: snapshot save/restore is handled by saveCleanSnapshot/resetToCleanState
   }
 
@@ -227,6 +283,9 @@ export class VmManager {
           "com.happytomatoe.VoiceToText",
           10000
         );
+
+        // 5. Reset JS-side recording state (snapshot restore doesn't reset this)
+        this.shell.resetRecordingState();
         
         console.log("  Snapshot restored successfully");
         return;

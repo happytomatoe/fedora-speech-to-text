@@ -23,7 +23,7 @@ export class StepRunner {
           await step.fn();
         }
         const ms = Date.now() - start;
-        console.log(`  ✓ ${step.name} (${(ms / 1000).toFixed(1)}s)`);
+        console.log(`  ✓ ${step.name} [time] ${(ms / 1000).toFixed(1)}s`);
       } catch (err) {
         const ms = Date.now() - start;
         console.error(`  ✗ ${step.name} FAILED (${(ms / 1000).toFixed(1)}s):`, err);

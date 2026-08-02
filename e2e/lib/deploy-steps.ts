@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
+import { Deployer } from "./deploy.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 
 // --- SSH exec helpers (sync, for quick one-off commands) ---
@@ -37,6 +38,7 @@ export interface DeployConfig {
   sshUser: string;
   extensionUuid: string;
   testAudioFile: string;
+  outputMethod?: string; // Output method to test: type, clipboard, mutter-virtual
 }
 
 // --- Deployment steps ---
@@ -44,8 +46,45 @@ export interface DeployConfig {
 export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
-  console.log("Waiting for GDM auto-login...");
-  await pollForCommandOutput(shellExec, "loginctl list-sessions", "seat0", 60000);
+  const t0 = Date.now();
+  console.log("Waiting for GNOME Shell to register on D-Bus...");
+  // Use gdbus wait to get shell on D-Bus quickly (~350ms)
+  await shellExec("gdbus wait --session --timeout=60 org.gnome.Shell");
+  console.log(`  gdbus wait: ${Date.now() - t0}ms [time]`);
+  
+  // Poll SessionIsActive — indicates full session is up.
+  // The PTY shell is functional after gdbus wait returns.
+  const t1 = Date.now();
+  let ready = false;
+  for (let i = 0; i < 20; i++) {
+    const result = await shellExec(
+      `busctl --user get-property org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager SessionIsActive 2>&1 || true`
+    );
+    if (result.includes("b true")) {
+      ready = true;
+      break;
+    }
+    await Bun.sleep(100);
+  }
+  console.log(`  session ready: ${Date.now() - t1}ms [time]`);
+  console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
+  
+  if (!ready) {
+    console.log("WARNING: Session did not become ready in time, continuing anyway");
+  }
+}
+
+export async function installDependencies(
+  _sshKey: string,
+  _sshPort: number,
+  _sshUser: string
+): Promise<void> {
+  const t0 = Date.now();
+  // Skip dependency checks — tmux and uv are guaranteed in base-with-uv.qcow2.
+  // This saves 6-18s per run (sshExec has ~6s cold connection overhead per call).
+  // If someone rebuilds base without tmux/uv, tests will fail with a clear error.
+  console.log("Dependencies: skipped (guaranteed in base image) [time]");
+  console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
 // extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
@@ -53,14 +92,37 @@ export async function waitForGdmLogin(
 export async function deployExtension(
   shell: ShellHelper,
   cfg: DeployConfig,
-  pollUntilFn: typeof pollUntil
+  pollUntilFn: typeof pollUntil,
+  deployer?: Deployer
 ): Promise<void> {
   const extDir = join(cfg.projectRoot, "gnome-ext");
   if (!existsSync(extDir)) return;
 
+  const t0 = Date.now();
   console.log("Deploying GNOME extension...");
-  rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await shell.exec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}/schemas/ 2>/dev/null || true`);
+  
+  const extRemoteDir = `~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`;
+  const tUpload = Date.now();
+  if (deployer) {
+    // Use persistent SSH connection (avoids ~6s per-call overhead)
+    await deployer.uploadDir(extDir, extRemoteDir);
+  } else {
+    rsyncToVm(extDir, extRemoteDir, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  }
+  console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
+  
+  const tSchema = Date.now();
+  if (deployer) {
+    const schemaResult = await deployer.exec(`glib-compile-schemas ${extRemoteDir}/schemas/`);
+    if (schemaResult.code !== 0) {
+      throw new Error(`glib-compile-schemas failed (code ${schemaResult.code}): ${schemaResult.stderr}`);
+    }
+  } else {
+    sshExec(`glib-compile-schemas ${extRemoteDir}/schemas/`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  }
+  console.log(`    schemas: ${Date.now() - tSchema}ms [time]`);
+  
+  const tDconf = Date.now();
   await shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`);
   await shell.exec(`dconf write /org/gnome/shell/disable-user-extensions false`);
   await shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
@@ -68,33 +130,126 @@ export async function deployExtension(
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
+  console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
+  console.log(`  rsync+dconf: ${Date.now() - t0}ms [time]`);
 
-  // Restart GNOME Shell to load extension
-  console.log("Restarting GNOME Shell to load extension...");
-  await shell.exec("sudo systemctl restart gdm");
+  // Disconnect deployer before GDM restart — SSH connection will be stale after restart
+  if (deployer) {
+    await deployer.disconnect();
+  }
 
-  // Re-establish SSH session after GDM restart
-  console.log("Re-establishing SSH session after GDM restart...");
-  await shell.close();
-  await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+  // Restart GDM to load the extension.
+  // Note: org.gnome.Shell.Eval is disabled in GNOME 50, so D-Bus loading
+  // and global.reexec_self() are not available. GDM restart is the only way.
+  console.log("Restarting GDM to load extension...");
+  
+  let extensionFound = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    console.log(`  attempt ${attempt + 1}...`);
+    try {
+      sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    } catch {
+      // Expected: GDM restart drops the SSH connection mid-command
+    }
 
-  // Wait for GNOME Shell
-  await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+    // Wait for GDM to fully restart and create a new user session
+    console.log("  waiting for GDM to stabilize...");
+    await Bun.sleep(5000);
 
-  // Wait for extension to be available
-  console.log("Waiting for extension to be available...");
-  await pollUntilFn(
-    "extension available",
-    async () => {
-      try {
-        const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-        return !result.includes("doesn't exist");
-      } catch {
-        return false;
-      }
-    },
-    30000
-  );
+    // Poll for GDM to be active (new session created)
+    await pollUntilFn(
+      "GDM active after restart",
+      async () => {
+        try {
+          const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+          return result.trim() === "active";
+        } catch {
+          return false;
+        }
+      },
+      30000
+    );
+
+    // Re-establish SSH session
+    console.log("  re-establishing SSH session...");
+    await shell.close();
+    await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+    // Re-establish deployer SSH connection (stale after GDM restart)
+    if (deployer) {
+      await deployer.disconnect();
+      await deployer.connect();
+    }
+
+    // Wait for user session to be ready (GDM auto-login creates the session)
+    // This must happen BEFORE checking for gnome-shell — gnome-shell only starts
+    // after the user session is created and systemd --user is running.
+    const t2 = Date.now();
+    await pollUntilFn(
+      "user session ready",
+      async () => {
+        try {
+          // Check if the user's D-Bus session bus socket exists
+          const result = await shell.exec(
+            `test -S /run/user/$(id -u)/bus && echo ready`
+          );
+          return result.includes("ready");
+        } catch {
+          return false;
+        }
+      },
+      30000
+    );
+    console.log(`  user session ready: ${Date.now() - t2}ms [time]`);
+
+    // Now wait for GNOME Shell to register on D-Bus (same method as initial login)
+    const t3 = Date.now();
+    try {
+      await shell.exec("gdbus wait --session --timeout=60 org.gnome.Shell");
+    } catch {
+      // gdbus wait may fail if shell is already up — check pgrep as fallback
+      await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+    }
+    console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
+
+    // Poll for GNOME Shell extension system to be ready
+    await pollUntilFn(
+      "extension system ready",
+      async () => {
+        try {
+          const result = await shell.exec(`gnome-extensions list 2>&1`);
+          return !result.includes("error") && !result.includes("Error");
+        } catch {
+          return false;
+        }
+      },
+      15000
+    );
+    console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
+
+    // Wait for extension to be available
+    console.log("  waiting for extension...");
+    try {
+      await pollUntilFn(
+        "extension available",
+        async () => {
+          try {
+            const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+            return !result.includes("doesn't exist");
+          } catch {
+            return false;
+          }
+        },
+        30000
+      );
+      extensionFound = true;
+      break;
+    } catch {
+      // Extension not found — try again
+      console.log("  extension not found, retrying...");
+    }
+  }
+
+  if (!extensionFound) throw new Error("Extension failed to load after two GDM restarts");
 
   sshExec(`gnome-extensions enable ${cfg.extensionUuid} 2>/dev/null || true`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   const extState = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
@@ -138,11 +293,19 @@ export async function startVoiceService(
   pollForCommandOutputFn: typeof pollForCommandOutput
 ): Promise<void> {
   console.log("Installing Python dependencies...");
-  const pipResult = await shell.exec(
-    "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
+  // Use uv for faster, more reliable installs (matches install.sh approach)
+  const uvResult = await shell.exec(
+    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
   );
-  if (pipResult.includes("ERROR") || pipResult.includes("Failed")) {
-    console.log("  WARNING: pip install issues:", pipResult.trim());
+  if (!uvResult.includes("__UV_OK__")) {
+    // Fallback to pip if uv not available
+    console.log("  uv install failed, falling back to pip...");
+    const pipResult = await shell.exec(
+      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 && echo __PIP_OK__ || echo __PIP_FAILED__"
+    );
+    if (!pipResult.includes("__PIP_OK__")) {
+      console.log("  WARNING: pip install issues:", pipResult.trim());
+    }
   }
 
   // Kill existing voice service
@@ -161,8 +324,13 @@ export async function startVoiceService(
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   scpToVm(join(cfg.fixtureDir, "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  
+  // Set output method from config (default to 'type')
+  const outputMethod = cfg.outputMethod || 'type';
+  console.log(`  Using output method: ${outputMethod}`);
+  
   await shell.exec(
-    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
+    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
   );
 
   await pollForCommandOutputFn(

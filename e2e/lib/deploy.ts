@@ -142,20 +142,61 @@ export class Deployer {
     // Ensure remote directory exists
     await this.exec(`mkdir -p ${shellEscape(resolvedRemote)}`);
 
-    const entries = readdirSync(localDir);
-
-    for (const entry of entries) {
-      const local = join(localDir, entry);
-      const remote = `${resolvedRemote}/${entry}`;
-      const stat = statSync(local);
-
-      if (stat.isDirectory()) {
-        await this.exec(`mkdir -p ${shellEscape(remote)}`);
-        await this.uploadDir(local, remote);
-      } else {
-        await this.uploadFile(local, remote);
+    // Collect all files to upload (flatten recursive tree)
+    const files: Array<{ local: string; remote: string; isDir: boolean }> = [];
+    const collectFiles = (ld: string, rd: string) => {
+      for (const entry of readdirSync(ld)) {
+        const local = join(ld, entry);
+        const remote = `${rd}/${entry}`;
+        const stat = statSync(local);
+        if (stat.isDirectory()) {
+          files.push({ local, remote, isDir: true });
+          collectFiles(local, remote);
+        } else {
+          files.push({ local, remote, isDir: false });
+        }
       }
-    }
+    };
+    collectFiles(localDir, resolvedRemote);
+
+    // Upload all files through a single SFTP session
+    return new Promise((resolve, reject) => {
+      this.client!.sftp(async (err, sftp) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        try {
+          // Create all remote directories first
+          for (const file of files) {
+            if (file.isDir) {
+              await new Promise<void>((res) => {
+                sftp.mkdir(file.remote, () => res());
+              });
+            }
+          }
+
+          // Upload all files
+          for (const file of files) {
+            if (file.isDir) continue;
+            const data = readFileSync(file.local);
+            await new Promise<void>((res, rej) => {
+              sftp.writeFile(file.remote, data, (err) => {
+                if (err) rej(err);
+                else res();
+              });
+            });
+          }
+
+          sftp.end();
+          resolve();
+        } catch (e) {
+          sftp.end();
+          reject(e);
+        }
+      });
+    });
   }
 
   async exec(command: string): Promise<{ stdout: string; stderr: string; code: number }> {

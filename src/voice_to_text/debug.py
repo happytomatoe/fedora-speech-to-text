@@ -16,7 +16,8 @@ import asyncio
 import logging
 import math
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 # Lazy imports to avoid circular dependencies
 # These are resolved at runtime when handle_debug_recording is called
@@ -28,10 +29,12 @@ def _lazy_imports():
     """Import provider dependencies lazily to avoid circular imports."""
     global _get_batch_provider, _ConfigManager
     if _get_batch_provider is None:
-        from voice_to_text.providers import get_batch_provider
         from voice_to_text.config import ConfigManager
+        from voice_to_text.providers import get_batch_provider
+
         _get_batch_provider = get_batch_provider
         _ConfigManager = ConfigManager
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +46,6 @@ async def handle_debug_recording(
     config: dict[str, Any],
     on_level: "Callable[[float], None] | None" = None,
     _cancel_event: "asyncio.Event | None" = None,
-    """Handle debug mode recording with a test file.
-
-    Args:
-        config: Recording configuration from D-Bus
-        on_level: Optional callback to emit audio levels (0.0-1.0)
-        _cancel_event: Optional cancellation event to allow early exit
-
-    Returns:
-        Transcription text if successful, None otherwise
-    """
 ) -> str | None:
     """Handle debug mode recording with a test file.
 
@@ -83,15 +76,12 @@ async def handle_debug_recording(
     provider_config = config_mgr.get_provider_config(provider)
 
     # Create provider
-    batch_provider = await asyncio.to_thread(
-        _get_batch_provider, provider, provider_config
-    )
+    batch_provider = await asyncio.to_thread(_get_batch_provider, provider, provider_config)
 
     try:
         # Simulate audio level feedback for a few seconds
         # This gives visual feedback that recording started
         logger.info("DEBUG MODE: Simulating audio capture for %d seconds...", DEBUG_RECORDING_DURATION)
-
 
         # Emit fake audio levels to show the indicator is working
         level = 0.0
@@ -147,16 +137,13 @@ async def handle_debug_recording(
 
             # Apply custom word corrections (same as normal pipeline)
             raw_custom_words = config.get("custom_words")
-            custom_words = (
-                raw_custom_words if raw_custom_words is not None
-                else postprocess_cfg.get("custom_words", [])
-            )
+            custom_words = raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
             if custom_words:
                 from voice_to_text.postprocess import apply_custom_words
+
                 raw_threshold = config.get("custom_words_threshold")
                 custom_words_threshold = (
-                    raw_threshold if raw_threshold is not None
-                    else postprocess_cfg.get("custom_words_threshold", 0.5)
+                    raw_threshold if raw_threshold is not None else postprocess_cfg.get("custom_words_threshold", 0.5)
                 )
                 text = apply_custom_words(
                     text,

@@ -16,13 +16,24 @@ writeFileSync(LOG_FILE, "");
 
 const origLog = console.log;
 const origError = console.error;
+
+// In timing mode, only show timing-related output on stdout.
+// Everything still goes to the log file.
+function isTimingOutput(msg: string): boolean {
+  return msg.includes("[time]") || msg.includes("Total:") || msg.includes("=== Timing");
+}
+
 console.log = (...args: any[]) => {
-  origLog(...args);
-  appendFileSync(LOG_FILE, args.join(" ") + "\n");
+  const msg = args.join(" ");
+  appendFileSync(LOG_FILE, msg + "\n");
+  if (!TIMING_MODE || isTimingOutput(msg)) {
+    origLog(...args);
+  }
 };
 console.error = (...args: any[]) => {
+  const msg = args.join(" ");
+  appendFileSync(LOG_FILE, "ERROR: " + msg + "\n");
   origError(...args);
-  appendFileSync(LOG_FILE, "ERROR: " + args.join(" ") + "\n");
 };
 
 
@@ -33,17 +44,24 @@ const SHUTDOWN = args.includes("--shutdown");
 const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
+if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const SNAPSHOT_MODE = args.includes("--snapshot");
 
-// Parse --timeout <seconds> (default: 60)
+// Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? parseInt(args[timeoutIdx + 1]) * 1000 : 60_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 180) * 1000 : 180_000;
+
+// Parse --case <name> (select specific test case instead of random)
+const caseIdx = args.indexOf("--case");
+const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
+
+// Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual)
+const outputMethodIdx = args.indexOf("--output-method");
+const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 
 function timing(label: string, startMs: number): void {
-  if (TIMING_MODE) {
-    const ms = Date.now() - startMs;
-    console.log(`  [time] ${label}: ${ms}ms`);
-  }
+  const ms = Date.now() - startMs;
+  console.log(`  [time] ${label}: ${ms}ms`);
 }
 
 // Configuration
@@ -51,7 +69,10 @@ const CONFIG = {
   paths: {
     projectRoot: join(import.meta.dir, ".."),
     vmDir: join(import.meta.dir, "qemu-images"),
-    baseImage: join(import.meta.dir, "qemu-images/base.qcow2"),
+    baseImage: (() => {
+      const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
+      return existsSync(uvBase) ? uvBase : join(import.meta.dir, "qemu-images/base.qcow2");
+    })(),
     overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
     sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
@@ -94,8 +115,17 @@ interface TestCase {
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
   const cases: TestCase[] = data["test-cases"];
-  const picked = cases[Math.floor(Math.random() * cases.length)];
-  console.log(`  Selected test case: ${picked.file}`);
+  let picked: TestCase;
+  if (SELECTED_CASE) {
+    picked = cases.find(c => c.file.includes(SELECTED_CASE))!;
+    if (!picked) {
+      throw new Error(`Test case '${SELECTED_CASE}' not found. Available: ${cases.map(c => c.file).join(", ")}`);
+    }
+    console.log(`  Selected test case (by name): ${picked.file}`);
+  } else {
+    picked = cases[Math.floor(Math.random() * cases.length)];
+    console.log(`  Selected test case (random): ${picked.file}`);
+  }
   return picked;
 }
 
@@ -119,11 +149,15 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
   let t: number;
 
+  // Set deployer on shell for fast D-Bus address resolution
+  shell.setDeployer(vm.deployer);
+
   const tmuxCfg: tmux.TmuxHelper = {
     session: `e2e-${run.id}`,
     sshKey: SSH_KEY,
     sshPort: run.sshPort,
     sshUser: SSH_USER,
+    deployer: vm.deployer,
   };
 
   t = Date.now();
@@ -143,7 +177,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   t = Date.now();
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
-  tmux.killSession(tmuxCfg);
+  await tmux.killSession(tmuxCfg);
   await shell.exec(`nohup gnome-terminal -- tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
   // Poll until tmux session appears
   await vm.pollUntil(
@@ -162,10 +196,10 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(500);
 
   // Verify terminal is focused by typing a test character and checking tmux
-  const paneBefore = tmux.capturePane(tmuxCfg);
+  const paneBefore = await tmux.capturePane(tmuxCfg);
   await shell.dotoolCommand("key shift+space"); // type space to confirm dotool works
   await Bun.sleep(200);
-  const paneAfter = tmux.capturePane(tmuxCfg);
+  const paneAfter = await tmux.capturePane(tmuxCfg);
   if (paneBefore === paneAfter) {
     // Terminal might not be focused, try clicking again
     console.log("  Retrying terminal focus...");
@@ -182,7 +216,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Step 3: Snapshot pane content before recording (for transcription detection)
   t = Date.now();
-  const preRecordingPane = tmux.capturePane(tmuxCfg);
+  const preRecordingPane = await tmux.capturePane(tmuxCfg);
   console.log("Pre-recording pane captured.");
   timing("snapshot-pane", t);
 
@@ -238,7 +272,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
           `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
         );
         const trimmed = logOutput.trim();
-        if (trimmed && !/^\\s*(?:\\[[^\\]]*\\]\\s*)?\\S+@\\S+/.test(trimmed)) {
+        if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
           transcription = trimmed;
           console.log(`  Got from log: ${transcription}`);
           return true;
@@ -251,9 +285,9 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     // If log didn't have it, try tmux capture as fallback
     if (!transcription) {
       console.log("  Log poll timed out, trying tmux capture...");
-      const paneContent = tmux.capturePane(tmuxCfg);
+      const paneContent = await tmux.capturePane(tmuxCfg);
       // Strip prompt prefix from lines that contain it
-      const promptPrefixRe = /^\\s*(?:\\[[^\\]]*\\]\\s*)?\\S+@\\S+\\s+\\S*\\s*[#$]\\s*/;
+      const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
       const newLines = paneContent.split("\n")
         .map(l => l.replace(promptPrefixRe, ""))
         .filter(l => l.trim() && !preRecordingPane.includes(l));
@@ -306,43 +340,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   timing("write-result", t);
 
   // Cleanup: kill tmux session
-  tmux.killSession(tmuxCfg);
-}
-
-async function verifyResult(vm: VmManager, preRecordingPane: string, run: RunContext): Promise<{ passed: boolean; message: string }> {
-  console.log("\n=== Verification ===");
-
-  const expected = EXPECTED_TEXT;
-  
-  // Get current tmux pane content
-  const tmuxCfg: tmux.TmuxHelper = {
-    session: `e2e-${run.id}`,
-    sshKey: SSH_KEY,
-    sshPort: run.sshPort,
-    sshUser: SSH_USER,
-  };
-  const currentPane = tmux.capturePane(tmuxCfg);
-  
-  // Extract NEW content (lines that weren't there before recording)
-  const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
-  const newLines = currentPane.split("\n")
-    .map(l => l.replace(promptPrefixRe, ""))
-    .filter(l => l.trim() && !preRecordingPane.includes(l));
-  const actual = newLines.join(" ").trim();
-
-  console.log(`  Expected: ${expected}`);
-  console.log(`  Actual (from tmux): ${actual}`);
-
-  // Normalize: lowercase, strip trailing period, collapse whitespace
-  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
-  const actualNorm = normalize(actual);
-  const expectedNorm = normalize(expected);
-  console.log(`  Normalized expected: ${expectedNorm}`);
-  console.log(`  Normalized actual:   ${actualNorm}`);
-  if (actualNorm === expectedNorm) {
-    return { passed: true, message: "Text matches expected output" };
-  }
-  return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'` };
+  await tmux.killSession(tmuxCfg);
 }
 
 /**
@@ -518,16 +516,18 @@ async function main(): Promise<void> {
     recordMode: RECORD_MODE,
     updateMode: UPDATE_MODE,
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
+    outputMethod: OUTPUT_METHOD,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
   let testsFailed = 0;
 
-  // Global timeout watchdog
+  // Global timeout watchdog — sets a flag instead of process.exit so cleanup runs
+  let timedOut = false;
   const timeoutTimer = setTimeout(() => {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     console.error(`\nTIMEOUT: Test exceeded ${GLOBAL_TIMEOUT_MS / 1000}s limit (${elapsed}s elapsed)`);
-    process.exit(1);
+    timedOut = true;
   }, GLOBAL_TIMEOUT_MS);
 
 
@@ -583,6 +583,11 @@ async function main(): Promise<void> {
     // Update reference images if in update mode
     if (UPDATE_MODE) {
       updateReferenceImages(run);
+    }
+
+    // Check if watchdog timed out during execution
+    if (timedOut) {
+      testsFailed++;
     }
   } catch (err) {
     console.error("\nFATAL:", err);

@@ -508,17 +508,50 @@ qemu-e2e-vm:
     wait ${QEMU_PID} 2>/dev/null || true
 
 # @category e2e-qemu
-# Open SPICE viewer to QEMU E2E test VM (port 5930)
-e2e-test-view:
+# Open SPICE viewer to QEMU E2E test VM
+# Usage: just e2e-test-view [spice_port] [ssh_port]
+# If no ports specified, auto-detects from listening QEMU processes
+e2e-test-view spice_port='' ssh_port='' :
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! ss -tlnp | grep -q ':5930 '; then
-        echo "ERROR: QEMU VM not running (no SPICE on port 5930)"
-        echo "Run 'just qemu-e2e-test-host' first."
+    
+    # Auto-detect ports if not specified
+    if [ -z "{{spice_port}}" ]; then
+        # Find SPICE port from QEMU processes (look for -spice port=XXXX)
+        SPICE_PORT=$(ps aux | grep -oP 'qemu.*-spice port=\K\d+' | head -1 || true)
+        if [ -z "$SPICE_PORT" ]; then
+            # Fallback: find any listening port in SPICE range (5930-5999)
+            SPICE_PORT=$(ss -tlnp 2>/dev/null | grep -oP ':\K(59[3-9]\d)\b' | head -1 || true)
+        fi
+        if [ -z "$SPICE_PORT" ]; then
+            echo "ERROR: Could not auto-detect SPICE port"
+            echo "Specify manually: just e2e-test-view <spice_port> <ssh_port>"
+            exit 1
+        fi
+    else
+        SPICE_PORT="{{spice_port}}"
+    fi
+    
+    if [ -z "{{ssh_port}}" ]; then
+        # Find SSH port from QEMU processes (look for hostfwd=tcp::XXXX-:22)
+        SSH_PORT=$(ps aux | grep -oP 'hostfwd=tcp::\K\d+' | head -1 || true)
+        if [ -z "$SSH_PORT" ]; then
+            SSH_PORT="2222"  # Default fallback
+        fi
+    else
+        SSH_PORT="{{ssh_port}}"
+    fi
+    
+    echo "Using SPICE port: $SPICE_PORT, SSH port: $SSH_PORT"
+    
+    if ! ss -tlnp | grep -q ":$SPICE_PORT "; then
+        echo "ERROR: QEMU VM not running (no SPICE on port $SPICE_PORT)"
+        echo "Run 'just e2e' or 'just qemu-e2e-test-host' first."
         exit 1
     fi
+    
     SSH_KEY="e2e/qemu-images/id_ed25519"
-    SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 testuser@localhost"
+    SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT testuser@localhost"
     # Wait for GDM login screen
     echo -n "Waiting for GDM..."
     for i in $(seq 1 30); do
@@ -543,13 +576,13 @@ e2e-test-view:
     # Dismiss lock screen if present
     $SSH "echo 'key Escape' > /run/user/1000/dotool-pipe" 2>/dev/null || true
     sleep 0.5
-    echo "Connecting to QEMU VM via SPICE (localhost:5930)..."
+    echo "Connecting to QEMU VM via SPICE (localhost:$SPICE_PORT)..."
     if flatpak list --app 2>/dev/null | grep -q org.virt_manager.virt-viewer; then
-        flatpak run org.virt_manager.virt-viewer spice://localhost:5930 &
+        flatpak run org.virt_manager.virt-viewer spice://localhost:$SPICE_PORT &
     elif command -v remote-viewer &>/dev/null; then
-        remote-viewer spice://localhost:5930 &
+        remote-viewer spice://localhost:$SPICE_PORT &
     elif command -v remmina &>/dev/null; then
-        remmina spice://localhost:5930 &
+        remmina spice://localhost:$SPICE_PORT &
     else
         echo "No SPICE client found. Install one:"
         echo "  just install-spice-client"
@@ -567,7 +600,6 @@ e2e-test-view:
         printf 'mouseto 0.25 0.5\nclick left\n' | dotool
     fi
     wait $SPICE_PID 2>/dev/null || true
-
 # @category e2e-qemu
 # Install QEMU/KVM on host (Fedora Silverblue — requires reboot)
 qemu-install:
