@@ -24,8 +24,9 @@ export class ShellHelper {
     // Retry shell-use daemon connection — it can crash after GDM restart
     let lastErr: Error | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
+      let shell: ShellUse | null = null;
       try {
-        const shell = new ShellUse("e2e-ssh");
+        shell = new ShellUse("e2e-ssh");
         await shell.open({
           cols: opts.cols ?? 120,
           rows: opts.rows ?? 40,
@@ -46,7 +47,7 @@ export class ShellHelper {
         console.log(`  SSH session attempt ${attempt + 1} failed: ${lastErr.message}`);
         // Close the failed instance to avoid resource leak
         try {
-          await shell.close();
+          await shell?.close();
         } catch { /* ignore */ }
         if (attempt < 2) {
           // Kill any stale daemon session and wait before retry

@@ -195,7 +195,6 @@ export class VmManager {
   async setup(): Promise<void> {
     const t0 = Date.now();
     const shellExec = this.shell.exec.bind(this.shell);
-
     if (this.freshlyBooted) {
       await waitForGdmLogin(shellExec);
     } else {
