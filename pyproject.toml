@@ -26,6 +26,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/voice_to_text"]
+exclude = ["src/voice_to_text/debug.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

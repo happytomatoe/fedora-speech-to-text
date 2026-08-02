@@ -1,58 +1,59 @@
 import { execSync } from "node:child_process";
+import { Deployer } from "./deploy.js";
 
 export interface TmuxHelper {
   session: string;
   sshKey: string;
   sshPort: number;
   sshUser: string;
+  deployer?: Deployer;
 }
 
-function sshOpts(key: string, port: number): string {
-  return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${key} -p ${port}`;
-}
-
-function sshHost(user: string): string {
-  return `${user}@localhost`;
-}
-
-function tmuxCmd(t: TmuxHelper, ...args: string[]): string {
-  // Escape shell metacharacters individually so double-quoted args pass through correctly.
-  // Wrapping each arg in single quotes (old approach) broke when args contained double quotes
-  // because bash interpreted them inside the SSH command string.
+async function tmuxCmd(t: TmuxHelper, ...args: string[]): Promise<string> {
   const escaped = args.map(a => a.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
-  const cmd = `ssh ${sshOpts(t.sshKey, t.sshPort)} ${sshHost(t.sshUser)} "tmux ${escaped.join(' ')}"`;
-  return execSync(cmd, { encoding: "utf-8" }).trim();
+  const cmd = `tmux ${escaped.join(' ')}`;
+
+  if (t.deployer) {
+    // Fast path: use persistent SSH connection (avoids ~6s per-call overhead)
+    const result = await t.deployer.exec(cmd);
+    return result.stdout.trim();
+  }
+
+  // Fallback: spawn new SSH connection
+  const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${t.sshKey} -p ${t.sshPort}`;
+  const sshHost = `${t.sshUser}@localhost`;
+  return execSync(`ssh ${sshOpts} ${sshHost} "${cmd}"`, { encoding: "utf-8" }).trim();
 }
 
 /** Create a new tmux session with a shell */
-export function createSession(t: TmuxHelper, sessionName = "e2e"): void {
+export async function createSession(t: TmuxHelper, sessionName = "e2e"): Promise<void> {
   // Kill any existing session
   try {
-    tmuxCmd(t, "kill-session", "-t", sessionName);
+    await tmuxCmd(t, "kill-session", "-t", sessionName);
   } catch {
     // Ignore if session doesn't exist
   }
-  tmuxCmd(t, "new-session", "-d", "-s", sessionName, "-x", "120", "-y", "40");
+  await tmuxCmd(t, "new-session", "-d", "-s", sessionName, "-x", "120", "-y", "40");
 }
 
 /** Send keystrokes to a tmux session (like dotool but for tmux) */
-export function sendKeys(t: TmuxHelper, keys: string, sessionName = "e2e"): void {
-  tmuxCmd(t, "send-keys", "-t", sessionName, keys);
+export async function sendKeys(t: TmuxHelper, keys: string, sessionName = "e2e"): Promise<void> {
+  await tmuxCmd(t, "send-keys", "-t", sessionName, keys);
 }
 
 /** Send a key combination (e.g., "C-c", "Enter") */
-export function sendKey(t: TmuxHelper, key: string, sessionName = "e2e"): void {
-  tmuxCmd(t, "send-keys", "-t", sessionName, key);
+export async function sendKey(t: TmuxHelper, key: string, sessionName = "e2e"): Promise<void> {
+  await tmuxCmd(t, "send-keys", "-t", sessionName, key);
 }
 
 /** Capture the visible pane content as plain text */
-export function capturePane(t: TmuxHelper, sessionName = "e2e"): string {
-  return tmuxCmd(t, "capture-pane", "-t", sessionName, "-p");
+export async function capturePane(t: TmuxHelper, sessionName = "e2e"): Promise<string> {
+  return await tmuxCmd(t, "capture-pane", "-t", sessionName, "-p");
 }
 
 /** Capture pane including scrollback history */
-export function capturePaneHistory(t: TmuxHelper, sessionName = "e2e"): string {
-  return tmuxCmd(t, "capture-pane", "-t", sessionName, "-p", "-S", "-1000");
+export async function capturePaneHistory(t: TmuxHelper, sessionName = "e2e"): Promise<string> {
+  return await tmuxCmd(t, "capture-pane", "-t", sessionName, "-p", "-S", "-1000");
 }
 
 /** Wait for text to appear in the pane */
@@ -65,7 +66,7 @@ export async function waitForText(
 ): Promise<string> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const content = capturePane(t, sessionName);
+    const content = await capturePane(t, sessionName);
     if (content.includes(text)) {
       return content;
     }
@@ -75,9 +76,9 @@ export async function waitForText(
 }
 
 /** Kill a tmux session */
-export function killSession(t: TmuxHelper, sessionName = "e2e"): void {
+export async function killSession(t: TmuxHelper, sessionName = "e2e"): Promise<void> {
   try {
-    tmuxCmd(t, "kill-session", "-t", sessionName);
+    await tmuxCmd(t, "kill-session", "-t", sessionName);
   } catch {
     // Ignore
   }
