@@ -55,7 +55,10 @@ const CONFIG = {
   paths: {
     projectRoot: join(import.meta.dir, ".."),
     vmDir: join(import.meta.dir, "qemu-images"),
-    baseImage: join(import.meta.dir, "qemu-images/base.qcow2"),
+    baseImage: (() => {
+      const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
+      return existsSync(uvBase) ? uvBase : join(import.meta.dir, "qemu-images/base.qcow2");
+    })(),
     overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
     sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
