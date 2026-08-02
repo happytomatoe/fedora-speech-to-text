@@ -516,6 +516,7 @@ async function main(): Promise<void> {
     recordMode: RECORD_MODE,
     updateMode: UPDATE_MODE,
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
+    outputMethod: OUTPUT_METHOD,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();

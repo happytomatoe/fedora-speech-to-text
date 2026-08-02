@@ -113,7 +113,10 @@ export async function deployExtension(
   
   const tSchema = Date.now();
   if (deployer) {
-    await deployer.exec(`glib-compile-schemas ${extRemoteDir}/schemas/`);
+    const schemaResult = await deployer.exec(`glib-compile-schemas ${extRemoteDir}/schemas/`);
+    if (schemaResult.code !== 0) {
+      throw new Error(`glib-compile-schemas failed (code ${schemaResult.code}): ${schemaResult.stderr}`);
+    }
   } else {
     sshExec(`glib-compile-schemas ${extRemoteDir}/schemas/`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
@@ -285,15 +288,15 @@ export async function startVoiceService(
   console.log("Installing Python dependencies...");
   // Use uv for faster, more reliable installs (matches install.sh approach)
   const uvResult = await shell.exec(
-    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
+    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
   );
-  if (uvResult.includes("ERROR") || uvResult.includes("Failed")) {
+  if (!uvResult.includes("__UV_OK__")) {
     // Fallback to pip if uv not available
-    console.log("  uv not available, falling back to pip...");
+    console.log("  uv install failed, falling back to pip...");
     const pipResult = await shell.exec(
-      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
+      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 && echo __PIP_OK__ || echo __PIP_FAILED__"
     );
-    if (pipResult.includes("ERROR") || pipResult.includes("Failed")) {
+    if (!pipResult.includes("__PIP_OK__")) {
       console.log("  WARNING: pip install issues:", pipResult.trim());
     }
   }

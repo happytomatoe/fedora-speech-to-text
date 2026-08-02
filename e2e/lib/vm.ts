@@ -28,6 +28,7 @@ export interface VmConfig {
   recordMode: boolean;
   updateMode: boolean;
   testAudioFile: string;
+  outputMethod?: string;
 }
 
 export class VmManager {
@@ -59,6 +60,7 @@ export class VmManager {
       sshUser: config.sshUser,
       extensionUuid: config.extensionUuid,
       testAudioFile: config.testAudioFile,
+      outputMethod: config.outputMethod,
     };
     if (config.recordMode) {
       mkdirSync(join(config.run.outputDir, "recording"), { recursive: true });
