@@ -130,12 +130,22 @@ export function createCustomWordsGroup(
         const doAdd = async () => {
             const text = entry.get_text().trim();
             if (text) {
+                // Check for duplicates
+                const existing = getCustomWordsFromList();
+                if (existing.includes(text)) {
+                    dialog.close();
+                    return;
+                }
                 // GTK4 Gtk.ListBox has no insert_child_before; remove/re-add to insert before addWordRow
                 customWordsList.remove(addWordRow);
                 customWordsList.append(createWordRow(text));
                 customWordsList.append(addWordRow);
                 settings.set_strv('custom-words', getCustomWordsFromList());
-                await syncAllToConfig();
+                try {
+                    await syncAllToConfig();
+                } catch (e) {
+                    console.error('VoiceToText: sync failed:', e);
+                }
             }
             dialog.close();
         };
@@ -188,6 +198,10 @@ export function createThresholdRow(settings, syncAllToConfig) {
         'value',
         Gio.SettingsBindFlags.DEFAULT
     );
-    row.connect('notify::value', () => syncAllToConfig());
+    row.connect('notify::value', () =>
+        syncAllToConfig().catch(e =>
+            console.error('VoiceToText: threshold sync failed:', e)
+        )
+    );
     return row;
 }

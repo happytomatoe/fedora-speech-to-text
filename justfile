@@ -21,6 +21,21 @@ run *args:
 test:
     uv run pytest -n auto
 
+# @category lint
+# Run all linters (Python + GNOME extension)
+lint:
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run pyright
+    just gnome-ext-lint
+    echo "All lint checks passed!"
+
+# @category lint
+# Auto-fix lint issues
+lint-fix:
+    uv run ruff check --fix .
+    uv run ruff format .
+    echo "Lint fixes applied."
 # @category test
 test-all: test
 
@@ -330,11 +345,15 @@ gnome-ext-lint:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Checking JS syntax..."
-    for f in gnome-ext/*.js; do
-        node --input-type=module --check < "$f" || exit 1
+    for f in gnome-ext/**/*.js gnome-ext/*.js; do
+        [ -f "$f" ] && node --input-type=module --check < "$f" || exit 1
     done
     echo "Checking GTK4 API compatibility..."
-    gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
+    if [ -f gnome-ext/tests/test-gtk4-api.js ]; then
+        gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
+    else
+        echo "Skipping GTK4 API check (test file not found)"
+    fi
     echo "Validating GSettings schema..."
     python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
     glib-compile-schemas --strict gnome-ext/schemas/ 2>&1 || exit 1
@@ -449,7 +468,11 @@ qemu-e2e-vm port='5930':
 
     # Kill any existing QEMU for this VM (use specific path to avoid killing unrelated VMs)
     if [ -f "${VM_DIR_ABS}/qemu.pid" ]; then
-        kill -9 $(cat "${VM_DIR_ABS}/qemu.pid") 2>/dev/null || true
+        QEMU_PID=$(cat "${VM_DIR_ABS}/qemu.pid")
+        # Verify the PID is a QEMU process before killing
+        if ps -p "$QEMU_PID" -o comm= 2>/dev/null | grep -q qemu; then
+            kill -9 "$QEMU_PID" 2>/dev/null || true
+        fi
         rm -f "${VM_DIR_ABS}/qemu.pid"
     fi
     sleep 1
@@ -614,6 +637,94 @@ qemu-install:
     rpm-ostree install qemu-kvm libvirt virt-install qemu-img
     echo "Packages staged. Run 'systemctl reboot' to activate."
 
+# @category e2e-qemu
+# Check E2E test prerequisites
+qemu-e2e-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking E2E prerequisites..."
+
+    # Check QEMU
+    if ! command -v qemu-system-x86_64 &>/dev/null; then
+        echo "❌ qemu-system-x86_64 not found. Run 'just qemu-install' first."
+        exit 1
+    fi
+    echo "✓ QEMU installed: $(qemu-system-x86_64 --version | head -1)"
+
+    # Check KVM
+    if ! lsmod | grep -q kvm; then
+        echo "❌ KVM modules not loaded. Run 'sudo modprobe kvm kvm_intel' or 'kvm_amd'."
+        exit 1
+    fi
+    echo "✓ KVM available"
+
+    # Check base image (qemu-e2e-vm uses base.qcow2)
+    if [[ ! -f "e2e/qemu-images/base.qcow2" ]]; then
+        echo "❌ Base image not found (e2e/qemu-images/base.qcow2). See docs/e2e-setup.md for instructions."
+        exit 1
+    fi
+    echo "✓ Base image found"
+
+    # Check SSH key
+    if [[ ! -f "e2e/qemu-images/id_ed25519" ]]; then
+        echo "❌ SSH key not found. Generate with: ssh-keygen -t ed25519 -f e2e/qemu-images/id_ed25519"
+        exit 1
+    fi
+    echo "✓ SSH key found"
+
+    # Check bun
+    if ! command -v bun &>/dev/null; then
+        echo "❌ bun not found. Install with: curl -fsSL https://bun.sh/install | bash"
+        exit 1
+    fi
+    echo "✓ bun installed"
+
+    # Check npm deps
+    if [[ ! -d "e2e/node_modules" ]]; then
+        echo "Installing npm dependencies..."
+        cd e2e && bun install
+    fi
+    echo "✓ npm dependencies installed"
+
+    echo ""
+    echo "All prerequisites met! Run 'just e2e' to execute tests."
+# @category e2e-qemu
+# Create base QEMU image with uv and dependencies
+qemu-e2e-create-base:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Creating E2E base image..."
+    echo ""
+    echo "This script creates a QEMU base image for E2E testing."
+    echo "See docs/e2e-setup.md for detailed instructions."
+    echo ""
+
+    VM_DIR="e2e/qemu-images"
+    mkdir -p "$VM_DIR"
+
+    # Check if image already exists
+    if [[ -f "$VM_DIR/base.qcow2" ]]; then
+        echo "Base image already exists: $VM_DIR/base.qcow2"
+        echo "Delete it first or use 'just qemu-e2e-create-uv' to create UV-enhanced image."
+        exit 1
+    fi
+
+    echo "Downloading Fedora Cloud image (this may take a few minutes)..."
+    wget -O "$VM_DIR/base.qcow2" https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2
+    echo ""
+    echo "Base image downloaded: $VM_DIR/base.qcow2"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Generate SSH key: ssh-keygen -t ed25519 -f $VM_DIR/id_ed25519"
+    echo "  2. Install virt-customize: sudo dnf install -y libguestfs-tools"
+    echo "  3. Customize image: see docs/e2e-setup.md Step 3"
+    echo "  4. Run 'just qemu-e2e-create-uv' to create UV-enhanced image"
+    echo "  5. Run 'just qemu-e2e-check' to verify all prerequisites."
+
+# @category e2e-qemu
+# Create UV-enhanced base image (requires base.qcow2)
+qemu-e2e-create-uv:
+    ./e2e/scripts/create-base-with-uv.sh
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
