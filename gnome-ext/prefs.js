@@ -363,8 +363,9 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
 
         const outputMethodCombo = new Gtk.ComboBoxText();
-        outputMethodCombo.append('mutter-virtual', _('Mutter Virtual Device'));
+        outputMethodCombo.append('type', _('Type'));
         outputMethodCombo.append('wl-paste', _('Clipboard + Paste'));
+        outputMethodCombo.append('mutter-virtual', _('Mutter Virtual Device'));
         outputMethodCombo.set_active_id(settings.get_string('output-method'));
         outputMethodCombo.connect('changed', () => {
             settings.set_string(

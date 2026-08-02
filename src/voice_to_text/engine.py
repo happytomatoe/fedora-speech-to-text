@@ -26,7 +26,7 @@ from voice_to_text.config import ConfigManager
 from voice_to_text.hybrid import HybridTranscriber
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
-from voice_to_text.typer import MutterVirtualTyper
+from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError, MutterVirtualTyper
 from voice_to_text.vad import SmoothedVAD
 
 CLIPBOARD_CMDS = [
@@ -266,7 +266,7 @@ class RecordingEngine:
         self._batch_provider = None
         self._task: asyncio.Task | None = None
         self._cancel_event = asyncio.Event()
-        self._typer: MutterVirtualTyper | None = None
+        self._typer: ContinuousTyper | MutterVirtualTyper | None = None
         # Initialize stop_timeout with default (will be overridden in start())
         config_mgr = ConfigManager()
         engine_cfg = config_mgr.config.get("engine", {})
@@ -339,26 +339,34 @@ class RecordingEngine:
         try:
             # 1. Determine output method
             output_method = config.get("output_method", "none")
-            use_typing = output_method == "mutter-virtual"
+            use_typing = output_method in ("type", "type-fallback-clipboard", "mutter-virtual")
             logger.info("Engine config: output_method=%s, use_typing=%s", output_method, use_typing)
             _step("config_parsed")
             logger.info("Engine: config parsed, opening dotoolc...")
 
             # 2. Open dotoolc pipe early if typing
-            # 2. Open mutter virtual typer early if typing
-            typer: MutterVirtualTyper | None = None
+            typer: ContinuousTyper | MutterVirtualTyper | None = None
+            fallback_to_clipboard = False
             if use_typing:
                 try:
-                    mutter = MutterVirtualTyper()
-                    await mutter.start()
-                    typer = mutter
-                    logger.info("MutterVirtualTyper opened for recording session")
-                except Exception as e:
-                    logger.warning("Typing requested but MutterVirtualTyper failed: %s", e)
+                    if output_method == "mutter-virtual":
+                        mutter = MutterVirtualTyper()
+                        await mutter.start()
+                        typer = mutter
+                    else:
+                        typer = ContinuousTyper()
+                        await typer.start()
+                    logger.info("Continuous dotoolc pipe opened for recording session")
+                except DotoolcNotFoundError as e:
+                    logger.warning("Typing requested but dotoolc not found: %s", e)
                     if self.on_error:
                         self.on_error(f"Typing not available: {e}")
+                    # If fallback mode, we'll use clipboard when typing fails
+                    if output_method == "type-fallback-clipboard":
+                        fallback_to_clipboard = True
+                        logger.info("Will fall back to clipboard output")
             self._typer = typer
-            _step("mutter_typer_opened")
+            _step("dotoolc_opened")
 
             # 3. Check for debug mode (test file instead of microphone)
             # Lazy import to avoid circular dependencies in production builds
@@ -392,6 +400,8 @@ class RecordingEngine:
                     await typer.stream_diff(text)
                 elif text and output_method == "wl-paste":
                     await asyncio.to_thread(_copy_and_paste, text)
+                elif text and (output_method == "clipboard" or fallback_to_clipboard):
+                    await asyncio.to_thread(_copy_to_clipboard, text)
 
                 logger.info("DEBUG MODE: Transcription complete")
                 return  # Exit early, skip normal recording flow
@@ -536,6 +546,13 @@ class RecordingEngine:
                     # Handle wl-paste output (copy + paste via dotool)
                     if text and output_method == "wl-paste":
                         await asyncio.to_thread(_copy_and_paste, text)
+                    # Handle clipboard output if configured
+                    elif text and output_method == "clipboard":
+                        await asyncio.to_thread(_copy_to_clipboard, text)
+                    # Fallback to clipboard if typing failed in fallback mode
+                    elif text and fallback_to_clipboard:
+                        logger.info("Falling back to clipboard output")
+                        await asyncio.to_thread(_copy_to_clipboard, text)
                     _step("output_done")
 
                     logger.info("Transcription completed: %d characters", len(text) if text else 0)
@@ -563,7 +580,7 @@ class RecordingEngine:
                     prev_t = elapsed
                 logger.info("[PROFIL]   TOTAL: %.3fs", timings[-1][1])
 
-            # Close mutter typer
+            # Close dotoolc pipe
             if self._typer:
                 try:
                     await self._typer.stop()
