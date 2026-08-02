@@ -111,7 +111,7 @@ class TypeTextService {
         }
         console.log(`VoiceToText: TypeText typing ${text.length} chars`);
         try {
-            let time = Clutter.get_current_event_time() * 1000;
+            let time = Clutter.get_current_event_time() || Date.now();
             for (const char of text) {
                 if (char === '\n') {
                     this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
