@@ -39,6 +39,10 @@ const CONFIG_SYNC_MAP = {
         path: ['postprocess', 'custom_words_threshold'],
         type: 'double',
     },
+    'output-method': {
+        path: ['engine', 'output_method'],
+        type: 'string',
+    },
 };
 
 function readConfigYaml() {

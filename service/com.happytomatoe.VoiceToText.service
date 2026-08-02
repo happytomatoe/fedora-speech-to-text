@@ -1,3 +1,3 @@
 [D-BUS Service]
 Name=com.happytomatoe.VoiceToText
-Exec=/var/home/l/.local/bin/voice-to-text-dbus
+Exec=/bin/sh -c 'exec $HOME/.local/bin/voice-to-text-dbus'

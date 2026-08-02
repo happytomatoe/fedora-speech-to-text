@@ -339,7 +339,7 @@ class RecordingEngine:
         try:
             # 1. Determine output method
             output_method = config.get("output_method", "mutter-virtual")
-            use_typing = output_method in ("type", "type-fallback-clipboard", "mutter-virtual")
+            use_typing = output_method in ("type", "mutter-virtual")
             logger.info("Engine config: output_method=%s, use_typing=%s", output_method, use_typing)
             _step("config_parsed")
             logger.info("Engine: config parsed, opening dotoolc...")
@@ -347,7 +347,6 @@ class RecordingEngine:
             # 2. Open dotoolc pipe early if typing
             typer: ContinuousTyper | MutterVirtualTyper | None = None
             mutter_paster: MutterVirtualPaster | None = None
-            fallback_to_clipboard = False
             if use_typing:
                 try:
                     if output_method == "mutter-virtual":
@@ -362,20 +361,8 @@ class RecordingEngine:
                     logger.warning("Typing requested but dotoolc not found: %s", e)
                     if self.on_error:
                         self.on_error(f"Typing not available: {e}")
-                    # If fallback mode, we'll use clipboard when typing fails
-                    if output_method == "type-fallback-clipboard":
-                        fallback_to_clipboard = True
-                        logger.info("Will fall back to clipboard output")
             self._typer = typer
 
-            # Initialize compositor paster for wl-paste output
-            if output_method == "wl-paste":
-                mutter_paster = MutterVirtualPaster()
-                await mutter_paster.start()
-                if mutter_paster.is_running:
-                    logger.info("Using compositor paste (St.Clipboard + virtual keyboard)")
-                else:
-                    logger.info("Compositor paste unavailable, falling back to wl-copy + dotool")
             _step("dotoolc_opened")
 
             # 3. Check for debug mode (test file instead of microphone)
@@ -408,11 +395,6 @@ class RecordingEngine:
                 # Output the result
                 if text and typer:
                     await typer.stream_diff(text)
-                elif text and output_method == "wl-paste":
-                    await asyncio.to_thread(_copy_and_paste, text)
-                elif text and (output_method == "clipboard" or fallback_to_clipboard):
-                    await asyncio.to_thread(_copy_to_clipboard, text)
-
                 elif text and output_method == "wl-paste":
                     if mutter_paster and mutter_paster.is_running:
                         await mutter_paster.paste(text)
@@ -572,10 +554,6 @@ class RecordingEngine:
                         await asyncio.to_thread(_copy_and_paste, text)
                     # Handle clipboard output if configured
                     elif text and output_method == "clipboard":
-                        await asyncio.to_thread(_copy_to_clipboard, text)
-                    # Fallback to clipboard if typing failed in fallback mode
-                    elif text and fallback_to_clipboard:
-                        logger.info("Falling back to clipboard output")
                         await asyncio.to_thread(_copy_to_clipboard, text)
                     _step("output_done")
 
