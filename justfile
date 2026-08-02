@@ -615,6 +615,147 @@ qemu-install:
     echo "Packages staged. Run 'systemctl reboot' to activate."
 
 # @category e2e-qemu
+# Check E2E test prerequisites
+qemu-e2e-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking E2E prerequisites..."
+    
+    # Check QEMU
+    if ! command -v qemu-system-x86_64 &>/dev/null; then
+        echo "❌ qemu-system-x86_64 not found. Run 'just qemu-install' first."
+        exit 1
+    fi
+    echo "✓ QEMU installed: $(qemu-system-x86_64 --version | head -1)"
+    
+    # Check KVM
+    if ! lsmod | grep -q kvm; then
+        echo "❌ KVM modules not loaded. Run 'sudo modprobe kvm kvm_intel' or 'kvm_amd'."
+        exit 1
+    fi
+    echo "✓ KVM available"
+    
+    # Check base image
+    if [[ ! -f "e2e/qemu-images/base.qcow2" ]] && [[ ! -f "e2e/qemu-images/base-with-uv.qcow2" ]]; then
+        echo "❌ Base image not found. See docs/e2e-setup.md for instructions."
+        exit 1
+    fi
+    echo "✓ Base image found"
+    
+    # Check SSH key
+    if [[ ! -f "e2e/qemu-images/id_ed25519" ]]; then
+        echo "❌ SSH key not found. Generate with: ssh-keygen -t ed25519 -f e2e/qemu-images/id_ed25519"
+        exit 1
+    fi
+    echo "✓ SSH key found"
+    
+    # Check bun
+    if ! command -v bun &>/dev/null; then
+        echo "❌ bun not found. Install with: curl -fsSL https://bun.sh/install | bash"
+        exit 1
+    fi
+    echo "✓ bun installed"
+    
+    # Check npm deps
+    if [[ ! -d "e2e/node_modules" ]]; then
+        echo "Installing npm dependencies..."
+        cd e2e && bun install
+    fi
+    echo "✓ npm dependencies installed"
+    
+    echo ""
+    echo "All prerequisites met! Run 'just e2e' to execute tests."
+# @category e2e-qemu
+# Check E2E test prerequisites
+qemu-e2e-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking E2E prerequisites..."
+    
+    # Check QEMU
+    if ! command -v qemu-system-x86_64 &>/dev/null; then
+        echo "❌ qemu-system-x86_64 not found. Run 'just qemu-install' first."
+        exit 1
+    fi
+    echo "✓ QEMU installed: $(qemu-system-x86_64 --version | head -1)"
+    
+    # Check KVM
+    if ! lsmod | grep -q kvm; then
+        echo "❌ KVM modules not loaded. Run 'sudo modprobe kvm kvm_intel' or 'kvm_amd'."
+        exit 1
+    fi
+    echo "✓ KVM available"
+    
+    # Check base image
+    if [[ ! -f "e2e/qemu-images/base.qcow2" ]] && [[ ! -f "e2e/qemu-images/base-with-uv.qcow2" ]]; then
+        echo "❌ Base image not found. See docs/e2e-setup.md for instructions."
+        exit 1
+    fi
+    echo "✓ Base image found"
+    
+    # Check SSH key
+    if [[ ! -f "e2e/qemu-images/id_ed25519" ]]; then
+        echo "❌ SSH key not found. Generate with: ssh-keygen -t ed25519 -f e2e/qemu-images/id_ed25519"
+        exit 1
+    fi
+    echo "✓ SSH key found"
+    
+    # Check bun
+    if ! command -v bun &>/dev/null; then
+        echo "❌ bun not found. Install with: curl -fsSL https://bun.sh/install | bash"
+        exit 1
+    fi
+    echo "✓ bun installed"
+    
+    # Check npm deps
+    if [[ ! -d "e2e/node_modules" ]]; then
+        echo "Installing npm dependencies..."
+        cd e2e && bun install
+    fi
+    echo "✓ npm dependencies installed"
+    
+    echo ""
+    echo "All prerequisites met! Run 'just e2e' to execute tests."
+
+# @category e2e-qemu
+# Create base QEMU image with uv and dependencies
+qemu-e2e-create-base:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Creating E2E base image..."
+    echo ""
+    echo "This script creates a QEMU base image for E2E testing."
+    echo "See docs/e2e-setup.md for detailed instructions."
+    echo ""
+    
+    VM_DIR="e2e/qemu-images"
+    mkdir -p "$VM_DIR"
+    
+    # Check if image already exists
+    if [[ -f "$VM_DIR/base.qcow2" ]]; then
+        echo "Base image already exists: $VM_DIR/base.qcow2"
+        echo "Delete it first or use 'just qemu-e2e-create-uv' to create UV-enhanced image."
+        exit 1
+    fi
+    
+    echo "Downloading Fedora Cloud image (this may take a few minutes)..."
+    wget -O "$VM_DIR/base.qcow2" https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2
+    echo ""
+    echo "Base image downloaded: $VM_DIR/base.qcow2"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Generate SSH key: ssh-keygen -t ed25519 -f $VM_DIR/id_ed25519"
+    echo "  2. Create cloud-init ISO with user-data (see docs/e2e-setup.md)"
+    echo "  3. Boot VM with ISO to customize image"
+    echo "  4. Run 'just qemu-e2e-create-uv' to create UV-enhanced image"
+    echo "  5. Run 'just qemu-e2e-check' to verify all prerequisites."
+
+# @category e2e-qemu
+# Create UV-enhanced base image (requires base.qcow2)
+qemu-e2e-create-uv:
+    ./e2e/scripts/create-base-with-uv.sh
+
+# @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
     cd e2e && bun run e2e.ts
