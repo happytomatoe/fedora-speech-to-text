@@ -266,13 +266,18 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # ── Open HTML report ──────────────────────────────────────────────────
 REPORT_HTML="${REPORTS_DIR}/report.html"
 if [[ -f "$REPORT_HTML" ]]; then
-    log "Opening report in browser..."
-    if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$REPORT_HTML"
-    elif command -v open >/dev/null 2>&1; then
-        open "$REPORT_HTML"
+    # Skip browser opening in CI (no display)
+    if [[ -z "${CI:-}" ]]; then
+        log "Opening report in browser..."
+        if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$REPORT_HTML" || true
+        elif command -v open >/dev/null 2>&1; then
+            open "$REPORT_HTML" || true
+        else
+            echo "  Open manually: $REPORT_HTML"
+        fi
     else
-        echo "  Open manually: $REPORT_HTML"
+        echo "  Report: $REPORT_HTML"
     fi
 fi
 
