@@ -54,13 +54,13 @@ def _copy_to_clipboard(text: str) -> bool:
 
 
 def _paste_via_dotool() -> bool:
-    """Paste from clipboard via dotool key shift+insert (fallback method)."""
+    """Paste from clipboard via dotool key ctrl+v."""
     import subprocess
 
     try:
         proc = subprocess.run(
             ["dotool"],
-            input=b"key shift+insert\n",
+            input=b"key ctrl+v\n",
             timeout=5.0,
         )
         return proc.returncode == 0
@@ -70,7 +70,7 @@ def _paste_via_dotool() -> bool:
 
 
 def _copy_and_paste(text: str) -> bool:
-    """Copy text to clipboard, paste via dotool, then restore previous clipboard (fallback)."""
+    """Copy text to clipboard, paste via dotool, then restore previous clipboard."""
     import subprocess
 
     # Save current clipboard content
@@ -91,11 +91,6 @@ def _copy_and_paste(text: str) -> bool:
     copied = _copy_to_clipboard(text)
     if not copied:
         return False
-
-    # Small delay to let clipboard propagate
-    import time
-
-    time.sleep(0.1)
 
     # Paste via dotool
     pasted = _paste_via_dotool()
@@ -352,6 +347,7 @@ class RecordingEngine:
             # 2. Open dotoolc pipe early if typing
             typer: ContinuousTyper | MutterVirtualTyper | None = None
             mutter_paster: MutterVirtualPaster | None = None
+            fallback_to_clipboard = False
             if use_typing:
                 try:
                     if output_method == "mutter-virtual":
@@ -366,6 +362,10 @@ class RecordingEngine:
                     logger.warning("Typing requested but dotoolc not found: %s", e)
                     if self.on_error:
                         self.on_error(f"Typing not available: {e}")
+                    # If fallback mode, we'll use clipboard when typing fails
+                    if output_method == "type-fallback-clipboard":
+                        fallback_to_clipboard = True
+                        logger.info("Will fall back to clipboard output")
             self._typer = typer
 
             # Initialize compositor paster for wl-paste output
@@ -408,6 +408,10 @@ class RecordingEngine:
                 # Output the result
                 if text and typer:
                     await typer.stream_diff(text)
+                elif text and output_method == "wl-paste":
+                    await asyncio.to_thread(_copy_and_paste, text)
+                elif text and (output_method == "clipboard" or fallback_to_clipboard):
+                    await asyncio.to_thread(_copy_to_clipboard, text)
 
                 elif text and output_method == "wl-paste":
                     if mutter_paster and mutter_paster.is_running:
@@ -563,23 +567,16 @@ class RecordingEngine:
                     elif text and typer and not typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
 
-                    # Handle wl-paste output: try compositor first, fallback to dotool
+                    # Handle wl-paste output (copy + paste via dotool)
                     if text and output_method == "wl-paste":
-                        logger.info("Using wl-paste output method: text_len=%d", len(text))
-                        result = False
-                        if mutter_paster and mutter_paster.is_running:
-                            result = await mutter_paster.paste(text)
-                            if result:
-                                logger.info("wl-paste via compositor succeeded")
-                            else:
-                                logger.warning("wl-paste via compositor failed, trying dotool fallback")
-                        if not result:
-                            result = await asyncio.to_thread(_copy_and_paste, text)
-                            logger.info("wl-paste via dotool fallback result=%s", result)
-                        if not result:
-                            logger.error("wl-paste failed: both compositor and dotool methods failed")
-                            if self.on_error:
-                                self.on_error("Paste failed: compositor unavailable and dotool paste failed")
+                        await asyncio.to_thread(_copy_and_paste, text)
+                    # Handle clipboard output if configured
+                    elif text and output_method == "clipboard":
+                        await asyncio.to_thread(_copy_to_clipboard, text)
+                    # Fallback to clipboard if typing failed in fallback mode
+                    elif text and fallback_to_clipboard:
+                        logger.info("Falling back to clipboard output")
+                        await asyncio.to_thread(_copy_to_clipboard, text)
                     _step("output_done")
 
                     logger.info("Transcription completed: %d characters", len(text) if text else 0)

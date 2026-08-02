@@ -7,7 +7,6 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
 import Clutter from 'gi://Clutter';
-import St from 'gi://St';
 
 const VoiceToTextIface = `
 <node>
@@ -39,20 +38,14 @@ const TypeTextIface = `
     <method name="TypeText">
       <arg type="s" name="text" direction="in"/>
     </method>
-    <method name="PasteText">
-      <arg type="s" name="text" direction="in"/>
-    </method>
-    <method name="SaveClipboard"/>
-    <method name="RestoreClipboard"/>
   </interface>
-</node>`
+</node>`;
 
 class TypeTextService {
     constructor() {
         this._virtualKeyboard = null;
         this._dbusImpl = null;
         this._ownerId = null;
-        this._savedClipboard = null;
     }
 
     enable() {
@@ -116,96 +109,24 @@ class TypeTextService {
             console.log('VoiceToText: TypeText virtual keyboard not available');
             return;
         }
-        const preview = text.length > 20 ? text.substring(0, 20) + '...' : text;
-        console.log(`VoiceToText: TypeText called with ${text.length} chars: "${preview}"`);
+        console.log(`VoiceToText: TypeText typing ${text.length} chars`);
         try {
-            // notify_keyval() expects time in MICROSECONDS, not milliseconds
-            // Clutter.get_current_event_time() returns milliseconds
-            let time_ms = Clutter.get_current_event_time();
-            if (time_ms === 0) {
-                time_ms = Date.now();
-                console.log('VoiceToText: No active Clutter event, using Date.now() fallback');
-            }
-            const time_us = time_ms * 1000; // Convert ms to us
-            console.log(`VoiceToText: Using timestamp ${time_us} us (from ${time_ms} ms)`);
+            let time = Clutter.get_current_event_time() * 1000;
             for (const char of text) {
                 if (char === '\n') {
-                    this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
-                    this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
-                } else if (char === '\x08') {
-                    // Explicitly handle backspace (U+0008) for diff-correction
-                    this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_BackSpace, Clutter.KeyState.PRESSED);
-                    this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_BackSpace, Clutter.KeyState.RELEASED);
+                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
+                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
                 } else {
                     const charCode = char.charCodeAt(0);
-                    const keyval = Clutter.unicode_to_keysym(charCode);
+                    const keyval = Clutter.unicode_to_keyval(charCode);
                     if (keyval !== 0) {
-                        this._virtualKeyboard.notify_keyval(time_us, keyval, Clutter.KeyState.PRESSED);
-                        this._virtualKeyboard.notify_keyval(time_us, keyval, Clutter.KeyState.RELEASED);
+                        this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
+                        this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
                     }
                 }
             }
         } catch (e) {
             console.error('VoiceToText: TypeText failed:', e);
-        }
-    }
-
-    PasteText(text) {
-        if (!this._virtualKeyboard) {
-            console.log('VoiceToText: PasteText virtual keyboard not available');
-            return;
-        }
-        const preview = text.length > 20 ? text.substring(0, 20) + '...' : text;
-        console.log(`VoiceToText: PasteText called with ${text.length} chars: "${preview}"`);
-        try {
-            // Set clipboard text via St.Clipboard
-            const clipboard = St.Clipboard.get_default();
-            clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
-            console.log('VoiceToText: PasteText clipboard set');
-
-            // Send Shift+Insert via virtual keyboard
-            let time_ms = Clutter.get_current_event_time();
-            if (time_ms === 0) {
-                time_ms = Date.now();
-            }
-            const time_us = time_ms * 1000;
-
-            // Press Shift
-            this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED);
-            // Press Insert
-            this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Insert, Clutter.KeyState.PRESSED);
-            this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Insert, Clutter.KeyState.RELEASED);
-            // Release Shift
-            this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Shift_L, Clutter.KeyState.RELEASED);
-            console.log('VoiceToText: PasteText Shift+Insert sent');
-        } catch (e) {
-            console.error('VoiceToText: PasteText failed:', e);
-        }
-    }
-
-    SaveClipboard() {
-        try {
-            const clipboard = St.Clipboard.get_default();
-            this._savedClipboard = clipboard.get_text(St.ClipboardType.CLIPBOARD);
-            console.log(`VoiceToText: SaveClipboard saved ${this._savedClipboard ? this._savedClipboard.length : 0} chars`);
-        } catch (e) {
-            console.error('VoiceToText: SaveClipboard failed:', e);
-            this._savedClipboard = null;
-        }
-    }
-
-    RestoreClipboard() {
-        try {
-            if (this._savedClipboard !== null) {
-                const clipboard = St.Clipboard.get_default();
-                clipboard.set_text(St.ClipboardType.CLIPBOARD, this._savedClipboard);
-                console.log(`VoiceToText: RestoreClipboard restored ${this._savedClipboard.length} chars`);
-                this._savedClipboard = null;
-            } else {
-                console.log('VoiceToText: RestoreClipboard nothing to restore');
-            }
-        } catch (e) {
-            console.error('VoiceToText: RestoreClipboard failed:', e);
         }
     }
 }
