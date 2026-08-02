@@ -56,6 +56,8 @@ export async function installDependencies(
   console.log("Installing dependencies...");
   // Install tmux if not present (needed for terminal session management in tests)
   sshExec("command -v tmux >/dev/null 2>&1 || sudo dnf install -y tmux", sshKey, sshPort, sshUser);
+  // Install uv if not present (faster Python dependency installation)
+  sshExec("command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh", sshKey, sshPort, sshUser);
 }
 
 // extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
@@ -187,11 +189,19 @@ export async function startVoiceService(
   pollForCommandOutputFn: typeof pollForCommandOutput
 ): Promise<void> {
   console.log("Installing Python dependencies...");
-  const pipResult = await shell.exec(
-    "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
+  // Use uv for faster, more reliable installs (matches install.sh approach)
+  const uvResult = await shell.exec(
+    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
   );
-  if (pipResult.includes("ERROR") || pipResult.includes("Failed")) {
-    console.log("  WARNING: pip install issues:", pipResult.trim());
+  if (uvResult.includes("ERROR") || uvResult.includes("Failed")) {
+    // Fallback to pip if uv not available
+    console.log("  uv not available, falling back to pip...");
+    const pipResult = await shell.exec(
+      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 || true"
+    );
+    if (pipResult.includes("ERROR") || pipResult.includes("Failed")) {
+      console.log("  WARNING: pip install issues:", pipResult.trim());
+    }
   }
 
   // Kill existing voice service
