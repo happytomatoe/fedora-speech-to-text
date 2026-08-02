@@ -32,7 +32,7 @@ uninstall:
     uv tool uninstall voice-to-text 2>/dev/null || true
 
 # Reinstall Python package from source
-reinstall:
+reinstall: gnome-ext-install service-install
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Reinstalling voice-to-text from source..."
@@ -228,6 +228,11 @@ service-restart: service-stop
 # Reinstall from source
 service-reinstall: reinstall
     @echo "Done. Service will auto-start on next extension use."
+
+# @category service
+# Alias for reinstall (kept for backward compatibility)
+reinstall-all: reinstall
+    @echo "Done. Service and extension reinstalled."
 
 # @category gnome-ext
 # Install extension, then start a nested GNOME Shell

@@ -57,6 +57,7 @@ module.exports = [
       "object-curly-spacing": "off",
       "array-bracket-spacing": "off",
       "quotes": "off",
+      "quote-props": "off",
       "semi": "off",
       "no-multi-spaces": "off",
       "no-trailing-spaces": "off",
