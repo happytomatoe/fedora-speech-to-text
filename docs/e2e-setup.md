@@ -244,6 +244,17 @@ ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost
 
 ## Troubleshooting
 
+### SSH Authentication Failed
+
+If you see `All configured authentication methods failed`, the base image doesn't have the testuser with your SSH key. You need to customize the image with cloud-init:
+
+1. Create cloud-init config with your SSH key
+2. Boot the VM with the cloud-init ISO
+3. Verify SSH access works
+4. Optimize the image
+
+See [Base Image Setup](#base-image-setup) for detailed instructions.
+
 ### VM Won't Boot
 
 ```bash
