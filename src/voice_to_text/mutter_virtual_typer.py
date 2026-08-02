@@ -17,8 +17,6 @@ import logging
 from dbus_next import BusType
 from dbus_next.aio import MessageBus
 
-from voice_to_text.typer import ContinuousTyper
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +31,6 @@ class MutterVirtualTyper:
         self._typed_text: str = ""
         self._usable: bool = True
         self._proxy = None
-        self._fallback: ContinuousTyper | None = None
         self._bus: MessageBus | None = None
 
     async def start(self) -> None:
@@ -52,19 +49,13 @@ class MutterVirtualTyper:
             if bus is not None:
                 bus.disconnect()
 
-        # Fallback to dotool
-        logger.warning("MutterVirtualTyper: TypeText not available, falling back to dotool")
-        self._fallback = ContinuousTyper()
-        await self._fallback.start()
+        # D-Bus service not available
+        logger.warning("MutterVirtualTyper: TypeText D-Bus service not available")
+        self._usable = False
 
     async def stream_diff(self, new_text: str) -> None:
         """Diff new_text against typed text and send corrections."""
         if new_text == self._typed_text:
-            return
-
-        if self._fallback:
-            await self._fallback.stream_diff(new_text)
-            self._typed_text = self._fallback.typed_text
             return
 
         if not self._proxy or not self._usable:
@@ -99,26 +90,12 @@ class MutterVirtualTyper:
                 logger.debug("MutterVirtualTyper: Sending %d chars via D-Bus", len(new_suffix))
 
             self._typed_text = new_text
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - D-Bus can fail in many ways
             logger.warning("MutterVirtualTyper: D-Bus call failed: %s", e)
-            # Create fallback for subsequent calls
-            if not self._fallback:
-                logger.warning("MutterVirtualTyper: Creating fallback typer after D-Bus failure")
-                self._fallback = ContinuousTyper()
-                try:
-                    await self._fallback.start()
-                    # Replay current text to fallback
-                    if self._typed_text:
-                        await self._fallback.stream_diff(self._typed_text)
-                except Exception as fallback_error:
-                    logger.error("MutterVirtualTyper: Fallback creation failed: %s", fallback_error)
-                    self._usable = False
+            self._usable = False
 
     async def stop(self) -> None:
         """Cleanup."""
-        if self._fallback:
-            await self._fallback.stop()
-            self._fallback = None
         if self._bus:
             self._bus.disconnect()
             self._bus = None
@@ -127,10 +104,8 @@ class MutterVirtualTyper:
 
     @property
     def is_running(self) -> bool:
-        return self._usable and (self._proxy is not None or bool(self._fallback and self._fallback.is_running))
+        return self._usable and self._proxy is not None
 
     @property
     def typed_text(self) -> str:
-        if self._fallback:
-            return self._fallback.typed_text
         return self._typed_text

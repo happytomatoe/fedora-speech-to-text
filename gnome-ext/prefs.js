@@ -2,6 +2,7 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Gtk from 'gi://Gtk';
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
@@ -14,6 +15,18 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
         const settings = this.getSettings();
+
+        // Sync state tracking
+        const _configSyncFailed = {v: false};
+
+        const _syncAllToConfig = async () => {
+            try {
+                await syncToConfig(settings);
+            } catch (e) {
+                console.error('VoiceToText: syncToConfig failed:', e);
+                _configSyncFailed.v = true;
+            }
+        };
 
         // Create a preferences page
         const page = new Adw.PreferencesPage({
@@ -175,7 +188,12 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         languageRow.add_suffix(languageEntry);
         recordingGroup.add(languageRow);
 
-        // Add sync warning to recording group
+        // Sync warning row (shown when config.yaml drift detected)
+        const syncWarningRow = new Adw.ActionRow({
+            title: _('⚠️ Configuration Drift'),
+            subtitle: _('config.yaml has been modified externally. Click Edit Configuration to review.'),
+            visible: false,
+        });
         recordingGroup.add(syncWarningRow);
 
         // Custom Words Group

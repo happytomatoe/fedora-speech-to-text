@@ -88,12 +88,13 @@ Fedora Cloud images don't include GNOME by default. Use `virt-customize` to inst
 sudo dnf install -y libguestfs-tools
 
 # Inject SSH key and install GNOME + dependencies
+# Note: useradd must come before --ssh-inject (libguestfs requires the target user to exist)
 virt-customize \
   -a e2e/qemu-images/base.qcow2 \
   --format qcow2 \
-  --ssh-inject testuser:file:e2e/qemu-images/id_ed25519.pub \
   --run-command 'useradd -m -G wheel,input testuser' \
   --run-command 'echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers' \
+  --ssh-inject testuser:file:e2e/qemu-images/id_ed25519.pub \
   --install gnome-shell,gdm,dotool,tmux,python3 \
   --run-command 'systemctl set-default graphical.target' \
   --selinux-relabel
@@ -281,12 +282,20 @@ cd e2e && bun run e2e.ts --record
 
 ### Debugging with Snapshots
 
+The E2E VM uses direct QEMU (not libvirt), so use QEMU monitor commands:
+
 ```bash
+# Connect to QEMU monitor
+qemu-monitor unix:e2e/qemu-images/qemu-monitor.sock
+
 # Save VM snapshot
-virsh snapshot-create-as <vm-name> clean "Clean state"
+savevm clean
 
 # Restore snapshot
-virsh snapshot-revert <vm-name> clean
+loadvm clean
+
+# List snapshots
+info snapshots
 ```
 
 ### Custom Test Cases

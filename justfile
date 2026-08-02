@@ -26,6 +26,7 @@ test:
 lint:
     uv run ruff check .
     uv run ruff format --check .
+    uv run pyright
     just gnome-ext-lint
     echo "All lint checks passed!"
 
@@ -344,8 +345,8 @@ gnome-ext-lint:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Checking JS syntax..."
-    for f in gnome-ext/*.js; do
-        node --input-type=module --check < "$f" || exit 1
+    for f in gnome-ext/**/*.js gnome-ext/*.js; do
+        [ -f "$f" ] && node --input-type=module --check < "$f" || exit 1
     done
     echo "Checking GTK4 API compatibility..."
     if [ -f gnome-ext/tests/test-gtk4-api.js ]; then
@@ -657,9 +658,9 @@ qemu-e2e-check:
     fi
     echo "✓ KVM available"
 
-    # Check base image
-    if [[ ! -f "e2e/qemu-images/base.qcow2" ]] && [[ ! -f "e2e/qemu-images/base-with-uv.qcow2" ]]; then
-        echo "❌ Base image not found. See docs/e2e-setup.md for instructions."
+    # Check base image (qemu-e2e-vm uses base.qcow2)
+    if [[ ! -f "e2e/qemu-images/base.qcow2" ]]; then
+        echo "❌ Base image not found (e2e/qemu-images/base.qcow2). See docs/e2e-setup.md for instructions."
         exit 1
     fi
     echo "✓ Base image found"
