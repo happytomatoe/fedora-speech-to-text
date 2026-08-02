@@ -37,18 +37,22 @@ export class ShellHelper {
         );
 
         // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
-        await shell.waitText(`${opts.sshUser}@`, { timeout: 60000 });
+        await shell.waitText(`${opts.sshUser}@localhost`, { timeout: 60000 });
 
         this.session = { shell, ...opts, host };
         return this.session;
       } catch (err) {
         lastErr = err as Error;
         console.log(`  SSH session attempt ${attempt + 1} failed: ${lastErr.message}`);
+        // Close the failed instance to avoid resource leak
+        try {
+          await shell.close();
+        } catch { /* ignore */ }
         if (attempt < 2) {
           // Kill any stale daemon session and wait before retry
+          // Scope the pkill to this specific session to avoid killing unrelated sessions
           try {
-            const { execSync } = await import("node:child_process");
-            execSync("pkill -f 'shell-use.*e2e-ssh' 2>/dev/null || true", { stdio: "pipe" });
+            execSync(`pkill -f 'shell-use.*e2e-ssh' 2>/dev/null || true`, { stdio: "pipe" });
           } catch { /* ignore */ }
           await Bun.sleep(3000);
         }

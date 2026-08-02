@@ -37,7 +37,7 @@ const SNAPSHOT_MODE = args.includes("--snapshot");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? parseInt(args[timeoutIdx + 1]) * 1000 : 180_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 180) * 1000 : 180_000;
 
 // Parse --case <name> (select specific test case instead of random)
 const caseIdx = args.indexOf("--case");

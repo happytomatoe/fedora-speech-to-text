@@ -518,10 +518,10 @@ e2e-test-view spice_port='' ssh_port='' :
     # Auto-detect ports if not specified
     if [ -z "{{spice_port}}" ]; then
         # Find SPICE port from QEMU processes (look for -spice port=XXXX)
-        SPICE_PORT=$(ps aux | grep -oP 'qemu.*-spice port=\K\d+' | head -1)
+        SPICE_PORT=$(ps aux | grep -oP 'qemu.*-spice port=\K\d+' | head -1 || true)
         if [ -z "$SPICE_PORT" ]; then
             # Fallback: find any listening port in SPICE range (5930-5999)
-            SPICE_PORT=$(ss -tlnp 2>/dev/null | grep -oP ':\K(59[3-9]\d)\b' | head -1)
+            SPICE_PORT=$(ss -tlnp 2>/dev/null | grep -oP ':\K(59[3-9]\d)\b' | head -1 || true)
         fi
         if [ -z "$SPICE_PORT" ]; then
             echo "ERROR: Could not auto-detect SPICE port"
@@ -534,7 +534,7 @@ e2e-test-view spice_port='' ssh_port='' :
     
     if [ -z "{{ssh_port}}" ]; then
         # Find SSH port from QEMU processes (look for hostfwd=tcp::XXXX-:22)
-        SSH_PORT=$(ps aux | grep -oP 'hostfwd=tcp::\K\d+' | head -1)
+        SSH_PORT=$(ps aux | grep -oP 'hostfwd=tcp::\K\d+' | head -1 || true)
         if [ -z "$SSH_PORT" ]; then
             SSH_PORT="2222"  # Default fallback
         fi
