@@ -74,22 +74,15 @@ export async function waitForGdmLogin(
 }
 
 export async function installDependencies(
-  sshKey: string,
-  sshPort: number,
-  sshUser: string
+  _sshKey: string,
+  _sshPort: number,
+  _sshUser: string
 ): Promise<void> {
   const t0 = Date.now();
-  console.log("Installing dependencies...");
-  // Check tmux and uv — each sshExec call has ~6s cold connection overhead.
-  const t1 = Date.now();
-  const tmuxMissing = sshExec("command -v tmux 2>/dev/null || echo MISSING", sshKey, sshPort, sshUser).includes("MISSING");
-  if (tmuxMissing) sshExec("sudo dnf install -y tmux", sshKey, sshPort, sshUser);
-  console.log(`  tmux: ${Date.now() - t1}ms${tmuxMissing ? " (installed)" : " (in base image)"} [time]`);
-  
-  const t2 = Date.now();
-  const uvMissing = sshExec("command -v uv 2>/dev/null || echo MISSING", sshKey, sshPort, sshUser).includes("MISSING");
-  if (uvMissing) sshExec("curl -LsSf https://astral.sh/uv/install.sh | sh", sshKey, sshPort, sshUser);
-  console.log(`  uv: ${Date.now() - t2}ms${uvMissing ? " (installed)" : " (in base image)"} [time]`);
+  // Skip dependency checks — tmux and uv are guaranteed in base-with-uv.qcow2.
+  // This saves 6-18s per run (sshExec has ~6s cold connection overhead per call).
+  // If someone rebuilds base without tmux/uv, tests will fail with a clear error.
+  console.log("Dependencies: skipped (guaranteed in base image) [time]");
   console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
