@@ -61,16 +61,24 @@ function readConfigYaml() {
 
 function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
+    // Ensure parent directory exists
+    const parent = file.get_parent();
+    if (parent && !parent.query_exists(null)) {
+        parent.make_directory_with_parents(null);
+    }
     const yamlStr = yamlDump(config);
     const encoder = new TextEncoder();
     const bytes = encoder.encode(yamlStr);
-    file.replace_contents(
+    const [ok] = file.replace_contents(
         bytes,
         null,
         false,
         Gio.FileCreateFlags.REPLACE_DESTINATION,
         null
     );
+    if (!ok) {
+        console.error('VoiceToText: failed to write config.yaml');
+    }
 }
 
 // Get a nested value from an object by path array
@@ -96,7 +104,7 @@ function setConfigValue(config, path, value) {
 /**
  * Read config.yaml and seed GSettings for any keys that are empty.
  * @param {Gio.Settings} settings
- * @returns {Promise<{config: object|null, drifted: string[]}>}
+ * @returns {{config: object|null, drifted: string[]}}
  */
 export function syncFromConfig(settings) {
     const config = readConfigYaml();
@@ -106,6 +114,32 @@ export function syncFromConfig(settings) {
     for (const [gkey, {path, type}] of Object.entries(CONFIG_SYNC_MAP)) {
         const cfgVal = getConfigValue(config, path);
         if (cfgVal === undefined || cfgVal === null) continue;
+
+        // Type validation before writing
+        if (type === 'int' && !Number.isInteger(cfgVal)) {
+            console.warn(
+                `VoiceToText: skipping ${gkey}: expected int, got ${typeof cfgVal}`
+            );
+            continue;
+        }
+        if (type === 'double' && typeof cfgVal !== 'number') {
+            console.warn(
+                `VoiceToText: skipping ${gkey}: expected number, got ${typeof cfgVal}`
+            );
+            continue;
+        }
+        if (type === 'string' && typeof cfgVal !== 'string') {
+            console.warn(
+                `VoiceToText: skipping ${gkey}: expected string, got ${typeof cfgVal}`
+            );
+            continue;
+        }
+        if (type === 'strv' && !Array.isArray(cfgVal)) {
+            console.warn(
+                `VoiceToText: skipping ${gkey}: expected array, got ${typeof cfgVal}`
+            );
+            continue;
+        }
 
         let gsetVal;
         if (type === 'strv') {
@@ -155,7 +189,12 @@ export function syncFromConfig(settings) {
  */
 export function syncToConfig(settings) {
     const config = readConfigYaml();
-    if (!config) return; // Don't overwrite config on parse failure
+    if (!config) {
+        console.error(
+            'VoiceToText: syncToConfig failed - cannot read config.yaml'
+        );
+        throw new Error('Failed to read config.yaml for sync');
+    }
     for (const [gkey, {path, type}] of Object.entries(CONFIG_SYNC_MAP)) {
         let value;
         if (type === 'strv') value = settings.get_strv(gkey);

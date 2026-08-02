@@ -101,7 +101,18 @@ class MutterVirtualTyper:
             self._typed_text = new_text
         except Exception as e:
             logger.warning("MutterVirtualTyper: D-Bus call failed: %s", e)
-            self._usable = False
+            # Create fallback for subsequent calls
+            if not self._fallback:
+                logger.warning("MutterVirtualTyper: Creating fallback typer after D-Bus failure")
+                self._fallback = ContinuousTyper()
+                try:
+                    await self._fallback.start()
+                    # Replay current text to fallback
+                    if self._typed_text:
+                        await self._fallback.stream_diff(self._typed_text)
+                except Exception as fallback_error:
+                    logger.error("MutterVirtualTyper: Fallback creation failed: %s", fallback_error)
+                    self._usable = False
 
     async def stop(self) -> None:
         """Cleanup."""

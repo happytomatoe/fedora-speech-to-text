@@ -366,5 +366,3 @@ class ContinuousTyper:
     @property
     def typed_text(self) -> str:
         return self._typed_text
-
-

@@ -85,6 +85,10 @@ export class TypeTextService {
                 if (char === '\n') {
                     this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
                     this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
+                } else if (char === '\x08') {
+                    // Handle backspace (U+0008) for diff-correction
+                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_BackSpace, Clutter.KeyState.PRESSED);
+                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_BackSpace, Clutter.KeyState.RELEASED);
                 } else {
                     const charCode = char.charCodeAt(0);
                     const keyval = Clutter.unicode_to_keyval(charCode);

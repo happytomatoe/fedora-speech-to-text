@@ -54,7 +54,6 @@ def _copy_to_clipboard(text: str) -> bool:
     return False
 
 
-
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
 

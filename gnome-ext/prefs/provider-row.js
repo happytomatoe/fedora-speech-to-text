@@ -28,10 +28,13 @@ export function createProviderRows(settings, syncAllToConfig) {
     providerCombo.append('elevenlabs', 'ElevenLabs');
     providerCombo.set_active_id(settings.get_string('provider'));
     providerCombo.connect('changed', () => {
-        settings.set_string('provider', providerCombo.get_active_id());
-        syncAllToConfig().catch(e =>
-            console.error('VoiceToText: sync failed:', e)
-        );
+        const activeId = providerCombo.get_active_id();
+        if (activeId) {
+            settings.set_string('provider', activeId);
+            syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
+        }
     });
     providerRow.add_suffix(providerCombo);
 
@@ -64,13 +67,13 @@ export function createProviderRows(settings, syncAllToConfig) {
         settings.get_string('streaming-provider')
     );
     streamingProviderCombo.connect('changed', () => {
-        settings.set_string(
-            'streaming-provider',
-            streamingProviderCombo.get_active_id()
-        );
-        syncAllToConfig().catch(e =>
-            console.error('VoiceToText: sync failed:', e)
-        );
+        const activeId = streamingProviderCombo.get_active_id();
+        if (activeId) {
+            settings.set_string('streaming-provider', activeId);
+            syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
+        }
     });
     streamingProviderRow.add_suffix(streamingProviderCombo);
 
@@ -89,13 +92,13 @@ export function createProviderRows(settings, syncAllToConfig) {
     batchProviderCombo.append('elevenlabs', 'ElevenLabs');
     batchProviderCombo.set_active_id(settings.get_string('batch-provider'));
     batchProviderCombo.connect('changed', () => {
-        settings.set_string(
-            'batch-provider',
-            batchProviderCombo.get_active_id()
-        );
-        syncAllToConfig().catch(e =>
-            console.error('VoiceToText: sync failed:', e)
-        );
+        const activeId = batchProviderCombo.get_active_id();
+        if (activeId) {
+            settings.set_string('batch-provider', activeId);
+            syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
+        }
     });
     batchProviderRow.add_suffix(batchProviderCombo);
 
@@ -109,11 +112,14 @@ export function createProviderRows(settings, syncAllToConfig) {
     updateProviderVisibility();
 
     modeCombo.connect('changed', () => {
-        settings.set_string('mode', modeCombo.get_active_id());
-        updateProviderVisibility();
-        syncAllToConfig().catch(e =>
-            console.error('VoiceToText: sync failed:', e)
-        );
+        const activeId = modeCombo.get_active_id();
+        if (activeId) {
+            settings.set_string('mode', activeId);
+            updateProviderVisibility();
+            syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
+        }
     });
 
     return {
@@ -125,9 +131,10 @@ export function createProviderRows(settings, syncAllToConfig) {
 /**
  * Create the output method selector row.
  * @param {Gio.Settings} settings
+ * @param {() => Promise<void>} syncAllToConfig - Function to sync settings to config.yaml
  * @returns {Adw.ActionRow}
  */
-export function createOutputMethodRow(settings) {
+export function createOutputMethodRow(settings, syncAllToConfig) {
     const row = new Adw.ActionRow({
         title: _('Output Method'),
         subtitle: _('How to deliver transcribed text'),
@@ -135,11 +142,17 @@ export function createOutputMethodRow(settings) {
 
     const combo = new Gtk.ComboBoxText();
     combo.append('type', _('Type'));
-    combo.append('wl-paste', _('Clipboard + Paste'));
+    combo.append('clipboard', _('Clipboard'));
     combo.append('mutter-virtual', _('Mutter Virtual Device'));
     combo.set_active_id(settings.get_string('output-method'));
     combo.connect('changed', () => {
-        settings.set_string('output-method', combo.get_active_id());
+        const activeId = combo.get_active_id();
+        if (activeId) {
+            settings.set_string('output-method', activeId);
+            syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
+        }
     });
     row.add_suffix(combo);
 

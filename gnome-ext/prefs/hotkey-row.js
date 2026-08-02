@@ -79,6 +79,20 @@ function showHotkeyDialog(settings, parentWindow, label) {
                 return false;
             }
 
+            // Ignore modifier-only key presses
+            if (
+                key === 'Control_L' ||
+                key === 'Control_R' ||
+                key === 'Shift_L' ||
+                key === 'Shift_R' ||
+                key === 'Alt_L' ||
+                key === 'Alt_R' ||
+                key === 'Super_L' ||
+                key === 'Super_R'
+            ) {
+                return false;
+            }
+
             if (!mask) {
                 return false;
             }
