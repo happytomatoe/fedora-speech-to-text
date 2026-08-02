@@ -13,6 +13,14 @@ export class ShellHelper {
   private session: ShellSession | null = null;
   private isRecording = false;
 
+  private dbusAddr: string | null = null;
+  private _deployer: import("./deploy.js").Deployer | null = null;
+
+  /** Set deployer for fast SSH commands (avoids per-call connection overhead) */
+  setDeployer(deployer: import("./deploy.js").Deployer): void {
+    this._deployer = deployer;
+  }
+
   async openSshSession(opts: {
     sshKey: string;
     sshPort: number;
@@ -114,15 +122,30 @@ export class ShellHelper {
   }
 
   private async getShellDbusAddr(): Promise<string> {
+    // Return cached address (D-Bus session address never changes after GNOME Shell starts)
+    if (this.dbusAddr) return this.dbusAddr;
     if (!this.session) return "";
     try {
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
-      const raw = execSync(
-        `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
-        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-      );
-      return raw.trim();
+      let raw: string;
+      if (this._deployer) {
+        // Fast path: use persistent SSH connection (avoids ~6s per-call overhead)
+        const result = await this._deployer.exec(
+          `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+        );
+        raw = result.stdout.trim();
+      } else {
+        // Fallback: spawn new SSH connection
+        const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+        const sshHost = `${this.session.sshUser}@${this.session.host}`;
+        raw = execSync(
+          `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
+          { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+        ).trim();
+      }
+      if (raw) {
+        this.dbusAddr = raw;
+      }
+      return raw;
     } catch {
       return "";
     }
@@ -312,9 +335,11 @@ export class ShellHelper {
   }
 
   async close(): Promise<void> {
+    this.dbusAddr = null;  // Invalidate cached address
     if (this.session) {
       await this.session.shell.close();
       this.session = null;
     }
-  }
+
+}
 }

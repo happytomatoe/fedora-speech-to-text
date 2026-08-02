@@ -149,11 +149,15 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
   let t: number;
 
+  // Set deployer on shell for fast D-Bus address resolution
+  shell.setDeployer(vm.deployer);
+
   const tmuxCfg: tmux.TmuxHelper = {
     session: `e2e-${run.id}`,
     sshKey: SSH_KEY,
     sshPort: run.sshPort,
     sshUser: SSH_USER,
+    deployer: vm.deployer,
   };
 
   t = Date.now();
@@ -173,7 +177,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   t = Date.now();
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
-  tmux.killSession(tmuxCfg);
+  await tmux.killSession(tmuxCfg);
   await shell.exec(`nohup gnome-terminal -- tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
   // Poll until tmux session appears
   await vm.pollUntil(
@@ -192,10 +196,10 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(500);
 
   // Verify terminal is focused by typing a test character and checking tmux
-  const paneBefore = tmux.capturePane(tmuxCfg);
+  const paneBefore = await tmux.capturePane(tmuxCfg);
   await shell.dotoolCommand("key shift+space"); // type space to confirm dotool works
   await Bun.sleep(200);
-  const paneAfter = tmux.capturePane(tmuxCfg);
+  const paneAfter = await tmux.capturePane(tmuxCfg);
   if (paneBefore === paneAfter) {
     // Terminal might not be focused, try clicking again
     console.log("  Retrying terminal focus...");
@@ -212,7 +216,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Step 3: Snapshot pane content before recording (for transcription detection)
   t = Date.now();
-  const preRecordingPane = tmux.capturePane(tmuxCfg);
+  const preRecordingPane = await tmux.capturePane(tmuxCfg);
   console.log("Pre-recording pane captured.");
   timing("snapshot-pane", t);
 
@@ -281,7 +285,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     // If log didn't have it, try tmux capture as fallback
     if (!transcription) {
       console.log("  Log poll timed out, trying tmux capture...");
-      const paneContent = tmux.capturePane(tmuxCfg);
+      const paneContent = await tmux.capturePane(tmuxCfg);
       // Strip prompt prefix from lines that contain it
       const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
       const newLines = paneContent.split("\n")
@@ -336,7 +340,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   timing("write-result", t);
 
   // Cleanup: kill tmux session
-  tmux.killSession(tmuxCfg);
+  await tmux.killSession(tmuxCfg);
 }
 
 /**

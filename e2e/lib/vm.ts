@@ -161,8 +161,6 @@ export class VmManager {
       sshPort: this.config.run.sshPort,
       sshUser: this.config.sshUser,
     });
-    // Pre-establish deployer SSH connection (warms up during boot, ready for deployExtension)
-    await this.deployer.connect();
   }
 
   /** Verify Spice display is accessible */
@@ -203,6 +201,9 @@ export class VmManager {
       console.log("VM already booted, skipping GDM wait...");
     }
     console.log(`  GDM login: ${Date.now() - t0}ms`);
+
+    // Establish deployer SSH connection (after GDM login, before deployment)
+    await this.deployer.connect();
 
     const t1 = Date.now();
     await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
