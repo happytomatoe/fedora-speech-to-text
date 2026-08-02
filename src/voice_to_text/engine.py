@@ -53,6 +53,62 @@ def _copy_to_clipboard(text: str) -> bool:
     return False
 
 
+def _paste_via_dotool() -> bool:
+    """Paste from clipboard via dotool key ctrl+v."""
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["dotool"],
+            input=b"key ctrl+v\n",
+            timeout=5.0,
+        )
+        return proc.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        logger.warning("dotool paste failed")
+        return False
+
+
+def _copy_and_paste(text: str) -> bool:
+    """Copy text to clipboard, paste via dotool, then restore previous clipboard."""
+    import subprocess
+
+    # Save current clipboard content
+    previous_clipboard = ""
+    try:
+        result = subprocess.run(
+            ["wl-paste", "--no-newline"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+        if result.returncode == 0:
+            previous_clipboard = result.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Copy new text to clipboard
+    copied = _copy_to_clipboard(text)
+    if not copied:
+        return False
+
+    # Paste via dotool
+    pasted = _paste_via_dotool()
+
+    # Restore previous clipboard content
+    if previous_clipboard:
+        try:
+            subprocess.run(
+                ["wl-copy"],
+                input=previous_clipboard.encode(),
+                timeout=2.0,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    return pasted
+
+
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
 
@@ -312,7 +368,10 @@ class RecordingEngine:
             try:
                 from voice_to_text.debug import handle_debug_recording, is_debug_mode
             except ImportError:
-                is_debug_mode = lambda: False
+
+                def is_debug_mode() -> bool:
+                    return False
+
                 handle_debug_recording = None
 
             if is_debug_mode():
@@ -321,8 +380,12 @@ class RecordingEngine:
                 self._notify_state()
 
                 # handle_debug_recording is guaranteed non-None when is_debug_mode() is True
-                assert handle_debug_recording is not None, "handle_debug_recording must be set when debug mode is active"
-                text = await handle_debug_recording(config, on_level=self.on_audio_level, _cancel_event=self._cancel_event)
+                assert handle_debug_recording is not None, (
+                    "handle_debug_recording must be set when debug mode is active"
+                )
+                text = await handle_debug_recording(
+                    config, on_level=self.on_audio_level, _cancel_event=self._cancel_event
+                )
 
                 self.state = EngineState.PROCESSING
                 self._notify_state()
@@ -330,6 +393,8 @@ class RecordingEngine:
                 # Output the result
                 if text and typer:
                     await typer.stream_diff(text)
+                elif text and output_method == "wl-paste":
+                    await asyncio.to_thread(_copy_and_paste, text)
                 elif text and (output_method == "clipboard" or fallback_to_clipboard):
                     await asyncio.to_thread(_copy_to_clipboard, text)
 
@@ -473,8 +538,11 @@ class RecordingEngine:
                     if text and typer:
                         await typer.stream_diff(text)
 
+                    # Handle wl-paste output (copy + paste via dotool)
+                    if text and output_method == "wl-paste":
+                        await asyncio.to_thread(_copy_and_paste, text)
                     # Handle clipboard output if configured
-                    if text and output_method == "clipboard":
+                    elif text and output_method == "clipboard":
                         await asyncio.to_thread(_copy_to_clipboard, text)
                     # Fallback to clipboard if typing failed in fallback mode
                     elif text and fallback_to_clipboard:

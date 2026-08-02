@@ -6,6 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
+import Clutter from 'gi://Clutter';
 
 const VoiceToTextIface = `
 <node>
@@ -30,6 +31,105 @@ const VoiceToTextIface = `
 </node>`;
 
 const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
+
+const TypeTextIface = `
+<node>
+  <interface name="com.happytomatoe.TypeText">
+    <method name="TypeText">
+      <arg type="s" name="text" direction="in"/>
+    </method>
+  </interface>
+</node>`;
+
+class TypeTextService {
+    constructor() {
+        this._virtualKeyboard = null;
+        this._dbusImpl = null;
+        this._ownerId = null;
+    }
+
+    enable() {
+        // Get virtual keyboard via Clutter
+        try {
+            const backend = Clutter.get_default_backend();
+            const seat = backend.get_default_seat();
+            this._virtualKeyboard = seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+            if (this._virtualKeyboard) {
+                console.log('VoiceToText: TypeText virtual keyboard obtained');
+            } else {
+                console.log('VoiceToText: TypeText virtual keyboard not available');
+            }
+        } catch (e) {
+            console.error('VoiceToText: TypeText failed to get virtual keyboard:', e);
+        }
+
+        // Claim bus name + export object
+        try {
+            this._ownerId = Gio.bus_own_name(
+                Gio.BusType.SESSION,
+                'com.happytomatoe.TypeText',
+                Gio.BusNameOwnerFlags.NONE,
+                (connection, _name) => {
+                    // Bus acquired — export D-Bus object
+                    try {
+                        this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(TypeTextIface, this);
+                        this._dbusImpl.export(connection, '/com/happytomatoe/TypeText');
+                        console.log('VoiceToText: TypeText D-Bus object exported at /com/happytomatoe/TypeText');
+                    } catch (e) {
+                        console.error('VoiceToText: TypeText D-Bus export failed:', e);
+                    }
+                },
+                (connection, name) => {
+                    console.log(`VoiceToText: bus name acquired: ${name}`);
+                },
+                (connection, _name) => {
+                    console.error(`VoiceToText: bus name lost: ${_name}`);
+                }
+            );
+            console.log('VoiceToText: bus_own_name called for com.happytomatoe.TypeText');
+        } catch (e) {
+            console.error('VoiceToText: bus_own_name failed:', e);
+        }
+    }
+
+    disable() {
+        if (this._dbusImpl) {
+            this._dbusImpl.unexport();
+            this._dbusImpl = null;
+        }
+        if (this._ownerId) {
+            Gio.bus_unown_name(this._ownerId);
+            this._ownerId = null;
+        }
+        this._virtualKeyboard = null;
+    }
+
+    TypeText(text) {
+        if (!this._virtualKeyboard) {
+            console.log('VoiceToText: TypeText virtual keyboard not available');
+            return;
+        }
+        console.log(`VoiceToText: TypeText typing ${text.length} chars`);
+        try {
+            let time = Clutter.get_current_event_time() * 1000;
+            for (const char of text) {
+                if (char === '\n') {
+                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
+                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
+                } else {
+                    const charCode = char.charCodeAt(0);
+                    const keyval = Clutter.unicode_to_keyval(charCode);
+                    if (keyval !== 0) {
+                        this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
+                        this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('VoiceToText: TypeText failed:', e);
+        }
+    }
+}
 
 const SessionManagerIface =
     '<node>\
@@ -69,6 +169,8 @@ export default class VoiceToTextExtension extends Extension {
         }
         console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
         this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
+        this._typeTextService = new TypeTextService();
+        this._typeTextService.enable();
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
@@ -130,6 +232,8 @@ export default class VoiceToTextExtension extends Extension {
         this._sessionManager = null;
         this._proxy = null;
 
+        this._typeTextService?.disable();
+        this._typeTextService = null;
         this._audioLevelWidget?.destroy();
         this._audioLevelWidget = null;
         this._indicator?.destroy();
