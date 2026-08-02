@@ -70,11 +70,43 @@ def _paste_via_dotool() -> bool:
 
 
 def _copy_and_paste(text: str) -> bool:
-    """Copy text to clipboard then paste via dotool."""
+    """Copy text to clipboard, paste via dotool, then restore previous clipboard."""
+    import subprocess
+
+    # Save current clipboard content
+    previous_clipboard = ""
+    try:
+        result = subprocess.run(
+            ["wl-paste", "--no-newline"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+        if result.returncode == 0:
+            previous_clipboard = result.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Copy new text to clipboard
     copied = _copy_to_clipboard(text)
-    if copied:
-        return _paste_via_dotool()
-    return False
+    if not copied:
+        return False
+
+    # Paste via dotool
+    pasted = _paste_via_dotool()
+
+    # Restore previous clipboard content
+    if previous_clipboard:
+        try:
+            subprocess.run(
+                ["wl-copy"],
+                input=previous_clipboard.encode(),
+                timeout=2.0,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    return pasted
 
 
 SAMPLE_RATE = 16000
