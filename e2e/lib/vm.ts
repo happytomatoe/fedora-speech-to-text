@@ -193,6 +193,7 @@ export class VmManager {
   }
 
   async setup(): Promise<void> {
+    const t0 = Date.now();
     const shellExec = this.shell.exec.bind(this.shell);
 
     if (this.freshlyBooted) {
@@ -200,17 +201,28 @@ export class VmManager {
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
+    console.log(`  GDM login: ${Date.now() - t0}ms`);
 
+    const t1 = Date.now();
     await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
+    console.log(`  installDependencies: ${Date.now() - t1}ms`);
+
+    const t2 = Date.now();
     await deployExtension(this.shell, this.deployCfg, pollUntil);
+    console.log(`  deployExtension: ${Date.now() - t2}ms`);
 
     // Deploy Python source and test audio (sequential, sync operations)
+    const t3 = Date.now();
     deployPythonSource(this.deployCfg);
     deployTestAudio(this.deployCfg);
+    console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
+    const t4 = Date.now();
     await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput);
+    console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 
+    console.log(`  setup total: ${Date.now() - t0}ms`);
     // Note: snapshot save/restore is handled by saveCleanSnapshot/resetToCleanState
   }
 

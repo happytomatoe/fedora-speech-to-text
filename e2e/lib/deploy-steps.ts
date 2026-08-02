@@ -54,11 +54,17 @@ export async function installDependencies(
   sshPort: number,
   sshUser: string
 ): Promise<void> {
+  const t0 = Date.now();
   console.log("Installing dependencies...");
   // Install tmux if not present (needed for terminal session management in tests)
+  const t = Date.now();
   sshExec("command -v tmux >/dev/null 2>&1 || sudo dnf install -y tmux", sshKey, sshPort, sshUser);
+  console.log(`  tmux: ${Date.now() - t}ms`);
   // Install uv if not present (faster Python dependency installation)
+  const t2 = Date.now();
   sshExec("command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh", sshKey, sshPort, sshUser);
+  console.log(`  uv: ${Date.now() - t2}ms`);
+  console.log(`  dependencies total: ${Date.now() - t0}ms`);
 }
 
 // extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
@@ -71,6 +77,7 @@ export async function deployExtension(
   const extDir = join(cfg.projectRoot, "gnome-ext");
   if (!existsSync(extDir)) return;
 
+  const t0 = Date.now();
   console.log("Deploying GNOME extension...");
   rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   sshExec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}/schemas/`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
@@ -81,10 +88,12 @@ export async function deployExtension(
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
+  console.log(`  rsync+dconf: ${Date.now() - t0}ms`);
 
   // Try to load extension dynamically via D-Bus (faster than GDM restart)
   // Falls back to GDM restart if D-Bus method not available
   console.log("Loading extension via D-Bus...");
+  const t1 = Date.now();
   let extensionLoaded = false;
   
   try {
@@ -95,13 +104,24 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         "Main.extensionManager.loadExtension '${cfg.extensionUuid}'" 2>&1 || true`
     );
     
-    if (dbusResult.includes("true") || dbusResult.includes("(true, ''))")) {
+    if (dbusResult.includes("true") || dbusResult.includes("(true, '')")) {
       console.log("Extension loaded via D-Bus");
-      extensionLoaded = true;
+      // Verify the extension is actually available
+      try {
+        const verifyResult = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        if (!verifyResult.includes("doesn't exist")) {
+          extensionLoaded = true;
+        } else {
+          console.log("  D-Bus load succeeded but extension not found, will use GDM restart");
+        }
+      } catch {
+        // Extension not recognized, fall back to GDM restart
+      }
     }
   } catch {
     // D-Bus method not available, will try GDM restart
   }
+  console.log(`  D-Bus attempt: ${Date.now() - t1}ms`);
   
   // Fall back to GDM restart if D-Bus loading failed
   if (!extensionLoaded) {
@@ -143,10 +163,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
 
       // Wait for GNOME Shell
+      const t2 = Date.now();
       await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
 
       // Give GNOME Shell time to initialize extension system
       await Bun.sleep(3000);
+      console.log(`  GDM restart+SSH: ${Date.now() - t2}ms`);
 
       // Wait for extension to be available
       console.log("Waiting for extension to be available...");
