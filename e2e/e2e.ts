@@ -16,13 +16,24 @@ writeFileSync(LOG_FILE, "");
 
 const origLog = console.log;
 const origError = console.error;
+
+// In timing mode, only show timing-related output on stdout.
+// Everything still goes to the log file.
+function isTimingOutput(msg: string): boolean {
+  return msg.includes("[time]") || msg.includes("Total:") || msg.includes("=== Timing");
+}
+
 console.log = (...args: any[]) => {
-  origLog(...args);
-  appendFileSync(LOG_FILE, args.join(" ") + "\n");
+  const msg = args.join(" ");
+  appendFileSync(LOG_FILE, msg + "\n");
+  if (!TIMING_MODE || isTimingOutput(msg)) {
+    origLog(...args);
+  }
 };
 console.error = (...args: any[]) => {
+  const msg = args.join(" ");
+  appendFileSync(LOG_FILE, "ERROR: " + msg + "\n");
   origError(...args);
-  appendFileSync(LOG_FILE, "ERROR: " + args.join(" ") + "\n");
 };
 
 
@@ -33,6 +44,7 @@ const SHUTDOWN = args.includes("--shutdown");
 const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
+if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const SNAPSHOT_MODE = args.includes("--snapshot");
 
 // Parse --timeout <seconds> (default: 180)
@@ -48,10 +60,8 @@ const outputMethodIdx = args.indexOf("--output-method");
 const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 
 function timing(label: string, startMs: number): void {
-  if (TIMING_MODE) {
-    const ms = Date.now() - startMs;
-    console.log(`  [time] ${label}: ${ms}ms`);
-  }
+  const ms = Date.now() - startMs;
+  console.log(`  [time] ${label}: ${ms}ms`);
 }
 
 // Configuration

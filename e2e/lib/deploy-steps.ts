@@ -49,7 +49,7 @@ export async function waitForGdmLogin(
   console.log("Waiting for GNOME Shell to register on D-Bus...");
   // Use gdbus wait to get shell on D-Bus quickly (~350ms)
   await shellExec("gdbus wait --session --timeout=60 org.gnome.Shell");
-  console.log(`  gdbus wait: ${Date.now() - t0}ms`);
+  console.log(`  gdbus wait: ${Date.now() - t0}ms [time]`);
   
   // Poll SessionIsActive — indicates full session is up.
   // The PTY shell is functional after gdbus wait returns.
@@ -65,8 +65,8 @@ export async function waitForGdmLogin(
     }
     await Bun.sleep(100);
   }
-  console.log(`  session ready: ${Date.now() - t1}ms`);
-  console.log(`  GDM login total: ${Date.now() - t0}ms`);
+  console.log(`  session ready: ${Date.now() - t1}ms [time]`);
+  console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
   
   if (!ready) {
     console.log("WARNING: Session did not become ready in time, continuing anyway");
@@ -80,15 +80,17 @@ export async function installDependencies(
 ): Promise<void> {
   const t0 = Date.now();
   console.log("Installing dependencies...");
-  // Install tmux and uv in a single SSH call to avoid per-command SSH overhead (~6s each).
-  const t = Date.now();
-  sshExec(
-    `command -v tmux >/dev/null 2>&1 || sudo dnf install -y tmux; ` +
-    `command -v uv >/dev/null 2>&1 || (mkdir -p ~/.local/bin && curl -LsSf https://astral.sh/uv/install.sh | sh)`,
-    sshKey, sshPort, sshUser
-  );
-  console.log(`  tmux+uv: ${Date.now() - t}ms`);
-  console.log(`  dependencies total: ${Date.now() - t0}ms`);
+  // Check tmux and uv — each sshExec call has ~6s cold connection overhead.
+  const t1 = Date.now();
+  const tmuxMissing = sshExec("command -v tmux 2>/dev/null || echo MISSING", sshKey, sshPort, sshUser).includes("MISSING");
+  if (tmuxMissing) sshExec("sudo dnf install -y tmux", sshKey, sshPort, sshUser);
+  console.log(`  tmux: ${Date.now() - t1}ms${tmuxMissing ? " (installed)" : " (in base image)"} [time]`);
+  
+  const t2 = Date.now();
+  const uvMissing = sshExec("command -v uv 2>/dev/null || echo MISSING", sshKey, sshPort, sshUser).includes("MISSING");
+  if (uvMissing) sshExec("curl -LsSf https://astral.sh/uv/install.sh | sh", sshKey, sshPort, sshUser);
+  console.log(`  uv: ${Date.now() - t2}ms${uvMissing ? " (installed)" : " (in base image)"} [time]`);
+  console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
 // extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
@@ -112,7 +114,7 @@ export async function deployExtension(
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
-  console.log(`  rsync+dconf: ${Date.now() - t0}ms`);
+  console.log(`  rsync+dconf: ${Date.now() - t0}ms [time]`);
 
   // Restart GDM to load the extension.
   // Note: org.gnome.Shell.Eval is disabled in GNOME 50, so D-Bus loading
@@ -157,7 +159,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
     // Give GNOME Shell time to initialize extension system
     await Bun.sleep(3000);
-    console.log(`  GDM restart+SSH: ${Date.now() - t2}ms`);
+    console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
 
     // Wait for extension to be available
     console.log("  waiting for extension...");

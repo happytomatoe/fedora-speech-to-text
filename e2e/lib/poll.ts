@@ -5,15 +5,16 @@ export async function pollUntil(
   intervalMs = 1000
 ): Promise<void> {
   const start = Date.now();
-  process.stdout.write(`Waiting for ${desc}`);
+  const quiet = !!process.env.TIMING_MODE;
+  if (!quiet) process.stdout.write(`Waiting for ${desc}`);
 
   try {
     while (Date.now() - start < timeoutMs) {
       if (await check()) {
-        console.log(` ready (${Math.round((Date.now() - start) / 1000)}s)`);
+        console.log(`${quiet ? "  " : " "}ready (${Math.round((Date.now() - start) / 1000)}s)`);
         return;
       }
-      process.stdout.write(".");
+      if (!quiet) process.stdout.write(".");
       await Bun.sleep(intervalMs);
     }
 
@@ -21,7 +22,7 @@ export async function pollUntil(
     throw new Error(`Timeout waiting for ${desc}`);
   } catch (err) {
     if (err instanceof Error && err.message.startsWith("Timeout")) throw err;
-    process.stdout.write("\n");
+    if (!quiet) process.stdout.write("\n");
     throw err;
   }
 }
