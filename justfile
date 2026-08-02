@@ -640,3 +640,41 @@ e2e-snapshot:
 # Update E2E reference images in snapshot mode
 e2e-update-snapshot:
     cd e2e && bun run e2e.ts --snapshot --update
+
+# @category sonarqube
+# Run a one-shot SonarQube scan (starts temp server, scans, exports reports, tears down)
+sonar-scan:
+    scripts/sonar-scan.sh
+
+# @category sonarqube
+# Run SonarQube scan and keep the server running (view results at localhost:9000)
+sonar-scan-keep:
+    scripts/sonar-scan.sh --keep-server
+
+# @category sonarqube
+# Stop a previously kept SonarQube server
+sonar-stop:
+    scripts/sonar-scan.sh --tear-down
+
+# @category sonarqube
+# Start SonarQube server (persistent, for repeated scans)
+sonar-start:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CONTAINER="sonarqube-oneshot"
+    if podman ps --format '{{'.Names'}}' | grep -q "^${CONTAINER}$"; then
+        echo "SonarQube already running at http://localhost:9000"
+        exit 0
+    fi
+    sudo sysctl -w vm.max_map_count=262144 >/dev/null 2>&1 || true
+    podman rm -f "$CONTAINER" 2>/dev/null || true
+    podman run -d --name "$CONTAINER" -p 9000:9000 \
+        -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+        sonarqube:26.4.0.121862-community >/dev/null
+    echo "SonarQube starting... UI will be ready in ~60-90s at http://localhost:9000"
+    echo "Credentials: admin / Sonarless123!"
+
+# @category sonarqube
+# Show SonarQube container logs
+sonar-logs:
+    podman logs -f sonarqube-oneshot

@@ -29,7 +29,9 @@ Available query parameters (set via deepgram.batch_options in config.yaml):
 - mip_opt_out:     Opt out of the Model Improvement Program
 """
 
+import asyncio
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -82,8 +84,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
                     "Authorization": f"Token {self.api_key}",
                     "Content-Type": "audio/wav",
                 }
-                with open(audio_path, "rb") as audio_file:
-                    content = audio_file.read()
+                content = await asyncio.to_thread(Path(audio_path).read_bytes)
                 json_data = None
 
             response = await self._client.post(
@@ -107,15 +108,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
             logger.error("Deepgram API error: HTTP %s", status)
-            if e.response is not None:
-                try:
-                    body = e.response.json()
-                    logger.error("Deepgram response body: %s", body)
-                except ValueError:
-                    logger.error("Deepgram response text: %s", e.response.text[:500])
-                if status == 401:
-                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if len(self.api_key) > 10 else self.api_key
-                    logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fp, len(self.api_key))
+            self._log_http_error_details(e, status)
             raise RuntimeError(f"Deepgram API request failed (HTTP {status}): {e}") from e
         except Exception as e:
             logger.exception("Deepgram transcription failed")
@@ -141,6 +134,19 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         await self._connect_ws(ws_url, headers)
         logger.info("[PROFIL] Deepgram WS connect: %.3fs (sample_rate=%d)", _time.monotonic() - _t0, sample_rate)
 
+    def _log_http_error_details(self, e: httpx.HTTPStatusError, status: int | str) -> None:
+        """Log additional details from HTTP error responses."""
+        if e.response is None:
+            return
+        try:
+            body = e.response.json()
+            logger.error("Deepgram response body: %s", body)
+        except ValueError:
+            logger.error("Deepgram response text: %s", e.response.text[:500])
+        if status == 401:
+            key = self.api_key
+            fingerprint = key[:6] + "..." + key[-4:] if len(key) > 10 else key[:3] + "..." + key[-2:]
+            logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fingerprint, len(key))
     @property
     def name(self) -> str:
         return "deepgram"

@@ -9,6 +9,7 @@ import concurrent.futures
 import logging
 import os
 import threading
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -60,16 +61,16 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
         try:
             async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    files = {"file": (os.path.basename(audio_path), audio_file)}
-                    data = {"model": self.model, "language": language}
-                    response = await client.post(
-                        f"{self._api_url}/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {self.api_key}"},
-                        files=files,
-                        data=data,
-                        timeout=120,
-                    )
+                audio_data = await asyncio.to_thread(Path(audio_path).read_bytes)
+                files = {"file": (os.path.basename(audio_path), audio_data)}
+                data = {"model": self.model, "language": language}
+                response = await client.post(
+                    f"{self._api_url}/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    files=files,
+                    data=data,
+                    timeout=120,
+                )
                 response.raise_for_status()
                 result = response.json()
                 text = result.get("text", "").strip()
@@ -78,22 +79,25 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
             logger.error("Voxtral API error: HTTP %s", status)
-            if e.response is not None:
-                try:
-                    body = e.response.json()
-                    logger.error("Voxtral response body: %s", body)
-                except ValueError:
-                    logger.error("Voxtral response text: %s", e.response.text[:500])
-                if status == 401:
-                    logger.error(
-                        "401 Unauthorized - key fingerprint=%s (len=%d)",
-                        self.api_key[:6] + "..." + self.api_key[-4:] if len(self.api_key) > 10 else self.api_key,
-                        len(self.api_key),
-                    )
+            self._log_http_error_details(e)
             raise RuntimeError(f"Voxtral API request failed (HTTP {status}): {e}") from e
         except Exception as e:
             logger.exception("Voxtral transcription failed")
             raise RuntimeError(f"Voxtral transcription failed: {e}")
+
+    def _log_http_error_details(self, e: httpx.HTTPStatusError) -> None:
+        """Log additional details from HTTP error responses."""
+        if e.response is None:
+            return
+        try:
+            body = e.response.json()
+            logger.error("Voxtral response body: %s", body)
+        except ValueError:
+            logger.error("Voxtral response text: %s", e.response.text[:500])
+        if e.response.status_code == 401:
+            key = self.api_key
+            fingerprint = key[:6] + "..." + key[-4:] if len(key) > 10 else key
+            logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fingerprint, len(key))
 
     # ── Streaming ──────────────────────────────────────────────────────
 
@@ -130,7 +134,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
         # Schedule the streaming coroutine on the event loop
         assert self._loop is not None  # guaranteed by the thread wait above
-        self._stream_task = asyncio.run_coroutine_threadsafe(self._stream(language, sample_rate), self._loop)
+        self._stream_task = asyncio.run_coroutine_threadsafe(self._stream(sample_rate), self._loop)
         logger.info(
             "[PROFIL] Voxtral stream start: %.3fs total (event_loop %.3fs, model=%s delay=%sms)",
             _time.monotonic() - _t0,
@@ -139,7 +143,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
             self._target_delay_ms,
         )
 
-    async def _stream(self, language: str, sample_rate: int) -> None:
+    async def _stream(self, sample_rate: int) -> None:
         """Run the Voxtral realtime streaming in the event loop thread."""
         from mistralai.client import Mistral
         from mistralai.extra.realtime import AudioFormat
@@ -167,6 +171,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
                     break
         except asyncio.CancelledError:
             logger.info("Voxtral realtime stream cancelled")
+            raise
         except Exception as exc:
             logger.exception("Voxtral realtime stream error")
             raise RuntimeError(f"Streaming connection lost: {exc}") from exc

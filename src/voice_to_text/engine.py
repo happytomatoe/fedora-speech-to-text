@@ -100,7 +100,7 @@ class AsyncAudioRecorder:
         import wave
 
         self._filepath = filepath
-        fd = os.fdopen(os.open(filepath, os.O_WRONLY | os.O_CREAT, 0o600), "wb")
+        fd = await asyncio.to_thread(os.open, filepath, os.O_WRONLY | os.O_CREAT, 0o600)
         self._wav_file = wave.open(fd, "wb")
         self._wav_file.setnchannels(1)
         self._wav_file.setsampwidth(2)
@@ -346,41 +346,8 @@ class RecordingEngine:
                 return  # Exit early, skip normal recording flow
 
             # 4. Set up providers
-            provider = config.get("provider", "voxtral")
-            mode = config.get("mode", "batch")
             language = config.get("language", "en")
-
-            transcriber: HybridTranscriber | None = None
-            batch_provider = None
-
-            if mode in ("hybrid", "streaming"):
-                config_mgr = ConfigManager()
-                hybrid_cfg = config_mgr.config.get("transcription", {}).get("hybrid", {})
-                streaming_name = config.get("streaming_provider") or hybrid_cfg.get("streaming_provider", "deepgram")
-                if mode == "hybrid":
-                    batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
-                    streaming_config = config_mgr.get_provider_config(streaming_name)
-                    batch_config = config_mgr.get_provider_config(batch_name)
-                    # Construct providers in a worker thread: their __init__
-                    # may run blocking I/O (e.g. API key resolution).
-                    streaming_provider = await asyncio.to_thread(
-                        get_streaming_provider, streaming_name, streaming_config
-                    )
-                    batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
-                else:
-                    # streaming mode — use streaming provider as both
-                    streaming_config = config_mgr.get_provider_config(streaming_name)
-                    streaming_provider = await asyncio.to_thread(
-                        get_streaming_provider, streaming_name, streaming_config
-                    )
-                    batch_provider = None  # no batch in pure streaming mode
-                transcriber = HybridTranscriber(streaming_provider, batch_provider or streaming_provider)  # type: ignore[arg-type]
-            else:
-                config_mgr = ConfigManager()
-                provider_config = config_mgr.get_provider_config(provider)
-                # Construct the provider in a worker thread: its __init__ may
-                # run blocking I/O (e.g. API key resolution).
-                batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
+            transcriber, batch_provider = await self._init_providers(config)
 
             self._transcriber = transcriber
             self._batch_provider = batch_provider
@@ -448,54 +415,10 @@ class RecordingEngine:
             self._notify_state()
             if filepath:
                 try:
-                    postprocess_cfg = config_mgr.config.get("postprocess", {})
-                    raw_custom_words = config.get("custom_words")
-                    custom_words = (
-                        raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
+                    await self._transcribe_and_output(
+                        filepath, config, transcriber, batch_provider, typer, output_method, language
                     )
-                    raw_threshold = config.get("custom_words_threshold")
-                    custom_words_threshold = (
-                        raw_threshold
-                        if raw_threshold is not None
-                        else postprocess_cfg.get("custom_words_threshold", 0.5)
-                    )
-                    if transcriber:
-                        text = await transcriber.on_recording_stop(filepath, language, custom_words)
-                    else:
-                        assert batch_provider is not None
-                        text = await batch_provider.transcribe_file(filepath, language, custom_words)
                     _step("transcription_done")
-                    # Apply text post-processing
-                    if text:
-                        postprocess_cfg = config_mgr.config.get("postprocess", {})
-                        if postprocess_cfg.get("enabled", True):
-                            text = postprocess(
-                                text,
-                                lang=postprocess_cfg.get("language") or language,
-                                custom_words=custom_words,
-                                custom_words_threshold=custom_words_threshold,
-                                custom_filler_words=postprocess_cfg.get("custom_filler_words"),
-                            )
-                    _step("postprocess_done")
-
-                    # If we were typing incrementally, apply final corrections
-                    if text and typer and typer._usable:
-                        logger.info(
-                            "Applying final stream_diff with typer=%s, text_len=%d",
-                            type(typer).__name__,
-                            len(text),
-                        )
-                        await typer.stream_diff(text)
-                    elif text and typer and not typer._usable:
-                        logger.warning("Typer is not usable, skipping stream_diff")
-
-                    # Handle clipboard output if configured
-                    if text and output_method == "clipboard":
-                        await asyncio.to_thread(_copy_to_clipboard, text)
-                    _step("output_done")
-
-                    logger.info("Transcription completed: %d characters", len(text) if text else 0)
-
                 finally:
                     # Clean up temp WAV file after transcription
                     try:
@@ -541,6 +464,88 @@ class RecordingEngine:
             self._notify_state()
             self._cleanup()
 
+    async def _init_providers(self, config: dict[str, Any]) -> tuple[HybridTranscriber | None, Any]:
+        """Initialize transcription providers based on config."""
+        provider = config.get("provider", "voxtral")
+        mode = config.get("mode", "batch")
+
+        transcriber: HybridTranscriber | None = None
+        batch_provider = None
+
+        config_mgr = ConfigManager()
+
+        if mode in ("hybrid", "streaming"):
+            hybrid_cfg = config_mgr.config.get("transcription", {}).get("hybrid", {})
+            streaming_name = config.get("streaming_provider") or hybrid_cfg.get("streaming_provider", "deepgram")
+            if mode == "hybrid":
+                batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
+                streaming_config = config_mgr.get_provider_config(streaming_name)
+                batch_config = config_mgr.get_provider_config(batch_name)
+                streaming_provider = await asyncio.to_thread(
+                    get_streaming_provider, streaming_name, streaming_config
+                )
+                batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
+            else:
+                streaming_config = config_mgr.get_provider_config(streaming_name)
+                streaming_provider = await asyncio.to_thread(
+                    get_streaming_provider, streaming_name, streaming_config
+                )
+                batch_provider = None
+            transcriber = HybridTranscriber(streaming_provider, batch_provider or streaming_provider)  # type: ignore[arg-type]
+        else:
+            provider_config = config_mgr.get_provider_config(provider)
+            batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
+
+        return transcriber, batch_provider
+
+    async def _transcribe_and_output(
+        self,
+        filepath: str,
+        config: dict[str, Any],
+        transcriber: HybridTranscriber | None,
+        batch_provider: Any,
+        typer: ContinuousTyper | MutterVirtualTyper | None,
+        output_method: str,
+        language: str,
+    ) -> None:
+        """Handle transcription, post-processing, and output."""
+        config_mgr = ConfigManager()
+        postprocess_cfg = config_mgr.config.get("postprocess", {})
+        raw_custom_words = config.get("custom_words")
+        custom_words = (
+            raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
+        )
+        raw_threshold = config.get("custom_words_threshold")
+        custom_words_threshold = (
+            raw_threshold
+            if raw_threshold is not None
+            else postprocess_cfg.get("custom_words_threshold", 0.5)
+        )
+
+        if transcriber:
+            text = await transcriber.on_recording_stop(filepath, language, custom_words)
+        else:
+            assert batch_provider is not None
+            text = await batch_provider.transcribe_file(filepath, language, custom_words)
+
+        if text and postprocess_cfg.get("enabled", True):
+            text = postprocess(
+                text,
+                lang=postprocess_cfg.get("language") or language,
+                custom_words=custom_words,
+                custom_words_threshold=custom_words_threshold,
+                custom_filler_words=postprocess_cfg.get("custom_filler_words"),
+            )
+
+        if text and typer and typer._usable:
+            await typer.stream_diff(text)
+        elif text and typer and not typer._usable:
+            logger.warning("Typer is not usable, skipping stream_diff")
+
+        if text and output_method == "clipboard":
+            await asyncio.to_thread(_copy_to_clipboard, text)
+
+        logger.info("Transcription completed: %d characters", len(text) if text else 0)
     def _cleanup(self):
         if self._recorder:
             try:

@@ -123,6 +123,27 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
         raise ValueError(f"API key command error: {e}") from e
 
 
+def _resolve_key_from_env(
+    env_var: str, extra_envs: tuple[str, ...]
+) -> tuple[str | None, str]:
+    """Try to find API key in environment variables."""
+    key = os.getenv(env_var)
+    if key:
+        return key, f"env:{env_var}"
+    for env in extra_envs:
+        key = os.getenv(env)
+        if key:
+            return key, f"env:{env}"
+    return None, "none"
+
+
+def _key_fingerprint(key: str) -> str:
+    """Return a masked fingerprint of the API key for logging."""
+    if len(key) > 10:
+        return f"{key[:6]}...{key[-4:]}"
+    return f"{key[:3]}...{key[-2:]}"
+
+
 def resolve_api_key(
     config: dict[str, Any],
     default_env: str,
@@ -137,16 +158,9 @@ def resolve_api_key(
 
     Raises ValueError if not found.
     """
-    source_used = "none"
     env_var = config.get("api_key_env", default_env)
-    key = os.getenv(env_var)
-    if not key:
-        for env in extra_envs:
-            key = os.getenv(env)
-            if key:
-                break
-    if key:
-        source_used = f"env:{env_var or extra_envs}"
+    key, source_used = _resolve_key_from_env(env_var, extra_envs)
+
     # 2. Config file
     if not key:
         key = config.get("api_key")
@@ -154,19 +168,19 @@ def resolve_api_key(
             source_used = "config:api_key"
 
     if not key:
-        all_vars = (config.get("api_key_env", default_env),) + extra_envs
+        all_vars = (env_var,) + extra_envs
         raise ValueError(f"No API key found in environment ({all_vars}) or config")
-    # Log key fingerprint for debugging (first 6 + last 4 chars)
-    if len(key) > 10:
-        fingerprint = f"{key[:6]}...{key[-4:]}"
-    else:
-        fingerprint = f"{key[:3]}...{key[-2:]}"
-    logger.info("API key resolved: provider=%s source=%s fingerprint=%s", provider_name, source_used, fingerprint)
+
+    logger.info(
+        "API key resolved: provider=%s source=%s fingerprint=%s",
+        provider_name,
+        source_used,
+        _key_fingerprint(key),
+    )
 
     # 4. Command substitution (!command)
-    if key and key.startswith("!"):
-        command = key[1:]  # strip leading !
-        return _execute_command_for_key(command)
+    if key.startswith("!"):
+        return _execute_command_for_key(key[1:])
 
     return key
 
@@ -226,42 +240,37 @@ class WebSocketStreamingProvider(StreamingProvider):
             )
         return self._finalized_text or None
 
+    def _get_pending_result(self) -> str:
+        """Combine finalized text with any partial result."""
+        if self._partial_result:
+            text = (self._finalized_text + " " + self._partial_result).strip()
+        else:
+            text = self._finalized_text
+        self._partial_result = None
+        self._finalized_text = ""
+        return text
+
+    async def _drain_close_messages(self) -> None:
+        """Read final messages after sending CloseStream."""
+        try:
+            async with asyncio.timeout(2.0):
+                while True:
+                    msg = await self._ws.recv()
+                    self._handle_close_message(msg)
+        except TimeoutError:
+            pass
+
     async def finalize_stream(self) -> str:
         if self._ws is None:
-            result = (
-                (self._finalized_text + " " + self._partial_result).strip()
-                if self._partial_result
-                else self._finalized_text
-            )
-            self._partial_result = None
-            self._finalized_text = ""
-            return result
+            return self._get_pending_result()
 
         try:
             await self._ws.send(json.dumps({"type": "CloseStream"}))
-            try:
-                async with asyncio.timeout(2.0):
-                    while True:
-                        msg = await self._ws.recv()
-                        if isinstance(msg, str):
-                            data = json.loads(msg)
-                            msg_type = data.get("type", "")
-                            if msg_type == "Results":
-                                channel = data.get("channel", {})
-                                alternatives = channel.get("alternatives", [{}])
-                                transcript = alternatives[0].get("transcript", "") if alternatives else ""
-                                if transcript:
-                                    self._finalized_text = (self._finalized_text + " " + transcript).strip()
-            except TimeoutError:
-                pass
+            await self._drain_close_messages()
         except Exception as e:
             logger.warning("Error closing %s stream: %s", self.name, e)
         finally:
-            if self._ws is not None:
-                try:
-                    await self._ws.close()
-                except Exception:
-                    pass
+            await self._close_ws()
 
         result = self._finalized_text
         self._ws = None
@@ -269,30 +278,58 @@ class WebSocketStreamingProvider(StreamingProvider):
         self._finalized_text = ""
         return result
 
-    async def _process_messages(self) -> None:
+    async def _close_ws(self) -> None:
+        """Close WebSocket, ignoring errors."""
         if self._ws is None:
             return
+        try:
+            await self._ws.close()
+        except Exception:
+            pass
 
+    def _handle_close_message(self, msg: str) -> None:
+        """Process a single WebSocket message during stream finalization."""
+        if not isinstance(msg, str):
+            return
+        data = json.loads(msg)
+        if data.get("type") != "Results":
+            return
+        channel = data.get("channel", {})
+        alternatives = channel.get("alternatives", [{}])
+        if not alternatives:
+            return
+        transcript = alternatives[0].get("transcript", "")
+        if transcript:
+            self._finalized_text = (self._finalized_text + " " + transcript).strip()
+
+    def _handle_stream_message(self, msg: str) -> None:
+        """Process a single streaming message (partial/final transcript)."""
+        if not isinstance(msg, str):
+            return
+        data = json.loads(msg)
+        msg_type = data.get("type", "unknown")
+        if msg_type == "Results":
+            logger.debug("%s Results: %s", self.name, msg)
+            channel = data.get("channel", {})
+            alternatives = channel.get("alternatives", [{}])
+            transcript = alternatives[0].get("transcript", "") if alternatives else ""
+            if data.get("is_final", False) and transcript:
+                self._finalized_text = (self._finalized_text + " " + transcript).strip()
+                self._partial_result = None
+            elif transcript:
+                self._partial_result = transcript
+        elif msg_type == "Error":
+            logger.error("%s stream error: %s", self.name, data.get("message"))
+
+    async def _process_messages(self) -> None:
+        """Process pending WebSocket messages (non-blocking)."""
+        if self._ws is None:
+            return
         try:
             async with asyncio.timeout(0.01):
                 while True:
                     msg = await self._ws.recv()
-                    if isinstance(msg, str):
-                        data = json.loads(msg)
-                        msg_type = data.get("type", "unknown")
-                        if msg_type == "Results":
-                            logger.debug("Deepgram Results: %s", msg)
-                            channel = data.get("channel", {})
-                            alternatives = channel.get("alternatives", [{}])
-                            transcript = alternatives[0].get("transcript", "") if alternatives else ""
-                            is_final = data.get("is_final", False)
-                            if is_final and transcript:
-                                self._finalized_text = (self._finalized_text + " " + transcript).strip()
-                                self._partial_result = None
-                            elif transcript:
-                                self._partial_result = transcript
-                        elif msg_type == "Error":
-                            logger.error("%s stream error: %s", self.name, data.get("message"))
+                    self._handle_stream_message(msg)
         except (TimeoutError, asyncio.CancelledError):  # noqa: UP041
             pass
         except Exception as e:

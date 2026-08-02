@@ -3,8 +3,10 @@
 Project docs: docs/providers/parakeet.md
 """
 
+import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -32,10 +34,10 @@ class ParakeetProvider(BatchProvider):
         logger.info("Transcribing %s via HTTP", audio_path)
         url = f"{self.http_endpoint}/v1/audio/transcriptions"
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            with open(audio_path, "rb") as f:
-                files = {"file": (os.path.basename(audio_path), f, "audio/wav")}
-                data = {"model": self.model_name}
-                response = await client.post(url, files=files, data=data)
+            audio_data = await asyncio.to_thread(Path(audio_path).read_bytes)
+            files = {"file": (os.path.basename(audio_path), audio_data, "audio/wav")}
+            data = {"model": self.model_name}
+            response = await client.post(url, files=files, data=data)
             response.raise_for_status()
             result = response.json().get("text", "").strip()
             logger.info("Transcription result: %s", result[:100])

@@ -92,3 +92,8 @@ gnome-ext/schemas/gschemas.compiled
 scripts/test-*.sh
 scripts/test-*.py
 scripts/wait-for-*.sh
+
+# SonarQube
+.scannerwork/
+sonar-reports/
+sonar-metrics.json

@@ -4,6 +4,7 @@ API reference: https://elevenlabs.io/docs/api-reference/speech-to-text/convert
 Project docs:  docs/providers/elevenlabs.md
 """
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -51,14 +52,14 @@ class ElevenLabsProvider(BatchProvider):
             data["language_code"] = language
         try:
             async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    response = await client.post(
-                        f"{self.api_url}/v1/speech-to-text",
-                        headers=headers,
-                        data=data,
-                        files={"file": (Path(audio_path).name, audio_file, "application/octet-stream")},
-                        timeout=120,
-                    )
+                audio_data = await asyncio.to_thread(Path(audio_path).read_bytes)
+                response = await client.post(
+                    f"{self.api_url}/v1/speech-to-text",
+                    headers=headers,
+                    data=data,
+                    files={"file": (Path(audio_path).name, audio_data, "application/octet-stream")},
+                    timeout=120,
+                )
             response.raise_for_status()
             result = response.json()
             text = (result.get("text") or "").strip()

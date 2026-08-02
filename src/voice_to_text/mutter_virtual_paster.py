@@ -73,7 +73,7 @@ class MutterVirtualPaster:
             self._usable = False
             return False
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """Cleanup."""
         if self._bus:
             self._bus.disconnect()

@@ -9,6 +9,7 @@ import base64
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -49,15 +50,15 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             data["language"] = language
         try:
             async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    files = {"file": (os.path.basename(audio_path), audio_file)}
-                    response = await client.post(
-                        f"{self.api_url}/stt",
-                        headers=headers,
-                        data=data,
-                        files=files,
-                        timeout=120,
-                    )
+                audio_data = await asyncio.to_thread(Path(audio_path).read_bytes)
+                files = {"file": (os.path.basename(audio_path), audio_data)}
+                response = await client.post(
+                    f"{self.api_url}/stt",
+                    headers=headers,
+                    data=data,
+                    files=files,
+                    timeout=120,
+                )
                 response.raise_for_status()
                 result = response.json()
                 payload = result.get("data", result)
@@ -131,6 +132,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                 self._handle_message(msg)
         except asyncio.CancelledError:
             logger.info("60db receive loop cancelled")
+            raise
         except Exception as e:
             logger.warning("60db receive loop error: %s", e)
 
