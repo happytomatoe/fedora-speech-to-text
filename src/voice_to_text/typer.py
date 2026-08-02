@@ -20,11 +20,8 @@ import logging
 import os
 import shutil
 
-try:
-    from gi.repository import Gio, GLib  # type: ignore[import-untyped]
-except ImportError:
-    Gio = None  # type: ignore[assignment,misc]
-    GLib = None  # type: ignore[assignment,misc]
+from dbus_next.aio import MessageBus
+from dbus_next import BusType
 
 logger = logging.getLogger(__name__)
 
@@ -398,37 +395,25 @@ class MutterVirtualTyper:
         self._usable: bool = True
         self._proxy = None
         self._fallback: ContinuousTyper | None = None
+        self._bus: MessageBus | None = None
 
     async def start(self) -> None:
         """Check if the TypeText D-Bus service is available."""
-        if Gio is None or GLib is None:
-            logger.info("MutterVirtualTyper: gi.repository not available, falling back to dotool")
-            self._fallback = ContinuousTyper()
-            await self._fallback.start()
-            return
         try:
-            bus = await Gio.DBusConnection.get(Gio.BusType.SESSION, None)
-            result = await bus.call_sync(
-                self.DBUS_NAME,
-                self.DBUS_PATH,
-                "org.freedesktop.DBus",
-                "ListNames",
-                GLib.Variant("()", ()),
-                GLib.VariantType("(as)"),
-                Gio.DBusCallFlags.NONE,
-                -1,
-                None,
+            bus = await MessageBus(bus_type=BusType.SESSION).connect()
+            introspection = await bus.introspect(self.DBUS_NAME, self.DBUS_PATH)
+            proxy = bus.get_proxy_object(
+                self.DBUS_NAME, self.DBUS_PATH, introspection
             )
-            names = result.get_child_value(0).unpack()
-            if self.DBUS_NAME in names:
-                logger.info("MutterVirtualTyper: TypeText D-Bus service available")
-                self._proxy = True
-                return
+            self._proxy = proxy.get_interface(self.DBUS_INTERFACE)
+            self._bus = bus
+            logger.info("MutterVirtualTyper: TypeText D-Bus service available")
+            return
         except Exception as e:
             logger.debug("MutterVirtualTyper: D-Bus check failed: %s", e)
 
         # Fallback to dotool
-        logger.info("MutterVirtualTyper: TypeText not available, falling back to dotool")
+        logger.warning("MutterVirtualTyper: TypeText not available, falling back to dotool")
         self._fallback = ContinuousTyper()
         await self._fallback.start()
 
@@ -445,11 +430,8 @@ class MutterVirtualTyper:
         if not self._proxy or not self._usable:
             return
 
-        # For mutter-virtual, we type the full text each time
-        # (no incremental diff — the virtual keyboard handles it)
-        old_text = self._typed_text
-
         # Find common prefix
+        old_text = self._typed_text
         common_len = 0
         min_len = min(len(old_text), len(new_text))
         while common_len < min_len and old_text[common_len] == new_text[common_len]:
@@ -459,36 +441,14 @@ class MutterVirtualTyper:
         new_suffix = new_text[common_len:]
 
         try:
-            bus = await Gio.DBusConnection.get(Gio.BusType.SESSION, None)
-
             # Send backspaces if needed
             if backspace_count > 0:
-                bs_text = "\x08" * backspace_count  # backspace character
-                await bus.call_sync(
-                    self.DBUS_NAME,
-                    self.DBUS_PATH,
-                    self.DBUS_INTERFACE,
-                    "TypeText",
-                    GLib.Variant("(s,)", (bs_text,)),
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
+                bs_text = "\x08" * backspace_count
+                await self._proxy.call_type_text(bs_text)
 
             # Send new text
             if new_suffix:
-                await bus.call_sync(
-                    self.DBUS_NAME,
-                    self.DBUS_PATH,
-                    self.DBUS_INTERFACE,
-                    "TypeText",
-                    GLib.Variant("(s,)", (new_suffix,)),
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
+                await self._proxy.call_type_text(new_suffix)
 
             self._typed_text = new_text
         except Exception as e:
@@ -500,6 +460,9 @@ class MutterVirtualTyper:
         if self._fallback:
             await self._fallback.stop()
             self._fallback = None
+        if self._bus:
+            self._bus.disconnect()
+            self._bus = None
         self._proxy = None
         self._typed_text = ""
 

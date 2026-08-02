@@ -540,15 +540,22 @@ class RecordingEngine:
                     _step("postprocess_done")
 
                     # If we were typing incrementally, apply final corrections
-                    if text and typer:
+                    if text and typer and typer._usable:
+                        logger.info("Applying final stream_diff with typer=%s, text_len=%d", type(typer).__name__, len(text))
                         await typer.stream_diff(text)
+                    elif text and typer and not typer._usable:
+                        logger.warning("Typer is not usable, skipping stream_diff")
 
                     # Handle wl-paste output (copy + paste via dotool)
                     if text and output_method == "wl-paste":
-                        await asyncio.to_thread(_copy_and_paste, text)
+                        logger.info("Using wl-paste output method: text_len=%d", len(text))
+                        result = await asyncio.to_thread(_copy_and_paste, text)
+                        logger.info("wl-paste result=%s", result)
                     # Handle clipboard output if configured
                     elif text and output_method == "clipboard":
-                        await asyncio.to_thread(_copy_to_clipboard, text)
+                        logger.info("Using clipboard output method: text_len=%d", len(text))
+                        result = await asyncio.to_thread(_copy_to_clipboard, text)
+                        logger.info("clipboard result=%s", result)
                     # Fallback to clipboard if typing failed in fallback mode
                     elif text and fallback_to_clipboard:
                         logger.info("Falling back to clipboard output")
