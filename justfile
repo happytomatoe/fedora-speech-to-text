@@ -16,12 +16,12 @@ setup:
     lefthook install
 
 run *args:
-    PYTHONPATH=src .venv/bin/python -m voice_to_text.__main__ {{args}}
+    PYTHONPATH=src .venv/bin/python -m voice_to_text.__main__ {{ args }}
 
 test:
-  uv run pytest -n auto
+    uv run pytest -n auto
 
-# @category test  
+# @category test
 test-all: test
 
 install:
@@ -56,7 +56,7 @@ dev-setup: setup-deps dev-sync
 setup-deps:
     #!/usr/bin/env bash
     set -euo pipefail
-    
+
     # Package mappings: command to check -> package name
     declare -A FEDORA_PKGS=(
         [rsync]="rsync"
@@ -66,7 +66,7 @@ setup-deps:
         [qemu-img]="qemu-img"
         [ssh]="openssh-clients"
     )
-    
+
     declare -A UBUNTU_PKGS=(
         [rsync]="rsync"
         [qemu-system-x86_64]="qemu-kvm"
@@ -75,7 +75,7 @@ setup-deps:
         [qemu-img]="qemu-utils"
         [ssh]="openssh-client"
     )
-    
+
     # Detect package manager
     if command -v rpm-ostree &>/dev/null; then
         PKG_MGR="rpm-ostree"
@@ -87,7 +87,7 @@ setup-deps:
         echo "ERROR: Unsupported package manager"
         exit 1
     fi
-    
+
     # Check which packages are missing
     MISSING=()
     for cmd in "${!FEDORA_PKGS[@]}"; do
@@ -99,21 +99,21 @@ setup-deps:
             fi
         fi
     done
-    
+
     if [ ${#MISSING[@]} -eq 0 ]; then
         echo "All system dependencies already installed."
         exit 0
     fi
-    
+
     echo "Missing packages: ${MISSING[*]}"
     echo "Installing..."
-    
+
     case "$PKG_MGR" in
         rpm-ostree) sudo rpm-ostree install -y "${MISSING[@]}" ;;
         dnf)        sudo dnf install -y "${MISSING[@]}" ;;
         apt)        sudo apt install -y "${MISSING[@]}" ;;
     esac
-    
+
     echo "System dependencies installed."
 
 # @category setup
@@ -212,12 +212,12 @@ service-status:
 # @category service
 # Tail service logs
 service-logs:
-	journalctl --user -f | grep voice
+    journalctl --user -f | grep voice
 
 # @category service
 # Tail D-Bus service logs (includes D-Bus activation logs and Python service logs)
 dbus-logs:
-	journalctl --user -f -u voice-to-text-dbus
+    journalctl --user -f -u voice-to-text-dbus
 
 # @category service
 # Restart the service by stopping it (D-Bus activation restarts on next extension use)
@@ -357,15 +357,13 @@ gnome-ext-pack:
     cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
     echo "Extension packed to dist/$UUID.shell-extension.zip"
 
-
-
 # @category e2e
 # Watch container via VNC (real-time live view)
 # Usage: just container-watch
 container-watch:
     #!/usr/bin/env bash
     set -euo pipefail
-    
+
     # Find running container
     POD=$(podman ps --filter ancestor=voice-to-text-e2e --format '{'{'.ID'}'}' | head -1)
     if [ -z "$POD" ]; then
@@ -373,26 +371,26 @@ container-watch:
       echo "Start one with: just e2e-full (in background) or podman run..."
       exit 1
     fi
-    
+
     echo "Found container: $POD"
-    
+
     # Install x11vnc as root (not gnomeshell user)
     echo "Installing x11vnc..."
     podman exec $POD dnf install -y --nogpgcheck x11vnc 2>/dev/null || true
-    
+
     # Kill any existing VNC server
     podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true
     sleep 1
-    
+
     # Start VNC server with -noshm to fix MIT-SHM error
     echo "Starting VNC server on port 5900..."
     podman exec --user gnomeshell -e DISPLAY=:100 -d $POD bash -c "nohup /usr/bin/x11vnc -display :100 -nopw -forever -shared -rfbport 5900 -noshm > /tmp/x11vnc.log 2>&1 &"
     sleep 3
-    
+
     # Verify it started
     echo "Checking VNC server..."
     podman exec --user gnomeshell $POD cat /tmp/x11vnc.log 2>/dev/null | tail -5 || echo "No log yet"
-    
+
     echo ""
     echo "========================================="
     echo "VNC server is running!"
@@ -406,7 +404,7 @@ container-watch:
     echo "========================================="
     echo ""
     echo "Press Ctrl+C to stop the VNC server"
-    
+
     # Keep script running and cleanup on exit
     trap "podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true; echo 'VNC server stopped.'" EXIT
     # Block until user presses Ctrl+C (wait won't work since no background jobs in this shell)
@@ -443,16 +441,16 @@ qemu-e2e-vm:
     set -euo pipefail
     VM_DIR="e2e/qemu-images"
     VM_DIR_ABS="$(pwd)/${VM_DIR}"
-    
+
     # Kill any existing QEMU
     # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
     pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
     sleep 1
-    
+
     # Create fresh overlay
     rm -f "${VM_DIR_ABS}/overlay.qcow2"
     qemu-img create -f qcow2 -b "${VM_DIR_ABS}/base.qcow2" -F qcow2 "${VM_DIR_ABS}/overlay.qcow2"
-    
+
     # Start QEMU with SPICE
     cd "${VM_DIR_ABS}"
     qemu-system-x86_64 \
@@ -471,7 +469,7 @@ qemu-e2e-vm:
         -no-reboot &
     QEMU_PID=$!
     echo $QEMU_PID > qemu.pid
-    
+
     echo "QEMU started (PID: ${QEMU_PID})"
     echo ""
     echo "Waiting for SSH..."
@@ -485,7 +483,7 @@ qemu-e2e-vm:
         echo -n "."
         sleep 2
     done
-    
+
     if [ "$ssh_ready" = false ]; then
         echo ""
         echo "❌ ERROR: SSH connection failed after 60 seconds"
@@ -493,7 +491,7 @@ qemu-e2e-vm:
         rm -f "${VM_DIR_ABS}/qemu.pid"
         exit 1
     fi
-    
+
     echo ""
     echo "=== VM is ready ==="
     echo "SPICE: remote-viewer spice://localhost:5930"
@@ -502,18 +500,18 @@ qemu-e2e-vm:
     echo "Kill:  just qemu-e2e-kill"
     echo ""
     echo "Press Ctrl+C to stop the VM"
-    
+
     # Wait for user interrupt
     trap "echo ''; echo 'Shutting down VM...'; kill ${QEMU_PID} 2>/dev/null || true; exit 0" INT TERM
     wait ${QEMU_PID} 2>/dev/null || true
 
 # @category e2e-qemu
-# Open SPICE viewer to QEMU E2E test VM (port 5930)
-e2e-test-view:
+# Open SPICE viewer to QEMU E2E test VM
+e2e-test-view port='5930':
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! ss -tlnp | grep -q ':5930 '; then
-        echo "ERROR: QEMU VM not running (no SPICE on port 5930)"
+    if ! ss -tlnp | grep -q ":{{ port }} "; then
+        echo "ERROR: QEMU VM not running (no SPICE on port {{ port }})"
         echo "Run 'just qemu-e2e-test-host' first."
         exit 1
     fi
@@ -543,13 +541,13 @@ e2e-test-view:
     # Dismiss lock screen if present
     $SSH "echo 'key Escape' > /run/user/1000/dotool-pipe" 2>/dev/null || true
     sleep 0.5
-    echo "Connecting to QEMU VM via SPICE (localhost:5930)..."
+    echo "Connecting to QEMU VM via SPICE (localhost:{{ port }})..."
     if flatpak list --app 2>/dev/null | grep -q org.virt_manager.virt-viewer; then
-        flatpak run org.virt_manager.virt-viewer spice://localhost:5930 &
+        flatpak run org.virt_manager.virt-viewer spice://localhost:{{ port }} &
     elif command -v remote-viewer &>/dev/null; then
-        remote-viewer spice://localhost:5930 &
+        remote-viewer spice://localhost:{{ port }} &
     elif command -v remmina &>/dev/null; then
-        remmina spice://localhost:5930 &
+        remmina spice://localhost:{{ port }} &
     else
         echo "No SPICE client found. Install one:"
         echo "  just install-spice-client"
@@ -577,7 +575,6 @@ qemu-install:
     rpm-ostree install qemu-kvm libvirt virt-install qemu-img
     echo "Packages staged. Run 'systemctl reboot' to activate."
 
-
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
@@ -588,14 +585,12 @@ qemu-e2e-test-ts:
 qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
-
 # @category e2e-qemu
 # Run E2E tests (boots VM if needed, executes test, shuts down unless --keep-running)
 e2e:
     #!/usr/bin/env bash
     set -euo pipefail
     cd e2e && bun run e2e.ts
-
 
 # @category e2e-qemu
 # Run E2E tests with snapshot restore (retry on failure)
