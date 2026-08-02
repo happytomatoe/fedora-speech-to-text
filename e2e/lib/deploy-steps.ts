@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
+import { Deployer } from "./deploy.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 
 // --- SSH exec helpers (sync, for quick one-off commands) ---
@@ -91,15 +92,34 @@ export async function installDependencies(
 export async function deployExtension(
   shell: ShellHelper,
   cfg: DeployConfig,
-  pollUntilFn: typeof pollUntil
+  pollUntilFn: typeof pollUntil,
+  deployer?: Deployer
 ): Promise<void> {
   const extDir = join(cfg.projectRoot, "gnome-ext");
   if (!existsSync(extDir)) return;
 
   const t0 = Date.now();
   console.log("Deploying GNOME extension...");
-  rsyncToVm(extDir, `~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  sshExec(`glib-compile-schemas ~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}/schemas/`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  
+  const extRemoteDir = `~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`;
+  const tUpload = Date.now();
+  if (deployer) {
+    // Use persistent SSH connection (avoids ~6s per-call overhead)
+    await deployer.uploadDir(extDir, extRemoteDir);
+  } else {
+    rsyncToVm(extDir, extRemoteDir, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  }
+  console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
+  
+  const tSchema = Date.now();
+  if (deployer) {
+    await deployer.exec(`glib-compile-schemas ${extRemoteDir}/schemas/`);
+  } else {
+    sshExec(`glib-compile-schemas ${extRemoteDir}/schemas/`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  }
+  console.log(`    schemas: ${Date.now() - tSchema}ms [time]`);
+  
+  const tDconf = Date.now();
   await shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`);
   await shell.exec(`dconf write /org/gnome/shell/disable-user-extensions false`);
   await shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
@@ -107,7 +127,13 @@ export async function deployExtension(
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
+  console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
   console.log(`  rsync+dconf: ${Date.now() - t0}ms [time]`);
+
+  // Disconnect deployer before GDM restart — SSH connection will be stale after restart
+  if (deployer) {
+    await deployer.disconnect();
+  }
 
   // Restart GDM to load the extension.
   // Note: org.gnome.Shell.Eval is disabled in GNOME 50, so D-Bus loading
@@ -145,13 +171,31 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     console.log("  re-establishing SSH session...");
     await shell.close();
     await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+    // Re-establish deployer SSH connection (stale after GDM restart)
+    if (deployer) {
+      await deployer.disconnect();
+      await deployer.connect();
+    }
 
     // Wait for GNOME Shell
     const t2 = Date.now();
     await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
 
-    // Give GNOME Shell time to initialize extension system
-    await Bun.sleep(3000);
+    // Poll for GNOME Shell extension system to be ready
+    // (replaces fixed 3s sleep — faster when ready, more reliable when slow)
+    await pollUntilFn(
+      "extension system ready",
+      async () => {
+        try {
+          const result = await shell.exec(`gnome-extensions list 2>&1`);
+          // gnome-extensions list returns empty or a list — no error means extension system is ready
+          return !result.includes("error") && !result.includes("Error");
+        } catch {
+          return false;
+        }
+      },
+      15000
+    );
     console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
 
     // Wait for extension to be available

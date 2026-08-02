@@ -161,6 +161,8 @@ export class VmManager {
       sshPort: this.config.run.sshPort,
       sshUser: this.config.sshUser,
     });
+    // Pre-establish deployer SSH connection (warms up during boot, ready for deployExtension)
+    await this.deployer.connect();
   }
 
   /** Verify Spice display is accessible */
@@ -208,7 +210,7 @@ export class VmManager {
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
 
     const t2 = Date.now();
-    await deployExtension(this.shell, this.deployCfg, pollUntil);
+    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
     console.log(`  deployExtension: ${Date.now() - t2}ms`);
 
     // Deploy Python source and test audio (sequential, sync operations)
