@@ -112,24 +112,25 @@ class TypeTextService {
         const preview = text.length > 20 ? text.substring(0, 20) + '...' : text;
         console.log(`VoiceToText: TypeText called with ${text.length} chars: "${preview}"`);
         try {
-            let time = Clutter.get_current_event_time();
-            const fallbackTime = Date.now();
-            if (time === 0) {
+            // notify_keyval() expects time in MICROSECONDS, not milliseconds
+            // Clutter.get_current_event_time() returns milliseconds
+            let time_ms = Clutter.get_current_event_time();
+            if (time_ms === 0) {
+                time_ms = Date.now();
                 console.log('VoiceToText: No active Clutter event, using Date.now() fallback');
-                time = fallbackTime;
-            } else {
-                console.log(`VoiceToText: Using Clutter event time: ${time}`);
             }
+            const time_us = time_ms * 1000; // Convert ms to us
+            console.log(`VoiceToText: Using timestamp ${time_us} us (from ${time_ms} ms)`);
             for (const char of text) {
                 if (char === '\n') {
-                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
-                    this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
+                    this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Return, Clutter.KeyState.PRESSED);
+                    this._virtualKeyboard.notify_keyval(time_us, Clutter.KEY_Return, Clutter.KeyState.RELEASED);
                 } else {
                     const charCode = char.charCodeAt(0);
                     const keyval = Clutter.unicode_to_keyval(charCode);
                     if (keyval !== 0) {
-                        this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
-                        this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
+                        this._virtualKeyboard.notify_keyval(time_us, keyval, Clutter.KeyState.PRESSED);
+                        this._virtualKeyboard.notify_keyval(time_us, keyval, Clutter.KeyState.RELEASED);
                     }
                 }
             }
