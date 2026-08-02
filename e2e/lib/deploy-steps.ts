@@ -45,50 +45,7 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   console.log("Waiting for GDM auto-login...");
-
-  // Step 1: Wait for D-Bus session bus socket (UID 1000 for testuser)
-  console.log("  Waiting for D-Bus socket...");
-  await pollUntil(
-    "D-Bus socket",
-    async () => {
-      try {
-        const result = await shellExec("test -S /run/user/1000/bus && echo ready");
-        return result.includes("ready");
-      } catch {
-        return false;
-      }
-    },
-    60000
-  );
-
-  // Step 2: Wait for graphical-session.target OR org.gnome.Shell on D-Bus
-  // graphical-session.target is the canonical signal, but some distros don't wire it up.
-  // The busctl check is the fallback — gnome-shell claims its bus name after compositor init.
-  console.log("  Waiting for GNOME session readiness...");
-  await pollUntil(
-    "graphical-session.target or org.gnome.Shell",
-    async () => {
-      try {
-        // Check graphical-session.target first (canonical)
-        // No --machine flag needed since we're already in user's SSH session
-        const targetResult = await shellExec(
-          "systemctl --user is-active graphical-session.target 2>/dev/null"
-        );
-        if (targetResult.trim() === "active") return true;
-
-        // Fallback: check if org.gnome.Shell is registered on the session bus
-        const busResult = await shellExec(
-          "busctl --user list 2>/dev/null | grep -q org.gnome.Shell && echo ready"
-        );
-        return busResult.includes("ready");
-      } catch {
-        return false;
-      }
-    },
-    60000
-  );
-
-  console.log("GDM auto-login complete");
+  await pollForCommandOutput(shellExec, "loginctl list-sessions", "seat0", 60000);
 }
 
 export async function installDependencies(

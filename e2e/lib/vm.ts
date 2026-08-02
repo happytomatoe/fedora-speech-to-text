@@ -129,6 +129,7 @@ export class VmManager {
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
+      "-device", "virtio-rng-pci",
       "-no-reboot",
     ];
     // Wrap in setsid + nohup to detach from parent process group
