@@ -69,7 +69,8 @@ async def handle_debug_recording(
     logger.info("DEBUG MODE: Will show audio level for %d seconds", DEBUG_RECORDING_DURATION)
 
     # Get provider config
-    config_mgr = ConfigManager()
+    _lazy_imports()
+    config_mgr = _ConfigManager()
     provider = config.get("provider", "voxtral")
     provider_config = config_mgr.get_provider_config(provider)
 

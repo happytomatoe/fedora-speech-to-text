@@ -24,10 +24,10 @@ import sounddevice as sd
 from voice_to_text.audio import SpeakerVolumeManager
 from voice_to_text.config import ConfigManager
 from voice_to_text.hybrid import HybridTranscriber
-from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
+from voice_to_text.mutter_virtual_typer import MutterVirtualTyper
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
-from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError, MutterVirtualTyper
+from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError
 from voice_to_text.vad import SmoothedVAD
 
 logger = logging.getLogger(__name__)
@@ -53,61 +53,6 @@ def _copy_to_clipboard(text: str) -> bool:
     logger.warning("No clipboard tool found (tried: wl-copy, xclip, xsel)")
     return False
 
-
-def _paste_via_dotool() -> bool:
-    """Paste from clipboard via dotool key ctrl+v."""
-    import subprocess
-
-    try:
-        proc = subprocess.run(
-            ["dotool"],
-            input=b"key ctrl+v\n",
-            timeout=5.0,
-        )
-        return proc.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        logger.warning("dotool paste failed")
-        return False
-
-
-def _copy_and_paste(text: str) -> bool:
-    """Copy text to clipboard, paste via dotool, then restore previous clipboard."""
-    import subprocess
-
-    # Save current clipboard content
-    previous_clipboard = ""
-    try:
-        result = subprocess.run(
-            ["wl-paste", "--no-newline"],
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-        )
-        if result.returncode == 0:
-            previous_clipboard = result.stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # Copy new text to clipboard
-    copied = _copy_to_clipboard(text)
-    if not copied:
-        return False
-
-    # Paste via dotool
-    pasted = _paste_via_dotool()
-
-    # Restore previous clipboard content
-    if previous_clipboard:
-        try:
-            subprocess.run(
-                ["wl-copy"],
-                input=previous_clipboard.encode(),
-                timeout=2.0,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-    return pasted
 
 
 SAMPLE_RATE = 16000
@@ -347,7 +292,6 @@ class RecordingEngine:
 
             # 2. Open dotoolc pipe early if typing
             typer: ContinuousTyper | MutterVirtualTyper | None = None
-            mutter_paster: MutterVirtualPaster | None = None
             if use_typing:
                 try:
                     if output_method == "mutter-virtual":
@@ -396,11 +340,6 @@ class RecordingEngine:
                 # Output the result
                 if text and typer:
                     await typer.stream_diff(text)
-                elif text and output_method == "wl-paste":
-                    if mutter_paster and mutter_paster.is_running:
-                        await mutter_paster.paste(text)
-                    else:
-                        await asyncio.to_thread(_copy_and_paste, text)
                 elif text and output_method == "clipboard":
                     await asyncio.to_thread(_copy_to_clipboard, text)
                 logger.info("DEBUG MODE: Transcription complete")
@@ -550,11 +489,8 @@ class RecordingEngine:
                     elif text and typer and not typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
 
-                    # Handle wl-paste output (copy + paste via dotool)
-                    if text and output_method == "wl-paste":
-                        await asyncio.to_thread(_copy_and_paste, text)
                     # Handle clipboard output if configured
-                    elif text and output_method == "clipboard":
+                    if text and output_method == "clipboard":
                         await asyncio.to_thread(_copy_to_clipboard, text)
                     _step("output_done")
 
