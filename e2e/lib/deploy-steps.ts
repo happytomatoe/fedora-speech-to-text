@@ -177,18 +177,36 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       await deployer.connect();
     }
 
-    // Wait for GNOME Shell
+    // Wait for user session to be ready (GDM auto-login creates the session)
+    // This must happen BEFORE checking for gnome-shell — gnome-shell only starts
+    // after the user session is created and systemd --user is running.
     const t2 = Date.now();
+    await pollUntilFn(
+      "user session ready",
+      async () => {
+        try {
+          // Check if the user's D-Bus session bus socket exists
+          const result = await shell.exec(
+            `test -S /run/user/$(id -u)/bus && echo ready`
+          );
+          return result.includes("ready");
+        } catch {
+          return false;
+        }
+      },
+      30000
+    );
+    console.log(`  user session ready: ${Date.now() - t2}ms [time]`);
+
+    // Now wait for GNOME Shell (user session is ready, gnome-shell should start shortly)
     await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
 
     // Poll for GNOME Shell extension system to be ready
-    // (replaces fixed 3s sleep — faster when ready, more reliable when slow)
     await pollUntilFn(
       "extension system ready",
       async () => {
         try {
           const result = await shell.exec(`gnome-extensions list 2>&1`);
-          // gnome-extensions list returns empty or a list — no error means extension system is ready
           return !result.includes("error") && !result.includes("Error");
         } catch {
           return false;
