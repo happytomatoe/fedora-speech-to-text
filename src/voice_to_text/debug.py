@@ -22,7 +22,6 @@ from typing import Any
 from voice_to_text.config import ConfigManager
 from voice_to_text.providers import get_batch_provider
 
-
 logger = logging.getLogger(__name__)
 
 # Debug recording duration in seconds (show audio level before using test file)
@@ -54,9 +53,6 @@ async def handle_debug_recording(
 
     logger.info("DEBUG MODE: Using test file %s instead of microphone", debug_file)
     logger.info("DEBUG MODE: Will show audio level for %d seconds", DEBUG_RECORDING_DURATION)
-
-    # Lazy import to avoid circular dependencies
-    _lazy_imports()
 
     # Get provider config
     config_mgr = ConfigManager()

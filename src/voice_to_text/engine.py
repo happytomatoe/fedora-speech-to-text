@@ -24,9 +24,10 @@ import sounddevice as sd
 from voice_to_text.audio import SpeakerVolumeManager
 from voice_to_text.config import ConfigManager
 from voice_to_text.hybrid import HybridTranscriber
+from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
-from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError, MutterVirtualPaster, MutterVirtualTyper
+from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError, MutterVirtualTyper
 from voice_to_text.vad import SmoothedVAD
 
 logger = logging.getLogger(__name__)
