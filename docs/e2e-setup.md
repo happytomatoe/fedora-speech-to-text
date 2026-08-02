@@ -65,12 +65,9 @@ cp /path/to/base-with-uv.qcow2 e2e/qemu-images/
 #### Step 1: Download Fedora Cloud Image
 
 ```bash
-# Download Fedora 41 Cloud image (qcow2 format)
+# Download Fedora 44 Cloud image (qcow2 format)
 cd e2e/qemu-images
-wget https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-41-1.4.qcow2
-
-# Rename to base.qcow2
-mv Fedora-Cloud-Base-Generic.x86_64-41-1.4.qcow2 base.qcow2
+wget https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2 -O base.qcow2
 ```
 
 #### Step 2: Create SSH Key Pair
@@ -79,80 +76,37 @@ mv Fedora-Cloud-Base-Generic.x86_64-41-1.4.qcow2 base.qcow2
 # Generate SSH key for VM access
 ssh-keygen -t ed25519 -f e2e/qemu-images/id_ed25519 -N ""
 
-# The public key needs to be embedded in the image (see Step 3)
+# The public key will be injected into the image in Step 3
 ```
 
-#### Step 3: Customize the Image
+#### Step 3: Install GNOME and Customize Image
 
-Create a cloud-init config to set up the user and SSH key:
+Fedora Cloud images don't include GNOME by default. Use `virt-customize` to install it:
 
 ```bash
-# Create cloud-init config
-cat > /tmp/user-data << 'EOF'
-#cloud-config
-users:
-  - name: testuser
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-    ssh_authorized_keys:
-      - ssh-ed25519 AAAA... your-public-key-here
-EOF
+# Install virt-customize if not available
+sudo dnf install -y libguestfs-tools
 
-# Create cloud-init ISO
-genisoimage -output e2e/qemu-images/ci-data.iso -volid cidata -joliet -rock /tmp/user-data
+# Inject SSH key and install GNOME + dependencies
+virt-customize \
+  -a e2e/qemu-images/base.qcow2 \
+  --format qcow2 \
+  --ssh-inject testuser:file:e2e/qemu-images/id_ed25519.pub \
+  --run-command 'useradd -m -G wheel,input testuser' \
+  --run-command 'echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers' \
+  --install gnome-shell,gdm,dotool,tmux,python3 \
+  --run-command 'systemctl set-default graphical.target' \
+  --selinux-relabel
 ```
 
-#### Step 4: Boot and Customize Image
+#### Step 4: Optimize the Image
 
 ```bash
-# Create a temporary VM to customize the image
-qemu-img create -f qcow2 -b e2e/qemu-images/base.qcow2 -F qcow2 /tmp/temp-vm.qcow2
-
-# Boot with cloud-init ISO
-qemu-system-x86_64 \
-  -enable-kvm -m 2048 -smp 2 \
-  -drive file=/tmp/temp-vm.qcow2,format=qcow2,if=virtio \
-  -cdrom e2e/qemu-images/ci-data.iso \
-  -netdev user,id=net0,hostfwd=tcp::2222-:22 \
-  -device virtio-net-pci,netdev=net0 \
-  -display none &
-
-# Wait for cloud-init to complete (check console output)
-# Then customize the image:
-```
-
-#### Step 5: Install Dependencies in Image
-
-```bash
-# SSH into the VM (after cloud-init completes)
-ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost
-
-# Install required packages
-sudo dnf install -y tmux dotool gnome-shell
-
-# Install uv (Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-cp ~/.local/bin/uv ~/.local/bin/uv-backup
-
-# Install Python dependencies
-~/.local/bin/uv pip install --system httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz
-
-# Exit the VM
-exit
-```
-
-#### Step 6: Optimize the Image
-
-```bash
-# Shutdown the VM gracefully
-ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost "sudo shutdown -h now"
-wait
-
-# Optimize for faster boot
+# Optimize for faster boot (disables cloud-init, sets UseDNS no, etc.)
 ./e2e/scripts/optimize-vm-image.sh e2e/qemu-images/base.qcow2
 ```
 
-#### Step 7: Create UV-enhanced Image (Optional but Recommended)
+#### Step 5: Create UV-enhanced Image (Optional but Recommended)
 
 ```bash
 # Create an optimized image with uv pre-installed
