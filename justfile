@@ -28,7 +28,13 @@ lint:
     uv run ruff format --check .
     uv run pyright
     just gnome-ext-lint
+    just check-output-methods-sync
     echo "All lint checks passed!"
+
+# @category lint
+# Check output methods are in sync across engine, prefs, and schema
+check-output-methods-sync:
+    ./scripts/check-output-methods-sync.sh
 
 # @category lint
 # Auto-fix lint issues
@@ -329,6 +335,91 @@ gnome-ext-dev: reinstall gnome-ext-install
       gnome-shell --wayland $DEVKIT_FLAG
     " 2>&1 | tee -a "$LOG_FILE"
     echo "Logs written to $LOG_FILE"
+# @category gnome-ext
+# Start nested GNOME Shell and wait for GDM registration, then check for errors
+gnome-ext-check: reinstall gnome-ext-install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    LOG_DIR="$PWD/logs"
+    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    mkdir -p "$LOG_DIR"
+    echo "" > "$LOG_FILE"
+    if ! rpm -q mutter-devkit &>/dev/null; then
+        echo "mutter-devkit not installed, installing..."
+        if command -v rpm-ostree &>/dev/null; then
+            sudo rpm-ostree install mutter-devkit
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun." >&2
+            exit 1
+        else
+            sudo dnf install -y mutter-devkit
+        fi
+    fi
+    UUID="voice-to-text@happytomatoe.com"
+    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+    if ! echo "$CURRENT" | grep -q "$UUID"; then
+      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
+      else
+        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
+      fi
+    fi
+    GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
+    if [ "$GNOME_VERSION" -ge 49 ]; then
+      DEVKIT_FLAG=--devkit
+      export MUTTER_DEBUG_NESTED=
+    else
+      DEVKIT_FLAG=--nested
+      export MUTTER_DEBUG_NESTED=1
+    fi
+    # Start nested shell in background
+    dbus-run-session -- sh -c "
+      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_PID=\$!
+      sleep 0.5
+      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_REG_PID=\$!
+      sleep 0.5
+      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
+      DBUS_PID=\$!
+      sleep 1
+      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
+      gnome-shell --wayland $DEVKIT_FLAG
+    " >> "$LOG_FILE" 2>&1 &
+    NESTED_PID=$!
+    echo "Nested shell started (PID: $NESTED_PID), waiting for GDM..."
+    # Wait for GDM registration or timeout
+    TIMEOUT=15
+    for i in $(seq 1 $TIMEOUT); do
+      if grep -q "Registering display with GDM" "$LOG_FILE" 2>/dev/null; then
+        echo "✅ GDM registered (${i}s)"
+        sleep 1  # Let extension finish loading
+        break
+      fi
+      if ! ps -p $NESTED_PID >/dev/null 2>&1; then
+        echo "❌ Nested shell exited prematurely"
+        break
+      fi
+      sleep 1
+    done
+    if [ $i -eq $TIMEOUT ]; then
+      echo "⚠️  Timeout waiting for GDM (${TIMEOUT}s)"
+    fi
+    # Check for extension errors
+    echo ""
+    echo "=== Extension Status ==="
+    if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
+      echo "❌ Extension errors found:"
+      grep -E "CRITICAL|SyntaxError|Error.*extension" "$LOG_FILE" | tail -5
+    elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
+      echo "✅ Extension loaded successfully"
+      grep "VoiceToText" "$LOG_FILE" | tail -5
+    else
+      echo "⚠️  No extension messages found in logs"
+    fi
+    echo ""
+    echo "Full log: $LOG_FILE"
+    echo "Kill with: kill $NESTED_PID"
+    wait $NESTED_PID 2>/dev/null
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash

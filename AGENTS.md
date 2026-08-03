@@ -21,10 +21,16 @@ The engine supports three output methods (configured via `output-method` in pref
 | Method | Class | How it works |
 |--------|-------|--------------|
 | `type` | `ContinuousTyper` | Types via dotool (requires dotoolc) |
-| `mutter-paste` | `MutterVirtualPaster` | Clipboard paste via GNOME extension D-Bus (SaveClipboard → set text → Shift+Insert → RestoreClipboard) |
 | `mutter-virtual` | `MutterVirtualTyper` | Char-by-char typing via GNOME extension D-Bus (virtual keyboard) |
+| `mutter-commit` | `MutterVirtualPaster` | Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation entirely |
 
-**Do NOT confuse `mutter-paste` with `wl-copy`/`xclip`/`xsel`.** The clipboard paste uses the GNOME Shell extension's D-Bus methods (`St.Clipboard` + virtual keyboard), not external clipboard tools.
+### Adding/Removing Output Methods
+
+When adding or removing an output method, update ALL of these files:
+1. `src/voice_to_text/engine.py` — handle the new method in the output method switch
+2. `gnome-ext/prefs/provider-row.js` — add to `createOutputMethodRow()` combo box
+3. `gnome-ext/schemas/*.xml` — update allowed values if needed
+4. Run `just check-output-methods-sync` to verify (also runs in `just lint`)
 
 ## Layout
 
@@ -34,6 +40,8 @@ The engine supports three output methods (configured via `output-method` in pref
 - `service/` — D-Bus service definition.
 - `scripts/` — dev/setup helpers.
 - `docs/` — design notes.
+- `opensrc/` — Cloned open source repos for API reference (gitignored). See `opensrc/README.md`.
+  - GNOME Shell `gnome-50` branch for inspecting `Main.inputMethod` and other internal APIs.
 
 ## Tooling
 

@@ -271,13 +271,13 @@ class RecordingEngine:
 
             # 2. Open dotoolc pipe early if typing
             typer: ContinuousTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
-            if use_typing or output_method == "mutter-paste":
+            if use_typing or output_method == "mutter-commit":
                 try:
                     if output_method == "mutter-virtual":
                         mutter = MutterVirtualTyper()
                         await mutter.start()
                         typer = mutter
-                    elif output_method == "mutter-paste":
+                    elif output_method == "mutter-commit":
                         mutter_paste = MutterVirtualPaster()
                         await mutter_paste.start()
                         typer = mutter_paste
