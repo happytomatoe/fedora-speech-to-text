@@ -23,9 +23,24 @@ export class TypeTextService {
         this._dbusImpl = null;
         this._ownerId = null;
         this._savedClipboard = null;
+        this._isNested = false;
     }
 
     enable() {
+        // Detect nested shell (gnome-ext-dev) — clipboard+Shift+Insert doesn't work there
+        try {
+            const env = GLib.get_environ();
+            for (const [key] of env) {
+                if (key === 'MUTTER_DEBUG_NESTED') {
+                    this._isNested = true;
+                    console.log('VoiceToText: Detected nested shell, will use char-by-char paste');
+                    break;
+                }
+            }
+        } catch (e) {
+            console.error('VoiceToText: Failed to detect nested shell:', e);
+        }
+
         // Get virtual keyboard via Clutter
         try {
             const backend = Clutter.get_default_backend();
@@ -115,7 +130,8 @@ export class TypeTextService {
     SaveClipboard() {
         try {
             const clipboard = St.Clipboard.get_default();
-            console.log('VoiceToText: SaveClipboard called, current _savedClipboard:', this._savedClipboard ? `${this._savedClipboard.length} chars` : 'null');
+            const savedLen = this._savedClipboard ? `${this._savedClipboard.length} chars` : 'null';
+            console.log('VoiceToText: SaveClipboard called, current _savedClipboard:', savedLen);
             // get_text in GNOME 50 is async with callback — run nested main loop to wait
             let result = '';
             const loop = new GLib.MainLoop(null, false);
@@ -126,7 +142,8 @@ export class TypeTextService {
             });
             loop.run();
             this._savedClipboard = result;
-            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars:', this._savedClipboard.substring(0, 50));
+            const preview = this._savedClipboard.substring(0, 50);
+            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars:', preview);
             return this._savedClipboard;
         } catch (e) {
             console.error('VoiceToText: SaveClipboard failed:', e);
@@ -136,9 +153,16 @@ export class TypeTextService {
 
     PasteText(text) {
         try {
-            const clipboard = St.Clipboard.get_default();
             console.log('VoiceToText: PasteText called with', text.length, 'chars:', text.substring(0, 50));
-            console.log('VoiceToText: PasteText _savedClipboard state:', this._savedClipboard ? `${this._savedClipboard.length} chars` : 'null');
+            const savedInfo = this._savedClipboard ? `${this._savedClipboard.length} chars` : 'null';
+            console.log('VoiceToText: PasteText _savedClipboard state:', savedInfo);
+            // In nested shell, clipboard+Shift+Insert doesn't work — fall back to char-by-char typing
+            if (this._isNested) {
+                console.log('VoiceToText: PasteText using char-by-char fallback (nested shell)');
+                this.TypeText(text);
+                return;
+            }
+            const clipboard = St.Clipboard.get_default();
             // set_text takes a plain string (no GBytes needed)
             clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
             console.log(`VoiceToText: PasteText set clipboard to ${text.length} chars`);
@@ -164,7 +188,10 @@ export class TypeTextService {
     RestoreClipboard() {
         try {
             const clipboard = St.Clipboard.get_default();
-            console.log('VoiceToText: RestoreClipboard called, _savedClipboard:', this._savedClipboard ? `${this._savedClipboard.length} chars: ${this._savedClipboard.substring(0, 50)}` : 'null');
+            const savedInfo = this._savedClipboard ?
+                `${this._savedClipboard.length} chars: ${this._savedClipboard.substring(0, 50)}` :
+                'null';
+            console.log('VoiceToText: RestoreClipboard called, _savedClipboard:', savedInfo);
             if (this._savedClipboard !== null) {
                 // set_text takes a plain string
                 clipboard.set_text(St.ClipboardType.CLIPBOARD, this._savedClipboard);
