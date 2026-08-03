@@ -14,6 +14,21 @@ import {createCustomWordsGroup, createThresholdRow} from './prefs/custom-words-r
 export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
+
+        // Add Ctrl+W to close the preferences window
+        const closeAction = new Gio.SimpleAction({name: 'close', parameter_type: null});
+        closeAction.connect('activate', () => window.close());
+        window.add_action(closeAction);
+
+        const shortcutController = new Gtk.ShortcutController();
+        shortcutController.set_scope(Gtk.ShortcutScope.MANAGED);
+        window.add_controller(shortcutController);
+        shortcutController.add_shortcut(
+            new Gtk.Shortcut({
+                trigger: Gtk.ShortcutTrigger.parse_string('<Control>w'),
+                action: Gtk.NamedAction.new('win.close'),
+            })
+        );
         const settings = this.getSettings();
 
         // Sync state tracking

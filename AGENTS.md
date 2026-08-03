@@ -14,6 +14,18 @@ Voice-to-text converts speech to text on Linux using free cloud/local APIs. It i
 
 Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and local (Parakeet). API keys come from env vars, `config.yaml`, or command substitution (`!command`).
 
+## Output Methods
+
+The engine supports three output methods (configured via `output-method` in preferences):
+
+| Method | Class | How it works |
+|--------|-------|--------------|
+| `type` | `ContinuousTyper` | Types via dotool (requires dotoolc) |
+| `mutter-paste` | `MutterVirtualPaster` | Clipboard paste via GNOME extension D-Bus (SaveClipboard → set text → Shift+Insert → RestoreClipboard) |
+| `mutter-virtual` | `MutterVirtualTyper` | Char-by-char typing via GNOME extension D-Bus (virtual keyboard) |
+
+**Do NOT confuse `mutter-paste` with `wl-copy`/`xclip`/`xsel`.** The clipboard paste uses the GNOME Shell extension's D-Bus methods (`St.Clipboard` + virtual keyboard), not external clipboard tools.
+
 ## Layout
 
 - `src/voice_to_text/` — Python package (engine, audio, config, dbus_service, debug, hybrid, postprocess, profiling, typer, vad, providers/).
