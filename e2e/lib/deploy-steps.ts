@@ -362,7 +362,7 @@ export async function startVoiceService(
       console.log("  pip install completed");
     } catch (e) {
       console.log("  FATAL: pip install failed:", (e as Error).message);
-      throw new Error(`Dependency installation failed: ${(e as Error).message}`);
+      throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
     }
   }
 

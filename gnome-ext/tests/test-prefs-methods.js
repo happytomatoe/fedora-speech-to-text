@@ -242,12 +242,18 @@ try {
             const imports = extractImports(src);
             const missing = [];
             for (const imp of imports) {
-                if (imp.specifier.startsWith('./')) {
-                    const path = GLib.build_filenamev([
-                        prefsDir,
-                        imp.specifier.substring(2),
-                    ]);
-                    if (!fileExists(path) && !fileExists(`${path}.js`)) {
+                if (imp.specifier.startsWith('./') || imp.specifier.startsWith('../')) {
+                    // Resolve relative to prefs/ for ./ and ../ specifiers
+                    const parts = imp.specifier.split('/');
+                    let baseDir = imp.specifier.startsWith('../') ? DIR : prefsDir;
+                    for (const part of parts) {
+                        if (part === '..') {
+                            baseDir = GLib.path_get_dirname(baseDir);
+                        } else if (part !== '.') {
+                            baseDir = GLib.build_filenamev([baseDir, part]);
+                        }
+                    }
+                    if (!fileExists(baseDir) && !fileExists(`${baseDir}.js`)) {
                         missing.push(imp.specifier);
                     }
                 }

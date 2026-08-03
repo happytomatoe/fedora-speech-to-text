@@ -272,7 +272,7 @@ export class ShellHelper {
   async sendHotkey(): Promise<void> {
     // Use D-Bus instead of dotool - dotool key presses don't propagate through Wayland
     const dbusAddr = await this.getShellDbusAddr();
-    const dbusBase = `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method`;
+    const dbusBase = `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method`;
 
     if (this.isRecording) {
       await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);

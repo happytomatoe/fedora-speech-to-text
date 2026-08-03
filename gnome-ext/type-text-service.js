@@ -98,7 +98,7 @@ export class TypeTextService {
                     this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_BackSpace, Clutter.KeyState.RELEASED);
                 } else {
                     const charCode = char.charCodeAt(0);
-                    const keyval = Clutter.unicode_to_keysym(charCode);
+                    const keyval = Clutter.unicode_to_keysym(char.codePointAt(0));
                     if (keyval !== 0) {
                         this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
                         this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
