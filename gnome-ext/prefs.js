@@ -49,14 +49,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         window.add(page);
 
-        // Create a preferences group
-        const group = new Adw.PreferencesGroup({
-            title: _('Recording Settings'),
-            description: _('Configure voice to text recording behavior'),
-        });
-        page.add(group);
-
-
         // Recording Settings Group
         const recordingGroup = new Adw.PreferencesGroup({
             title: _('Recording Settings'),

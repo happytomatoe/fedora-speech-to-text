@@ -8,7 +8,9 @@ const TypeTextIface = `
     <method name="TypeText">
       <arg type="s" name="text" direction="in"/>
     </method>
-    <method name="SaveClipboard"/>
+    <method name="SaveClipboard">
+      <arg type="s" name="clipboard" direction="out"/>
+    </method>
     <method name="PasteText">
       <arg type="s" name="text" direction="in"/>
     </method>
@@ -114,13 +116,20 @@ export class TypeTextService {
     SaveClipboard() {
         try {
             const clipboard = St.Clipboard.get_default();
-            // get_text is async with callback — store result for later restore
+            // get_text in GNOME 50 is async with callback — run nested main loop to wait
+            let result = '';
+            const loop = new GLib.MainLoop(null, false);
             clipboard.get_text(St.ClipboardType.CLIPBOARD, (_cb, text) => {
-                this._savedClipboard = text || '';
-                console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars');
+                result = text || '';
+                loop.quit();
             });
+            loop.run();
+            this._savedClipboard = result;
+            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars');
+            return this._savedClipboard;
         } catch (e) {
             console.error('VoiceToText: SaveClipboard failed:', e);
+            return '';
         }
     }
 
