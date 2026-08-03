@@ -782,4 +782,4 @@ atspi-find-indicator:
 
 # Take a screenshot of the nested shell via xdg-desktop-portal
 atspi-screenshot output="/tmp/nested-shell-screenshot.png":
-    ./skills/atspi-nested-shell/scripts/portal-screenshot.sh "{{output}}"
+    ./skills/atspi-nested-shell/scripts/portal-screenshot.sh "{{ output }}"
