@@ -253,6 +253,43 @@ try {
     log(`  ⚠️ Could not read prefs/ directory: ${e.message}`);
 }
 
+// --- Regression: St.Clipboard API (GNOME 50) ---
+
+log('\n── St.Clipboard API (GNOME 50) ──');
+const serviceSrc = readFile(
+    GLib.build_filenamev([DIR, 'type-text-service.js'])
+);
+
+test('type-text-service uses get_text instead of get_content for text', () => {
+    // get_content requires (type, mimetype, callback) — overkill for text.
+    // get_text is the simple text API: get_text(type, callback).
+    const hasGetContent = /\.get_content\s*\(/.test(serviceSrc);
+    assert(
+        !hasGetContent,
+        'type-text-service.js uses get_content() which requires GBytes callback.' +
+            ' Use get_text(type, callback) for text operations.'
+    );
+});
+
+test('type-text-service uses set_text instead of set_content for text', () => {
+    // set_content requires GBytes, not a string.
+    // set_text accepts a plain string.
+    const hasSetContent = /\.set_content\s*\(/.test(serviceSrc);
+    assert(
+        !hasSetContent,
+        'type-text-service.js uses set_content() which requires GBytes.' +
+            ' Use set_text(type, text) for text operations.'
+    );
+});
+
+test('type-text-service does not use clipboard.clear()', () => {
+    // St.Clipboard.clear() was removed in GNOME 50.
+    const hasClear = /\.clear\s*\(/.test(serviceSrc);
+    assert(
+        !hasClear,
+        'type-text-service.js uses clipboard.clear() which was removed in GNOME 50.'
+    );
+});
 // --- Summary ---
 
 log(`\n${'═'.repeat(40)}`);

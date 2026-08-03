@@ -114,10 +114,11 @@ export class TypeTextService {
     SaveClipboard() {
         try {
             const clipboard = St.Clipboard.get_default();
-            // @ts-ignore — St.Clipboard.get_content() takes no args at runtime; type defs are wrong
-            this._savedClipboard = clipboard.get_content();
-            // @ts-ignore — _savedClipboard is actually a string at runtime
-            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard?.length || 0, 'bytes');
+            // get_text is async with callback — store result for later restore
+            clipboard.get_text(St.ClipboardType.CLIPBOARD, (_cb, text) => {
+                this._savedClipboard = text || '';
+                console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars');
+            });
         } catch (e) {
             console.error('VoiceToText: SaveClipboard failed:', e);
         }
@@ -126,7 +127,8 @@ export class TypeTextService {
     PasteText(text) {
         try {
             const clipboard = St.Clipboard.get_default();
-            clipboard.set_content(St.ClipboardType.CLIPBOARD, 'text/plain', text);
+            // set_text takes a plain string (no GBytes needed)
+            clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
             console.log(`VoiceToText: PasteText set clipboard to ${text.length} chars`);
 
             // Send Shift+Insert to paste
@@ -145,13 +147,12 @@ export class TypeTextService {
         try {
             const clipboard = St.Clipboard.get_default();
             if (this._savedClipboard !== null) {
-                // @ts-ignore — St.Clipboard.set_content() accepts string at runtime
-                clipboard.set_content(St.ClipboardType.CLIPBOARD, 'text/plain', this._savedClipboard);
-                // @ts-ignore — _savedClipboard is actually a string at runtime
-                console.log('VoiceToText: RestoreClipboard restored', this._savedClipboard.length, 'bytes');
+                // set_text takes a plain string
+                clipboard.set_text(St.ClipboardType.CLIPBOARD, this._savedClipboard);
+                console.log('VoiceToText: RestoreClipboard restored', this._savedClipboard.length, 'chars');
             } else {
-                // @ts-ignore — St.Clipboard.clear() exists at runtime
-                clipboard.clear(St.ClipboardType.CLIPBOARD);
+                // No saved content — set empty string (clear was removed in GNOME 50)
+                clipboard.set_text(St.ClipboardType.CLIPBOARD, '');
                 console.log('VoiceToText: RestoreClipboard cleared clipboard');
             }
             this._savedClipboard = null;
