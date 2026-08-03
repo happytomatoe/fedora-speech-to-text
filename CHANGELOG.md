@@ -43,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`clipboard` output method** — unused dead code (`wl-copy`/`xclip`/`xsel` + `xdotool` Ctrl+V) that was never functional
 
 ### Fixed
-- **Stale D-Bus processes accumulating** — Multiple `voice-to-text-dbus` processes would accumulate when systemd D-Bus activation spawned new instances before old ones finished shutting down. Fixed by adding PID file locking: on startup, the service checks for a stale PID file, kills the old process if still running, then writes its own PID. On clean shutdown, the PID file is removed.
+- **Stale D-Bus processes accumulating** — Multiple `voice-to-text-dbus` processes would accumulate when systemd D-Bus activation spawned new instances before old ones finished shutting down. Fixed by using systemd `Conflicts=` directive in the user service file, which ensures systemd stops the old instance before starting a new one.
 - **E2E preferences screenshots now capture actual content** — GNOME 47 renders extension preferences in-process via Clutter, so `xwd` couldn't capture them. Fixed by using `org.gnome.Shell.Eval` → `Shell.Screenshot` from inside gnome-shell, which reads `global.stage` directly. Requires `--unsafe-mode` enabled via systemd drop-in on `org.gnome.Shell@x11.service`.
 
 ### Security

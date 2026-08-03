@@ -144,15 +144,19 @@ build-python:
 # Install the D-Bus service (D-Bus activation only, no systemd)
 service-install:
     uv tool install -e .
-    mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/
+    mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/ ~/.config/systemd/user/
     cp service/com.happytomatoe.VoiceToText.service ~/.local/share/dbus-1/services/
+    cp service/com.happytomatoe.VoiceToText.user.service ~/.config/systemd/user/
+    systemctl --user daemon-reload
     @echo "Service installed. D-Bus activation handles startup automatically."
 
 # @category service
 # Uninstall the D-Bus service
 service-uninstall:
     rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
+    rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.service
     rm -f ~/.local/bin/voice-to-text-dbus-wrapper
+    systemctl --user daemon-reload
     @echo "D-Bus service uninstalled."
 
 # @category service
