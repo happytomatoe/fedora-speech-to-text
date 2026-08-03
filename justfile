@@ -308,12 +308,24 @@ gnome-ext-dev: reinstall gnome-ext-install
 
     # Start the D-Bus service inside the isolated session bus so the
     # GNOME extension can find and call it on real hardware.
-    # Trap EXIT/INT/TERM to kill the background service when the shell exits,
+    # Also start AT-SPI accessibility bus for UI inspection.
+    # Trap EXIT/INT/TERM to kill the background services when the shell exits,
     dbus-run-session -- sh -c "
+      # Start AT-SPI accessibility bus (needed for UI inspection)
+      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_PID=\$!
+      sleep 0.5
+
+      # Start AT-SPI registry daemon (registers accessibility providers)
+      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_REG_PID=\$!
+      sleep 0.5
+
       voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
       DBUS_PID=\$!
       sleep 1
-      trap 'kill \$DBUS_PID 2>/dev/null || true' EXIT INT TERM
+      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
+      echo 'AT-SPI bus running. Use: just atspi-tree' >> \"$LOG_FILE\"
       gnome-shell --wayland $DEVKIT_FLAG
     " 2>&1 | tee -a "$LOG_FILE"
     echo "Logs written to $LOG_FILE"
@@ -758,3 +770,16 @@ e2e-snapshot:
 # Update E2E reference images in snapshot mode
 e2e-update-snapshot:
     cd e2e && bun run e2e.ts --snapshot --update
+
+# @category gnome-ext
+# Query AT-SPI accessibility tree in the nested GNOME Shell
+atspi-tree:
+    ./skills/atspi-nested-shell/scripts/atspi-query.sh
+
+# Find the Voice to Text indicator in the panel via AT-SPI
+atspi-find-indicator:
+    ./skills/atspi-nested-shell/scripts/atspi-find-indicator.sh
+
+# Take a screenshot of the nested shell via xdg-desktop-portal
+atspi-screenshot output="/tmp/nested-shell-screenshot.png":
+    ./skills/atspi-nested-shell/scripts/portal-screenshot.sh "{{output}}"

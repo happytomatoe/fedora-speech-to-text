@@ -22,6 +22,9 @@ export const VoiceIndicator = GObject.registerClass(
             this.onStart = null;
             this.onStop = null;
             this.onConfigure = null;
+            
+            // Set accessible name for AT-SPI
+            this.set_accessible_name('Voice to Text');
         }
 
         _buildUI() {
@@ -92,6 +95,7 @@ export const VoiceIndicator = GObject.registerClass(
 
             // Add Preferences menu item
             const prefsItem = new PopupMenu.PopupMenuItem(_('Preferences'));
+            prefsItem.set_accessible_name('Preferences');
             prefsItem.connect('activate', () => {
                 this.onConfigure?.();
             });
