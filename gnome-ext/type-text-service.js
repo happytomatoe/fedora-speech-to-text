@@ -1,5 +1,6 @@
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
+import St from 'gi://St';
 
 const TypeTextIface = `
 <node>
@@ -7,6 +8,11 @@ const TypeTextIface = `
     <method name="TypeText">
       <arg type="s" name="text" direction="in"/>
     </method>
+    <method name="SaveClipboard"/>
+    <method name="PasteText">
+      <arg type="s" name="text" direction="in"/>
+    </method>
+    <method name="RestoreClipboard"/>
   </interface>
 </node>`;
 
@@ -15,6 +21,7 @@ export class TypeTextService {
         this._virtualKeyboard = null;
         this._dbusImpl = null;
         this._ownerId = null;
+        this._savedClipboard = null;
     }
 
     enable() {
@@ -71,6 +78,7 @@ export class TypeTextService {
             this._ownerId = null;
         }
         this._virtualKeyboard = null;
+        this._savedClipboard = null;
     }
 
     TypeText(text) {
@@ -100,6 +108,55 @@ export class TypeTextService {
             }
         } catch (e) {
             console.error('VoiceToText: TypeText failed:', e);
+        }
+    }
+
+    SaveClipboard() {
+        try {
+            const clipboard = St.Clipboard.get_default();
+            // @ts-ignore — St.Clipboard.get_content() takes no args at runtime; type defs are wrong
+            this._savedClipboard = clipboard.get_content();
+            // @ts-ignore — _savedClipboard is actually a string at runtime
+            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard?.length || 0, 'bytes');
+        } catch (e) {
+            console.error('VoiceToText: SaveClipboard failed:', e);
+        }
+    }
+
+    PasteText(text) {
+        try {
+            const clipboard = St.Clipboard.get_default();
+            clipboard.set_content(St.ClipboardType.CLIPBOARD, 'text/plain', text);
+            console.log(`VoiceToText: PasteText set clipboard to ${text.length} chars`);
+
+            // Send Shift+Insert to paste
+            let time = Clutter.get_current_event_time() * 1000;
+            this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED);
+            this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Insert, Clutter.KeyState.PRESSED);
+            this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Insert, Clutter.KeyState.RELEASED);
+            this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Shift_L, Clutter.KeyState.RELEASED);
+            console.log('VoiceToText: PasteText sent Shift+Insert');
+        } catch (e) {
+            console.error('VoiceToText: PasteText failed:', e);
+        }
+    }
+
+    RestoreClipboard() {
+        try {
+            const clipboard = St.Clipboard.get_default();
+            if (this._savedClipboard !== null) {
+                // @ts-ignore — St.Clipboard.set_content() accepts string at runtime
+                clipboard.set_content(St.ClipboardType.CLIPBOARD, 'text/plain', this._savedClipboard);
+                // @ts-ignore — _savedClipboard is actually a string at runtime
+                console.log('VoiceToText: RestoreClipboard restored', this._savedClipboard.length, 'bytes');
+            } else {
+                // @ts-ignore — St.Clipboard.clear() exists at runtime
+                clipboard.clear(St.ClipboardType.CLIPBOARD);
+                console.log('VoiceToText: RestoreClipboard cleared clipboard');
+            }
+            this._savedClipboard = null;
+        } catch (e) {
+            console.error('VoiceToText: RestoreClipboard failed:', e);
         }
     }
 }

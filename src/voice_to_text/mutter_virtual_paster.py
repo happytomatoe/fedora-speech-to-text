@@ -28,6 +28,8 @@ class MutterVirtualPaster:
         self._usable: bool = True
         self._proxy = None
         self._bus: MessageBus | None = None
+        self._current_text: str = ""
+        self._is_running: bool = False
 
     async def start(self) -> None:
         """Check if the PasteText D-Bus service is available."""
@@ -38,6 +40,7 @@ class MutterVirtualPaster:
             proxy = bus.get_proxy_object(self.DBUS_NAME, self.DBUS_PATH, introspection)
             self._proxy = proxy.get_interface(self.DBUS_INTERFACE)
             self._bus = bus
+            self._is_running = True
             logger.info("MutterVirtualPaster: PasteText D-Bus service available")
             return
         except Exception as e:
@@ -53,18 +56,18 @@ class MutterVirtualPaster:
 
         try:
             # Save current clipboard
-            await self._proxy.call_save_clipboard()
+            await self._proxy.call_save_clipboard()  # type: ignore[reportAttributeAccessIssue]
             logger.debug("MutterVirtualPaster: Clipboard saved")
 
             # Paste the new text
-            await self._proxy.call_paste_text(text)
+            await self._proxy.call_paste_text(text)  # type: ignore[reportAttributeAccessIssue]
             logger.debug("MutterVirtualPaster: Pasted %d chars via D-Bus", len(text))
 
             # Small delay to let paste happen
             await asyncio.sleep(0.1)
 
             # Restore previous clipboard
-            await self._proxy.call_restore_clipboard()
+            await self._proxy.call_restore_clipboard()  # type: ignore[reportAttributeAccessIssue]
             logger.debug("MutterVirtualPaster: Clipboard restored")
 
             return True
@@ -79,7 +82,13 @@ class MutterVirtualPaster:
             self._bus.disconnect()
             self._bus = None
         self._proxy = None
+        self._is_running = False
 
     @property
     def is_running(self) -> bool:
         return self._usable and self._proxy is not None
+
+    async def stream_diff(self, text: str) -> None:
+        """Paste text via clipboard (for compatibility with engine interface)."""
+        if text and self._usable:
+            await self.paste(text)

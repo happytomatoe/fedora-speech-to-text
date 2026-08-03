@@ -142,8 +142,8 @@ export function createOutputMethodRow(settings, syncAllToConfig) {
 
     const combo = new Gtk.ComboBoxText();
     combo.append('type', _('Type'));
-    combo.append('clipboard', _('Clipboard'));
-    combo.append('mutter-virtual', _('Mutter Virtual Device'));
+    combo.append('mutter-paste', _('Mutter Paste'));
+    combo.append('mutter-virtual', _('Mutter Type'));
     combo.set_active_id(settings.get_string('output-method'));
     combo.connect('changed', () => {
         const activeId = combo.get_active_id();

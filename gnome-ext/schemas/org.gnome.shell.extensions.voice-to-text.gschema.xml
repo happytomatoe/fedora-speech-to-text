@@ -25,7 +25,7 @@
     </key>
     <key name="output-method" type="s">
       <default>"mutter-virtual"</default>
-      <summary>Output method for transcribed text (type, mutter-virtual, clipboard)</summary>
+      <summary>Output method for transcribed text (type, mutter-virtual, mutter-paste)</summary>
     </key>
     <key name="inhibit-sleep" type="b">
       <default>true</default>
