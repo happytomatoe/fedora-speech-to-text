@@ -141,9 +141,9 @@ export function createOutputMethodRow(settings, syncAllToConfig) {
     });
 
     const combo = new Gtk.ComboBoxText();
-    combo.append('type', _('Type'));
-    combo.append('mutter-virtual', _('Mutter Type'));
     combo.append('mutter-commit', _('Mutter Commit'));
+    combo.append('mutter-virtual', _('Mutter Type'));
+    combo.append('type', _('Dotool Type'));
     combo.set_active_id(settings.get_string('output-method'));
     combo.connect('changed', () => {
         const activeId = combo.get_active_id();
