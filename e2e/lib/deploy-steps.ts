@@ -90,6 +90,16 @@ export async function installDependencies(
   } catch {
     // Continue — tmux may work without it depending on test flow
   }
+  // Install Ghostty via COPR (for testing mutter-paste clipboard behavior)
+  try {
+    const ghosttyCheck = sshExec("which ghostty 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+    if (ghosttyCheck.includes("missing")) {
+      console.log("  Installing Ghostty via COPR...");
+      sshExec("sudo dnf copr enable -y scottames/ghostty 2>/dev/null && sudo dnf install -y ghostty 2>/dev/null", _sshKey, _sshPort, _sshUser);
+    }
+  } catch {
+    // Continue — Ghostty install may fail, fall back to gnome-terminal
+  }
   console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
@@ -288,6 +298,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     // Continue — dotoold start may fail with clear error
   }
   console.log("Restarting dotoold...");
+  // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
+  try {
+    sshExec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  } catch {
+    // Best effort — may fail if udev rule already set permissions
+  }
   execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
   await pollUntilFn(
     "dotool pipe",

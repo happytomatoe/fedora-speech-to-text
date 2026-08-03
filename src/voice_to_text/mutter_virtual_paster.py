@@ -52,23 +52,29 @@ class MutterVirtualPaster:
     async def paste(self, text: str) -> bool:
         """Paste text via PasteText D-Bus method with clipboard save/restore."""
         if not self._proxy or not self._usable:
+            logger.debug("MutterVirtualPaster: paste() called but proxy not available")
             return False
 
         try:
+            logger.info("MutterVirtualPaster: paste() called with %d chars: %.80r...", len(text), text)
+
             # Save current clipboard
-            await self._proxy.call_save_clipboard()  # type: ignore[reportAttributeAccessIssue]
-            logger.debug("MutterVirtualPaster: Clipboard saved")
+            logger.debug("MutterVirtualPaster: calling SaveClipboard...")
+            saved = await self._proxy.call_save_clipboard()  # type: ignore[reportAttributeAccessIssue]
+            logger.info("MutterVirtualPaster: SaveClipboard returned: %.100r", saved)
 
             # Paste the new text
+            logger.debug("MutterVirtualPaster: calling PasteText with %d chars...", len(text))
             await self._proxy.call_paste_text(text)  # type: ignore[reportAttributeAccessIssue]
-            logger.debug("MutterVirtualPaster: Pasted %d chars via D-Bus", len(text))
+            logger.info("MutterVirtualPaster: PasteText completed")
 
-            # Small delay to let paste happen
-            await asyncio.sleep(0.1)
+            # Delay to let paste happen before restoring clipboard
+            await asyncio.sleep(0.5)
 
             # Restore previous clipboard
+            logger.debug("MutterVirtualPaster: calling RestoreClipboard...")
             await self._proxy.call_restore_clipboard()  # type: ignore[reportAttributeAccessIssue]
-            logger.debug("MutterVirtualPaster: Clipboard restored")
+            logger.info("MutterVirtualPaster: RestoreClipboard completed")
 
             return True
         except Exception as e:

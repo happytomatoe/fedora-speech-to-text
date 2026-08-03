@@ -115,16 +115,18 @@ export class TypeTextService {
     SaveClipboard() {
         try {
             const clipboard = St.Clipboard.get_default();
+            console.log('VoiceToText: SaveClipboard called, current _savedClipboard:', this._savedClipboard ? `${this._savedClipboard.length} chars` : 'null');
             // get_text in GNOME 50 is async with callback — run nested main loop to wait
             let result = '';
             const loop = new GLib.MainLoop(null, false);
             clipboard.get_text(St.ClipboardType.CLIPBOARD, (_cb, text) => {
                 result = text || '';
+                console.log('VoiceToText: SaveClipboard callback received, text length:', result.length);
                 loop.quit();
             });
             loop.run();
             this._savedClipboard = result;
-            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars');
+            console.log('VoiceToText: SaveClipboard saved', this._savedClipboard.length, 'chars:', this._savedClipboard.substring(0, 50));
             return this._savedClipboard;
         } catch (e) {
             console.error('VoiceToText: SaveClipboard failed:', e);
@@ -135,10 +137,18 @@ export class TypeTextService {
     PasteText(text) {
         try {
             const clipboard = St.Clipboard.get_default();
+            console.log('VoiceToText: PasteText called with', text.length, 'chars:', text.substring(0, 50));
+            console.log('VoiceToText: PasteText _savedClipboard state:', this._savedClipboard ? `${this._savedClipboard.length} chars` : 'null');
             // set_text takes a plain string (no GBytes needed)
             clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
             console.log(`VoiceToText: PasteText set clipboard to ${text.length} chars`);
-
+            // Small delay to ensure clipboard is updated before sending paste keystroke
+            const pasteLoop = new GLib.MainLoop(null, false);
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                pasteLoop.quit();
+                return false;
+            });
+            pasteLoop.run();
             // Send Shift+Insert to paste
             let time = Clutter.get_current_event_time() * 1000;
             this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED);
@@ -154,6 +164,7 @@ export class TypeTextService {
     RestoreClipboard() {
         try {
             const clipboard = St.Clipboard.get_default();
+            console.log('VoiceToText: RestoreClipboard called, _savedClipboard:', this._savedClipboard ? `${this._savedClipboard.length} chars: ${this._savedClipboard.substring(0, 50)}` : 'null');
             if (this._savedClipboard !== null) {
                 // set_text takes a plain string
                 clipboard.set_text(St.ClipboardType.CLIPBOARD, this._savedClipboard);
