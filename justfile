@@ -320,14 +320,12 @@ gnome-ext-install:
     UUID="voice-to-text@happytomatoe.com"
     DEST=$HOME/.local/share/gnome-shell/extensions/$UUID
     # No TypeScript build needed — extension is plain JS
-    mkdir -p "$DEST/schemas"
-    # Copy JS files from gnome-ext/
-    cp gnome-ext/*.js "$DEST/"
-    # Copy vendor directory (js-yaml)
-    cp -r gnome-ext/vendor gnome-ext/prefs "$DEST/"
-    # Copy other files from gnome-ext/
-    cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
-    cp gnome-ext/schemas/*.xml "$DEST/schemas/"
+    rsync -av --delete \
+        --exclude='tests/' \
+        --exclude='run-dev.sh' \
+        --exclude='gjs-env.d.ts' \
+        --exclude='bun.lock' \
+        gnome-ext/ "$DEST/"
     glib-compile-schemas "$DEST/schemas/"
     echo "Extension installed to $DEST"
 
