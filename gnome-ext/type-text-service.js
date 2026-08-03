@@ -1,4 +1,5 @@
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 
@@ -8,9 +9,7 @@ const TypeTextIface = `
     <method name="TypeText">
       <arg type="s" name="text" direction="in"/>
     </method>
-    <method name="SaveClipboard">
-      <arg type="s" name="clipboard" direction="out"/>
-    </method>
+    <method name="SaveClipboard"/>
     <method name="PasteText">
       <arg type="s" name="text" direction="in"/>
     </method>
