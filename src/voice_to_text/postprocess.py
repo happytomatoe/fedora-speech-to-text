@@ -169,38 +169,16 @@ def _preserve_case_pattern(original: str, replacement: str) -> str:
     return replacement
 
 
-def _is_valid_candidate(candidate: str, key: str) -> bool:
-    """Check if candidate is valid for matching against key."""
-    candidate_len = len(candidate)
-    key_len = len(key)
-
-    if candidate_len > key_len * 1.5:
-        return False
-    if key_len < 3 and abs(candidate_len - key_len) > 1:
-        return False
-    if candidate_len < 3 and candidate != key:
-        return False
-    return True
-
-
-def _compute_match_score(candidate: str, key: str) -> float:
-    """Compute match score with optional phonetic boost."""
-    lev_score = fuzz.ratio(candidate, key) / 100.0
-
-    c_soundex = _supports_soundex(candidate) and _soundex(candidate)
-    k_soundex = _supports_soundex(key) and _soundex(key)
-    phonetic_match = bool(c_soundex and k_soundex and c_soundex == k_soundex)
-
-    return lev_score * 1.5 if phonetic_match else lev_score
-
-
-def _find_best_match(
+def _find_best_match(  # noqa: S3776 - fuzzy matching logic
     candidate: str,
     custom_words: list[str],
     custom_keys: list[tuple[int, str]],
     threshold: float,
 ) -> tuple[str, float] | None:
-    """Find the best matching custom word for a candidate string."""
+    """Find the best matching custom word for a candidate string.
+
+    Uses Levenshtein distance + optional Soundex phonetic boost.
+    """
     if not _is_supported_fuzzy_key(candidate) or len(candidate) > 50:
         return None
 
@@ -208,84 +186,99 @@ def _find_best_match(
     best_score = -1.0
 
     for word_idx, key in custom_keys:
-        if not _is_valid_candidate(candidate, key):
+        candidate_len = len(candidate)
+        key_len = len(key)
+        len_diff = abs(candidate_len - key_len)
+        # Stricter length filter: reject if candidate is >50% longer than key
+        if candidate_len > key_len * 1.5:
+            continue
+        # Also reject if key is much shorter (e.g. 2-char key matching 4-char candidate)
+        if key_len < 3 and len_diff > 1:
+            continue
+        # Reject very short candidates (< 3 chars) unless exact match
+        if candidate_len < 3 and candidate != key:
             continue
 
-        score = _compute_match_score(candidate, key)
-        if score > threshold and score > best_score:
+        # Levenshtein ratio via rapidfuzz (0.0-100.0 scale, convert to 0.0-1.0)
+        lev_score = fuzz.ratio(candidate, key) / 100.0
+
+        # Soundex phonetic match — boost score for phonetically similar words
+        c_soundex = _supports_soundex(candidate) and _soundex(candidate)
+        k_soundex = _supports_soundex(key) and _soundex(key)
+        phonetic_match = bool(c_soundex and k_soundex and c_soundex == k_soundex)
+
+        combined_score = lev_score * 1.5 if phonetic_match else lev_score
+
+        if combined_score > threshold and combined_score > best_score:
             best_match = custom_words[word_idx]
-            best_score = score
+            best_score = combined_score
 
     return (best_match, best_score) if best_match is not None else None
 
 
-def _build_custom_keys(custom_words: list[str]) -> list[tuple[int, str]]:
-    """Pre-compute normalized keys for custom words."""
+def apply_custom_words(  # noqa: S3776 - n-gram matching logic
+    text: str,
+    custom_words: list[str],
+    threshold: float = 0.5,
+) -> str:
+    """Apply fuzzy custom word corrections to transcribed text.
+
+    Matches 1-grams, 2-grams, and 3-grams against the custom word list
+    using Levenshtein distance + Soundex phonetic matching.
+
+    Args:
+        text: Input text to correct.
+        custom_words: List of words to match against.
+        threshold: Maximum score to accept (0.0 = exact, 1.0 = any).
+    """
+    if not custom_words:
+        return text
+
+    # Pre-compute normalized keys
     custom_keys: list[tuple[int, str]] = []
     for i, word in enumerate(custom_words):
         key = _build_match_key(word)
         if _is_supported_fuzzy_key(key):
             custom_keys.append((i, key))
+        # Handle '&' expansion (e.g. "R&D" → "randd")
         if "&" in word:
             expanded = _build_match_key(word.replace("&", " and "))
             if _is_supported_fuzzy_key(expanded) and expanded != key:
                 custom_keys.append((i, expanded))
-    return custom_keys
 
-
-def _find_best_ngram_match(
-    words: list[str],
-    start: int,
-    custom_words: list[str],
-    custom_keys: list[tuple[int, str]],
-    threshold: float,
-) -> tuple[int, str, float] | None:
-    """Find the best n-gram match starting at position. Returns (n, replacement, score) or None."""
-    best_match: tuple[int, str, float] | None = None
-
-    for n in range(min(4, len(words) - start), 0, -1):
-        ngram_words = words[start : start + n]
-
-        if n > 1 and any(_extract_punctuation(w)[1] for w in ngram_words[:-1]):
-            continue
-
-        ngram_key = "".join(_build_match_key(w) for w in ngram_words)
-        match = _find_best_match(ngram_key, custom_words, custom_keys, threshold)
-
-        if match:
-            replacement, score = match
-            first_word_key = _build_match_key(ngram_words[0])
-            replacement_key = _build_match_key(replacement)
-            has_matching_first_letter = bool(
-                first_word_key and replacement_key and first_word_key[0] == replacement_key[0]
-            )
-            adjusted_score = score + (0.3 if has_matching_first_letter else 0.0)
-
-            if best_match is None or adjusted_score > best_match[2]:
-                best_match = (n, replacement, adjusted_score)
-
-    return best_match
-
-
-def apply_custom_words(
-    text: str,
-    custom_words: list[str],
-    threshold: float = 0.5,
-) -> str:
-    """Apply fuzzy custom word corrections to transcribed text."""
-    if not custom_words:
-        return text
-
-    custom_keys = _build_custom_keys(custom_words)
     words = text.split()
     result: list[str] = []
     i = 0
 
     while i < len(words):
-        match = _find_best_ngram_match(words, i, custom_words, custom_keys, threshold)
+        best_match: tuple[int, str, float, float] | None = None  # (n, replacement, score, adjusted_score)
 
-        if match:
-            n, replacement, _ = match
+        # Try 4-gram, 3-gram, 2-gram, 1-gram (longest first)
+        for n in range(min(4, len(words) - i), 0, -1):
+            ngram_words = words[i : i + n]
+
+            # Don't cross punctuation boundaries
+            if n > 1 and any(_extract_punctuation(w)[1] for w in ngram_words[:-1]):
+                continue
+
+            ngram_key = "".join(_build_match_key(w) for w in ngram_words)
+
+            match = _find_best_match(ngram_key, custom_words, custom_keys, threshold)
+            if match:
+                replacement, score = match
+                # Prefer matches where first word starts with same letter as custom word
+                first_word_key = _build_match_key(ngram_words[0])
+                replacement_key = _build_match_key(replacement)
+                has_matching_first_letter = (
+                    first_word_key and replacement_key and first_word_key[0] == replacement_key[0]
+                )
+                first_letter_bonus = 0.3 if has_matching_first_letter else 0.0
+                adjusted_score = score + first_letter_bonus
+                if best_match is None or adjusted_score > best_match[3]:
+                    best_match = (n, replacement, score, adjusted_score)
+
+        if best_match:
+            n, replacement, _, _ = best_match
             ngram_words = words[i : i + n]
             prefix, _ = _extract_punctuation(ngram_words[0])
             _, suffix = _extract_punctuation(ngram_words[-1])

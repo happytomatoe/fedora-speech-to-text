@@ -262,14 +262,16 @@ class RecordingEngine:
             self.state = EngineState.IDLE
             self._notify_state()
 
-    async def _run(self, config: dict[str, Any]) -> None:
+    async def _run(self, config: dict[str, Any]) -> None:  # noqa: S3776 - complex pipeline, refactoring risky
         """Full recording + transcription pipeline."""
         import time as _time
 
+        # Check if profiling is enabled
         config_mgr = ConfigManager()
         profiling_enabled = config_mgr.config.get("profiling", False)
+
         _t0 = _time.monotonic()
-        timings: list[tuple[str, float]] = []
+        timings: list[tuple[str, float]] = []  # (label, elapsed)
 
         def _step(label: str) -> None:
             if not profiling_enabled:
@@ -280,33 +282,144 @@ class RecordingEngine:
             logger.info("[PROFIL] %.3fs total, step=%s", elapsed, label)
 
         try:
+            # 1. Determine output method
             output_method = config.get("output_method", "mutter-virtual")
             use_typing = output_method in ("type", "mutter-virtual")
             logger.info("Engine config: output_method=%s, use_typing=%s", output_method, use_typing)
             _step("config_parsed")
+            logger.info("Engine: config parsed, opening dotoolc...")
 
-            typer = await self._setup_typer(output_method)
+            # 2. Open dotoolc pipe early if typing
+            typer: ContinuousTyper | MutterVirtualTyper | None = None
+            if use_typing:
+                try:
+                    if output_method == "mutter-virtual":
+                        mutter = MutterVirtualTyper()
+                        await mutter.start()
+                        typer = mutter
+                    else:
+                        typer = ContinuousTyper()
+                        await typer.start()
+                    logger.info("Continuous dotoolc pipe opened for recording session")
+                except DotoolcNotFoundError as e:
+                    logger.warning("Typing requested but dotoolc not found: %s", e)
+                    if self.on_error:
+                        self.on_error(f"Typing not available: {e}")
+            self._typer = typer
+
             _step("dotoolc_opened")
 
-            if await self._handle_debug_mode(config, typer, output_method):
-                return
+            # 3. Check for debug mode (test file instead of microphone)
+            # Lazy import to avoid circular dependencies in production builds
+            try:
+                from voice_to_text.debug import handle_debug_recording, is_debug_mode
+            except ImportError:
 
+                def is_debug_mode() -> bool:
+                    return False
+
+                handle_debug_recording = None
+
+            if is_debug_mode():
+                logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
+                self.state = EngineState.RECORDING
+                self._notify_state()
+
+                # handle_debug_recording is guaranteed non-None when is_debug_mode() is True
+                assert handle_debug_recording is not None, (
+                    "handle_debug_recording must be set when debug mode is active"
+                )
+                text = await handle_debug_recording(
+                    config, on_level=self.on_audio_level, _cancel_event=self._cancel_event
+                )
+
+                self.state = EngineState.PROCESSING
+                self._notify_state()
+
+                # Output the result
+                if text and typer:
+                    await typer.stream_diff(text)
+                elif text and output_method == "clipboard":
+                    await asyncio.to_thread(_copy_to_clipboard, text)
+                logger.info("DEBUG MODE: Transcription complete")
+                return  # Exit early, skip normal recording flow
+
+            # 4. Set up providers
             language = config.get("language", "en")
             transcriber, batch_provider = await self._init_providers(config)
+
             self._transcriber = transcriber
             self._batch_provider = batch_provider
             _step("providers_initialized")
+            logger.info("Engine: providers initialized, starting recorder...")
 
-            filepath = await self._record_audio(config, transcriber, typer, language, _step)
-            if filepath:
-                self.state = EngineState.PROCESSING
+            # 5. Record audio via InputStream + Queue
+            decrease_pct = config.get("decrease_speaker_volume", 50)
+            fd, audio_path = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+
+            raw_device = config.get("device")
+            device = None if raw_device in (None, "", "__system_default__") else raw_device
+            recorder = AsyncAudioRecorder(
+                device=device,
+                sample_rate=SAMPLE_RATE,
+            )
+            self._recorder = recorder
+
+            with SpeakerVolumeManager.with_decrease(decrease_pct):
+                if self._cancel_event.is_set():
+                    try:
+                        os.unlink(audio_path)
+                    except OSError:
+                        pass
+                    return
+                await recorder.start(audio_path)
+                self.state = EngineState.RECORDING
                 self._notify_state()
+                _step("recorder_started")
+                logger.info("Engine: recording started")
+
+                # Start streaming if in hybrid mode
+                if transcriber:
+                    await transcriber.start_stream(language, sample_rate=recorder.sample_rate)
+                    _step("stream_started")
+
+                # Recording loop — read chunks from the queue
+                # Use a short timeout so cancellation is responsive even
+                # when no audio data arrives (no microphone signal etc.)
+                while not self._cancel_event.is_set():
+                    try:
+                        chunk = await asyncio.wait_for(recorder.read_chunk(), timeout=0.1)
+                    except TimeoutError:
+                        continue  # no data yet, re-check cancellation
+                    if chunk is None:
+                        break  # stream ended
+
+                    # Emit audio level for D-Bus signal
+                    if self.on_audio_level:
+                        self.on_audio_level(recorder.smoothed_level)
+
+                    # Feed streaming provider + type incrementally
+                    if transcriber and typer:
+                        partial = await transcriber.on_audio_chunk(chunk)
+                        if partial:
+                            await typer.stream_diff(partial)
+                    elif transcriber:
+                        await transcriber.on_audio_chunk(chunk)
+
+            # 6. Stop microphone before transitioning to processing
+            filepath = recorder.stop()
+            _step("recording_stopped")
+            self.state = EngineState.PROCESSING
+            self._notify_state()
+            if filepath:
                 try:
                     await self._transcribe_and_output(
                         filepath, config, transcriber, batch_provider, typer, output_method, language
                     )
                     _step("transcription_done")
                 finally:
+                    # Clean up temp WAV file after transcription
                     try:
                         os.unlink(filepath)
                     except OSError:
@@ -317,159 +430,38 @@ class RecordingEngine:
             if self.on_error:
                 self.on_error(str(e))
         finally:
+            # Log timing summary only if profiling enabled
             if profiling_enabled and timings:
-                self._log_timings(timings)
-            await self._cleanup_resources()
+                _step("done")
+                logger.info("[PROFIL] STARTUP TIMING SUMMARY:")
+                prev_t = 0.0
+                for label, elapsed in timings:
+                    delta = elapsed - prev_t
+                    logger.info("[PROFIL]   %s: %.3fs (delta +%.3fs)", label, elapsed, delta)
+                    prev_t = elapsed
+                logger.info("[PROFIL]   TOTAL: %.3fs", timings[-1][1])
 
-    async def _setup_typer(self, output_method: str) -> ContinuousTyper | MutterVirtualTyper | None:
-        """Initialize and start the typer based on output method."""
-        if output_method not in ("type", "mutter-virtual"):
-            return None
-
-        try:
-            if output_method == "mutter-virtual":
-                typer = MutterVirtualTyper()
-                await typer.start()
-            else:
-                typer = ContinuousTyper()
-                await typer.start()
-            logger.info("Continuous dotoolc pipe opened for recording session")
-            self._typer = typer
-            return typer
-        except DotoolcNotFoundError as e:
-            logger.warning("Typing requested but dotoolc not found: %s", e)
-            if self.on_error:
-                self.on_error(f"Typing not available: {e}")
-            self._typer = None
-            return None
-
-    async def _handle_debug_mode(
-        self, config: dict[str, Any], typer: ContinuousTyper | MutterVirtualTyper | None, output_method: str
-    ) -> bool:
-        """Handle debug mode. Returns True if debug mode was used (caller should return)."""
-        try:
-            from voice_to_text.debug import handle_debug_recording, is_debug_mode
-        except ImportError:
-            return False
-
-        if not is_debug_mode():
-            return False
-
-        logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
-        self.state = EngineState.RECORDING
-        self._notify_state()
-
-        assert handle_debug_recording is not None
-        text = await handle_debug_recording(config, on_level=self.on_audio_level, _cancel_event=self._cancel_event)
-
-        self.state = EngineState.PROCESSING
-        self._notify_state()
-
-        if text and typer:
-            await typer.stream_diff(text)
-        elif text and output_method == "clipboard":
-            await asyncio.to_thread(_copy_to_clipboard, text)
-        logger.info("DEBUG MODE: Transcription complete")
-        return True
-
-    async def _record_audio(
-        self,
-        config: dict[str, Any],
-        transcriber: HybridTranscriber | None,
-        typer: ContinuousTyper | MutterVirtualTyper | None,
-        language: str,
-        _step: Callable[[str], None],
-    ) -> str | None:
-        """Record audio and return the filepath, or None if cancelled."""
-        decrease_pct = config.get("decrease_speaker_volume", 50)
-        fd, audio_path = tempfile.mkstemp(suffix=".wav")
-        os.close(fd)
-
-        raw_device = config.get("device")
-        device = None if raw_device in (None, "", "__system_default__") else raw_device
-        recorder = AsyncAudioRecorder(device=device, sample_rate=SAMPLE_RATE)
-        self._recorder = recorder
-
-        with SpeakerVolumeManager.with_decrease(decrease_pct):
-            if self._cancel_event.is_set():
+            # Close dotoolc pipe
+            if self._typer:
                 try:
-                    os.unlink(audio_path)
-                except OSError:
+                    await self._typer.stop()
+                except Exception:
                     pass
-                return None
-
-            await recorder.start(audio_path)
-            self.state = EngineState.RECORDING
+                self._typer = None
+            # Close providers
+            if self._transcriber:
+                try:
+                    await self._transcriber.close()
+                except Exception:
+                    pass
+            elif self._batch_provider:
+                try:
+                    await self._batch_provider.close()
+                except Exception:
+                    pass
+            self.state = EngineState.IDLE
             self._notify_state()
-            _step("recorder_started")
-            logger.info("Engine: recording started")
-
-            if transcriber:
-                await transcriber.start_stream(language, sample_rate=recorder.sample_rate)
-                _step("stream_started")
-
-            await self._recording_loop(recorder, transcriber, typer)
-
-        return recorder.stop()
-
-    async def _recording_loop(
-        self,
-        recorder: AsyncAudioRecorder,
-        transcriber: HybridTranscriber | None,
-        typer: ContinuousTyper | MutterVirtualTyper | None,
-    ) -> None:
-        """Read audio chunks and feed to providers."""
-        while not self._cancel_event.is_set():
-            try:
-                chunk = await asyncio.wait_for(recorder.read_chunk(), timeout=0.1)
-            except TimeoutError:
-                continue
-            if chunk is None:
-                break
-
-            if self.on_audio_level:
-                self.on_audio_level(recorder.smoothed_level)
-
-            if transcriber and typer:
-                partial = await transcriber.on_audio_chunk(chunk)
-                if partial:
-                    await typer.stream_diff(partial)
-            elif transcriber:
-                await transcriber.on_audio_chunk(chunk)
-
-    def _log_timings(self, timings: list[tuple[str, float]]) -> None:
-        """Log profiling timing summary."""
-        logger.info("[PROFIL] STARTUP TIMING SUMMARY:")
-        prev_t = 0.0
-        for label, elapsed in timings:
-            delta = elapsed - prev_t
-            logger.info("[PROFIL]   %s: %.3fs (delta +%.3fs)", label, elapsed, delta)
-            prev_t = elapsed
-        logger.info("[PROFIL]   TOTAL: %.3fs", timings[-1][1])
-
-    async def _cleanup_resources(self) -> None:
-        """Clean up typer, providers, and reset state."""
-        if self._typer:
-            try:
-                await self._typer.stop()
-            except Exception:
-                pass
-            self._typer = None
-
-        if self._transcriber:
-            try:
-                await self._transcriber.close()
-            except Exception:
-                pass
-        elif self._batch_provider:
-            try:
-                await self._batch_provider.close()
-            except Exception:
-                pass
-
-        self.state = EngineState.IDLE
-        self._notify_state()
-        self._cleanup()
+            self._cleanup()
 
     async def _init_providers(self, config: dict[str, Any]) -> tuple[HybridTranscriber | None, Any]:
         """Initialize transcription providers based on config."""
