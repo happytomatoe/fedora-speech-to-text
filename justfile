@@ -160,7 +160,7 @@ service-install:
 # Uninstall the D-Bus service
 service-uninstall:
     rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
-    rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.service
+    rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.user.service
     rm -f ~/.local/bin/voice-to-text-dbus-wrapper
     systemctl --user daemon-reload
     @echo "D-Bus service uninstalled."

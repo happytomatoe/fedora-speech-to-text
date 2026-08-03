@@ -12,6 +12,12 @@ uv tool install . --force
 # Copy D-Bus service file
 cp service/com.happytomatoe.VoiceToText.service "$DBUS_SERVICE_DIR/"
 
+# Copy systemd user service file
+SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_USER_DIR/"
+systemctl --user daemon-reload
+
 # Install wrapper script
 cp service/voice-to-text-dbus-wrapper "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/voice-to-text-dbus-wrapper"

@@ -242,7 +242,6 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
           const result = await shell.exec(`gnome-extensions list 2>&1`);
           // Must contain our extension UUID (not just any text without "error")
           return result.includes(cfg.extensionUuid);
-          return !result.includes("error") && !result.includes("Error");
         } catch {
           return false;
         }
@@ -362,7 +361,8 @@ export async function startVoiceService(
       );
       console.log("  pip install completed");
     } catch (e) {
-      console.log("  WARNING: pip install failed:", (e as Error).message);
+      console.log("  FATAL: pip install failed:", (e as Error).message);
+      throw new Error(`Dependency installation failed: ${(e as Error).message}`);
     }
   }
 

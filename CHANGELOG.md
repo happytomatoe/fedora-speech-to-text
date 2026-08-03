@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
-- **`mutter-paste` output method** — Clipboard-based paste via GNOME Shell's `St.Clipboard` + `Shift+Insert`. Faster than `Mutter Type` in browsers because it avoids per-character keyboard event overhead. Uses D-Bus methods `SaveClipboard`, `PasteText`, `RestoreClipboard` from the GNOME extension.
+- **`mutter-commit` output method** — Commits text directly via GNOME Shell's `Main.inputMethod.commit()`. Bypasses clipboard and keystroke simulation entirely. Should work universally with any focused input.
 - **Command substitution (`!command`) for API keys** — If an `api_key` value starts with `!`, the rest is executed as a shell command and stdout is used as the key. This enables integration with secret managers like 1Password, pass, or custom scripts.
   ```yaml
   # 1Password

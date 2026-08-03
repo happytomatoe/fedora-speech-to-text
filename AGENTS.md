@@ -20,7 +20,7 @@ The engine supports three output methods (configured via `output-method` in pref
 
 | Method | Class | How it works |
 |--------|-------|--------------|
-| `type` | `ContinuousTyper` | Types via dotool (requires dotoolc) |
+| `type` | `DotoolTyper` | Types via dotool (requires dotoolc) |
 | `mutter-virtual` | `MutterVirtualTyper` | Char-by-char typing via GNOME extension D-Bus (virtual keyboard) |
 | `mutter-commit` | `MutterVirtualPaster` | Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation entirely |
 

@@ -27,7 +27,7 @@ class DotoolcNotFoundError(RuntimeError):
     """Raised when ``dotoolc`` is not found in PATH."""
 
 
-class ContinuousTyper:
+class DotoolTyper:
     """Types text via a persistent pipe to the ``dotoolc`` binary.
 
     Usage::

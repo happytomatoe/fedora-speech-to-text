@@ -28,7 +28,7 @@ from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 from voice_to_text.mutter_virtual_typer import MutterVirtualTyper
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
-from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError
+from voice_to_text.typer import DotoolcNotFoundError, DotoolTyper
 from voice_to_text.vad import SmoothedVAD
 
 logger = logging.getLogger(__name__)
@@ -191,7 +191,7 @@ class RecordingEngine:
         self._batch_provider = None
         self._task: asyncio.Task | None = None
         self._cancel_event = asyncio.Event()
-        self._typer: ContinuousTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
+        self._typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
         # Initialize stop_timeout with default (will be overridden in start())
         config_mgr = ConfigManager()
         engine_cfg = config_mgr.config.get("engine", {})
@@ -270,7 +270,7 @@ class RecordingEngine:
             logger.info("Engine: config parsed, opening dotoolc...")
 
             # 2. Open dotoolc pipe early if typing
-            typer: ContinuousTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
+            typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
             if use_typing or output_method == "mutter-commit":
                 try:
                     if output_method == "mutter-virtual":
@@ -282,7 +282,7 @@ class RecordingEngine:
                         await mutter_paste.start()
                         typer = mutter_paste
                     else:
-                        typer = ContinuousTyper()
+                        typer = DotoolTyper()
                         await typer.start()
                     logger.info("Output method %s initialized", output_method)
                 except DotoolcNotFoundError as e:

@@ -126,15 +126,20 @@ test('All imported modules exist on disk', () => {
     const imports = extractImports(prefsSrc);
     const missing = [];
     for (const imp of imports) {
-        if (imp.specifier.startsWith('./')) {
-            const path = GLib.build_filenamev([
-                DIR,
-                imp.specifier.substring(2),
-            ]);
-            if (!fileExists(path) && !fileExists(`${path}.js`)) {
+        if (imp.specifier.startsWith('./') || imp.specifier.startsWith('../')) {
+            // Resolve relative to the prefs/ directory
+            const parts = imp.specifier.split('/');
+            let baseDir = DIR;
+            for (const part of parts) {
+                if (part === '..') {
+                    baseDir = GLib.path_get_dirname(baseDir);
+                } else if (part !== '.') {
+                    baseDir = GLib.build_filenamev([baseDir, part]);
+                }
+            }
+            if (!fileExists(baseDir) && !fileExists(`${baseDir}.js`)) {
                 missing.push(`${imp.specifier} (line ${imp.line})`);
             }
-        }
     }
     assert(missing.length === 0, `Missing files: ${missing.join(', ')}`);
 });
@@ -156,7 +161,8 @@ test('prefs.js does not use window.add_action (deprecated on Adw.PreferencesWind
 });
 
 test('prefs.js uses EventControllerKey for keyboard shortcuts', () => {
-    const hasKeyController = prefsSrc.includes('EventControllerKey');
+    // Check for actual construction, not just comments
+    const hasKeyController = /new\s+EventControllerKey\s*\(/.test(prefsSrc);
     assert(
         hasKeyController,
         'prefs.js should use Gtk.EventControllerKey for keyboard shortcuts'
@@ -251,6 +257,7 @@ try {
     }
 } catch (e) {
     log(`  ⚠️ Could not read prefs/ directory: ${e.message}`);
+    failed = true;
 }
 
 // --- Regression: St.Clipboard API (GNOME 50) ---
@@ -289,6 +296,13 @@ test('type-text-service does not use clipboard.clear()', () => {
         !hasClear,
         'type-text-service.js uses clipboard.clear() which was removed in GNOME 50.'
     );
+});
+test('type-text-service uses get_text and set_text', () => {
+    // Positive assertions: ensure the replacement APIs are present
+    const hasGetText = /get_text\s*\(/.test(serviceSrc);
+    const hasSetText = /set_text\s*\(/.test(serviceSrc);
+    assert(hasGetText, 'type-text-service.js should use get_text() for clipboard reads');
+    assert(hasSetText, 'type-text-service.js should use set_text() for clipboard writes');
 });
 // --- Summary ---
 

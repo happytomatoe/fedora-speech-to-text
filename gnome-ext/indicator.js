@@ -24,7 +24,7 @@ export const VoiceIndicator = GObject.registerClass(
             this.onConfigure = null;
             
             // Set accessible name for AT-SPI
-            this.set_accessible_name('Voice to Text');
+            this.set_accessible_name(_('Voice to Text'));
         }
 
         _buildUI() {
