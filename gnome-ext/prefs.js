@@ -3,6 +3,7 @@ import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
+import Gdk from 'gi://Gdk';
 import {gettext as _, ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
@@ -15,20 +16,18 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
 
-        // Add Ctrl+W to close the preferences window
-        const closeAction = new Gio.SimpleAction({name: 'close', parameter_type: null});
-        closeAction.connect('activate', () => window.close());
-        window.add_action(closeAction);
-
-        const shortcutController = new Gtk.ShortcutController();
-        shortcutController.set_scope(Gtk.ShortcutScope.MANAGED);
-        window.add_controller(shortcutController);
-        shortcutController.add_shortcut(
-            new Gtk.Shortcut({
-                trigger: Gtk.ShortcutTrigger.parse_string('<Control>w'),
-                action: Gtk.NamedAction.new('win.close'),
-            })
-        );
+        // Add Ctrl+W to close the preferences window via key controller
+        // (window.add_action is unavailable on Adw.PreferencesWindow in GNOME 50+)
+        const keyController = new Gtk.EventControllerKey();
+        keyController.connect('key-pressed', (_controller, keyval, _keycode, state) => {
+            const mask = state & Gtk.accelerator_get_default_mod_mask();
+            if (keyval === Gdk.KEY_w && mask === Gdk.ModifierType.CONTROL_MASK) {
+                window.close();
+                return true;
+            }
+            return false;
+        });
+        window.add_controller(keyController);
         const settings = this.getSettings();
 
         // Sync state tracking

@@ -139,6 +139,30 @@ test('All imported modules exist on disk', () => {
     assert(missing.length === 0, `Missing files: ${missing.join(', ')}`);
 });
 
+// --- Regression: GNOME 50 Adw.PreferencesWindow.add_action missing ---
+
+log('\n── GNOME 50 compatibility ──');
+
+test('prefs.js does not use window.add_action (deprecated on Adw.PreferencesWindow)', () => {
+    // Adw.PreferencesWindow is deprecated since libadwaita 1.6 (GNOME 50+).
+    // The GJS bindings no longer expose add_action from Gio.ActionMap.
+    // Keyboard shortcuts must use Gtk.EventControllerKey instead.
+    const hasAddAction = /window\.add_action\s*\(/.test(prefsSrc);
+    assert(
+        !hasAddAction,
+        'prefs.js uses window.add_action which is unavailable on Adw.PreferencesWindow in GNOME 50+.' +
+            ' Use Gtk.EventControllerKey for keyboard shortcuts instead.'
+    );
+});
+
+test('prefs.js uses EventControllerKey for keyboard shortcuts', () => {
+    const hasKeyController = prefsSrc.includes('EventControllerKey');
+    assert(
+        hasKeyController,
+        'prefs.js should use Gtk.EventControllerKey for keyboard shortcuts'
+    );
+});
+
 // --- extension.js tests ---
 
 log('\n── extension.js ──');
