@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- **`mutter-paste` output method** — Clipboard-based paste via GNOME Shell's `St.Clipboard` + `Shift+Insert`. Faster than `Mutter Type` in browsers because it avoids per-character keyboard event overhead. Uses D-Bus methods `SaveClipboard`, `PasteText`, `RestoreClipboard` from the GNOME extension.
 - **Command substitution (`!command`) for API keys** — If an `api_key` value starts with `!`, the rest is executed as a shell command and stdout is used as the key. This enables integration with secret managers like 1Password, pass, or custom scripts.
   ```yaml
   # 1Password
@@ -32,12 +33,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 - Resolution order: environment variable → config file → command substitution
 - Updated documentation with command substitution examples
+- **Output method renamed**: `mutter-virtual` is now `Mutter Type` in preferences (no config change needed)
+- **`clipboard` output method removed** — was dead code using `wl-copy`/`xclip`/`xsel` + `xdotool` and never worked
 
 ### Deprecated
 - None
 
 ### Removed
-- None
+- **`clipboard` output method** — unused dead code (`wl-copy`/`xclip`/`xsel` + `xdotool` Ctrl+V) that was never functional
 
 ### Fixed
 - **E2E preferences screenshots now capture actual content** — GNOME 47 renders extension preferences in-process via Clutter, so `xwd` couldn't capture them. Fixed by using `org.gnome.Shell.Eval` → `Shell.Screenshot` from inside gnome-shell, which reads `global.stage` directly. Requires `--unsafe-mode` enabled via systemd drop-in on `org.gnome.Shell@x11.service`.
