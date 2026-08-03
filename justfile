@@ -350,6 +350,8 @@ gnome-ext-lint:
     done
     echo "Running static analysis tests..."
     gjs --module gnome-ext/tests/test-prefs-methods.js 2>&1 || exit 1
+    echo "Running TypeScript type check..."
+    npx tsc --noEmit 2>&1 || exit 1
     echo "Checking GTK4 API compatibility..."
     if [ -f gnome-ext/tests/test-gtk4-api.js ]; then
         gjs --module gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1

@@ -10,7 +10,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "lib": ["ES2022"],
-    "types": ["@girs/gjs"],
+    "types": ["@girs/gjs", "@girs/gnome-shell"],
     "paths": {
       "gi://Gtk": ["./node_modules/@girs/gtk-4.0"],
       "gi://Adw": ["./node_modules/@girs/adw-1"],
@@ -20,9 +20,14 @@
       "gi://GObject": ["./node_modules/@girs/gobject-2.0"],
       "gi://GdkPixbuf": ["./node_modules/@girs/gdkpixbuf-2.0"],
       "gi://Pango": ["./node_modules/@girs/pango-1.0"],
-      "gi://cairo": ["./node_modules/@girs/cairo-1.0"]
+      "gi://cairo": ["./node_modules/@girs/cairo-1.0"],
+      "gi://St": ["./node_modules/@girs/st-14"],
+      "gi://Clutter": ["./node_modules/@girs/clutter-16"],
+      "gi://Shell": ["./node_modules/@girs/shell-13"],
+      "gi://Meta": ["./node_modules/@girs/meta-14"],
+      "resource:///org/gnome/Shell/Extensions/js/*": ["./node_modules/@girs/gnome-shell/js/*"]
     }
   },
   "include": ["gnome-ext/**/*.js", "gnome-ext/**/*.d.ts"],
-  "exclude": ["node_modules", "gnome-ext/dist", "gnome-ext/js-yaml.mjs"]
+  "exclude": ["node_modules", "gnome-ext/dist", "gnome-ext/vendor/**"]
 }
