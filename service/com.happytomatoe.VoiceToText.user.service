@@ -1,6 +1,6 @@
 [Unit]
 Description=Voice-to-Text D-Bus Service
-Conflicts=com.happytomatoe.VoiceToText.service
+Conflicts=com.happytomatoe.VoiceToText.user.service
 
 [Service]
 Type=dbus

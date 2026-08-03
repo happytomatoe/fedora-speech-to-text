@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=com.happytomatoe.VoiceToText
 Exec=/bin/sh -c 'exec $HOME/.local/bin/voice-to-text-dbus'
-SystemdService=com.happytomatoe.VoiceToText.service
+SystemdService=com.happytomatoe.VoiceToText.user.service
