@@ -324,7 +324,7 @@ gnome-ext-install:
     # Copy JS files from gnome-ext/
     cp gnome-ext/*.js "$DEST/"
     # Copy vendor directory (js-yaml)
-    cp -r gnome-ext/vendor "$DEST/"
+    cp -r gnome-ext/vendor gnome-ext/prefs "$DEST/"
     # Copy other files from gnome-ext/
     cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
     cp gnome-ext/schemas/*.xml "$DEST/schemas/"
@@ -339,7 +339,7 @@ gnome-ext-uninstall:
 # @category gnome-ext
 # Verify GTK4 widget APIs used in prefs.js actually exist (catches GTK3→GTK4 regressions)
 gtk4-api-check:
-    gjs gnome-ext/tests/test-gtk4-api.js
+    gjs --module gnome-ext/tests/test-gtk4-api.js
 # Validate GNOME extension (syntax + schema)
 gnome-ext-lint:
     #!/usr/bin/env bash
@@ -348,9 +348,11 @@ gnome-ext-lint:
     for f in gnome-ext/**/*.js gnome-ext/*.js; do
         [ -f "$f" ] && node --input-type=module --check < "$f" || exit 1
     done
+    echo "Running static analysis tests..."
+    gjs --module gnome-ext/tests/test-prefs-methods.js 2>&1 || exit 1
     echo "Checking GTK4 API compatibility..."
     if [ -f gnome-ext/tests/test-gtk4-api.js ]; then
-        gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
+        gjs --module gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
     else
         echo "Skipping GTK4 API check (test file not found)"
     fi

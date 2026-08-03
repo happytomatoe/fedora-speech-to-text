@@ -27,6 +27,7 @@ module.exports = [
         console: "readonly",
         TextDecoder: "readonly",
         TextEncoder: "readonly",
+        log: "readonly",
       },
     },
     plugins: {

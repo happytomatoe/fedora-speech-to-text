@@ -3,7 +3,7 @@ import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
-import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {gettext as _, ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
 import {createHotkeyRow} from './prefs/hotkey-row.js';
@@ -42,36 +42,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         page.add(group);
 
-        // Hotkey setting - using a custom row with key capture
-        const hotkeyRow = new Adw.ActionRow({
-            title: _('Recording Hotkey'),
-        });
-
-        const hotkeyBox = new Gtk.Box({
-            hexpand: true,
-            spacing: 6,
-        });
-        hotkeyRow.add_suffix(hotkeyBox);
-
-        const hotkeyLabel = new Gtk.Label({
-            label: this._getHotkeyDisplay(settings.get_strv('hotkey')[0]),
-            xalign: 0,
-        });
-        hotkeyBox.append(hotkeyLabel);
-        hotkeyLabel.set_hexpand(true);
-
-        const hotkeyButton = new Gtk.Button({
-            label: _('Set Shortcut…'),
-            halign: Gtk.Align.END,
-        });
-        hotkeyBox.append(hotkeyButton);
-
-        // Create a key capture dialog
-        hotkeyButton.connect('clicked', () => {
-            this._showHotkeyDialog(settings, hotkeyLabel);
-        });
-
-        group.add(hotkeyRow);
 
         // Recording Settings Group
         const recordingGroup = new Adw.PreferencesGroup({
