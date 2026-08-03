@@ -6,6 +6,87 @@ when something breaks.
 > **Agent instructions:** see `AGENTS.md` for coding conventions, tooling, and
 > project-specific guidelines that apply when modifying this codebase.
 
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           GNOME Shell (JS)                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │
+│  │ Indicator│  │ Hotkey   │  │ AudioLvl │  │ Prefs    │  │ TypeText     │ │
+│  │ (panel)  │  │ (Super+W)│  │ Widget   │  │ (Adw)    │  │ D-Bus Svc    │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────┬───────┘ │
+│       └──────────────┴─────────────┴──────────────┴───────────────┘         │
+│                                    │ D-Bus (session)                        │
+└────────────────────────────────────┼────────────────────────────────────────┘
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────────┐
+│                     Python Service │                                       │
+│  ┌─────────────────────────────────▼─────────────────────────────────────┐  │
+│  │                         D-Bus Service                                │  │
+│  │  com.happytomatoe.VoiceToText    /com/happytomatoe/VoiceToText       │  │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────────────┐  │  │
+│  │  │ StartRecording │  │ StopRecording  │  │ GetStatus              │  │  │
+│  │  │ (config JSON)  │  │                │  │ → idle/recording/proc  │  │  │
+│  │  └───────┬────────┘  └───────┬────────┘  └────────────────────────┘  │  │
+│  └──────────┼───────────────────┼────────────────────────────────────────┘  │
+│             │                   │                                           │
+│  ┌──────────▼───────────────────▼────────────────────────────────────────┐  │
+│  │                        RecordingEngine                               │  │
+│  │  ┌─────────────┐    ┌─────────────┐    ┌──────────────────────────┐ │  │
+│  │  │   Audio     │───▶│   VAD       │───▶│   Transcriber            │ │  │
+│  │  │  Recorder   │    │ (SmoothedVAD)│   │  (Hybrid/Batch/Stream)   │ │  │
+│  │  └─────────────┘    └─────────────┘    └──────────┬───────────────┘ │  │
+│  │                                                    │                 │  │
+│  │  ┌─────────────────────────────────────────────────▼───────────────┐ │  │
+│  │  │                      Output Methods                             │ │  │
+│  │  │  ┌──────────┐  ┌──────────────────┐  ┌──────────────────────┐  │ │  │
+│  │  │  │ type     │  │ mutter-virtual   │  │ mutter-paste         │  │ │  │
+│  │  │  │ (dotool) │  │ (char-by-char)   │  │ (clipboard+paste)    │  │ │  │
+│  │  │  └──────────┘  └──────────────────┘  └──────────────────────┘  │ │  │
+│  │  └────────────────────────────────────────────────────────────────┘ │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+## Recording Flow
+
+Trace from hotkey press to text output:
+
+```
+User presses Super+W
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ GNOME Extension: hotkey.js                                                   │
+│   registerHotkey() → listens for key combo → calls _toggle()                │
+└──────────────────────────────────┬───────────────────────────────────────────┘
+                                   │ D-Bus: StartRecording(config)
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Python: dbus_service.py → VoiceToTextInterface.StartRecording()             │
+│   • Parses JSON config (provider, mode, language, output_method, device...) │
+│   • Creates task: engine.start(config)                                      │
+└──────────────────────────────────┬───────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Python: engine.py → RecordingEngine.start()                                 │
+│                                                                             │
+│  1. Initialize output method (typer/paster)                                 │
+│  2. Initialize transcription provider(s)                                    │
+│  3. Start audio recorder → writes WAV to temp file                          │
+│  4. Recording loop:                                                         │
+│     • Read audio chunks from queue                                          │
+│     • Send to streaming provider (if hybrid/streaming mode)                 │
+│     • Emit AudioLevel signal for UI                                          │
+│  5. On stop:                                                                │
+│     • Finalize streaming provider                                           │
+│     • Run batch transcription (or use streaming result)                     │
+│     • Apply postprocessing (custom words, cleanup)                          │
+│     • Output text via selected method                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## How it works (end to end)
 
 1. The user presses the hotkey (**Super+W**) in GNOME Shell.
@@ -52,6 +133,76 @@ Selected by `transcription.mode` in `config.yaml` (also overridable per call):
 - **hybrid** — stream partials from `streaming_provider` while recording, then a
   final `batch_provider` pass for the corrected result.
 - **streaming** — stream-only; `streaming_provider` is used for both live and final.
+
+## Output Methods
+
+| Method | Class | How it works |
+|--------|-------|--------------|
+| `type` | `ContinuousTyper` | Types via dotool (requires `dotoolc`) |
+| `mutter-virtual` | `MutterVirtualTyper` | Char-by-char typing via D-Bus virtual keyboard |
+| `mutter-paste` | `MutterVirtualPaster` | Clipboard paste via D-Bus (Save → Set → Shift+Insert → Restore) |
+
+**Important:** `mutter-paste` uses the GNOME Shell extension's D-Bus methods (`St.Clipboard` + virtual keyboard), NOT `wl-copy`/`xclip`/`xsel`.
+
+## D-Bus Interfaces
+
+### com.happytomatoe.VoiceToText
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `StartRecording` | `(json_string)` | Start recording with config |
+| `StopRecording` | `()` | Stop current recording |
+| `GetStatus` | `() → string` | Return `idle`/`recording`/`processing` |
+| `ListInputDevices` | `() → a(ss)` | List available mic devices |
+
+| Signal | Signature | When |
+|--------|-----------|------|
+| `AudioLevel` | `(double)` | During recording (0.0–1.0) |
+| `StateChanged` | `(string)` | State transitions |
+| `Error` | `(string)` | On error |
+
+### com.happytomatoe.TypeText
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `TypeText` | `(text)` | Type text via virtual keyboard |
+| `SaveClipboard` | `()` | Save current clipboard contents |
+| `PasteText` | `(text)` | Set clipboard + Shift+Insert |
+| `RestoreClipboard` | `()` | Restore previous clipboard |
+
+## Provider Architecture
+
+```
+                    ┌─────────────────┐
+                    │   BatchProvider  │  (ABC)
+                    │   ────────────   │
+                    │   transcribe_file│
+                    └────────┬────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+   ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
+   │   Voxtral   │   │    Groq     │   │  Deepgram   │
+   │   Parakeet  │   │  ElevenLabs │   │    60db     │
+   └─────────────┘   └─────────────┘   └─────────────┘
+
+                    ┌─────────────────┐
+                    │StreamingProvider │  (ABC)
+                    │   ────────────   │
+                    │   start_stream   │
+                    │   send_audio     │
+                    │   get_partial    │
+                    │   finalize       │
+                    └────────┬────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+   ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
+   │   Deepgram  │   │   Voxtral   │   │    60db     │
+   └─────────────┘   └─────────────┘   └─────────────┘
+```
+
+All streaming providers extend `WebSocketStreamingProvider` which handles the Deepgram-compatible WebSocket protocol.
 
 ## Configuration & secrets
 
