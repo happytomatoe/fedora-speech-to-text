@@ -6,6 +6,7 @@ Uses dbus-next (pure Python, native asyncio) — no GLib/pygobject needed.
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 
@@ -28,8 +29,57 @@ def setup_logging() -> None:
     )
 
 
+def _pid_file_path() -> str:
+    """Return the PID file path using XDG_RUNTIME_DIR (per XDG spec)."""
+    xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return os.path.join(xdg_runtime, "voice-to-text-dbus.pid")
+
+
+def _kill_stale_pid() -> None:
+    """Kill any existing process holding the PID file, if still running."""
+    pid_path = _pid_file_path()
+    try:
+        with open(pid_path) as f:
+            old_pid = int(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        return
+
+    try:
+        os.kill(old_pid, 0)  # Check if process exists
+    except ProcessLookupError:
+        # Process already dead — stale file
+        pass
+    else:
+        logger.info("Killing stale voice-to-text-dbus process (pid=%d)", old_pid)
+        try:
+            os.kill(old_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # Already dead
+
+
+def _write_pid_file() -> None:
+    """Write current PID to file, replacing any stale file."""
+    pid_path = _pid_file_path()
+    with open(pid_path, "w") as f:
+        f.write(str(os.getpid()))
+    logger.debug("PID file written: %s (pid=%d)", pid_path, os.getpid())
+
+
+def _remove_pid_file() -> None:
+    """Remove PID file on clean shutdown."""
+    pid_path = _pid_file_path()
+    try:
+        os.remove(pid_path)
+    except FileNotFoundError:
+        pass
+
+
 async def run_service() -> None:
     """Connect to session bus, export interface, run until interrupted."""
+    # Kill any stale process before claiming the bus name
+    _kill_stale_pid()
+    _write_pid_file()
+
     bus = await MessageBus(bus_type=BusType.SESSION).connect()
     interface = VoiceToTextInterface()
     interface.set_bus(bus)
@@ -40,6 +90,7 @@ async def run_service() -> None:
     )
     if reply != RequestNameReply.PRIMARY_OWNER:
         logger.error("Failed to own D-Bus name %s (reply=%s). Another instance may be running.", SERVICE_NAME, reply)
+        _remove_pid_file()
         bus.disconnect()
         raise SystemExit(1)
     logger.info("Service registered: %s at %s", SERVICE_NAME, OBJECT_PATH)
@@ -67,6 +118,7 @@ async def run_service() -> None:
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Engine did not stop in time, disconnecting anyway")
 
+    _remove_pid_file()
     bus.disconnect()
 
 
