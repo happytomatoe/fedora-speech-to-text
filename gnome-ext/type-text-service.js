@@ -111,12 +111,17 @@ export class TypeTextService {
     }
 
     CommitText(text) {
+        if (!Main.inputMethod.currentFocus) {
+            console.error('VoiceToText: CommitText failed: no focused input context');
+            throw new Error('No focused input context');
+        }
         try {
             console.log(`VoiceToText: CommitText committing ${text.length} chars via inputMethod`);
             Main.inputMethod.commit(text);
             console.log('VoiceToText: CommitText completed');
         } catch (e) {
             console.error('VoiceToText: CommitText failed:', e);
+            throw e;
         }
     }
 }

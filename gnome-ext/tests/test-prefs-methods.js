@@ -140,6 +140,7 @@ test('All imported modules exist on disk', () => {
             if (!fileExists(baseDir) && !fileExists(`${baseDir}.js`)) {
                 missing.push(`${imp.specifier} (line ${imp.line})`);
             }
+        }
     }
     assert(missing.length === 0, `Missing files: ${missing.join(', ')}`);
 });
@@ -242,10 +243,15 @@ try {
             const imports = extractImports(src);
             const missing = [];
             for (const imp of imports) {
-                if (imp.specifier.startsWith('./') || imp.specifier.startsWith('../')) {
+                if (
+                    imp.specifier.startsWith('./') ||
+                    imp.specifier.startsWith('../')
+                ) {
                     // Resolve relative to prefs/ for ./ and ../ specifiers
                     const parts = imp.specifier.split('/');
-                    let baseDir = imp.specifier.startsWith('../') ? DIR : prefsDir;
+                    let baseDir = imp.specifier.startsWith('../')
+                        ? DIR
+                        : prefsDir;
                     for (const part of parts) {
                         if (part === '..') {
                             baseDir = GLib.path_get_dirname(baseDir);
@@ -307,8 +313,14 @@ test('type-text-service uses get_text and set_text', () => {
     // Positive assertions: ensure the replacement APIs are present
     const hasGetText = /get_text\s*\(/.test(serviceSrc);
     const hasSetText = /set_text\s*\(/.test(serviceSrc);
-    assert(hasGetText, 'type-text-service.js should use get_text() for clipboard reads');
-    assert(hasSetText, 'type-text-service.js should use set_text() for clipboard writes');
+    assert(
+        hasGetText,
+        'type-text-service.js should use get_text() for clipboard reads'
+    );
+    assert(
+        hasSetText,
+        'type-text-service.js should use set_text() for clipboard writes'
+    );
 });
 // --- Summary ---
 

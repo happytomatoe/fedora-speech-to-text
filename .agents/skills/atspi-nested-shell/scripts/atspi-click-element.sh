@@ -25,14 +25,15 @@ if [ -z "$DBUS_ADDR" ]; then
 fi
 
 echo "Searching for element matching '$ELEMENT_PATTERN'..."
-DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR" python3 << PYEOF
+DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR" ELEMENT_PATTERN="$ELEMENT_PATTERN" python3 << 'PYEOF'
 import gi
 gi.require_version('Atspi', '2.0')
 from gi.repository import Atspi
 import subprocess
 import sys
+import os
 
-pattern = "$ELEMENT_PATTERN".lower()
+pattern = os.environ['ELEMENT_PATTERN'].lower()
 
 def find_and_click(node, depth=0):
     if depth > 10:

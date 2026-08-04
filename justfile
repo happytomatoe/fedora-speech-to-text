@@ -870,8 +870,8 @@ atspi-tree:
 
 # Find the Voice to Text indicator in the panel via AT-SPI
 atspi-find-indicator:
-    ./skills/atspi-nested-shell/scripts/atspi-find-indicator.sh
+    ./.agents/skills/atspi-nested-shell/scripts/atspi-find-indicator.sh
 
 # Take a screenshot of the nested shell via xdg-desktop-portal
 atspi-screenshot output="/tmp/nested-shell-screenshot.png":
-    ./skills/atspi-nested-shell/scripts/portal-screenshot.sh "{{ output }}"
+    ./.agents/skills/atspi-nested-shell/scripts/portal-screenshot.sh "{{ output }}"

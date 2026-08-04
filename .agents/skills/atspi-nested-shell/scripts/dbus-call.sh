@@ -34,10 +34,5 @@ if [ -z "$DBUS_ADDR" ]; then
 fi
 
 # Build the gdbus command
-CMD="gdbus call --session --dest $DESTINATION --object-path $OBJECT_PATH --method $INTERFACE.$METHOD"
-for arg in "$@"; do
-  CMD="$CMD $arg"
-done
-
-echo "Calling: $CMD"
-DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR" eval "$CMD" 2>&1
+echo "Calling: gdbus call --session --dest $DESTINATION --object-path $OBJECT_PATH --method $INTERFACE.$METHOD $*"
+DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR" gdbus call --session --dest "$DESTINATION" --object-path "$OBJECT_PATH" --method "$INTERFACE.$METHOD" "$@" 2>&1

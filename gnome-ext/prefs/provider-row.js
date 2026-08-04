@@ -144,6 +144,12 @@ export function createOutputMethodRow(settings, syncAllToConfig) {
     combo.append('mutter-commit', _('Mutter Commit'));
     combo.append('mutter-virtual', _('Mutter Type'));
     combo.append('type', _('Dotool Type'));
+    // Migrate legacy output-method values
+    const currentMethod = settings.get_string('output-method');
+    const validMethods = ['mutter-commit', 'mutter-virtual', 'type'];
+    if (!validMethods.includes(currentMethod)) {
+        settings.set_string('output-method', 'type');
+    }
     combo.set_active_id(settings.get_string('output-method'));
     combo.connect('changed', () => {
         const activeId = combo.get_active_id();

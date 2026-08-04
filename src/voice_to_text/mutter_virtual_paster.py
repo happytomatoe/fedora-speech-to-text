@@ -51,6 +51,7 @@ class MutterVirtualPaster:
         if self._bus:
             self._bus.disconnect()
             self._bus = None
+        self._proxy = None
         self._is_running = False
 
     @property
@@ -64,7 +65,7 @@ class MutterVirtualPaster:
             return False
 
         try:
-            logger.info("MutterVirtualPaster: commit_text() called with %d chars: %.80r...", len(text), text)
+            logger.info("MutterVirtualPaster: commit_text() called with %d chars", len(text))
             await self._proxy.call_commit_text(text)  # type: ignore[reportAttributeAccessIssue]
             logger.info("MutterVirtualPaster: commit_text completed")
             return True
@@ -92,6 +93,9 @@ class MutterVirtualPaster:
         new_suffix = new_text[common_len:]
 
         if new_suffix:
-            await self.commit_text(new_suffix)
+            success = await self.commit_text(new_suffix)
+            if not success:
+                logger.warning("MutterVirtualPaster: stream_diff: commit failed, not advancing state")
+                return
 
         self._typed_text = new_text
