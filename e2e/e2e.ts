@@ -542,23 +542,29 @@ async function main(): Promise<void> {
     if (SNAPSHOT_MODE) {
       // Snapshot mode: restore if exists, otherwise deploy and save
       // Always boot first (needed for both paths)
+      let t = Date.now();
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
       ]);
+      timing("boot-vm", t);
       
       const hasSnap = await vm.hasSnapshot("ready");
       
       if (hasSnap) {
         console.log("\n--- Snapshot 'ready' found, restoring ---");
+        t = Date.now();
         await vm.resetToCleanState("ready");
+        timing("restore-snapshot", t);
       } else {
         console.log("\n--- No snapshot found, deploying fresh ---");
+        t = Date.now();
         await new StepRunner().run([
           { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
           { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
         ]);
+        timing("deploy-and-save-snapshot", t);
       }
       
       // Run test

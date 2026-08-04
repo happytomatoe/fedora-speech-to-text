@@ -1,71 +1,35 @@
-# MEGA Upload/Download Guide for E2E Golden Image
+# Filen Download Guide for E2E Golden Image
 
-## Prerequisites
+## Quick Download
 
-- megatools installed in toolbox: `toolbox run --container fedora-toolbox-44 -- sudo dnf install -y megatools`
-- MEGA account with credentials set in fish shell
-
-## Environment Variables (Fish Shell)
-
-```fish
-# Set in fish shell (persistent)
-set -gx MEGA_USER your@email.com
-set -gx MEGA_PASSWORD yourpassword
-```
-
-## Upload Golden Image
+**Direct Link:** [golden-gnome-deps.qcow2](https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q)
 
 ```bash
-# Upload golden-gnome.qcow2 (base image without dependencies)
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome.qcow2 / -u $MEGA_USER -p $MEGA_PASSWORD'
-
-# Upload golden-gnome-deps.qcow2 (recommended - with all dependencies pre-installed)
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome-deps.qcow2 / -u $MEGA_USER -p $MEGA_PASSWORD'
-
-# Upload to specific folder
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools mkdir /E2E-Images'
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome-deps.qcow2 /E2E-Images/ -u $MEGA_USER -p $MEGA_PASSWORD'
+# Download using megatools
+cd e2e/qemu-images
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q -u $MEGA_USER -p $MEGA_PASSWORD'
 ```
 
-## Download Golden Image
+## What's in the Image
+
+- Fedora 44 + GNOME Shell
+- GDM with auto-login configured
+- gnome-terminal, ghostty, dotool
+- Python packages (httpx, dbus-next, numpy, etc.)
+- uv package manager
+
+## Using the Downloaded Image
 
 ```bash
-# Download golden-gnome.qcow2 (base image without dependencies)
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /golden-gnome.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
+# The E2E test will auto-detect golden-gnome-deps.qcow2
+cd e2e && bun run e2e.ts
 
-# Download golden-gnome-deps.qcow2 (recommended - with all dependencies pre-installed)
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /golden-gnome-deps.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
-
-# Download from specific folder
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /E2E-Images/golden-gnome-deps.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
-```
-
-## List Files
-
-```bash
-# List all files
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools ls / -u $MEGA_USER -p $MEGA_PASSWORD'
-
-# List with details
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools ls -l / -u $MEGA_USER -p $MEGA_PASSWORD'
-```
-
-## Check Storage
-
-```bash
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools df -h -u $MEGA_USER -p $MEGA_PASSWORD'
-```
-
-## Delete File
-
-```bash
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools rm /golden-gnome.qcow2 -u $MEGA_USER -p $MEGA_PASSWORD'
+# For faster subsequent runs (51% faster), use snapshot mode
+cd e2e && bun run e2e.ts --snapshot
 ```
 
 ## Notes
 
-- MEGA free tier: 20 GB storage
-- Upload speed: ~500 KB/s - 1 MB/s (varies)
-- Download limit: 1-5 GB per 6 hours (free tier)
-- File size limit: Unlimited
-- Encryption: End-to-end (zero-knowledge)
+- File size: ~2.2GB
+- Filen provides end-to-end encryption
+- Free tier: 10GB storage

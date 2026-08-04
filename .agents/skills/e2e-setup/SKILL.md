@@ -42,10 +42,12 @@ curl -fsSL https://bun.sh/install | bash
 
 The fastest way to get started is to download the pre-built golden image with all dependencies:
 
+**Direct Link:** [golden-gnome-deps.qcow2](https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q)
+
 ```bash
-# Download from Filen (recommended)
+# Download using megatools
 cd e2e/qemu-images
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /golden-gnome-deps.qcow2 . -u $MEGA_USER -p $MEGA_PASSWORD'
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q -u $MEGA_USER -p $MEGA_PASSWORD'
 
 # The image includes:
 # - Fedora 44 + GNOME Shell
