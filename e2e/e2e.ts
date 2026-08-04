@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
+import { deployTestAudio } from "./lib/deploy-steps.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -557,6 +558,8 @@ async function main(): Promise<void> {
         t = Date.now();
         await vm.resetToCleanState("ready");
         timing("restore-snapshot", t);
+        // Deploy test audio for this specific test case (snapshot has old audio)
+        deployTestAudio(vm.deployCfg);
       } else {
         console.log("\n--- No snapshot found, deploying fresh ---");
         t = Date.now();
