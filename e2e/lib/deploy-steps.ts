@@ -80,6 +80,18 @@ export async function installDependencies(
   _sshUser: string
 ): Promise<void> {
   const t0 = Date.now();
+
+  // Install GDM + GNOME Shell if not present (base cloud image is headless)
+  try {
+    const gdmCheck = sshExec("rpm -q gdm 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+    if (gdmCheck.includes("missing")) {
+      console.log("  Installing GDM + GNOME Shell...");
+      sshExec("sudo dnf install -y gdm gnome-shell 2>/dev/null", _sshKey, _sshPort, _sshUser);
+    }
+  } catch {
+    // Continue — GDM install may fail on some images
+  }
+
   // Install gnome-terminal if not present (needed for tmux in E2E tests)
   try {
     const termCheck = sshExec("which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
