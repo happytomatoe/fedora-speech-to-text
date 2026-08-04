@@ -95,3 +95,4 @@ scripts/wait-for-*.sh
 # Open source references
 opensrc/*
 !opensrc/README.md
+.env*

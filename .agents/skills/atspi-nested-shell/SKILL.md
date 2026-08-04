@@ -10,8 +10,11 @@ Interact with nested GNOME Shell instances using the AT-SPI accessibility API fo
 ## Quick Start
 
 ```bash
-# Start nested shell with AT-SPI support
+# Start nested shell with AT-SPI support (visible window)
 just gnome-ext-dev
+
+# Or start headless (no window, no focus steal)
+dbus-run-session -- gnome-shell --headless --virtual-monitor 1920x1080 &
 
 # In another terminal, query the accessibility tree
 just atspi-tree
@@ -63,29 +66,91 @@ Output shows panel buttons and highlights the extension:
 3. **Applications** expose their UI elements via AT-SPI interfaces
 4. **Clients** (like our scripts) query the tree via the D-Bus bus
 
-### Nested Shell Setup
+### X11 Limitation (GNOME 50+)
 
-The `gnome-ext-dev` recipe starts:
+GNOME Shell 50 **removed the X11 backend** from mutter. This means:
+
+- `gnome-shell` can only run as a **Wayland compositor** (nested or standalone)
+- There is no `--x11` flag — running without `--wayland` still defaults to Wayland
+- **Xephyr, Xvfb, or any X11-based nested approach won't work**
+- The nested shell creates an internal X11 display (e.g., `:2`) for Xwayland clients, but this is managed by the compositor and not accessible for external screenshots
+- The `--devkit` flag (GNOME 49+) replaces the old `--nested` flag
+
+**Impact for screenshots:** The `ffmpeg -f x11grab` method captures the Xwayland display only (often black). Use `xdg-desktop-portal` instead — it captures the Wayland compositor's view directly.
+### Nested Shell Modes
+
+GNOME Shell supports two nested modes:
+
+#### Visible Mode (`--devkit`)
+
+Opens a window on the host display. Use for interactive development.
 
 ```bash
 dbus-run-session -- sh -c "
-  # Start AT-SPI accessibility bus
   /usr/libexec/at-spi-bus-launcher &
   sleep 0.5
-  
-  # Start AT-SPI registry daemon
   /usr/libexec/at-spi2-registryd --use-gnome-session &
   sleep 0.5
-  
-  # Start D-Bus service
   voice-to-text-dbus &
   sleep 1
-  
-  # Start GNOME Shell
   gnome-shell --wayland --devkit
 "
 ```
 
+#### Headless Mode (`--headless --virtual-monitor`)
+
+**No window on the host display** — runs entirely in the background with a virtual monitor. Ideal for:
+- Automated E2E testing
+- Not stealing focus from your current work
+- Running multiple shells simultaneously
+
+```bash
+dbus-run-session -- sh -c "
+  /usr/libexec/at-spi-bus-launcher &
+  sleep 0.5
+  /usr/libexec/at-spi2-registryd --use-gnome-session &
+  sleep 0.5
+  voice-to-text-dbus &
+  sleep 1
+  gnome-shell --headless --virtual-monitor 1920x1080
+"
+```
+
+**Key differences:**
+| Feature | `--devkit` | `--headless --virtual-monitor` |
+|---------|-----------|-------------------------------|
+| Window on host | ✅ Yes | ❌ No |
+| Focus stealing | ⚠️ Yes | ✅ No |
+| AT-SPI support | ✅ Yes | ✅ Yes |
+| Portal screenshots | ✅ Yes | ✅ Yes |
+| Interactive use | ✅ Yes | ❌ No |
+| E2E testing | ⚠️ Possible | ✅ Recommended |
+
+**Note:** The headless shell uses `--virtual-monitor WxH` to create a virtual output. Without it, the compositor has no output and nothing renders.
+
+### Querying from Host
+
+To query the nested shell's AT-SPI from another terminal:
+
+```bash
+# Find the nested shell PID (use tail -1 for most recent)
+NESTED_PID=$(pgrep -f "gnome-shell --.*--(devkit|nested|headless)" | tail -1)
+
+# Get its D-Bus address
+DBUS_ADDR=$(tr '\0' '\n' < /proc/$NESTED_PID/environ | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-)
+
+# Query AT-SPI
+DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR" python3 -c "
+import gi
+gi.require_version('Atspi', '2.0')
+from gi.repository import Atspi
+
+desktop = Atspi.get_desktop(0)
+for i in range(desktop.get_child_count()):
+    app = desktop.get_child_at_index(i)
+    print(f'{app.get_name()}')
+"
+```
 ### Querying from Host
 
 To query the nested shell's AT-SPI from another terminal:
@@ -234,9 +299,11 @@ Interact with the nested shell's D-Bus session:
 # List D-Bus services
 ./dbus-list.sh [filter]
 
-# Take a screenshot (may be restricted — see Screenshots section below)
+# Take a screenshot (restricted — see Screenshots section below)
 ./screenshot.sh [output-file]
-```
+
+# Take screenshot via portal (recommended — works on GNOME 49+)
+./portal-screenshot.sh [output-file]
 
 ### Screenshots
 
@@ -248,12 +315,12 @@ Taking screenshots of the nested GNOME Shell is **restricted in GNOME 49+** due 
 | `grim` | ❌ No protocol | Nested shell doesn't support `wlr-screencopy` |
 | `gnome-screenshot` | ❌ Removed | Uninstalled upstream, uses restricted API |
 | `ffmpeg -f x11grab` | ⚠️ Black image | Captures XWayland only, not Wayland compositor |
-| **`xdg-desktop-portal`** | ✅ **Works** | **Recommended** — non-interactive, saves to `~/Pictures/` |
+| **`xdg-desktop-portal`** | ✅ **Works** | **Recommended** — non-interactive, captures nested shell view |
 
 **Recommended: Use xdg-desktop-portal** (the official Wayland screenshot API):
 
 ```bash
-# Take screenshot via portal script
+# Take screenshot via portal script (from host, against nested shell's D-Bus)
 ./portal-screenshot.sh /tmp/nested-shell.png
 
 # Or use the justfile recipe
@@ -269,7 +336,85 @@ The portal works because it's the official Wayland screenshot API. On the first 
 
 **Portal script location:** `skills/atspi-nested-shell/scripts/portal-screenshot.sh`
 
-For E2E testing, screenshots are optional — the core test flow uses D-Bus calls and log file verification, not visual assertions.
+### Taking Screenshots from Another Terminal
+
+The portal screenshot needs the **nested shell's D-Bus session address** to capture what the nested compositor sees. Here's how to do it from another terminal:
+
+```bash
+# 1. Find the nested shell PID
+NESTED_PID=$(pgrep -f "gnome-shell --.*--(devkit|nested)" | tail -1)
+
+# 2. Get its D-Bus session address
+DBUS_ADDR=$(tr '\0' '\n' < /proc/$NESTED_PID/environ | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-)
+
+# 3. Take a screenshot using the nested shell's portal
+DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR" python3 << 'PYEOF'
+import gi
+gi.require_version('Gio', '2.0')
+from gi.repository import Gio, GLib
+import os, random, sys, shutil
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+loop = GLib.MainLoop()
+screenshot_uri = None
+
+def on_response(connection, sender_name, object_path, interface_name, signal_name, parameters, user_data):
+    global screenshot_uri
+    response_code = parameters[0]
+    results = parameters[1]
+    if response_code == 0:
+        screenshot_uri = results.get('uri', '')
+    else:
+        print(f"Screenshot failed: {response_code}", file=sys.stderr)
+    loop.quit()
+
+token = f"screenshot_{random.randint(1000,9999)}"
+unique_name = bus.get_unique_name().replace(':', '').replace('.', '_')
+request_path = f"/org/freedesktop/portal/desktop/request/{unique_name}/{token}"
+
+sub_id = bus.signal_subscribe(
+    'org.freedesktop.portal.Desktop',
+    'org.freedesktop.portal.Request',
+    'Response',
+    request_path, None,
+    Gio.DBusSignalFlags.NONE, on_response, None
+)
+
+options = {
+    'handle_token': GLib.Variant('s', token),
+    'interactive': GLib.Variant('b', False),
+    'modal': GLib.Variant('b', False),
+}
+
+result = bus.call_sync(
+    'org.freedesktop.portal.Desktop',
+    '/org/freedesktop/portal/desktop',
+    'org.freedesktop.portal.Screenshot', 'Screenshot',
+    GLib.Variant('(sa{sv})', ('', options)),
+    GLib.VariantType('(o)'), Gio.DBusCallFlags.NONE, -1, None
+)
+
+actual_path = result.unpack()[0]
+GLib.timeout_add(10000, lambda: (print("Timeout", file=sys.stderr), loop.quit()))
+loop.run()
+bus.signal_unsubscribe(sub_id)
+
+if screenshot_uri:
+    path = screenshot_uri.replace('file://', '')
+    if os.path.exists(path):
+        dest = '/tmp/nested-shell-screenshot.png'
+        shutil.copy2(path, dest)
+        print(dest)
+    else:
+        print(f"File not found: {path}", file=sys.stderr)
+else:
+    print("No screenshot captured", file=sys.stderr)
+PYEOF
+```
+
+**What the portal captures:** The portal screenshot captures what the **nested compositor sees** — its own desktop, panel, workspace, and any windows inside it. It does NOT capture the host's display. This is because the portal runs inside the nested shell's D-Bus session.
+
+**Note:** For E2E testing, screenshots are optional — the core test flow uses D-Bus calls and log file verification, not visual assertions.
 
 ## Troubleshooting
 
@@ -310,6 +455,21 @@ The extension's panel button might not expose its name. Try:
 2. Check extension logs: `tail -50 logs/gnome-ext-dev.log | grep -i VoiceToText`
 3. Use `atspi-tree` to manually inspect the panel children
 
+### Portal screenshot returns black or empty image
+
+The portal may need permission. Run the screenshot interactively once:
+```bash
+# Use the portal-screenshot.sh script — first call may prompt for permission
+./portal-screenshot.sh /tmp/test.png
+```
+After granting permission, subsequent calls with `interactive=false` will work.
+
+### Multiple nested shells running
+
+If you have multiple nested shells (e.g., from different users), use `tail -1` to get the most recent one:
+```bash
+NESTED_PID=$(pgrep -f "gnome-shell --.*--(devkit|nested)" | tail -1)
+```
 ## Integration with E2E Tests
 
 The AT-SPI scripts can be used in E2E tests to:
