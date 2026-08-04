@@ -299,14 +299,17 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
   // Restart dotoold
   // Install dotool if not present (not in base image)
-  try {
-    const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    if (dotoolCheck.includes("missing")) {
-      console.log("  Installing dotool...");
-      sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
+  if (!isGoldenDepsImage) {
+    try {
+      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (dotoolCheck.includes("missing")) {
+        console.log("  Installing dotool...");
+        sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      }
+    } catch {
+      // Continue — dotoold start may fail with clear error
     }
-  } catch {
-    // Continue — dotoold start may fail with clear error
   }
   console.log("Restarting dotoold...");
   // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
@@ -344,37 +347,42 @@ export async function startVoiceService(
   shell: ShellHelper,
   cfg: DeployConfig,
   pollUntilFn: typeof pollUntil,
-  pollForCommandOutputFn: typeof pollForCommandOutput
+  pollForCommandOutputFn: typeof pollForCommandOutput,
+  skipDeps = false
 ): Promise<void> {
-  console.log("Installing Python dependencies...");
-  // Install portaudio-devel for sounddevice (not in base image)
-  try {
-    const paCheck = sshExec("rpm -q portaudio-devel 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    if (paCheck.includes("missing")) {
-      console.log("  Installing portaudio-devel...");
-      sshExec("sudo dnf install -y portaudio-devel 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    }
-  } catch {
-    // Continue — sounddevice install may fail with clear error
-  }
-  // Use uv for faster, more reliable installs (matches install.sh approach)
-  const uvResult = await shell.exec(
-    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
-  );
-  if (!uvResult.includes("__UV_OK__")) {
-    // Fallback to pip if uv not available
-    console.log("  uv install failed, falling back to pip...");
-    // Use sshExec for pip (shell.exec has issues with long output)
+  if (skipDeps) {
+    console.log("Skipping Python dependency installation (deps pre-installed)");
+  } else {
+    console.log("Installing Python dependencies...");
+    // Install portaudio-devel for sounddevice (not in base image)
     try {
-      sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      sshExec(
-        "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq",
-        cfg.sshKey, cfg.sshPort, cfg.sshUser
-      );
-      console.log("  pip install completed");
-    } catch (e) {
-      console.log("  FATAL: pip install failed:", (e as Error).message);
-      throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
+      const paCheck = sshExec("rpm -q portaudio-devel 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (paCheck.includes("missing")) {
+        console.log("  Installing portaudio-devel...");
+        sshExec("sudo dnf install -y portaudio-devel 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      }
+    } catch {
+      // Continue — sounddevice install may fail with clear error
+    }
+    // Use uv for faster, more reliable installs (matches install.sh approach)
+    const uvResult = await shell.exec(
+      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
+    );
+    if (!uvResult.includes("__UV_OK__")) {
+      // Fallback to pip if uv not available
+      console.log("  uv install failed, falling back to pip...");
+      // Use sshExec for pip (shell.exec has issues with long output)
+      try {
+        sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        sshExec(
+          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq",
+          cfg.sshKey, cfg.sshPort, cfg.sshUser
+        );
+        console.log("  pip install completed");
+      } catch (e) {
+        console.log("  FATAL: pip install failed:", (e as Error).message);
+        throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
+      }
     }
   }
 

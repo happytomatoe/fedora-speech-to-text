@@ -71,6 +71,8 @@ const CONFIG = {
     projectRoot: join(import.meta.dir, ".."),
     vmDir: join(import.meta.dir, "qemu-images"),
     baseImage: (() => {
+      const goldenDeps = join(import.meta.dir, "qemu-images/golden-gnome-deps.qcow2");
+      if (existsSync(goldenDeps)) return goldenDeps;
       const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
       if (existsSync(depsBase)) return depsBase;
       const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
@@ -538,27 +540,30 @@ async function main(): Promise<void> {
 
   try {
     if (SNAPSHOT_MODE) {
-      // Snapshot mode: boot once, save snapshot, retry on failure
+      // Snapshot mode: restore if exists, otherwise deploy and save
+      // Always boot first (needed for both paths)
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-        { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
-        { name: "save-snapshot", fn: () => vm.saveCleanSnapshot() },
       ]);
       
-      // First attempt
-      await runTestFlow(vm, run);
-      let result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
+      const hasSnap = await vm.hasSnapshot("ready");
       
-      if (!result.passed) {
-        console.log("\n--- Test failed, restoring snapshot and retrying ---");
-        await vm.resetToCleanState();
-        
-        // Retry attempt
-        await runTestFlow(vm, run);
-        result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
+      if (hasSnap) {
+        console.log("\n--- Snapshot 'ready' found, restoring ---");
+        await vm.resetToCleanState("ready");
+      } else {
+        console.log("\n--- No snapshot found, deploying fresh ---");
+        await new StepRunner().run([
+          { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+          { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
+        ]);
       }
+      
+      // Run test
+      await runTestFlow(vm, run);
+      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
       
       if (result.passed) {
         console.log(`  PASS: ${result.message}`);

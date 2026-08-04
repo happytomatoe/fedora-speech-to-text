@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
@@ -28,7 +28,15 @@ export class RunContext {
 
   constructor(config: RunConfig, customId?: string) {
     this.id = customId ?? randomUUID().slice(0, 8);
-    this.runDir = mkdtempSync(`/tmp/e2e-run-${this.id}-`);
+    
+    // In update mode, use a temp directory; otherwise use persistent directory for snapshots
+    if (config.updateMode) {
+      this.runDir = mkdtempSync(`/tmp/e2e-run-${this.id}-`);
+    } else {
+      this.runDir = join(config.projectRoot, "e2e", "qemu-images", "persistent-run");
+      mkdirSync(this.runDir, { recursive: true });
+    }
+    
     this.overlayImage = join(this.runDir, "overlay.qcow2");
     this.socketPath = join(this.runDir, "qemu-monitor.sock");
     this.sshPort = this.findAvailablePort(2222, 2299);
@@ -65,6 +73,10 @@ export class RunContext {
   }
 
   cleanup(): void {
+    // Don't cleanup persistent-run directory (used for snapshots)
+    if (this.runDir.includes('persistent-run')) {
+      return;
+    }
     try {
       rmSync(this.runDir, { recursive: true, force: true });
     } catch {
