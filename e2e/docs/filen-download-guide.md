@@ -2,12 +2,12 @@
 
 ## Quick Download
 
-**Direct Link:** [golden-gnome-deps.qcow2](https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q)
+**Direct Link:** *(will be added after Filen upload)*
 
 ```bash
-# Download using megatools
+# Download using filen CLI (after user uploads)
 cd e2e/qemu-images
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q -u $FILLEN_USER -p $FILLEN_PASSWORD'
+filen download /golden-gnome-deps.qcow2 .
 ```
 
 ## What's in the Image
