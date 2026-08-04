@@ -40,40 +40,29 @@ curl -fsSL https://bun.sh/install | bash
 
 ## Base Image Setup
 
-### Option 1: Download Pre-built Image (Recommended)
+### Option 1: virt-customize (Recommended — needs sudo)
 
-```bash
-cp /path/to/base-with-uv.qcow2 e2e/qemu-images/
-```
-
-### Option 2: Create Base Image from Scratch
-
-#### Step 1: Download Fedora Cloud Image
+This bakes SSH key + GDM + packages into the image offline. One-time setup, fastest E2E runs.
 
 ```bash
 cd e2e/qemu-images
+
+# Step 1: Download Fedora Cloud Image
 wget https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2 -O base.qcow2
-```
 
-#### Step 2: Create SSH Key Pair
+# Step 2: Create SSH Key Pair
+ssh-keygen -t ed25519 -f id_ed25519 -N ""
 
-```bash
-ssh-keygen -t ed25519 -f e2e/qemu-images/id_ed25519 -N ""
-```
-
-#### Step 3: Install GNOME and Customize Image
-
-**This is the critical step** — use `virt-customize` to inject the SSH key directly into the image (no cloud-init needed):
-
-```bash
+# Step 3: Install dependencies
 sudo dnf install -y libguestfs-tools
 
+# Step 4: Customize image (user + SSH key + GDM + packages)
 sudo virt-customize \
-  -a e2e/qemu-images/base.qcow2 \
+  -a base.qcow2 \
   --format qcow2 \
   --run-command 'useradd -m -G wheel,input testuser' \
   --run-command 'echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers' \
-  --ssh-inject testuser:file:e2e/qemu-images/id_ed25519.pub \
+  --ssh-inject testuser:file:id_ed25519.pub \
   --install gnome-shell,gdm,dotool,tmux,python3 \
   --run-command 'systemctl set-default graphical.target' \
   --selinux-relabel
@@ -84,16 +73,28 @@ sudo virt-customize \
 - `--ssh-inject` adds the public key to `~testuser/.ssh/authorized_keys`
 - This works on first boot without cloud-init
 
-#### Step 4: Optimize the Image
+### Option 2: Cloud-init ISO (No sudo needed)
+
+If you can't use `virt-customize`, boot the VM with the cloud-init ISO. Cloud-init runs on first boot to create the user + SSH key.
 
 ```bash
-./e2e/scripts/optimize-vm-image.sh e2e/qemu-images/base.qcow2
+cd e2e/qemu-images
+
+# Download base image + create SSH key (same as Option 1 Steps 1-2)
+
+# Boot with cloud-init ISO (already exists in e2e/qemu-images/cloud-init.iso)
+# The E2E test code automatically passes -cdrom cloud-init.iso to QEMU
 ```
 
-#### Step 5: Create UV-enhanced Image (Optional but Recommended)
+**Limitations:**
+- GDM/GNOME Shell must be installed at runtime (adds ~2min to first E2E run)
+- Cloud-init does NOT re-run on subsequent boots — the overlay must be recreated fresh each time
+- First run is slower; subsequent runs using snapshot restore are fast
+
+### Option 3: Pre-built Image
 
 ```bash
-./e2e/scripts/create-base-with-uv.sh
+cp /path/to/base-with-uv.qcow2 e2e/qemu-images/
 ```
 
 ## Running E2E Tests
@@ -130,8 +131,9 @@ ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost
 
 If SSH hangs at banner exchange or "Connection timed out during banner exchange":
 - The image doesn't have the testuser with your SSH key
-- Re-run Step 3 (virt-customize) to inject the key
-- Cloud-init does NOT re-run on subsequent boots — the key must be baked into the image
+- If using `virt-customize`: re-run Step 4 to inject the key
+- If using cloud-init ISO: delete the overlay (`rm -f e2e/qemu-images/overlay.qcow2`) so cloud-init runs again
+- Cloud-init does NOT re-run on subsequent boots — the overlay must be recreated fresh
 
 ### VM Won't Boot
 
@@ -156,10 +158,19 @@ cat e2e/qemu-images/serial.log                           # Check VM console
 ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost "systemctl status gdm"
 ```
 
+### GDM Not Found
+
+If you see `Failed to restart gdm.service: Unit gdm.service not found`:
+- The base image doesn't have GDM installed
+- The E2E code will auto-install it, but first run will be slower (~2min)
+- Better: use `virt-customize` to pre-install GDM (see Base Image Setup Option 1)
+
 ## Key Learnings
 
-1. **Cloud-init does NOT re-run** — SSH key must be baked in via `virt-customize`, not cloud-init
-2. **`useradd` must come before `--ssh-inject`** — libguestfs requires the target user to exist
-3. **tmux must be inside gnome-terminal** — dotool types into focused window
-4. **Activities must be dismissed** — Otherwise dotool types into search bar
-5. **GNOME 50 removed `St.Spinner`** — Extension uses custom GObject class instead
+1. **Cloud-init runs on first boot only** — when booting with `-cdrom cloud-init.iso`. It does NOT re-run on subsequent boots.
+2. **`virt-customize` needs sudo** — but it's the fastest approach (offline, one-time setup)
+3. **Cloud-init ISO is the no-sudo alternative** — but GDM must be installed at runtime
+4. **`useradd` must come before `--ssh-inject`** — libguestfs requires the target user to exist
+5. **tmux must be inside gnome-terminal** — dotool types into focused window
+6. **Activities must be dismissed** — Otherwise dotool types into search bar
+7. **GNOME 50 removed `St.Spinner`** — Extension uses custom GObject class instead
