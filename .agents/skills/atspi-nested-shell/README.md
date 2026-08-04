@@ -15,7 +15,8 @@ atspi-nested-shell/
     ├── open-prefs.sh           # Open extension preferences
     ├── dbus-call.sh            # Call D-Bus methods
     ├── dbus-list.sh            # List D-Bus services
-    └── screenshot.sh           # Take screenshot
+    ├── portal-screenshot.sh    # Take screenshot via xdg-desktop-portal
+    └── screenshot.sh           # Take screenshot (legacy)
 ```
 
 ## Prerequisites
