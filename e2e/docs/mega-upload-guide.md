@@ -16,22 +16,28 @@ set -gx MEGA_PASSWORD yourpassword
 ## Upload Golden Image
 
 ```bash
-# Upload to MEGA
+# Upload golden-gnome.qcow2 (base image without dependencies)
 toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome.qcow2 / -u $MEGA_USER -p $MEGA_PASSWORD'
+
+# Upload golden-gnome-deps.qcow2 (recommended - with all dependencies pre-installed)
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome-deps.qcow2 / -u $MEGA_USER -p $MEGA_PASSWORD'
 
 # Upload to specific folder
 toolbox run --container fedora-toolbox-44 -- fish -c 'megatools mkdir /E2E-Images'
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome.qcow2 /E2E-Images/ -u $MEGA_USER -p $MEGA_PASSWORD'
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools put /var/home/l/git/voice-to-text/e2e/qemu-images/golden-gnome-deps.qcow2 /E2E-Images/ -u $MEGA_USER -p $MEGA_PASSWORD'
 ```
 
 ## Download Golden Image
 
 ```bash
-# Download from MEGA
+# Download golden-gnome.qcow2 (base image without dependencies)
 toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /golden-gnome.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
 
+# Download golden-gnome-deps.qcow2 (recommended - with all dependencies pre-installed)
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /golden-gnome-deps.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
+
 # Download from specific folder
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /E2E-Images/golden-gnome.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /E2E-Images/golden-gnome-deps.qcow2 /var/home/l/git/voice-to-text/e2e/qemu-images/ -u $MEGA_USER -p $MEGA_PASSWORD'
 ```
 
 ## List Files

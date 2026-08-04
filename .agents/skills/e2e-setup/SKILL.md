@@ -38,6 +38,34 @@ just dev-sync
 curl -fsSL https://bun.sh/install | bash
 ```
 
+## Quick Start: Download Pre-built Image
+
+The fastest way to get started is to download the pre-built golden image with all dependencies:
+
+```bash
+# Download from Filen (recommended)
+cd e2e/qemu-images
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools get /golden-gnome-deps.qcow2 . -u $MEGA_USER -p $MEGA_PASSWORD'
+
+# The image includes:
+# - Fedora 44 + GNOME Shell
+# - GDM with auto-login configured
+# - gnome-terminal, ghostty, dotool
+# - Python packages (httpx, dbus-next, numpy, etc.)
+# - uv package manager
+```
+
+### Using the Downloaded Image
+
+```bash
+# The E2E test will auto-detect golden-gnome-deps.qcow2
+# and skip dependency installation automatically
+cd e2e && bun run e2e.ts
+
+# For faster subsequent runs, use snapshot mode (reduces time from ~80s to ~40s)
+cd e2e && bun run e2e.ts --snapshot
+```
+
 ## Base Image Setup
 
 ### Golden Image Approach (Recommended)
