@@ -29,6 +29,7 @@ export interface VmConfig {
   updateMode: boolean;
   testAudioFile: string;
   outputMethod?: string;
+  skipDeps?: boolean;
 }
 
 export class VmManager {
@@ -132,6 +133,7 @@ export class VmManager {
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-device", "virtio-rng-pci",
+      "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
     // Wrap in setsid + nohup to detach from parent process group
@@ -208,7 +210,11 @@ export class VmManager {
     await this.deployer.connect();
 
     const t1 = Date.now();
-    await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+    if (this.config.skipDeps) {
+      console.log("  Skipping installDependencies (--skip-deps)");
+    } else {
+      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+    }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
 
