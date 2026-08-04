@@ -46,10 +46,11 @@ const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const SNAPSHOT_MODE = args.includes("--snapshot");
+const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 180) * 1000 : 180_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
 
 // Parse --case <name> (select specific test case instead of random)
 const caseIdx = args.indexOf("--case");
@@ -70,8 +71,11 @@ const CONFIG = {
     projectRoot: join(import.meta.dir, ".."),
     vmDir: join(import.meta.dir, "qemu-images"),
     baseImage: (() => {
+      const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
+      if (existsSync(depsBase)) return depsBase;
       const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
-      return existsSync(uvBase) ? uvBase : join(import.meta.dir, "qemu-images/base.qcow2");
+      if (existsSync(uvBase)) return uvBase;
+      return join(import.meta.dir, "qemu-images/base.qcow2");
     })(),
     overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
@@ -517,6 +521,7 @@ async function main(): Promise<void> {
     updateMode: UPDATE_MODE,
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
+    skipDeps: SKIP_DEPS,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -538,7 +543,7 @@ async function main(): Promise<void> {
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-        { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
+        { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
         { name: "save-snapshot", fn: () => vm.saveCleanSnapshot() },
       ]);
       
@@ -567,7 +572,7 @@ async function main(): Promise<void> {
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-        { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
+        { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
         { name: "test-flow", fn: () => runTestFlow(vm, run) },
       ]);
       
