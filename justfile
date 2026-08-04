@@ -837,6 +837,52 @@ qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
 
 # @category e2e-qemu
+# Download pre-built golden image from Filen (fastest setup)
+qemu-e2e-download-golden:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Downloading golden image from Filen..."
+    echo ""
+    
+    VM_DIR="e2e/qemu-images"
+    GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
+    
+    # Check if already exists
+    if [[ -f "$GOLDEN_FILE" ]]; then
+        echo "Golden image already exists: $GOLDEN_FILE"
+        echo "Delete it first to re-download."
+        exit 0
+    fi
+    
+    # Check for megatools
+    if ! command -v megatools &>/dev/null; then
+        echo "megatools not found. Installing via toolbox..."
+        toolbox run --container fedora-toolbox-44 -- sudo dnf install -y megatools
+    fi
+    
+    # Download from Filen
+    FILEN_LINK="https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q"
+    echo "Downloading 2.2GB image (this may take a few minutes)..."
+    toolbox run --container fedora-toolbox-44 -- fish -c "megatools dl $FILEN_LINK -u \$FILLEN_USER -p \$FILLEN_PASSWORD" 2>&1 | tail -5
+    
+    # Move to correct location if downloaded to current dir
+    if [[ -f "golden-gnome-deps.qcow2" ]]; then
+        mv golden-gnome-deps.qcow2 "$GOLDEN_FILE"
+    fi
+    
+    if [[ -f "$GOLDEN_FILE" ]]; then
+        echo ""
+        echo "✓ Golden image downloaded: $GOLDEN_FILE"
+        echo ""
+        echo "Run 'just e2e' to execute tests."
+    else
+        echo ""
+        echo "❌ Download failed. Check credentials and try again."
+        echo "Set FILLEN_USER and FILLEN_PASSWORD in your environment."
+        exit 1
+    fi
+
+# @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
     cd e2e && bun run e2e.ts
@@ -847,16 +893,16 @@ qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
 # @category e2e-qemu
-# Run E2E tests (boots VM if needed, executes test, shuts down unless --keep-running)
+# Run E2E tests with snapshot restore (fast, ~40s)
 e2e:
+    cd e2e && bun run e2e.ts --snapshot
+
+# @category e2e-qemu
+# Run E2E tests without snapshots (full boot, ~75s)
+e2e-full:
     #!/usr/bin/env bash
     set -euo pipefail
     cd e2e && bun run e2e.ts
-
-# @category e2e-qemu
-# Run E2E tests with snapshot restore (retry on failure)
-e2e-snapshot:
-    cd e2e && bun run e2e.ts --snapshot
 
 # @category e2e-qemu
 # Update E2E reference images in snapshot mode
