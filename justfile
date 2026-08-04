@@ -263,7 +263,7 @@ reinstall-all: reinstall
 # Install extension, then start a nested GNOME Shell
 gnome-ext-dev: reinstall gnome-ext-install
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
     # (where the Secret Service is reachable) so the nested D-Bus service
     # inherits them. The wrapper does this for the real service; gnome-ext-dev
@@ -605,6 +605,7 @@ qemu-e2e-vm port='5930':
         -serial file:serial.log \
         -netdev user,id=net0,hostfwd=tcp::2222-:22 \
         -device virtio-net-pci,netdev=net0 \
+        -cdrom cloud-init.iso \
         -no-reboot &
     QEMU_PID=$!
     echo $QEMU_PID > qemu.pid
