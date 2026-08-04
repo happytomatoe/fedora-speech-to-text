@@ -40,23 +40,112 @@ curl -fsSL https://bun.sh/install | bash
 
 ## Base Image Setup
 
-### Option 1: virt-customize (Recommended — needs sudo)
+### Golden Image Approach (Recommended)
 
-This bakes SSH key + GDM + packages into the image offline. One-time setup, fastest E2E runs.
+Build a golden image once with GDM pre-installed. Use COW overlays for each test run.
+
+#### Step 1: Download Fedora Cloud Base Image
 
 ```bash
 cd e2e/qemu-images
-
-# Step 1: Download Fedora Cloud Image
 wget https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2 -O base.qcow2
+```
 
-# Step 2: Create SSH Key Pair
+#### Step 2: Create SSH Key Pair
+
+```bash
 ssh-keygen -t ed25519 -f id_ed25519 -N ""
+```
 
-# Step 3: Install dependencies
+#### Step 3: Create Cloud-init ISO
+
+```bash
+mkdir -p cloud-init
+cat > cloud-init/user-data << 'EOF'
+#cloud-config
+users:
+  - name: testuser
+    ssh-authorized-keys:
+      - ssh-ed25519 AAAAC3... your-key
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: wheel,input
+    shell: /bin/bash
+
+password: ''
+chpasswd: { expire: false }
+
+package_update: true
+packages:
+  - gnome-shell
+  - gdm
+  - dotool
+  - tmux
+  - python3
+
+runcmd:
+  - systemctl set-default graphical.target
+EOF
+
+genisoimage -output cloud-init.iso -volid cidata -joliet -rock cloud-init/user-data
+```
+
+#### Step 4: Build Golden Image
+
+```bash
+# Create overlay from base
+qemu-img create -f qcow2 -b base.qcow2 -F qcow2 golden-gnome.qcow2
+
+# Boot with cloud-init ISO
+qemu-system-x86_64 \
+  -enable-kvm -cpu host -m 4096 -smp 2 \
+  -drive file=golden-gnome.qcow2,format=qcow2,if=virtio \
+  -device virtio-vga \
+  -spice port=5900,disable-ticketing=on \
+  -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+  -device virtio-net-pci,netdev=net0 \
+  -device virtio-rng-pci \
+  -cdrom cloud-init.iso \
+  -no-reboot &
+
+# Wait for SSH (cloud-init installs packages)
+for i in $(seq 1 60); do
+  ssh -o ConnectTimeout=3 -i id_ed25519 -p 2222 testuser@localhost 'echo ready' && break
+  sleep 5
+done
+
+# Verify GDM is running
+ssh -i id_ed25519 -p 2222 testuser@localhost 'systemctl is-active gdm'
+
+# Shutdown and save
+ssh -i id_ed25519 -p 2222 testuser@localhost 'sudo shutdown -h now'
+sleep 10
+pkill -f qemu-system
+```
+
+#### Step 5: Use Golden Image for Tests
+
+```bash
+# Create fresh overlay (instant)
+qemu-img create -f qcow2 -b golden-gnome.qcow2 -F qcow2 overlay.qcow2
+
+# Boot VM
+qemu-system-x86_64 \
+  -enable-kvm -m 4096 -smp 2 \
+  -drive file=overlay.qcow2,format=qcow2,if=virtio \
+  -device virtio-vga \
+  -spice port=5900,disable-ticketing=on \
+  ...
+
+# Delete when done
+rm overlay.qcow2
+```
+
+### Alternative: virt-customize (Needs sudo)
+
+Bakes SSH key + GDM + packages offline. One-time setup.
+
+```bash
 sudo dnf install -y libguestfs-tools
-
-# Step 4: Customize image (user + SSH key + GDM + packages)
 sudo virt-customize \
   -a base.qcow2 \
   --format qcow2 \
@@ -69,33 +158,8 @@ sudo virt-customize \
 ```
 
 **Key points:**
-- `useradd` must come before `--ssh-inject` (libguestfs requires the target user to exist)
-- `--ssh-inject` adds the public key to `~testuser/.ssh/authorized_keys`
+- `useradd` must come before `--ssh-inject`
 - This works on first boot without cloud-init
-
-### Option 2: Cloud-init ISO (No sudo needed)
-
-If you can't use `virt-customize`, boot the VM with the cloud-init ISO. Cloud-init runs on first boot to create the user + SSH key.
-
-```bash
-cd e2e/qemu-images
-
-# Download base image + create SSH key (same as Option 1 Steps 1-2)
-
-# Boot with cloud-init ISO (already exists in e2e/qemu-images/cloud-init.iso)
-# The E2E test code automatically passes -cdrom cloud-init.iso to QEMU
-```
-
-**Limitations:**
-- GDM/GNOME Shell must be installed at runtime (adds ~2min to first E2E run)
-- Cloud-init does NOT re-run on subsequent boots — the overlay must be recreated fresh each time
-- First run is slower; subsequent runs using snapshot restore are fast
-
-### Option 3: Pre-built Image
-
-```bash
-cp /path/to/base-with-uv.qcow2 e2e/qemu-images/
-```
 
 ## Running E2E Tests
 
@@ -123,7 +187,27 @@ just qemu-e2e-vm
 
 # SSH directly
 ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost
+
+# Connect with SPICE (visual)
+spicy -h localhost -p 5900
+# or
+remote-viewer spice://localhost:5900
 ```
+
+### Empty Password (Optional)
+
+For convenience, set empty password for testuser:
+
+```bash
+# During golden image build
+ssh -i id_ed25519 -p 2222 testuser@localhost 'echo "testuser:" | sudo chpasswd'
+
+# Or in cloud-init.yaml
+password: ''
+chpasswd: { expire: false }
+```
+
+Safe for local QEMU VMs with user-mode networking (no external access).
 
 ## Troubleshooting
 
