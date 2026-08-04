@@ -11,7 +11,7 @@
 - ✅ Golden image created (`golden-gnome.qcow2` - 1.9GB)
 - ✅ Dependencies pre-installed (dotool, tmux, python packages)
 - ✅ E2E tests passing
-- ⚠️ MEGA upload in progress (for backup)
+- ✅ Golden image uploaded to Filen (2.2GB with deps)
 
 ## Timing Breakdown
 
@@ -95,10 +95,9 @@ const [recording, frame] = await Promise.all([
 | Test | 22.7s | ~20s | -2.7s |
 | **Total** | **77.6s** | **~25s** | **-52.6s** |
 
-## MEGA Backup Status
+## Filen Backup Status
 
-- ✅ MEGA account created (20 GB free)
-- ✅ megatools installed in toolbox
-- ✅ Credentials configured
-- ⏳ Golden image upload in progress
-- 📝 Upload guide saved to `mega-upload-guide.md`
+- ✅ Golden image uploaded to Filen (2.2GB with deps)
+- ✅ Direct download link available
+- ✅ Download speed: ~19 MB/s
+- 📝 Download guide saved to `filen-download-guide.md`

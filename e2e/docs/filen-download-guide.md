@@ -7,7 +7,7 @@
 ```bash
 # Download using megatools
 cd e2e/qemu-images
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q -u $MEGA_USER -p $MEGA_PASSWORD'
+toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q -u $FILLEN_USER -p $FILLEN_PASSWORD'
 ```
 
 ## What's in the Image
