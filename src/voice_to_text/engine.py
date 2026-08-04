@@ -135,7 +135,10 @@ class AsyncAudioRecorder:
         # Smoothed level for D-Bus AudioLevel signal
         float_data = indata[:, 0].astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(float_data**2)))
-        self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * rms
+        # Convert to dBFS (floor at -50, ceiling at 0) for widget display
+        db = 20 * np.log10(max(rms, 1e-5))
+        db_normalized = max(0.0, min(1.0, (db + 50) / 50))
+        self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * db_normalized
         # Feed VAD with float32 samples
         self._vad.push_frame(float_data)
 
