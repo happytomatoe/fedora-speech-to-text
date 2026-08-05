@@ -557,6 +557,18 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Wait for window to appear
   await Bun.sleep(3000);
   
+  // Dismiss any welcome/tour dialogs that may appear
+  console.log("  Dismissing welcome dialogs...");
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key Escape" | dotool`
+  );
+  await Bun.sleep(500);
+  // Click Skip button if tour dialog appears
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
+  );
+  await Bun.sleep(1000);
+  
   // Take screenshot of main preferences window
   const mainPpm = join(prefsDir, "prefs-main.ppm");
   const mainPng = join(prefsDir, "prefs-main.png");
@@ -566,16 +578,16 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-main.png");
   
-  // Scroll down to see more settings
+  // Scroll down to see more settings using dotool (works on Wayland)
   console.log("  Scrolling down to see more settings...");
   // First click on the preferences window to focus it
   await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 300 click 1`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
   );
   await Bun.sleep(500);
-  // Then scroll down
+  // Then scroll down using dotool wheel (negative = scroll down)
   await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 400 click 5 click 5 click 5`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
   );
   await Bun.sleep(1000);
   
@@ -590,11 +602,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Scroll down more
   console.log("  Scrolling down more...");
   await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 300 click 1`
-  );
-  await Bun.sleep(500);
-  await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 400 click 5 click 5 click 5`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
   );
   await Bun.sleep(1000);
   
@@ -609,11 +617,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Scroll down even more
   console.log("  Scrolling down even more...");
   await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 300 click 1`
-  );
-  await Bun.sleep(500);
-  await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 400 click 5 click 5 click 5`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
   );
   await Bun.sleep(1000);
   
@@ -625,10 +629,10 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-scrolled-3.png");
   
-  // Close preferences window
+  // Close preferences window using dotool
   console.log("  Closing preferences window...");
   await vm.deployer.exec(
-    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool key alt+F4`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key alt+F4" | dotool`
   );
   await Bun.sleep(500);
   
