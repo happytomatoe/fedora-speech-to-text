@@ -898,6 +898,21 @@ e2e:
     cd e2e && bun run e2e.ts --snapshot
 
 # @category e2e-qemu
+# Run E2E tests in parallel mode
+e2e-parallel *ARGS:
+    cd e2e && bun run e2e.ts --snapshot --parallel {{ ARGS }}
+
+# @category e2e-qemu
+# Run preferences screenshot tests
+e2e-prefs:
+    cd e2e && bun run e2e.ts --snapshot --test-prefs
+
+# @category e2e-qemu
+# Run all E2E tests (parallel + preferences)
+e2e-all *ARGS:
+    cd e2e && bun run e2e.ts --snapshot --parallel 2 {{ ARGS }}
+
+# @category e2e-qemu
 # Run E2E tests without snapshots (full boot, ~75s)
 e2e-full:
     #!/usr/bin/env bash

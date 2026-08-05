@@ -1,4 +1,5 @@
 import { ensureParakeet } from "./lib/parakeet.js";
+import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
@@ -61,6 +62,13 @@ const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 const outputMethodIdx = args.indexOf("--output-method");
 const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 
+// Parse --parallel <n> (run n VMs in parallel)
+const parallelIdx = args.indexOf("--parallel");
+const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1;
+
+// Parse --test-prefs (run preferences screenshot tests)
+const TEST_PREFS = args.includes("--test-prefs");
+
 function timing(label: string, startMs: number): void {
   const ms = Date.now() - startMs;
   console.log(`  [time] ${label}: ${ms}ms`);
@@ -114,10 +122,14 @@ const OUTPUT_DIR = CONFIG.paths.outputDir;
 const PYTHON_SRC = CONFIG.paths.pythonSrc;
 const TEST_CASES_FILE = CONFIG.paths.testCasesFile;
 
-interface TestCase {
+interface TestCaseFile {
   file: string;
   expected: string;
 }
+
+// Load test matrix
+const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
+const testMatrix = JSON.parse(readFileSync(testMatrixPath, "utf-8"));
 
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
@@ -526,6 +538,102 @@ function updateReferenceImages(run: RunContext): void {
     console.log(`  Copied: transcription → test-cases/${testCase}/`);
   }
 }
+/**
+ * Run preferences screenshot tests.
+ * Opens preferences and takes screenshots of each section.
+ */
+async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
+  console.log("\n📸 Running preferences screenshot tests...");
+  
+  const prefsDir = join(run.outputDir, "preferences");
+  mkdirSync(prefsDir, { recursive: true });
+  
+  // Open preferences window using gnome-extensions prefs command
+  console.log("  Opening preferences window...");
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); gnome-extensions prefs voice-to-text@happytomatoe.com &`
+  );
+  
+  // Wait for window to appear
+  await Bun.sleep(3000);
+  
+  // Take screenshot of main preferences window
+  const mainPpm = join(prefsDir, "prefs-main.ppm");
+  const mainPng = join(prefsDir, "prefs-main.png");
+  await vm.qemu.screendump(mainPpm);
+  await Bun.sleep(500);
+  execSync(`convert "${mainPpm}" "${mainPng}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-main.png");
+  
+  // Scroll down to see more settings
+  console.log("  Scrolling down to see more settings...");
+  // First click on the preferences window to focus it
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 300 click 1`
+  );
+  await Bun.sleep(500);
+  // Then scroll down
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 400 click 5 click 5 click 5`
+  );
+  await Bun.sleep(1000);
+  
+  const scroll1Ppm = join(prefsDir, "prefs-scrolled-1.ppm");
+  const scroll1Png = join(prefsDir, "prefs-scrolled-1.png");
+  await vm.qemu.screendump(scroll1Ppm);
+  await Bun.sleep(500);
+  execSync(`convert "${scroll1Ppm}" "${scroll1Png}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${scroll1Ppm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-scrolled-1.png");
+  
+  // Scroll down more
+  console.log("  Scrolling down more...");
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 300 click 1`
+  );
+  await Bun.sleep(500);
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 400 click 5 click 5 click 5`
+  );
+  await Bun.sleep(1000);
+  
+  const scroll2Ppm = join(prefsDir, "prefs-scrolled-2.ppm");
+  const scroll2Png = join(prefsDir, "prefs-scrolled-2.png");
+  await vm.qemu.screendump(scroll2Ppm);
+  await Bun.sleep(500);
+  execSync(`convert "${scroll2Ppm}" "${scroll2Png}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${scroll2Ppm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-scrolled-2.png");
+  
+  // Scroll down even more
+  console.log("  Scrolling down even more...");
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 300 click 1`
+  );
+  await Bun.sleep(500);
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool mousemove 640 400 click 5 click 5 click 5`
+  );
+  await Bun.sleep(1000);
+  
+  const scroll3Ppm = join(prefsDir, "prefs-scrolled-3.ppm");
+  const scroll3Png = join(prefsDir, "prefs-scrolled-3.png");
+  await vm.qemu.screendump(scroll3Ppm);
+  await Bun.sleep(500);
+  execSync(`convert "${scroll3Ppm}" "${scroll3Png}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-scrolled-3.png");
+  
+  // Close preferences window
+  console.log("  Closing preferences window...");
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); xdotool key alt+F4`
+  );
+  await Bun.sleep(500);
+  
+  console.log("  ✅ Preferences tests completed");
+}
 
 async function main(): Promise<void> {
   const run = new RunContext({
@@ -574,6 +682,64 @@ async function main(): Promise<void> {
   }, GLOBAL_TIMEOUT_MS);
 
 
+  // Handle parallel mode
+  if (PARALLEL_VMS > 1) {
+    console.log(`\n🚀 Running in parallel mode with ${PARALLEL_VMS} VMs`);
+    
+    // Load test cases from matrix
+    const testCases: TestCase[] = testMatrix["test-suites"].transcription["test-cases"].map((tc: any) => ({
+      id: tc.id,
+      audioFile: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).file,
+      expectedText: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).expected,
+      outputMethod: tc["output-method"],
+      priority: tc.priority
+    }));
+    
+    const runner = new ParallelTestRunner({
+      maxVMs: PARALLEL_VMS,
+      testCases,
+      outputDir: join(import.meta.dir, "output", "parallel"),
+      baseImage: BASE_IMAGE,
+      sshKey: SSH_KEY,
+      sshUser: SSH_USER,
+      projectRoot: PROJECT_ROOT,
+      pythonSrc: PYTHON_SRC,
+      fixtureDir: join(import.meta.dir, "fixtures"),
+      extensionUuid: CONFIG.extension.uuid,
+      recordMode: RECORD_MODE,
+      updateMode: UPDATE_MODE,
+      skipDeps: SKIP_DEPS
+    });
+    
+    const results = await runner.runAll();
+    runner.printSummary();
+    
+    const passed = [...results.values()].filter(r => r.passed).length;
+    const failed = [...results.values()].filter(r => !r.passed).length;
+    
+    if (failed > 0) {
+      process.exit(1);
+    } else {
+      process.exit(0);
+    }
+  }
+  
+  // Handle preferences tests mode
+  if (TEST_PREFS) {
+    console.log("\n📸 Running preferences screenshot tests");
+    
+    await new StepRunner().run([
+      { name: "preflight", fn: preflight },
+      { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
+      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+      { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+    ]);
+    
+    await runPreferencesTests(vm, run);
+    
+    console.log("\n✅ Preferences tests completed");
+    process.exit(0);
+  }
   try {
     if (SNAPSHOT_MODE) {
       // Snapshot mode: restore if exists, otherwise deploy and save
