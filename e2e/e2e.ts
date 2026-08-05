@@ -406,6 +406,41 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
 }
 
 /**
+ * Create a video from screenshots using ffmpeg.
+ */
+function createVideoFromScreenshots(run: RunContext): void {
+  const recordingDir = join(run.outputDir, "recording");
+  const outputDir = join(run.outputDir, "test-cases", getTestCaseName());
+  const videoPath = join(outputDir, "test-recording.mp4");
+  const screenshotPattern = join(recordingDir, "frame-*.ppm");
+  
+  try {
+    // Check if ffmpeg is available
+    execSync("which ffmpeg", { stdio: "ignore" });
+    
+    // Check if there are any screenshots
+    const files = require("node:fs").readdirSync(recordingDir).filter((f: string) => f.startsWith("frame-") && f.endsWith(".ppm"));
+    if (files.length === 0) {
+      return;
+    }
+    
+    // Create video from screenshots
+    // Each screenshot shows for 2 seconds (6 screenshots = 12 seconds total)
+    execSync(
+      `ffmpeg -y -framerate 0.5 -pattern_type glob -i '${screenshotPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
+      { stdio: "ignore" }
+    );
+    
+    if (existsSync(videoPath)) {
+      const stats = require("node:fs").statSync(videoPath);
+      console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
+    }
+  } catch {
+    // ffmpeg not available or failed - skip video creation
+  }
+}
+
+/**
  * Verify screenshot matches reference (if exists) and file content matches expected text.
  */
 async function verifyWithScreenshot(
@@ -580,6 +615,9 @@ async function main(): Promise<void> {
         console.log(`  FAIL: ${result.message}`);
         testsFailed++;
       }
+
+      // Create video from screenshots
+      createVideoFromScreenshots(run);
     } else {
       // Fresh mode: original behavior
       await new StepRunner().run([
