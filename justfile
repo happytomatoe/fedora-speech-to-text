@@ -242,7 +242,12 @@ service-logs:
 # @category service
 # Tail D-Bus service logs (includes D-Bus activation logs and Python service logs)
 dbus-logs:
-    journalctl --user -f -u voice-to-text-dbus
+    journalctl --user -f -u com.happytomatoe.VoiceToText.user.service
+
+# @category service
+# Show WPM statistics from recent recordings (default: last 100)
+wpm *ARGS:
+    ./scripts/wpm-stats.sh {{ ARGS }}
 
 # @category service
 # Restart the service by stopping it (D-Bus activation restarts on next extension use)

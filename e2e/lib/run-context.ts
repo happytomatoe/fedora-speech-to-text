@@ -33,7 +33,8 @@ export class RunContext {
     if (config.updateMode) {
       this.runDir = mkdtempSync(`/tmp/e2e-run-${this.id}-`);
     } else {
-      this.runDir = join(config.projectRoot, "e2e", "qemu-images", "persistent-run");
+      // Each parallel worker gets its own subdirectory to avoid socket conflicts
+      this.runDir = join(config.projectRoot, "e2e", "qemu-images", "persistent-run", this.id);
       mkdirSync(this.runDir, { recursive: true });
     }
     
@@ -44,7 +45,7 @@ export class RunContext {
     this.outputDir = join(this.runDir, "output");
     this.serialLog = join(this.runDir, "serial.log");
 
-    // Create fresh overlay from base image
+    // Create fresh overlay from base image (each worker gets its own)
     if (config.updateMode || !existsSync(this.overlayImage)) {
       console.log(`Creating VM overlay in ${this.runDir}...`);
       const proc = Bun.spawnSync([
@@ -81,6 +82,27 @@ export class RunContext {
       rmSync(this.runDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
+    }
+  }
+
+  /**
+   * Cleanup all worker subdirectories under persistent-run
+   * Called at the end of a parallel run to free disk space
+   */
+  static cleanupPersistentRun(projectRoot: string): void {
+    const persistentRun = join(projectRoot, "e2e", "qemu-images", "persistent-run");
+    if (!existsSync(persistentRun)) return;
+    
+    const { readdirSync } = require("node:fs");
+    for (const entry of readdirSync(persistentRun)) {
+      // Keep the base overlay and output directory
+      if (entry === "overlay.qcow2" || entry === "output") continue;
+      const entryPath = join(persistentRun, entry);
+      try {
+        rmSync(entryPath, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   }
 }

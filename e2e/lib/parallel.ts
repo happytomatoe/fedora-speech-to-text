@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { VmManager, VmConfig } from "./vm.js";
 import { RunContext } from "./run-context.js";
@@ -96,7 +96,7 @@ export class ParallelTestRunner {
       const vmConfig: VmConfig = {
         run,
         baseImage: this.config.baseImage,
-        vmDir: runDir,
+        vmDir: join(this.config.projectRoot, "e2e", "qemu-images"),
         sshKey: this.config.sshKey,
         sshUser: this.config.sshUser,
         projectRoot: this.config.projectRoot,
@@ -147,6 +147,24 @@ export class ParallelTestRunner {
     try {
       // Update test audio file
       worker.vm.config.testAudioFile = join(this.config.fixtureDir, testCase.audioFile);
+
+      // Shutdown previous VM if still running
+      if (worker.vm.booted) {
+        try {
+          await worker.vm.qemu.connect();
+          await worker.vm.qemu.systemPowerdown();
+          await Bun.sleep(2000);
+        } catch { /* ignore */ }
+        try {
+          Bun.spawnSync(["pkill", "-f", `qemu-system.*${worker.vm.config.run.overlayImage}`]);
+          await Bun.sleep(1000);
+        } catch { /* ignore */ }
+        worker.vm.booted = false;
+      }
+
+      // Create fresh overlay for each test (snapshot restore)
+      const overlayPath = worker.vm.config.run.overlayImage;
+      try { unlinkSync(overlayPath); } catch { /* ignore if missing */ }
 
       // Run the test
       await worker.vm.boot();
