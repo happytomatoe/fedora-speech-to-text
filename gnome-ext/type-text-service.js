@@ -1,10 +1,16 @@
 import Gio from 'gi://Gio';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
+import St from 'gi://St';
 
 const TypeTextIface = `
 <node>
   <interface name="com.happytomatoe.TypeText">
     <method name="TypeText">
+      <arg type="s" name="text" direction="in"/>
+    </method>
+    <method name="CommitText">
       <arg type="s" name="text" direction="in"/>
     </method>
   </interface>
@@ -71,6 +77,7 @@ export class TypeTextService {
             this._ownerId = null;
         }
         this._virtualKeyboard = null;
+        this._savedClipboard = null;
     }
 
     TypeText(text) {
@@ -91,7 +98,7 @@ export class TypeTextService {
                     this._virtualKeyboard.notify_keyval(time++, Clutter.KEY_BackSpace, Clutter.KeyState.RELEASED);
                 } else {
                     const charCode = char.charCodeAt(0);
-                    const keyval = Clutter.unicode_to_keyval(charCode);
+                    const keyval = Clutter.unicode_to_keysym(char.codePointAt(0));
                     if (keyval !== 0) {
                         this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
                         this._virtualKeyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
@@ -100,6 +107,21 @@ export class TypeTextService {
             }
         } catch (e) {
             console.error('VoiceToText: TypeText failed:', e);
+        }
+    }
+
+    CommitText(text) {
+        if (!Main.inputMethod.currentFocus) {
+            console.error('VoiceToText: CommitText failed: no focused input context');
+            throw new Error('No focused input context');
+        }
+        try {
+            console.log(`VoiceToText: CommitText committing ${text.length} chars via inputMethod`);
+            Main.inputMethod.commit(text);
+            console.log('VoiceToText: CommitText completed');
+        } catch (e) {
+            console.error('VoiceToText: CommitText failed:', e);
+            throw e;
         }
     }
 }

@@ -14,6 +14,24 @@ Voice-to-text converts speech to text on Linux using free cloud/local APIs. It i
 
 Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and local (Parakeet). API keys come from env vars, `config.yaml`, or command substitution (`!command`).
 
+## Output Methods
+
+The engine supports three output methods (configured via `output-method` in preferences):
+
+| Method | Class | How it works |
+|--------|-------|--------------|
+| `type` | `DotoolTyper` | Dotool Type — Types via dotool (requires dotoolc) |
+| `mutter-virtual` | `MutterVirtualTyper` | Mutter Type — Char-by-char typing via GNOME extension D-Bus (virtual keyboard) |
+| `mutter-commit` | `MutterVirtualPaster` | Mutter Commit — Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation entirely |
+
+### Adding/Removing Output Methods
+
+When adding or removing an output method, update ALL of these files:
+1. `src/voice_to_text/engine.py` — handle the new method in the output method switch
+2. `gnome-ext/prefs/provider-row.js` — add to `createOutputMethodRow()` combo box
+3. `gnome-ext/schemas/*.xml` — update allowed values if needed
+4. Run `just check-output-methods-sync` to verify (also runs in `just lint`)
+
 ## Layout
 
 - `src/voice_to_text/` — Python package (engine, audio, config, dbus_service, debug, hybrid, postprocess, profiling, typer, vad, providers/).
@@ -22,6 +40,8 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 - `service/` — D-Bus service definition.
 - `scripts/` — dev/setup helpers.
 - `docs/` — design notes.
+- `opensrc/` — Cloned open source repos for API reference (gitignored). See `opensrc/README.md`.
+  - GNOME Shell `gnome-50` branch for inspecting `Main.inputMethod` and other internal APIs.
 
 ## Tooling
 

@@ -24,34 +24,14 @@ import sounddevice as sd
 from voice_to_text.audio import SpeakerVolumeManager
 from voice_to_text.config import ConfigManager
 from voice_to_text.hybrid import HybridTranscriber
+from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 from voice_to_text.mutter_virtual_typer import MutterVirtualTyper
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
-from voice_to_text.typer import ContinuousTyper, DotoolcNotFoundError
+from voice_to_text.typer import DotoolcNotFoundError, DotoolTyper
 from voice_to_text.vad import SmoothedVAD
 
 logger = logging.getLogger(__name__)
-
-CLIPBOARD_CMDS = [
-    ["wl-copy", "--type", "text/plain"],
-    ["xclip", "-selection", "clipboard"],
-    ["xsel", "--clipboard", "--input"],
-]
-
-
-def _copy_to_clipboard(text: str) -> bool:
-    """Copy text to system clipboard via wl-copy/xclip/xsel."""
-    import subprocess
-
-    for cmd in CLIPBOARD_CMDS:
-        try:
-            proc = subprocess.run(cmd, input=text.encode(), timeout=5.0)
-            if proc.returncode == 0:
-                return True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    logger.warning("No clipboard tool found (tried: wl-copy, xclip, xsel)")
-    return False
 
 
 SAMPLE_RATE = 16000
@@ -155,7 +135,10 @@ class AsyncAudioRecorder:
         # Smoothed level for D-Bus AudioLevel signal
         float_data = indata[:, 0].astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(float_data**2)))
-        self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * rms
+        # Convert to dBFS (floor at -50, ceiling at 0) for widget display
+        db = 20 * np.log10(max(rms, 1e-5))
+        db_normalized = max(0.0, min(1.0, (db + 50) / 50))
+        self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * db_normalized
         # Feed VAD with float32 samples
         self._vad.push_frame(float_data)
 
@@ -211,7 +194,7 @@ class RecordingEngine:
         self._batch_provider = None
         self._task: asyncio.Task | None = None
         self._cancel_event = asyncio.Event()
-        self._typer: ContinuousTyper | MutterVirtualTyper | None = None
+        self._typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
         # Initialize stop_timeout with default (will be overridden in start())
         config_mgr = ConfigManager()
         engine_cfg = config_mgr.config.get("engine", {})
@@ -290,17 +273,21 @@ class RecordingEngine:
             logger.info("Engine: config parsed, opening dotoolc...")
 
             # 2. Open dotoolc pipe early if typing
-            typer: ContinuousTyper | MutterVirtualTyper | None = None
-            if use_typing:
+            typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
+            if use_typing or output_method == "mutter-commit":
                 try:
                     if output_method == "mutter-virtual":
                         mutter = MutterVirtualTyper()
                         await mutter.start()
                         typer = mutter
+                    elif output_method == "mutter-commit":
+                        mutter_paste = MutterVirtualPaster()
+                        await mutter_paste.start()
+                        typer = mutter_paste
                     else:
-                        typer = ContinuousTyper()
+                        typer = DotoolTyper()
                         await typer.start()
-                    logger.info("Continuous dotoolc pipe opened for recording session")
+                    logger.info("Output method %s initialized", output_method)
                 except DotoolcNotFoundError as e:
                     logger.warning("Typing requested but dotoolc not found: %s", e)
                     if self.on_error:
@@ -339,8 +326,6 @@ class RecordingEngine:
                 # Output the result
                 if text and typer:
                     await typer.stream_diff(text)
-                elif text and output_method == "clipboard":
-                    await asyncio.to_thread(_copy_to_clipboard, text)
                 logger.info("DEBUG MODE: Transcription complete")
                 return  # Exit early, skip normal recording flow
 
@@ -488,9 +473,6 @@ class RecordingEngine:
                     elif text and typer and not typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
 
-                    # Handle clipboard output if configured
-                    if text and output_method == "clipboard":
-                        await asyncio.to_thread(_copy_to_clipboard, text)
                     _step("output_done")
 
                     logger.info("Transcription completed: %d characters", len(text) if text else 0)

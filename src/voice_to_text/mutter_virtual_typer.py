@@ -82,11 +82,11 @@ class MutterVirtualTyper:
             # Send backspaces if needed
             if backspace_count > 0:
                 bs_text = "\x08" * backspace_count
-                await self._proxy.call_type_text(bs_text)
+                await self._proxy.call_type_text(bs_text)  # type: ignore[reportAttributeAccessIssue]
 
             # Send new text
             if new_suffix:
-                await self._proxy.call_type_text(new_suffix)
+                await self._proxy.call_type_text(new_suffix)  # type: ignore[reportAttributeAccessIssue]
                 logger.debug("MutterVirtualTyper: Sending %d chars via D-Bus", len(new_suffix))
 
             self._typed_text = new_text

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
@@ -28,7 +28,16 @@ export class RunContext {
 
   constructor(config: RunConfig, customId?: string) {
     this.id = customId ?? randomUUID().slice(0, 8);
-    this.runDir = mkdtempSync(`/tmp/e2e-run-${this.id}-`);
+    
+    // In update mode, use a temp directory; otherwise use persistent directory for snapshots
+    if (config.updateMode) {
+      this.runDir = mkdtempSync(`/tmp/e2e-run-${this.id}-`);
+    } else {
+      // Each parallel worker gets its own subdirectory to avoid socket conflicts
+      this.runDir = join(config.projectRoot, "e2e", "qemu-images", "persistent-run", this.id);
+      mkdirSync(this.runDir, { recursive: true });
+    }
+    
     this.overlayImage = join(this.runDir, "overlay.qcow2");
     this.socketPath = join(this.runDir, "qemu-monitor.sock");
     this.sshPort = this.findAvailablePort(2222, 2299);
@@ -36,7 +45,7 @@ export class RunContext {
     this.outputDir = join(this.runDir, "output");
     this.serialLog = join(this.runDir, "serial.log");
 
-    // Create fresh overlay from base image
+    // Create fresh overlay from base image (each worker gets its own)
     if (config.updateMode || !existsSync(this.overlayImage)) {
       console.log(`Creating VM overlay in ${this.runDir}...`);
       const proc = Bun.spawnSync([
@@ -65,10 +74,35 @@ export class RunContext {
   }
 
   cleanup(): void {
+    // Don't cleanup persistent-run directory (used for snapshots)
+    if (this.runDir.includes('persistent-run')) {
+      return;
+    }
     try {
       rmSync(this.runDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
+    }
+  }
+
+  /**
+   * Cleanup all worker subdirectories under persistent-run
+   * Called at the end of a parallel run to free disk space
+   */
+  static cleanupPersistentRun(projectRoot: string): void {
+    const persistentRun = join(projectRoot, "e2e", "qemu-images", "persistent-run");
+    if (!existsSync(persistentRun)) return;
+    
+    const { readdirSync } = require("node:fs");
+    for (const entry of readdirSync(persistentRun)) {
+      // Keep the base overlay and output directory
+      if (entry === "overlay.qcow2" || entry === "output") continue;
+      const entryPath = join(persistentRun, entry);
+      try {
+        rmSync(entryPath, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   }
 }

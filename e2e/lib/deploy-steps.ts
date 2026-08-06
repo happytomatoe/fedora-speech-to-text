@@ -18,7 +18,7 @@ export function sshExec(command: string, sshKey: string, sshPort: number, sshUse
 
 export function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
-  execSync(`rsync -az --delete -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
+  execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
 }
 
 export function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
@@ -80,10 +80,38 @@ export async function installDependencies(
   _sshUser: string
 ): Promise<void> {
   const t0 = Date.now();
-  // Skip dependency checks — tmux and uv are guaranteed in base-with-uv.qcow2.
-  // This saves 6-18s per run (sshExec has ~6s cold connection overhead per call).
-  // If someone rebuilds base without tmux/uv, tests will fail with a clear error.
-  console.log("Dependencies: skipped (guaranteed in base image) [time]");
+
+  // Install GDM + GNOME Shell if not present (base cloud image is headless)
+  try {
+    const gdmCheck = sshExec("rpm -q gdm 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+    if (gdmCheck.includes("missing")) {
+      console.log("  Installing GDM + GNOME Shell...");
+      sshExec("sudo dnf install -y gdm gnome-shell 2>/dev/null", _sshKey, _sshPort, _sshUser);
+    }
+  } catch {
+    // Continue — GDM install may fail on some images
+  }
+
+  // Install gnome-terminal if not present (needed for tmux in E2E tests)
+  try {
+    const termCheck = sshExec("which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+    if (termCheck.includes("missing")) {
+      console.log("  Installing gnome-terminal...");
+      sshExec("sudo dnf install -y gnome-terminal 2>/dev/null", _sshKey, _sshPort, _sshUser);
+    }
+  } catch {
+    // Continue — tmux may work without it depending on test flow
+  }
+  // Install Ghostty via COPR (for testing mutter-paste clipboard behavior)
+  try {
+    const ghosttyCheck = sshExec("which ghostty 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+    if (ghosttyCheck.includes("missing")) {
+      console.log("  Installing Ghostty via COPR...");
+      sshExec("sudo dnf copr enable -y scottames/ghostty 2>/dev/null && sudo dnf install -y ghostty 2>/dev/null", _sshKey, _sshPort, _sshUser);
+    }
+  } catch {
+    // Continue — Ghostty install may fail, fall back to gnome-terminal
+  }
   console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
@@ -142,6 +170,13 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   // Note: org.gnome.Shell.Eval is disabled in GNOME 50, so D-Bus loading
   // and global.reexec_self() are not available. GDM restart is the only way.
   console.log("Restarting GDM to load extension...");
+  // Ensure GDM auto-login is configured (base image may not have it)
+  const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${cfg.sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
+  try {
+    sshExec(`echo '${gdmConf}' | sudo tee /etc/gdm/custom.conf > /dev/null`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  } catch {
+    // May fail if already configured — continue
+  }
   
   let extensionFound = false;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -217,7 +252,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       async () => {
         try {
           const result = await shell.exec(`gnome-extensions list 2>&1`);
-          return !result.includes("error") && !result.includes("Error");
+          // Must contain our extension UUID (not just any text without "error")
+          return result.includes(cfg.extensionUuid);
         } catch {
           return false;
         }
@@ -234,6 +270,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         async () => {
           try {
             const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+            // Extension must exist AND be in ACTIVE state (not just INITIALIZED/ENABLED)
+            return result.includes("State: ACTIVE");
             return !result.includes("doesn't exist");
           } catch {
             return false;
@@ -260,8 +298,27 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   }
 
   // Restart dotoold
+  // Install dotool if not present (not in base image)
+  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
+  if (!isGoldenDepsImage) {
+    try {
+      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (dotoolCheck.includes("missing")) {
+        console.log("  Installing dotool...");
+        sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      }
+    } catch {
+      // Continue — dotoold start may fail with clear error
+    }
+  }
   console.log("Restarting dotoold...");
-  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; /home/testuser/.local/bin/dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
+  // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
+  try {
+    sshExec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  } catch {
+    // Best effort — may fail if udev rule already set permissions
+  }
+  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
   await pollUntilFn(
     "dotool pipe",
     async () => {
@@ -275,7 +332,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 export function deployPythonSource(cfg: DeployConfig): void {
   if (!existsSync(cfg.pythonSrc)) return;
   console.log("Deploying Python source...");
-  sshExec("mkdir -p ~/voice_to_text/src/voice_to_text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  sshExec("rm -rf ~/voice_to_text/src/voice_to_text && mkdir -p ~/voice_to_text/src/voice_to_text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   rsyncToVm(cfg.pythonSrc, "~/voice_to_text/src/voice_to_text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
 }
 
@@ -290,21 +347,42 @@ export async function startVoiceService(
   shell: ShellHelper,
   cfg: DeployConfig,
   pollUntilFn: typeof pollUntil,
-  pollForCommandOutputFn: typeof pollForCommandOutput
+  pollForCommandOutputFn: typeof pollForCommandOutput,
+  skipDeps = false
 ): Promise<void> {
-  console.log("Installing Python dependencies...");
-  // Use uv for faster, more reliable installs (matches install.sh approach)
-  const uvResult = await shell.exec(
-    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
-  );
-  if (!uvResult.includes("__UV_OK__")) {
-    // Fallback to pip if uv not available
-    console.log("  uv install failed, falling back to pip...");
-    const pipResult = await shell.exec(
-      "pip3 install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz 2>&1 && echo __PIP_OK__ || echo __PIP_FAILED__"
+  if (skipDeps) {
+    console.log("Skipping Python dependency installation (deps pre-installed)");
+  } else {
+    console.log("Installing Python dependencies...");
+    // Install portaudio-devel for sounddevice (not in base image)
+    try {
+      const paCheck = sshExec("rpm -q portaudio-devel 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (paCheck.includes("missing")) {
+        console.log("  Installing portaudio-devel...");
+        sshExec("sudo dnf install -y portaudio-devel 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      }
+    } catch {
+      // Continue — sounddevice install may fail with clear error
+    }
+    // Use uv for faster, more reliable installs (matches install.sh approach)
+    const uvResult = await shell.exec(
+      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
     );
-    if (!pipResult.includes("__PIP_OK__")) {
-      console.log("  WARNING: pip install issues:", pipResult.trim());
+    if (!uvResult.includes("__UV_OK__")) {
+      // Fallback to pip if uv not available
+      console.log("  uv install failed, falling back to pip...");
+      // Use sshExec for pip (shell.exec has issues with long output)
+      try {
+        sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        sshExec(
+          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq",
+          cfg.sshKey, cfg.sshPort, cfg.sshUser
+        );
+        console.log("  pip install completed");
+      } catch (e) {
+        console.log("  FATAL: pip install failed:", (e as Error).message);
+        throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
+      }
     }
   }
 

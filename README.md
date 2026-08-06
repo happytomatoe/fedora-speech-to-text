@@ -107,8 +107,21 @@ Edit [`config.yaml`](./config.yaml) to customize if you are using python app or 
 
 ## Output Methods
 
-- **clipboard**: Copies text to system clipboard using `xclip`/`xsel`
-- **output** - used by gnome extension
+Configure via `output-method` in preferences or `config.yaml`:
+
+| Method | How it works | Requirements |
+|--------|--------------|--------------|
+| `type` | Types via dotool (keystroke simulation) | dotoolc running |
+| `mutter-virtual` | Char-by-char typing via GNOME Shell virtual keyboard | GNOME extension |
+| `mutter-commit` | Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation | GNOME extension |
+
+### How each method works
+
+**`type`** — Uses [dotool](https://github.com/fcambus/dotool) to simulate keystrokes. Requires `dotoolc` daemon running. Works on both X11 and Wayland.
+
+**`mutter-virtual`** — Uses GNOME Shell's `Clutter.VirtualDevice` to send key events character by character. Bypasses X11/Wayland clipboard entirely. Slow for long text.
+
+**`mutter-commit`** — Calls `Main.inputMethod.commit(text)` directly via GNOME Shell's internal input method. Bypasses clipboard and keystroke simulation entirely. Should work universally with any focused input.
 
 ## Attribution
 

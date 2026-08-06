@@ -1,9 +1,11 @@
 import { ensureParakeet } from "./lib/parakeet.js";
+import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
+import { deployTestAudio } from "./lib/deploy-steps.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -46,10 +48,11 @@ const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const SNAPSHOT_MODE = args.includes("--snapshot");
+const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 180) * 1000 : 180_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
 
 // Parse --case <name> (select specific test case instead of random)
 const caseIdx = args.indexOf("--case");
@@ -58,6 +61,13 @@ const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 // Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual)
 const outputMethodIdx = args.indexOf("--output-method");
 const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
+
+// Parse --parallel <n> (run n VMs in parallel)
+const parallelIdx = args.indexOf("--parallel");
+const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1;
+
+// Parse --test-prefs (run preferences screenshot tests)
+const TEST_PREFS = args.includes("--test-prefs");
 
 function timing(label: string, startMs: number): void {
   const ms = Date.now() - startMs;
@@ -70,8 +80,13 @@ const CONFIG = {
     projectRoot: join(import.meta.dir, ".."),
     vmDir: join(import.meta.dir, "qemu-images"),
     baseImage: (() => {
+      const goldenDeps = join(import.meta.dir, "qemu-images/golden-gnome-deps.qcow2");
+      if (existsSync(goldenDeps)) return goldenDeps;
+      const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
+      if (existsSync(depsBase)) return depsBase;
       const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
-      return existsSync(uvBase) ? uvBase : join(import.meta.dir, "qemu-images/base.qcow2");
+      if (existsSync(uvBase)) return uvBase;
+      return join(import.meta.dir, "qemu-images/base.qcow2");
     })(),
     overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
@@ -107,10 +122,14 @@ const OUTPUT_DIR = CONFIG.paths.outputDir;
 const PYTHON_SRC = CONFIG.paths.pythonSrc;
 const TEST_CASES_FILE = CONFIG.paths.testCasesFile;
 
-interface TestCase {
+interface TestCaseFile {
   file: string;
   expected: string;
 }
+
+// Load test matrix
+const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
+const testMatrix = JSON.parse(readFileSync(testMatrixPath, "utf-8"));
 
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
@@ -178,7 +197,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
-  await shell.exec(`nohup gnome-terminal -- tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
+  await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
   // Poll until tmux session appears
   await vm.pollUntil(
     "tmux session",
@@ -399,6 +418,41 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
 }
 
 /**
+ * Create a video from screenshots using ffmpeg.
+ */
+function createVideoFromScreenshots(run: RunContext): void {
+  const recordingDir = join(run.outputDir, "recording");
+  const outputDir = join(run.outputDir, "test-cases", getTestCaseName());
+  const videoPath = join(outputDir, "test-recording.mp4");
+  const screenshotPattern = join(recordingDir, "frame-*.ppm");
+  
+  try {
+    // Check if ffmpeg is available
+    execSync("which ffmpeg", { stdio: "ignore" });
+    
+    // Check if there are any screenshots
+    const files = require("node:fs").readdirSync(recordingDir).filter((f: string) => f.startsWith("frame-") && f.endsWith(".ppm"));
+    if (files.length === 0) {
+      return;
+    }
+    
+    // Create video from screenshots
+    // Each screenshot shows for 2 seconds (6 screenshots = 12 seconds total)
+    execSync(
+      `ffmpeg -y -framerate 0.5 -pattern_type glob -i '${screenshotPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
+      { stdio: "ignore" }
+    );
+    
+    if (existsSync(videoPath)) {
+      const stats = require("node:fs").statSync(videoPath);
+      console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
+    }
+  } catch {
+    // ffmpeg not available or failed - skip video creation
+  }
+}
+
+/**
  * Verify screenshot matches reference (if exists) and file content matches expected text.
  */
 async function verifyWithScreenshot(
@@ -484,6 +538,106 @@ function updateReferenceImages(run: RunContext): void {
     console.log(`  Copied: transcription → test-cases/${testCase}/`);
   }
 }
+/**
+ * Run preferences screenshot tests.
+ * Opens preferences and takes screenshots of each section.
+ */
+async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
+  console.log("\n📸 Running preferences screenshot tests...");
+  
+  const prefsDir = join(run.outputDir, "preferences");
+  mkdirSync(prefsDir, { recursive: true });
+  
+  // Open preferences window using gnome-extensions prefs command
+  console.log("  Opening preferences window...");
+  await vm.deployer.exec(
+    `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); gnome-extensions prefs voice-to-text@happytomatoe.com &`
+  );
+  
+  // Wait for window to appear
+  await Bun.sleep(3000);
+  
+  // Dismiss any welcome/tour dialogs that may appear
+  console.log("  Dismissing welcome dialogs...");
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key Escape" | dotool`
+  );
+  await Bun.sleep(500);
+  // Click Skip button if tour dialog appears
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  // Take screenshot of main preferences window
+  const mainPpm = join(prefsDir, "prefs-main.ppm");
+  const mainPng = join(prefsDir, "prefs-main.png");
+  await vm.qemu.screendump(mainPpm);
+  await Bun.sleep(500);
+  execSync(`convert "${mainPpm}" "${mainPng}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-main.png");
+  
+  // Scroll down to see more settings using dotool (works on Wayland)
+  console.log("  Scrolling down to see more settings...");
+  // First click on the preferences window to focus it
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
+  );
+  await Bun.sleep(500);
+  // Then scroll down using dotool wheel (negative = scroll down)
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  const scroll1Ppm = join(prefsDir, "prefs-scrolled-1.ppm");
+  const scroll1Png = join(prefsDir, "prefs-scrolled-1.png");
+  await vm.qemu.screendump(scroll1Ppm);
+  await Bun.sleep(500);
+  execSync(`convert "${scroll1Ppm}" "${scroll1Png}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${scroll1Ppm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-scrolled-1.png");
+  
+  // Scroll down more
+  console.log("  Scrolling down more...");
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  const scroll2Ppm = join(prefsDir, "prefs-scrolled-2.ppm");
+  const scroll2Png = join(prefsDir, "prefs-scrolled-2.png");
+  await vm.qemu.screendump(scroll2Ppm);
+  await Bun.sleep(500);
+  execSync(`convert "${scroll2Ppm}" "${scroll2Png}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${scroll2Ppm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-scrolled-2.png");
+  
+  // Scroll down even more
+  console.log("  Scrolling down even more...");
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  const scroll3Ppm = join(prefsDir, "prefs-scrolled-3.ppm");
+  const scroll3Png = join(prefsDir, "prefs-scrolled-3.png");
+  await vm.qemu.screendump(scroll3Ppm);
+  await Bun.sleep(500);
+  execSync(`convert "${scroll3Ppm}" "${scroll3Png}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-scrolled-3.png");
+  
+  // Close preferences window using dotool
+  console.log("  Closing preferences window...");
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key alt+F4" | dotool`
+  );
+  await Bun.sleep(500);
+  
+  console.log("  ✅ Preferences tests completed");
+}
 
 async function main(): Promise<void> {
   const run = new RunContext({
@@ -517,6 +671,7 @@ async function main(): Promise<void> {
     updateMode: UPDATE_MODE,
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
+    skipDeps: SKIP_DEPS,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -531,29 +686,98 @@ async function main(): Promise<void> {
   }, GLOBAL_TIMEOUT_MS);
 
 
+  // Handle parallel mode
+  if (PARALLEL_VMS > 1) {
+    console.log(`\n🚀 Running in parallel mode with ${PARALLEL_VMS} VMs`);
+    
+    // Load test cases from matrix
+    const testCases: TestCase[] = testMatrix["test-suites"].transcription["test-cases"].map((tc: any) => ({
+      id: tc.id,
+      audioFile: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).file,
+      expectedText: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).expected,
+      outputMethod: tc["output-method"],
+      priority: tc.priority
+    }));
+    
+    const runner = new ParallelTestRunner({
+      maxVMs: PARALLEL_VMS,
+      testCases,
+      outputDir: join(import.meta.dir, "output", "parallel"),
+      baseImage: BASE_IMAGE,
+      sshKey: SSH_KEY,
+      sshUser: SSH_USER,
+      projectRoot: PROJECT_ROOT,
+      pythonSrc: PYTHON_SRC,
+      fixtureDir: join(import.meta.dir, "fixtures"),
+      extensionUuid: CONFIG.extension.uuid,
+      recordMode: RECORD_MODE,
+      updateMode: UPDATE_MODE,
+      skipDeps: SKIP_DEPS
+    });
+    
+    const results = await runner.runAll();
+    runner.printSummary();
+    
+    const passed = [...results.values()].filter(r => r.passed).length;
+    const failed = [...results.values()].filter(r => !r.passed).length;
+    
+    if (failed > 0) {
+      process.exit(1);
+    } else {
+      process.exit(0);
+    }
+  }
+  
+  // Handle preferences tests mode
+  if (TEST_PREFS) {
+    console.log("\n📸 Running preferences screenshot tests");
+    
+    await new StepRunner().run([
+      { name: "preflight", fn: preflight },
+      { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
+      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+      { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+    ]);
+    
+    await runPreferencesTests(vm, run);
+    
+    console.log("\n✅ Preferences tests completed");
+    process.exit(0);
+  }
   try {
     if (SNAPSHOT_MODE) {
-      // Snapshot mode: boot once, save snapshot, retry on failure
+      // Snapshot mode: restore if exists, otherwise deploy and save
+      // Always boot first (needed for both paths)
+      let t = Date.now();
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-        { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
-        { name: "save-snapshot", fn: () => vm.saveCleanSnapshot() },
       ]);
+      timing("boot-vm", t);
       
-      // First attempt
-      await runTestFlow(vm, run);
-      let result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
+      const hasSnap = await vm.hasSnapshot("ready");
       
-      if (!result.passed) {
-        console.log("\n--- Test failed, restoring snapshot and retrying ---");
-        await vm.resetToCleanState();
-        
-        // Retry attempt
-        await runTestFlow(vm, run);
-        result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
+      if (hasSnap) {
+        console.log("\n--- Snapshot 'ready' found, restoring ---");
+        t = Date.now();
+        await vm.resetToCleanState("ready");
+        timing("restore-snapshot", t);
+        // Deploy test audio for this specific test case (snapshot has old audio)
+        deployTestAudio(vm.deployCfg);
+      } else {
+        console.log("\n--- No snapshot found, deploying fresh ---");
+        t = Date.now();
+        await new StepRunner().run([
+          { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+          { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
+        ]);
+        timing("deploy-and-save-snapshot", t);
       }
+      
+      // Run test
+      await runTestFlow(vm, run);
+      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
       
       if (result.passed) {
         console.log(`  PASS: ${result.message}`);
@@ -561,13 +785,16 @@ async function main(): Promise<void> {
         console.log(`  FAIL: ${result.message}`);
         testsFailed++;
       }
+
+      // Create video from screenshots
+      createVideoFromScreenshots(run);
     } else {
       // Fresh mode: original behavior
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-        { name: "setup", fn: () => vm.setup(), timeout: 180_000 },
+        { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
         { name: "test-flow", fn: () => runTestFlow(vm, run) },
       ]);
       

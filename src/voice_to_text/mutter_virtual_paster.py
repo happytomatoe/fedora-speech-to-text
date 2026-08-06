@@ -1,10 +1,8 @@
-"""Paste text via GNOME Shell extension's PasteText D-Bus method.
+"""Commit text via GNOME Shell extension's D-Bus method.
 
-Sets clipboard via St.Clipboard and sends Shift+Insert via virtual keyboard,
-all inside the compositor. Avoids the timing issues of wl-copy + dotool paste.
+Uses Main.inputMethod.commit() to bypass clipboard and keystroke simulation entirely.
 """
 
-import asyncio
 import logging
 
 from dbus_next.aio import MessageBus
@@ -14,10 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class MutterVirtualPaster:
-    """Paste text via GNOME Shell extension's PasteText D-Bus method.
+    """Commit text via GNOME Shell extension's D-Bus method.
 
-    Sets clipboard via St.Clipboard and sends Shift+Insert via virtual keyboard,
-    all inside the compositor. Avoids the timing issues of wl-copy + dotool paste.
+    Uses Main.inputMethod.commit() to bypass clipboard and keystroke simulation.
     """
 
     DBUS_NAME = "com.happytomatoe.TypeText"
@@ -28,9 +25,11 @@ class MutterVirtualPaster:
         self._usable: bool = True
         self._proxy = None
         self._bus: MessageBus | None = None
+        self._typed_text: str = ""
+        self._is_running: bool = False
 
     async def start(self) -> None:
-        """Check if the PasteText D-Bus service is available."""
+        """Check if the TypeText D-Bus service is available."""
         bus = None
         try:
             bus = await MessageBus(bus_type=BusType.SESSION).connect()
@@ -38,48 +37,65 @@ class MutterVirtualPaster:
             proxy = bus.get_proxy_object(self.DBUS_NAME, self.DBUS_PATH, introspection)
             self._proxy = proxy.get_interface(self.DBUS_INTERFACE)
             self._bus = bus
-            logger.info("MutterVirtualPaster: PasteText D-Bus service available")
+            self._is_running = True
+            logger.info("MutterVirtualPaster: TypeText D-Bus service available")
             return
-        except Exception as e:
+        except (ConnectionError, OSError, dbus_exceptions.DBusError) as e:
             logger.debug("MutterVirtualPaster: D-Bus check failed: %s", e)
             if bus is not None:
                 bus.disconnect()
             self._usable = False
 
-    async def paste(self, text: str) -> bool:
-        """Paste text via PasteText D-Bus method with clipboard save/restore."""
-        if not self._proxy or not self._usable:
-            return False
-
-        try:
-            # Save current clipboard
-            await self._proxy.call_save_clipboard()
-            logger.debug("MutterVirtualPaster: Clipboard saved")
-
-            # Paste the new text
-            await self._proxy.call_paste_text(text)
-            logger.debug("MutterVirtualPaster: Pasted %d chars via D-Bus", len(text))
-
-            # Small delay to let paste happen
-            await asyncio.sleep(0.1)
-
-            # Restore previous clipboard
-            await self._proxy.call_restore_clipboard()
-            logger.debug("MutterVirtualPaster: Clipboard restored")
-
-            return True
-        except Exception as e:
-            logger.warning("MutterVirtualPaster: D-Bus call failed: %s", e)
-            self._usable = False
-            return False
-
     async def stop(self) -> None:
-        """Cleanup."""
+        """Disconnect from D-Bus."""
         if self._bus:
             self._bus.disconnect()
             self._bus = None
         self._proxy = None
+        self._is_running = False
 
     @property
     def is_running(self) -> bool:
         return self._usable and self._proxy is not None
+
+    async def commit_text(self, text: str) -> bool:
+        """Commit text directly via GNOME Shell's inputMethod."""
+        if not self._proxy or not self._usable:
+            logger.debug("MutterVirtualPaster: commit_text() called but proxy not available")
+            return False
+
+        try:
+            logger.info("MutterVirtualPaster: commit_text() called with %d chars", len(text))
+            await self._proxy.call_commit_text(text)  # type: ignore[reportAttributeAccessIssue]
+            logger.info("MutterVirtualPaster: commit_text completed")
+            return True
+        except Exception as e:
+            logger.warning("MutterVirtualPaster: commit_text failed: %s", e)
+            return False
+
+    async def stream_diff(self, new_text: str) -> None:
+        """Diff new_text against previously typed text and only output the new part."""
+        if not self._usable or not new_text:
+            return
+
+        old_text = self._typed_text
+
+        # Skip if no change
+        if new_text == old_text:
+            return
+
+        # Find common prefix length
+        common_len = 0
+        min_len = min(len(old_text), len(new_text))
+        while common_len < min_len and old_text[common_len] == new_text[common_len]:
+            common_len += 1
+
+        new_suffix = new_text[common_len:]
+
+        if new_suffix:
+            success = await self.commit_text(new_suffix)
+            if not success:
+                logger.warning("MutterVirtualPaster: stream_diff: commit failed, not advancing state")
+                return
+
+        self._typed_text = new_text

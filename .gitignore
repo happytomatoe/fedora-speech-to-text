@@ -83,7 +83,6 @@ tests/gnome-references/*.zip
 
 node_modules/
 qemu.pid
-opensrc/
 logs/
 gnome-ext/schemas/gschemas.compiled
 .auto-handoff-resuming
@@ -92,3 +91,8 @@ gnome-ext/schemas/gschemas.compiled
 scripts/test-*.sh
 scripts/test-*.py
 scripts/wait-for-*.sh
+
+# Open source references
+opensrc/*
+!opensrc/README.md
+.env*

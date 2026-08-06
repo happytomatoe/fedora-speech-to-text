@@ -20,6 +20,12 @@ pre-commit:
     gjs-syntax:
       run: bash -c 'for f in {staged_files}; do node --input-type=module --check < "$f" || exit 1; done'
       glob: "gnome-ext/**/*.js"
+    gjs-static-analysis:
+      run: gjs --module gnome-ext/tests/test-prefs-methods.js
+      glob: "gnome-ext/**/*.js"
+    tsc-type-check:
+      run: npx tsc --noEmit
+      glob: "gnome-ext/**/*.js"
     gtk4-api-check:
       run: gjs gnome-ext/tests/test-gtk4-api.js
       glob: "gnome-ext/tests/**/*.js"

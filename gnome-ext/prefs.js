@@ -3,7 +3,8 @@ import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
-import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import Gdk from 'gi://Gdk';
+import {gettext as _, ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
 import {createHotkeyRow} from './prefs/hotkey-row.js';
@@ -14,6 +15,19 @@ import {createCustomWordsGroup, createThresholdRow} from './prefs/custom-words-r
 export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
+
+        // Add Ctrl+W to close the preferences window via key controller
+        // (window.add_action is unavailable on Adw.PreferencesWindow in GNOME 50+)
+        const keyController = new Gtk.EventControllerKey();
+        keyController.connect('key-pressed', (_controller, keyval, _keycode, state) => {
+            const mask = state & Gtk.accelerator_get_default_mod_mask();
+            if (keyval === Gdk.KEY_w && mask === Gdk.ModifierType.CONTROL_MASK) {
+                window.close();
+                return true;
+            }
+            return false;
+        });
+        window.add_controller(keyController);
         const settings = this.getSettings();
 
         // Sync state tracking
@@ -34,44 +48,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             icon_name: 'audio-input-microphone-symbolic',
         });
         window.add(page);
-
-        // Create a preferences group
-        const group = new Adw.PreferencesGroup({
-            title: _('Recording Settings'),
-            description: _('Configure voice to text recording behavior'),
-        });
-        page.add(group);
-
-        // Hotkey setting - using a custom row with key capture
-        const hotkeyRow = new Adw.ActionRow({
-            title: _('Recording Hotkey'),
-        });
-
-        const hotkeyBox = new Gtk.Box({
-            hexpand: true,
-            spacing: 6,
-        });
-        hotkeyRow.add_suffix(hotkeyBox);
-
-        const hotkeyLabel = new Gtk.Label({
-            label: this._getHotkeyDisplay(settings.get_strv('hotkey')[0]),
-            xalign: 0,
-        });
-        hotkeyBox.append(hotkeyLabel);
-        hotkeyLabel.set_hexpand(true);
-
-        const hotkeyButton = new Gtk.Button({
-            label: _('Set Shortcut…'),
-            halign: Gtk.Align.END,
-        });
-        hotkeyBox.append(hotkeyButton);
-
-        // Create a key capture dialog
-        hotkeyButton.connect('clicked', () => {
-            this._showHotkeyDialog(settings, hotkeyLabel);
-        });
-
-        group.add(hotkeyRow);
 
         // Recording Settings Group
         const recordingGroup = new Adw.PreferencesGroup({

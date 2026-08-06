@@ -28,7 +28,13 @@ lint:
     uv run ruff format --check .
     uv run pyright
     just gnome-ext-lint
+    just check-output-methods-sync
     echo "All lint checks passed!"
+
+# @category lint
+# Check output methods are in sync across engine, prefs, and schema
+check-output-methods-sync:
+    ./scripts/check-output-methods-sync.sh
 
 # @category lint
 # Auto-fix lint issues
@@ -144,15 +150,19 @@ build-python:
 # Install the D-Bus service (D-Bus activation only, no systemd)
 service-install:
     uv tool install -e .
-    mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/
+    mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/ ~/.config/systemd/user/
     cp service/com.happytomatoe.VoiceToText.service ~/.local/share/dbus-1/services/
+    cp service/com.happytomatoe.VoiceToText.user.service ~/.config/systemd/user/
+    systemctl --user daemon-reload
     @echo "Service installed. D-Bus activation handles startup automatically."
 
 # @category service
 # Uninstall the D-Bus service
 service-uninstall:
     rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
+    rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.user.service
     rm -f ~/.local/bin/voice-to-text-dbus-wrapper
+    systemctl --user daemon-reload
     @echo "D-Bus service uninstalled."
 
 # @category service
@@ -232,7 +242,12 @@ service-logs:
 # @category service
 # Tail D-Bus service logs (includes D-Bus activation logs and Python service logs)
 dbus-logs:
-    journalctl --user -f -u voice-to-text-dbus
+    journalctl --user -f -u com.happytomatoe.VoiceToText.user.service
+
+# @category service
+# Show WPM statistics from recent recordings (default: last 100)
+wpm *ARGS:
+    ./scripts/wpm-stats.sh {{ ARGS }}
 
 # @category service
 # Restart the service by stopping it (D-Bus activation restarts on next extension use)
@@ -253,7 +268,7 @@ reinstall-all: reinstall
 # Install extension, then start a nested GNOME Shell
 gnome-ext-dev: reinstall gnome-ext-install
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
     # (where the Secret Service is reachable) so the nested D-Bus service
     # inherits them. The wrapper does this for the real service; gnome-ext-dev
@@ -304,15 +319,112 @@ gnome-ext-dev: reinstall gnome-ext-install
 
     # Start the D-Bus service inside the isolated session bus so the
     # GNOME extension can find and call it on real hardware.
-    # Trap EXIT/INT/TERM to kill the background service when the shell exits,
+    # Also start AT-SPI accessibility bus for UI inspection.
+    # Trap EXIT/INT/TERM to kill the background services when the shell exits,
     dbus-run-session -- sh -c "
+      # Start AT-SPI accessibility bus (needed for UI inspection)
+      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_PID=\$!
+      sleep 0.5
+
+      # Start AT-SPI registry daemon (registers accessibility providers)
+      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_REG_PID=\$!
+      sleep 0.5
+
       voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
       DBUS_PID=\$!
       sleep 1
-      trap 'kill \$DBUS_PID 2>/dev/null || true' EXIT INT TERM
+      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
+      echo 'AT-SPI bus running. Use: just atspi-tree' >> \"$LOG_FILE\"
       gnome-shell --wayland $DEVKIT_FLAG
     " 2>&1 | tee -a "$LOG_FILE"
     echo "Logs written to $LOG_FILE"
+# @category gnome-ext
+# Start nested GNOME Shell and wait for GDM registration, then check for errors
+gnome-ext-check: reinstall gnome-ext-install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    LOG_DIR="$PWD/logs"
+    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    mkdir -p "$LOG_DIR"
+    echo "" > "$LOG_FILE"
+    if ! rpm -q mutter-devkit &>/dev/null; then
+        echo "mutter-devkit not installed, installing..."
+        if command -v rpm-ostree &>/dev/null; then
+            sudo rpm-ostree install mutter-devkit
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun." >&2
+            exit 1
+        else
+            sudo dnf install -y mutter-devkit
+        fi
+    fi
+    UUID="voice-to-text@happytomatoe.com"
+    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+    if ! echo "$CURRENT" | grep -q "$UUID"; then
+      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
+      else
+        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
+      fi
+    fi
+    GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
+    if [ "$GNOME_VERSION" -ge 49 ]; then
+      DEVKIT_FLAG=--devkit
+      export MUTTER_DEBUG_NESTED=
+    else
+      DEVKIT_FLAG=--nested
+      export MUTTER_DEBUG_NESTED=1
+    fi
+    # Start nested shell in background
+    dbus-run-session -- sh -c "
+      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_PID=\$!
+      sleep 0.5
+      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
+      ATSPI_REG_PID=\$!
+      sleep 0.5
+      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
+      DBUS_PID=\$!
+      sleep 1
+      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
+      gnome-shell --wayland $DEVKIT_FLAG
+    " >> "$LOG_FILE" 2>&1 &
+    NESTED_PID=$!
+    echo "Nested shell started (PID: $NESTED_PID), waiting for GDM..."
+    # Wait for GDM registration or timeout
+    TIMEOUT=15
+    for i in $(seq 1 $TIMEOUT); do
+      if grep -q "Registering display with GDM" "$LOG_FILE" 2>/dev/null; then
+        echo "✅ GDM registered (${i}s)"
+        sleep 1  # Let extension finish loading
+        break
+      fi
+      if ! ps -p $NESTED_PID >/dev/null 2>&1; then
+        echo "❌ Nested shell exited prematurely"
+        break
+      fi
+      sleep 1
+    done
+    if [ $i -eq $TIMEOUT ]; then
+      echo "⚠️  Timeout waiting for GDM (${TIMEOUT}s)"
+    fi
+    # Check for extension errors
+    echo ""
+    echo "=== Extension Status ==="
+    if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
+      echo "❌ Extension errors found:"
+      grep -E "CRITICAL|SyntaxError|Error.*extension" "$LOG_FILE" | tail -5
+    elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
+      echo "✅ Extension loaded successfully"
+      grep "VoiceToText" "$LOG_FILE" | tail -5
+    else
+      echo "⚠️  No extension messages found in logs"
+    fi
+    echo ""
+    echo "Full log: $LOG_FILE"
+    echo "Kill with: kill $NESTED_PID"
+    wait $NESTED_PID 2>/dev/null
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash
@@ -320,14 +432,12 @@ gnome-ext-install:
     UUID="voice-to-text@happytomatoe.com"
     DEST=$HOME/.local/share/gnome-shell/extensions/$UUID
     # No TypeScript build needed — extension is plain JS
-    mkdir -p "$DEST/schemas"
-    # Copy JS files from gnome-ext/
-    cp gnome-ext/*.js "$DEST/"
-    # Copy vendor directory (js-yaml)
-    cp -r gnome-ext/vendor "$DEST/"
-    # Copy other files from gnome-ext/
-    cp gnome-ext/metadata.json gnome-ext/stylesheet.css "$DEST/"
-    cp gnome-ext/schemas/*.xml "$DEST/schemas/"
+    rsync -av --delete \
+        --exclude='tests/' \
+        --exclude='run-dev.sh' \
+        --exclude='gjs-env.d.ts' \
+        --exclude='bun.lock' \
+        gnome-ext/ "$DEST/"
     glib-compile-schemas "$DEST/schemas/"
     echo "Extension installed to $DEST"
 
@@ -339,7 +449,7 @@ gnome-ext-uninstall:
 # @category gnome-ext
 # Verify GTK4 widget APIs used in prefs.js actually exist (catches GTK3→GTK4 regressions)
 gtk4-api-check:
-    gjs gnome-ext/tests/test-gtk4-api.js
+    gjs --module gnome-ext/tests/test-gtk4-api.js
 # Validate GNOME extension (syntax + schema)
 gnome-ext-lint:
     #!/usr/bin/env bash
@@ -348,9 +458,13 @@ gnome-ext-lint:
     for f in gnome-ext/**/*.js gnome-ext/*.js; do
         [ -f "$f" ] && node --input-type=module --check < "$f" || exit 1
     done
+    echo "Running static analysis tests..."
+    gjs --module gnome-ext/tests/test-prefs-methods.js 2>&1 || exit 1
+    echo "Running TypeScript type check..."
+    npx tsc --noEmit 2>&1 || exit 1
     echo "Checking GTK4 API compatibility..."
     if [ -f gnome-ext/tests/test-gtk4-api.js ]; then
-        gjs gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
+        gjs --module gnome-ext/tests/test-gtk4-api.js 2>&1 || exit 1
     else
         echo "Skipping GTK4 API check (test file not found)"
     fi
@@ -496,6 +610,7 @@ qemu-e2e-vm port='5930':
         -serial file:serial.log \
         -netdev user,id=net0,hostfwd=tcp::2222-:22 \
         -device virtio-net-pci,netdev=net0 \
+        -cdrom cloud-init.iso \
         -no-reboot &
     QEMU_PID=$!
     echo $QEMU_PID > qemu.pid
@@ -727,6 +842,52 @@ qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
 
 # @category e2e-qemu
+# Download pre-built golden image from Filen (fastest setup)
+qemu-e2e-download-golden:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Downloading golden image from Filen..."
+    echo ""
+    
+    VM_DIR="e2e/qemu-images"
+    GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
+    
+    # Check if already exists
+    if [[ -f "$GOLDEN_FILE" ]]; then
+        echo "Golden image already exists: $GOLDEN_FILE"
+        echo "Delete it first to re-download."
+        exit 0
+    fi
+    
+    # Check for megatools
+    if ! command -v megatools &>/dev/null; then
+        echo "megatools not found. Installing via toolbox..."
+        toolbox run --container fedora-toolbox-44 -- sudo dnf install -y megatools
+    fi
+    
+    # Download from Filen
+    FILEN_LINK="https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q"
+    echo "Downloading 2.2GB image (this may take a few minutes)..."
+    toolbox run --container fedora-toolbox-44 -- fish -c "megatools dl $FILEN_LINK -u \$FILLEN_USER -p \$FILLEN_PASSWORD" 2>&1 | tail -5
+    
+    # Move to correct location if downloaded to current dir
+    if [[ -f "golden-gnome-deps.qcow2" ]]; then
+        mv golden-gnome-deps.qcow2 "$GOLDEN_FILE"
+    fi
+    
+    if [[ -f "$GOLDEN_FILE" ]]; then
+        echo ""
+        echo "✓ Golden image downloaded: $GOLDEN_FILE"
+        echo ""
+        echo "Run 'just e2e' to execute tests."
+    else
+        echo ""
+        echo "❌ Download failed. Check credentials and try again."
+        echo "Set FILLEN_USER and FILLEN_PASSWORD in your environment."
+        exit 1
+    fi
+
+# @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:
     cd e2e && bun run e2e.ts
@@ -737,18 +898,46 @@ qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
 # @category e2e-qemu
-# Run E2E tests (boots VM if needed, executes test, shuts down unless --keep-running)
+# Run E2E tests with snapshot restore (fast, ~40s)
 e2e:
+    cd e2e && bun run e2e.ts --snapshot
+
+# @category e2e-qemu
+# Run E2E tests in parallel mode
+e2e-parallel *ARGS:
+    cd e2e && bun run e2e.ts --snapshot --parallel {{ ARGS }}
+
+# @category e2e-qemu
+# Run preferences screenshot tests
+e2e-prefs:
+    cd e2e && bun run e2e.ts --snapshot --test-prefs
+
+# @category e2e-qemu
+# Run all E2E tests (parallel + preferences)
+e2e-all *ARGS:
+    cd e2e && bun run e2e.ts --snapshot --parallel 2 {{ ARGS }}
+
+# @category e2e-qemu
+# Run E2E tests without snapshots (full boot, ~75s)
+e2e-full:
     #!/usr/bin/env bash
     set -euo pipefail
     cd e2e && bun run e2e.ts
 
 # @category e2e-qemu
-# Run E2E tests with snapshot restore (retry on failure)
-e2e-snapshot:
-    cd e2e && bun run e2e.ts --snapshot
-
-# @category e2e-qemu
 # Update E2E reference images in snapshot mode
 e2e-update-snapshot:
     cd e2e && bun run e2e.ts --snapshot --update
+
+# @category gnome-ext
+# Query AT-SPI accessibility tree in the nested GNOME Shell
+atspi-tree:
+    ./skills/atspi-nested-shell/scripts/atspi-query.sh
+
+# Find the Voice to Text indicator in the panel via AT-SPI
+atspi-find-indicator:
+    ./.agents/skills/atspi-nested-shell/scripts/atspi-find-indicator.sh
+
+# Take a screenshot of the nested shell via xdg-desktop-portal
+atspi-screenshot output="/tmp/nested-shell-screenshot.png":
+    ./.agents/skills/atspi-nested-shell/scripts/portal-screenshot.sh "{{ output }}"

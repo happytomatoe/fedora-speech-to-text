@@ -29,6 +29,7 @@ export interface VmConfig {
   updateMode: boolean;
   testAudioFile: string;
   outputMethod?: string;
+  skipDeps?: boolean;
 }
 
 export class VmManager {
@@ -132,6 +133,7 @@ export class VmManager {
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-device", "virtio-rng-pci",
+      "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
     // Wrap in setsid + nohup to detach from parent process group
@@ -208,7 +210,13 @@ export class VmManager {
     await this.deployer.connect();
 
     const t1 = Date.now();
-    await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+    const isGoldenDepsImage = this.config.baseImage.includes('golden-gnome-deps');
+    if (this.config.skipDeps || isGoldenDepsImage) {
+      const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
+      console.log(`  Skipping installDependencies (${reason})`);
+    } else {
+      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+    }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
 
@@ -223,7 +231,8 @@ export class VmManager {
     console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
     const t4 = Date.now();
-    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput);
+    const skipDeps = this.config.skipDeps || isGoldenDepsImage;
+    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps);
     console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 
     console.log(`  setup total: ${Date.now() - t0}ms`);
@@ -231,9 +240,20 @@ export class VmManager {
   }
 
   // --- Snapshot management ---
+  async hasSnapshot(tag: string): Promise<boolean> {
+    try {
+      // Check if the overlay file exists and has snapshots (without booting VM)
+      if (!existsSync(this.config.run.overlayImage)) return false;
+      const result = Bun.spawnSync(["qemu-img", "snapshot", "-l", this.config.run.overlayImage]);
+      const output = result.stdout.toString();
+      return output.includes(tag);
+    } catch {
+      return false;
+    }
+  }
 
-  async saveCleanSnapshot(): Promise<void> {
-    console.log("Preparing clean snapshot...");
+  async saveCleanSnapshot(tag = "clean"): Promise<void> {
+    console.log(`Preparing clean snapshot '${tag}'...`);
     
     // 1. Ensure Activities is closed
     await this.shell.dismissActivities();
@@ -248,23 +268,23 @@ export class VmManager {
     await Bun.sleep(1000);
     
     // 4. Save the snapshot
-    await this.qemu.savevm("clean");
-    console.log("  Saved 'clean' snapshot");
+    await this.qemu.savevm(tag);
+    console.log(`  Saved '${tag}' snapshot`);
     
     // 5. Verify snapshot exists
     const info = await this.qemu.infoSnapshots();
-    if (!info.includes("clean")) {
-      throw new Error("Snapshot save failed — not found in info snapshots");
+    if (!info.includes(tag)) {
+      throw new Error(`Snapshot save failed — not found in info snapshots`);
     }
   }
 
-  async resetToCleanState(retries = 2): Promise<void> {
+  async resetToCleanState(tag = "clean", retries = 2): Promise<void> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        console.log(`Restoring clean snapshot (attempt ${attempt + 1})...`);
+        console.log(`Restoring clean snapshot '${tag}' (attempt ${attempt + 1})...`);
         
         // 1. Restore snapshot
-        await this.qemu.loadvm("clean");
+        await this.qemu.loadvm(tag);
         
         // 2. Wait for guest OS to settle
         await Bun.sleep(2000);
