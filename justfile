@@ -969,50 +969,95 @@ qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
 
 # @category e2e-qemu
-# Download pre-built golden image from Filen (fastest setup)
-qemu-e2e-download-golden:
+# Set up E2E test environment (download images, create SSH key, cloud-init ISO)
+qemu-e2e-setup:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Downloading golden image from Filen..."
+    echo "Setting up E2E test environment..."
     echo ""
 
     VM_DIR="e2e/qemu-images"
-    GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
+    mkdir -p "$VM_DIR"
 
-    # Check if already exists
+    # 1. Download golden image from Filen
+    GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
+    if [[ -f "$GOLDEN_FILE" ]]; then
+        echo "✓ Golden image already exists: $GOLDEN_FILE"
+    else
+        echo "Downloading golden-gnome-deps.qcow2 from Filen..."
+        filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
+        echo "✓ Downloaded: $GOLDEN_FILE"
+    fi
+    echo ""
+
+    # 2. Generate SSH key pair if missing
+    if [[ -f "$VM_DIR/id_ed25519" ]]; then
+        echo "✓ SSH key already exists: $VM_DIR/id_ed25519"
+    else
+        echo "Generating SSH key pair..."
+        ssh-keygen -t ed25519 -f "$VM_DIR/id_ed25519" -N ""
+        echo "✓ SSH key generated: $VM_DIR/id_ed25519"
+    fi
+    echo ""
+
+    # 3. Create cloud-init ISO (required by QEMU boot)
+    CLOUD_INIT="$VM_DIR/cloud-init.iso"
+    if [[ -f "$CLOUD_INIT" ]]; then
+        echo "✓ Cloud-init ISO already exists: $CLOUD_INIT"
+    else
+        echo "Creating cloud-init ISO..."
+        PUB_KEY=$(cat "$VM_DIR/id_ed25519.pub")
+        TEMP_DIR=$(mktemp -d)
+        mkdir -p "$TEMP_DIR/cloud-init"
+        echo "#cloud-config" > "$TEMP_DIR/cloud-init/user-data"
+        echo "users:" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - name: testuser" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    ssh-authorized-keys:" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "      - $PUB_KEY" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    sudo: ALL=(ALL) NOPASSWD:ALL" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    groups: wheel,input" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    shell: /bin/bash" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "password: ''" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "chpasswd: { expire: false }" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "package_update: false" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "packages: []" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "runcmd:" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - systemctl set-default graphical.target" >> "$TEMP_DIR/cloud-init/user-data"
+        mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
+        rm -rf "$TEMP_DIR"
+        echo "✓ Cloud-init ISO created: $CLOUD_INIT"
+    fi
+    echo ""
+
+    echo "═══════════════════════════════════════════════════"
+    echo "  E2E environment ready!"
+    echo ""
+    echo "  Images:"
+    echo "    $GOLDEN_FILE"
+    echo "    $CLOUD_INIT"
+    echo ""
+    echo "  Run tests:  just e2e"
+    echo "  Run push:   git push"
+    echo "═══════════════════════════════════════════════════"
+
+# @category e2e-qemu
+# Download pre-built golden image from Filen (use qemu-e2e-setup for full setup)
+qemu-e2e-download-golden:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VM_DIR="e2e/qemu-images"
+    mkdir -p "$VM_DIR"
+    GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
     if [[ -f "$GOLDEN_FILE" ]]; then
         echo "Golden image already exists: $GOLDEN_FILE"
-        echo "Delete it first to re-download."
         exit 0
     fi
-
-    # Check for megatools
-    if ! command -v megatools &>/dev/null; then
-        echo "megatools not found. Installing via toolbox..."
-        toolbox run --container fedora-toolbox-44 -- sudo dnf install -y megatools
-    fi
-
-    # Download from Filen
-    FILEN_LINK="https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q"
-    echo "Downloading 2.2GB image (this may take a few minutes)..."
-    toolbox run --container fedora-toolbox-44 -- fish -c "megatools dl $FILEN_LINK -u \$FILLEN_USER -p \$FILLEN_PASSWORD" 2>&1 | tail -5
-
-    # Move to correct location if downloaded to current dir
-    if [[ -f "golden-gnome-deps.qcow2" ]]; then
-        mv golden-gnome-deps.qcow2 "$GOLDEN_FILE"
-    fi
-
-    if [[ -f "$GOLDEN_FILE" ]]; then
-        echo ""
-        echo "✓ Golden image downloaded: $GOLDEN_FILE"
-        echo ""
-        echo "Run 'just e2e' to execute tests."
-    else
-        echo ""
-        echo "❌ Download failed. Check credentials and try again."
-        echo "Set FILLEN_USER and FILLEN_PASSWORD in your environment."
-        exit 1
-    fi
+    echo "Downloading golden-gnome-deps.qcow2 from Filen..."
+    filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
+    echo "✓ Downloaded: $GOLDEN_FILE"
 
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
