@@ -266,12 +266,12 @@ reinstall-all: reinstall
 
 # @category gnome-ext
 # Install extension, then start a nested GNOME Shell
-gnome-ext-dev: reinstall gnome-ext-install
+dev: reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
     # (where the Secret Service is reachable) so the nested D-Bus service
-    # inherits them. The wrapper does this for the real service; gnome-ext-dev
+    # inherits them. The wrapper does this for the real service; dev
     # launches voice-to-text-dbus directly and must load keys here instead.
     if command -v secret-tool &>/dev/null; then
         export VOXTRAL_API_KEY=$(secret-tool lookup service voice-to-text username voxtral 2>/dev/null)
@@ -285,14 +285,14 @@ gnome-ext-dev: reinstall gnome-ext-install
         exit 1
     fi
     LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    LOG_FILE="$LOG_DIR/dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing..."
         if command -v rpm-ostree &>/dev/null; then
             sudo rpm-ostree install mutter-devkit
-            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-dev'." >&2
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just dev'." >&2
             exit 1
         else
             sudo dnf install -y mutter-devkit
@@ -322,7 +322,7 @@ gnome-ext-check: reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euo pipefail
     LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    LOG_FILE="$LOG_DIR/dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then

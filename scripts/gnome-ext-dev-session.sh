@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs inside dbus-run-session: starts AT-SPI, D-Bus service, enables extension, launches nested GNOME Shell.
-# Called by `just gnome-ext-dev`.
+# Called by `just dev`.
 set -euo pipefail
 echo "DEBUG: Script started, LOG_FILE=$LOG_FILE" >> "$LOG_FILE"
 

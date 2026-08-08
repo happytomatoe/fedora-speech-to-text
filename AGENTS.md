@@ -51,7 +51,7 @@ When adding or removing an output method, update ALL of these files:
   - `just run <args>` — run the CLI with `PYTHONPATH=src`.
   - `just service-run` — run the D-Bus service in the foreground.
   - `just service-install` / `service-uninstall` — install/uninstall the user D-Bus service.
-  - `just gnome-ext-dev` — install extension and launch a nested GNOME Shell for development.
+  - `just dev` — install extension and launch a nested GNOME Shell for development.
 - Python version: **3.13+** (`requires-python`).
 
 ## Linting and type checking

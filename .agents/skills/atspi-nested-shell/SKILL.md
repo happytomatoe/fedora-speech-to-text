@@ -11,7 +11,7 @@ Interact with nested GNOME Shell instances using the AT-SPI accessibility API fo
 
 ```bash
 # Start nested shell with AT-SPI support (visible window)
-just gnome-ext-dev
+just dev
 
 # Or start headless (no window, no focus steal)
 dbus-run-session -- gnome-shell --headless --virtual-monitor 1920x1080 &
@@ -422,7 +422,7 @@ PYEOF
 
 The nested shell isn't started. Run:
 ```bash
-just gnome-ext-dev
+just dev
 ```
 
 ### "Couldn't connect to accessibility bus"
@@ -438,21 +438,21 @@ If not running, restart the nested shell:
 pkill -f "gnome-shell --wayland --devkit"
 
 # Start fresh
-just gnome-ext-dev
+just dev
 ```
 
 ### "Permission denied" errors
 
 The AT-SPI registry might not have started. Check logs:
 ```bash
-tail -50 logs/gnome-ext-dev.log | grep -i at-spi
+tail -50 logs/dev.log | grep -i at-spi
 ```
 
 ### Extension not found in AT-SPI tree
 
 The extension's panel button might not expose its name. Try:
 1. Check if extension is enabled: `gnome-extensions list --enabled`
-2. Check extension logs: `tail -50 logs/gnome-ext-dev.log | grep -i VoiceToText`
+2. Check extension logs: `tail -50 logs/dev.log | grep -i VoiceToText`
 3. Use `atspi-tree` to manually inspect the panel children
 
 ### Portal screenshot returns black or empty image
