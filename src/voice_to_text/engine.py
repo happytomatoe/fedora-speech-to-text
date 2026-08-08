@@ -13,7 +13,10 @@ the callback thread into the async event loop.
 import asyncio
 import logging
 import os
+import subprocess
 import tempfile
+import time as _time
+import wave
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
@@ -76,8 +79,6 @@ class AsyncAudioRecorder:
         )
 
     async def start(self, filepath: str) -> None:
-        import wave
-
         self._filepath = filepath
         fd = os.fdopen(os.open(filepath, os.O_WRONLY | os.O_CREAT, 0o600), "wb")
         self._wav_file = wave.open(fd, "wb")
@@ -247,8 +248,6 @@ class RecordingEngine:
 
     async def _run(self, config: dict[str, Any]) -> None:
         """Full recording + transcription pipeline."""
-        import time as _time
-
         # Check if profiling is enabled
         config_mgr = ConfigManager()
         profiling_enabled = config_mgr.config.get("profiling", False)
@@ -299,7 +298,7 @@ class RecordingEngine:
             # 3. Check for debug mode (test file instead of microphone)
             # Lazy import to avoid circular dependencies in production builds
             try:
-                from voice_to_text.debug import handle_debug_recording, is_debug_mode
+                from voice_to_text.debug import handle_debug_recording, is_debug_mode  # noqa: PLC0415
             except ImportError:
 
                 def is_debug_mode() -> bool:
