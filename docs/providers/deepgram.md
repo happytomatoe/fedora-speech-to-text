@@ -47,7 +47,7 @@ Batch (`POST /v1/listen`) query parameters:
 | `detect_language` | Auto-detect language | `false` | boolean |
 | `dictation` | Optimize for dictation | `false` | boolean |
 | `measurements` | Include measurement output | `false` | boolean |
-| `keyterm` | Terms to bias recognition | none | repeatable param; max 100 terms |
+| `keyterm` | Terms to bias recognition | none | repeatable param; max 100 terms, 500-token aggregate limit |
 
 Streaming-only query parameters (`wss://.../v1/listen`):
 

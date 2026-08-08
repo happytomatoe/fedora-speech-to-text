@@ -32,9 +32,10 @@ Add Moonshine Medium Streaming as a local streaming STT provider alongside the e
 ## What We're NOT Doing
 
 - Modifying existing providers
-- Changing the GNOME extension UI (yet)
 - Adding multi-language support (English only for now)
 - Changing the hybrid transcriber logic
+
+> **Note:** Moonshine is added to all three GNOME extension provider selectors (batch, streaming, hybrid).
 
 ## Implementation Approach
 
