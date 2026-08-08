@@ -451,67 +451,6 @@ gnome-ext-uninstall:
     echo "Extension uninstalled"
 
 # @category gnome-ext
-# Run nested GNOME Shell with stop-button-preview extension
-preview-buttons:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    # Install extension
-    DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
-    mkdir -p "$DEST"
-    cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
-
-    # Enable it
-    gnome-extensions enable stop-button-preview@local 2>/dev/null || true
-
-    echo "Starting nested GNOME Shell with button preview..."
-    echo "A window should appear on your screen."
-    echo "Click the puzzle piece icon in the top panel to see button options."
-    echo ""
-
-    # Run nested shell
-    export MUTTER_DEBUG_NESTED=
-    dbus-run-session -- gnome-shell --wayland --devkit
-
-# @category gnome-ext
-# Quick check: run preview extension for 10s and report errors
-check-preview:
-    #!/usr/bin/env bash
-    set -uo pipefail
-
-    # Install extension
-    DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
-    mkdir -p "$DEST"
-    cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
-
-    gnome-extensions enable stop-button-preview@local 2>/dev/null || true
-
-    echo "Running preview extension for 10 seconds..."
-    LOG=$(mktemp)
-    # Run nested shell in a new process group; on EXIT/INT/TERM kill the whole tree.
-    cleanup() { kill -- -$(ps -o pgid= -p $BASHPID | tr -d ' ') 2>/dev/null || true; }
-    trap cleanup EXIT INT TERM
-    timeout 10 setsid bash -c 'export MUTTER_DEBUG_NESTED=; dbus-run-session -- gnome-shell --wayland --devkit' 2>&1 | tee "$LOG"
-    PREVIEW_EXIT=${PIPESTATUS[0]}
-    # Check for extension errors (ignore known harmless warnings)
-    ERRORS=$(grep -i 'stop-button-preview.*error\|stop-button-preview.*critical\|CRITICAL.*stop-button' "$LOG" || true)
-    rm -f "$LOG"
-
-    if [ -n "$ERRORS" ]; then
-        echo ""
-        echo "❌ ERRORS FOUND:"
-        echo "$ERRORS"
-        exit 1
-    else
-        echo ""
-        echo "✅ No errors from stop-button-preview extension"
-    fi
-    if [ "$PREVIEW_EXIT" -ne 0 ] && [ "$PREVIEW_EXIT" -ne 124 ]; then
-        echo "❌ Nested shell exited with status $PREVIEW_EXIT"
-        exit "$PREVIEW_EXIT"
-    fi
-
-# @category gnome-ext
 # Verify GTK4 widget APIs used in prefs.js actually exist (catches GTK3→GTK4 regressions)
 gtk4-api-check:
     gjs --module gnome-ext/tests/test-gtk4-api.js
