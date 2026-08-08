@@ -1,0 +1,7 @@
+{
+  "uuid": "stop-button-preview@local",
+  "name": "Stop Button Preview",
+  "description": "Preview all stop button styles for the floating widget",
+  "shell-version": ["47", "48", "49", "50"],
+  "url": ""
+}
