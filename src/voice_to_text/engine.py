@@ -491,6 +491,11 @@ class RecordingEngine:
                             )
                     _step("postprocess_done")
 
+                    # Check cancellation again after transcription completes
+                    if self._skip_output:
+                        logger.info("Output skipped (cancel) after transcription")
+                        return
+
                     # If we were typing incrementally, apply final corrections
                     if text and typer and typer._usable:
                         logger.info(

@@ -417,6 +417,7 @@ gnome-ext-check: reinstall gnome-ext-install
     if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
       echo "❌ Extension errors found:"
       grep -E "CRITICAL|SyntaxError|Error.*extension" "$LOG_FILE" | tail -5
+      exit 1
     elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
       echo "✅ Extension loaded successfully"
       grep "VoiceToText" "$LOG_FILE" | tail -5
@@ -1042,6 +1043,17 @@ qemu-e2e-setup:
         mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
         rm -rf "$TEMP_DIR"
         echo "✓ Cloud-init ISO created: $CLOUD_INIT"
+    fi
+    echo ""
+
+    # 4. Create base.qcow2 overlay (backing image for VM runs)
+    BASE_IMAGE="$VM_DIR/base.qcow2"
+    if [[ -f "$BASE_IMAGE" ]]; then
+        echo "✓ Base image already exists: $BASE_IMAGE"
+    else
+        echo "Creating base.qcow2 overlay from golden image..."
+        qemu-img create -f qcow2 -b "$GOLDEN_FILE" -F qcow2 "$BASE_IMAGE"
+        echo "✓ Base image created: $BASE_IMAGE"
     fi
     echo ""
 

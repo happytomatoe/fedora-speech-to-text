@@ -112,7 +112,7 @@ export class VmManager {
         const info = Bun.spawnSync(["qemu-img", "info", "--output=json", overlayImage]);
         if (info.exitCode !== 0) return true; // corrupted/unreadable
         const parsed = JSON.parse(info.stdout.toString());
-        return !parsed?.format?.file; // missing backing file = corrupt
+        return !parsed?.['backing-filename']; // missing backing file = corrupt
       } catch {
         return true; // can't inspect = assume stale
       }
