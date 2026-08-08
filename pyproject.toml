@@ -17,6 +17,9 @@ dependencies = [
   "jellyfish~=1.2",
 ]
 
+[project.optional-dependencies]
+moonshine = ["moonshine-voice"]
+
 [project.scripts]
 voice-to-text-dbus = "voice_to_text.__main__:main"
 

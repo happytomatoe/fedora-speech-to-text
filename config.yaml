@@ -50,6 +50,10 @@ elevenlabs:
   model: "scribe_v2"          # scribe_v1, scribe_v2, scribe_v2_base, scribe_v3
   tag_audio_events: false     # true includes (laughter) etc. tags in the transcript
 
+moonshine:
+  model: medium
+  language: en
+
 audio:
   sample_rate: 16000
   channels: 1

@@ -14,6 +14,7 @@ Cloud:
 
 Local:
 - Parakeet
+- Moonshine (streaming + batch, CPU-only)
 
 This repo contains gnome extension and python application
 
