@@ -19,7 +19,8 @@ def mock_dbus():
         mock_bus.get_proxy_object = MagicMock(return_value=mock_proxy)
         mock_proxy.get_interface = MagicMock(return_value=mock_iface)
 
-        # Make call_commit_text return a coroutine
+        # Make call_set_preedit_text return a coroutine
+        mock_iface.call_set_preedit_text = AsyncMock(return_value=None)
         mock_iface.call_commit_text = AsyncMock(return_value=None)
 
         yield mock_iface
@@ -27,7 +28,7 @@ def mock_dbus():
 
 @pytest.mark.asyncio
 async def test_stream_diff_tracks_diff(mock_dbus):
-    """stream_diff should only commit the NEW text, not the full text."""
+    """stream_diff should set preedit text with the full text each time."""
     from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 
     paster = MutterVirtualPaster()
@@ -38,15 +39,18 @@ async def test_stream_diff_tracks_diff(mock_dbus):
     await paster.stream_diff("Hello world")
     await paster.stream_diff("Hello world!")
 
-    # Check what was committed - should only be the DIFF each time
-    calls = mock_dbus.call_commit_text.call_args_list
+    # Check what was set as preedit - should be the full text each time
+    calls = mock_dbus.call_set_preedit_text.call_args_list
     assert len(calls) == 3
-    # First call: "Hello" (new)
+    # First call: "Hello" (full text)
     assert calls[0][0][0] == "Hello"
-    # Second call: " world" (only the new part, not "Hello world")
-    assert calls[1][0][0] == " world", f"Expected ' world' but got '{calls[1][0][0]}'"
-    # Third call: "!" (only the new part)
-    assert calls[2][0][0] == "!", f"Expected '!' but got '{calls[2][0][0]}'"
+    # Second call: "Hello world" (full text, not just diff)
+    assert calls[1][0][0] == "Hello world", f"Expected 'Hello world' but got '{calls[1][0][0]}'"
+    # Third call: "Hello world!" (full text)
+    assert calls[2][0][0] == "Hello world!", f"Expected 'Hello world!' but got '{calls[2][0][0]}'"
+    # All calls should have commit=False (preedit mode)
+    for call in calls:
+        assert call[0][3] is False, "Expected commit=False for preedit mode"
 
 
 @pytest.mark.asyncio
@@ -62,12 +66,12 @@ async def test_stream_diff_no_duplication(mock_dbus):
     await paster.stream_diff("Hello there")
     await paster.stream_diff("Hello there.")
 
-    # Check what was committed - should be ONLY the diff each time
-    calls = mock_dbus.call_commit_text.call_args_list
+    # Check what was set as preedit - should be the full text each time
+    calls = mock_dbus.call_set_preedit_text.call_args_list
     assert len(calls) == 3
     assert calls[0][0][0] == "Hello"  # First call: full text
-    assert calls[1][0][0] == " there"  # Second call: only new part
-    assert calls[2][0][0] == "."  # Third call: only new part
+    assert calls[1][0][0] == "Hello there"  # Second call: full text
+    assert calls[2][0][0] == "Hello there."  # Third call: full text
 
 
 @pytest.mark.asyncio
@@ -81,5 +85,27 @@ async def test_stream_diff_skip_if_same(mock_dbus):
     await paster.stream_diff("Hello")
     await paster.stream_diff("Hello")  # Same text
 
-    # Should only commit once
-    assert mock_dbus.call_commit_text.call_count == 1
+    # Should only set preedit once
+    assert mock_dbus.call_set_preedit_text.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_commit_preedit(mock_dbus):
+    """commit_preedit should commit the current preedit text."""
+    from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
+
+    paster = MutterVirtualPaster()
+    await paster.start()
+
+    # Stream some text
+    await paster.stream_diff("Hello world")
+
+    # Commit the preedit
+    result = await paster.commit_preedit()
+
+    assert result is True
+    # Should have called set_preedit_text with commit=True
+    calls = mock_dbus.call_set_preedit_text.call_args_list
+    assert len(calls) == 2  # One for stream_diff, one for commit_preedit
+    assert calls[1][0][0] == "Hello world"  # The text being committed
+    assert calls[1][0][3] is True  # commit=True

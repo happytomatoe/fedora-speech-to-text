@@ -496,6 +496,9 @@ class RecordingEngine:
                             len(text),
                         )
                         await typer.stream_diff(text)
+                        # For MutterVirtualPaster, commit the preedit text after streaming
+                        if isinstance(typer, MutterVirtualPaster):
+                            await typer.commit_preedit()
                     elif text and typer and not typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
 

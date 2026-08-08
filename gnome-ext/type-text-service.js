@@ -13,6 +13,12 @@ const TypeTextIface = `
     <method name="CommitText">
       <arg type="s" name="text" direction="in"/>
     </method>
+    <method name="SetPreeditText">
+      <arg type="s" name="text" direction="in"/>
+      <arg type="u" name="cursor" direction="in"/>
+      <arg type="u" name="anchor" direction="in"/>
+      <arg type="b" name="commit" direction="in"/>
+    </method>
   </interface>
 </node>`;
 
@@ -121,6 +127,22 @@ export class TypeTextService {
             console.log('VoiceToText: CommitText completed');
         } catch (e) {
             console.error('VoiceToText: CommitText failed:', e);
+            throw e;
+        }
+    }
+
+    SetPreeditText(text, cursor, anchor, commit) {
+        if (!Main.inputMethod.currentFocus) {
+            console.error('VoiceToText: SetPreeditText failed: no focused input context');
+            throw new Error('No focused input context');
+        }
+        try {
+            const mode = commit ? 1 : 0; // CLUTTER_PREEDIT_RESET_COMMIT or CLUTTER_PREEDIT_RESET_CLEAR
+            console.log(`VoiceToText: SetPreeditText setting ${text.length} chars, commit=${commit}`);
+            Main.inputMethod.set_preedit_text(text, cursor, anchor, mode);
+            console.log('VoiceToText: SetPreeditText completed');
+        } catch (e) {
+            console.error('VoiceToText: SetPreeditText failed:', e);
             throw e;
         }
     }
