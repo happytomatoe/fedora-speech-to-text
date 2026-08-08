@@ -266,7 +266,11 @@ reinstall-all: reinstall
 
 # @category gnome-ext
 # Install extension, then start a nested GNOME Shell
-gnome-ext-dev: reinstall gnome-ext-install
+# Run nested GNOME Shell with headless mode and configurable timeout (default 8s)
+# Usage: just gnome-ext-dev [TIMEOUT]
+# Example: just gnome-ext-dev 15
+[no-exit-message]
+gnome-ext-dev TIMEOUT='8': reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
@@ -447,6 +451,60 @@ gnome-ext-uninstall:
     echo "Extension uninstalled"
 
 # @category gnome-ext
+# Run nested GNOME Shell with stop-button-preview extension
+preview-buttons:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    # Install extension
+    DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
+    mkdir -p "$DEST"
+    cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
+    
+    # Enable it
+    gnome-extensions enable stop-button-preview@local 2>/dev/null || true
+    
+    echo "Starting nested GNOME Shell with button preview..."
+    echo "A window should appear on your screen."
+    echo "Click the puzzle piece icon in the top panel to see button options."
+    echo ""
+    
+    # Run nested shell
+    export MUTTER_DEBUG_NESTED=
+    dbus-run-session -- gnome-shell --wayland --devkit
+
+# @category gnome-ext
+# Quick check: run preview extension for 10s and report errors
+check-preview:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    
+    # Install extension
+    DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
+    mkdir -p "$DEST"
+    cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
+    
+    gnome-extensions enable stop-button-preview@local 2>/dev/null || true
+    
+    echo "Running preview extension for 10 seconds..."
+    LOG=$(mktemp)
+    timeout 10 bash -c 'export MUTTER_DEBUG_NESTED=; dbus-run-session -- gnome-shell --wayland --devkit' 2>&1 | tee "$LOG"
+    
+    # Check for extension errors (ignore known harmless warnings)
+    ERRORS=$(grep -i 'stop-button-preview.*error\|stop-button-preview.*critical\|CRITICAL.*stop-button' "$LOG" || true)
+    rm -f "$LOG"
+    
+    if [ -n "$ERRORS" ]; then
+        echo ""
+        echo "❌ ERRORS FOUND:"
+        echo "$ERRORS"
+        exit 1
+    else
+        echo ""
+        echo "✅ No errors from stop-button-preview extension"
+    fi
+
+# @category gnome-ext
 # Verify GTK4 widget APIs used in prefs.js actually exist (catches GTK3→GTK4 regressions)
 gtk4-api-check:
     gjs --module gnome-ext/tests/test-gtk4-api.js
@@ -473,6 +531,69 @@ gnome-ext-lint:
     glib-compile-schemas --strict gnome-ext/schemas/ 2>&1 || exit 1
     echo "All checks passed!"
 # Reinstall files and reset in GNOME Shell
+
+# @category gnome-ext
+# Quick check: run nested shell for N seconds and report errors (headless by default)
+gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
+    #!/usr/bin/env bash
+    set -uo pipefail
+    
+    LOG_DIR="$PWD/logs"
+    LOG_FILE="$LOG_DIR/gnome-ext-quick-check.log"
+    mkdir -p "$LOG_DIR"
+    echo "" > "$LOG_FILE"
+    
+    if ! rpm -q mutter-devkit &>/dev/null; then
+        echo "mutter-devkit not installed, installing..."
+        sudo dnf install -y mutter-devkit
+    fi
+    
+    UUID="voice-to-text@happytomatoe.com"
+    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+    if ! echo "$CURRENT" | grep -q "$UUID"; then
+      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
+      else
+        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
+      fi
+    fi
+    
+    export MUTTER_DEBUG_NESTED=
+    export MUTTER_DEBUG=1
+    
+    echo "Running nested shell for {{ TIMEOUT }}s (headless)..."
+    timeout {{ TIMEOUT }} bash -c '
+      dbus-run-session -- sh -c "
+        /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
+        sleep 0.3
+        voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
+        sleep 0.5
+        gnome-shell --wayland --headless --devkit
+      "
+    ' 2>&1 | tee -a "$LOG_FILE"
+    EXIT_CODE=${PIPESTATUS[0]}
+    
+    echo ""
+    echo "=== Results ==="
+    
+    # Check for extension errors
+    if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
+        echo "❌ Extension errors found:"
+        grep -E "CRITICAL|SyntaxError|Error.*extension|parsing error" "$LOG_FILE" | tail -10
+        exit 1
+    elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
+        echo "✅ Extension loaded successfully"
+        grep "VoiceToText" "$LOG_FILE" | tail -5
+    else
+        echo "⚠️  No extension messages found"
+    fi
+    
+    if [ $EXIT_CODE -eq 124 ]; then
+        echo "✅ Timeout reached (expected)"
+    fi
+    
+    echo ""
+    echo "Full log: $LOG_FILE"
 gnome-ext-reload:
     ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
 

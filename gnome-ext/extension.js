@@ -72,6 +72,9 @@ export default class VoiceToTextExtension extends Extension {
         }
         console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
         this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
+        if (this._audioLevelWidget) {
+            this._audioLevelWidget.onStop = () => this._stop();
+        }
         this._typeTextService = new TypeTextService();
         this._typeTextService.enable();
         this._indicator.onStart = () => this._start();
@@ -93,6 +96,7 @@ export default class VoiceToTextExtension extends Extension {
                 console.log(`VoiceToText: show-audio-level-widget changed to ${enabled}`);
                 if (enabled && !this._audioLevelWidget) {
                     this._audioLevelWidget = new AudioLevelWidget();
+                    this._audioLevelWidget.onStop = () => this._stop();
                     if (this._recording) this._audioLevelWidget.show();
                     console.log('VoiceToText: AudioLevelWidget created');
                 } else if (!enabled && this._audioLevelWidget) {

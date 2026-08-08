@@ -68,11 +68,12 @@ export const VoiceIndicator = GObject.registerClass(
                 reactive: true,
                 can_focus: true,
                 track_hover: true,
+                style_class: 'stop-btn',
             });
             this._stopBtn.add_child(
                 new St.Icon({
-                    icon_name: 'media-playback-stop-symbolic',
-                    style_class: 'system-status-icon',
+                    icon_name: 'window-close-symbolic',
+                    style: 'color: currentColor; icon-size: 9px;',
                 })
             );
             this._stopBtn.connect('button-press-event', () => {

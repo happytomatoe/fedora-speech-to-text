@@ -51,7 +51,7 @@ When adding or removing an output method, update ALL of these files:
   - `just run <args>` — run the CLI with `PYTHONPATH=src`.
   - `just service-run` — run the D-Bus service in the foreground.
   - `just service-install` / `service-uninstall` — install/uninstall the user D-Bus service.
-  - `just gnome-ext-dev` — install extension and launch a nested GNOME Shell for development.
+  - `just gnome-ext-dev [TIMEOUT]` — install extension and run nested GNOME Shell (headless, default 8s). Use `just gnome-ext-dev 15` for longer checks.
 - Python version: **3.13+** (`requires-python`).
 
 ## Linting and type checking
@@ -60,6 +60,32 @@ When adding or removing an output method, update ALL of these files:
 - **pyright** for types: `pyright .`.
 - **bun** + **eslint** for GNOME extension JS linting (see `eslint.config.cjs`).
 - **lefthook** is configured (see `lefthook.yml`); run `lefthook run pre-commit` or `just setup` to install hooks.
+
+## GNOME Extension Development
+
+When modifying files in `gnome-ext/`:
+
+1. **Quick check** — verify extension loads without errors:
+   ```sh
+   just gnome-ext-dev          # 8s headless check (default)
+   just gnome-ext-dev 15       # 15s timeout
+   ```
+2. **Lint** — run JS linting:
+   ```sh
+   bun run eslint gnome-ext/   # or specific file
+   ```
+3. **Visual testing** — if you need to see the UI:
+   - E2E tests: `just e2e` (runs in QEMU VM)
+   - AT-SPI inspection: `just atspi-tree` (after `just gnome-ext-dev`)
+
+**Common errors:**
+- `errcode:15` in stylesheet = CSS syntax error in `gnome-ext/stylesheet.css`
+- `JS ERROR` in log = check `gnome-ext/extension.js` or other JS files
+
+**Key files:**
+- `gnome-ext/stylesheet.css` — CSS (must not have syntax errors)
+- `gnome-ext/extension.js` — main entry point
+- `gnome-ext/audio-level-widget.js` — the audio level OSD widget
 
 ## Testing
 

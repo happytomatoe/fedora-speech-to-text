@@ -14,8 +14,8 @@ export class AudioLevelWidget {
         this._smoothedLevel = 0;
         this._visible = false;
         this._showTimeoutId = 0;
+        this.onStop = null;  // callback when stop button clicked
     }
-
     show() {
         if (this._widget) return;
 
@@ -53,6 +53,26 @@ export class AudioLevelWidget {
             this._widget.add_child(seg);
             this._segments.push(seg);
         }
+
+        // Stop button (X icon, ghost circle → red on hover)
+        this._stopButton = new St.Button({
+            style_class: 'osd-stop-button',
+            accessible_name: 'Stop recording',
+            reactive: true,
+            track_hover: true,
+            x_align: 2,  // CENTER
+            y_align: 2,  // CENTER
+        });
+        this._stopButton.set_size(36, 36);
+        const stopIcon = new St.Icon({
+            icon_name: 'window-close-symbolic',
+            style_class: 'osd-stop-icon',
+        });
+        this._stopButton.add_child(stopIcon);
+        this._stopButton.connect('clicked', () => {
+            if (this.onStop) this.onStop();
+        });
+        this._widget.add_child(this._stopButton);
 
         Main.layoutManager.addTopChrome(this._widget);
         this._positionWidget();
@@ -100,10 +120,10 @@ export class AudioLevelWidget {
             }
 
             // Only update if class changed
-            const currentClass = seg.has_style_class_name('green')
-                ? 'green' : seg.has_style_class_name('yellow')
-                ? 'yellow' : seg.has_style_class_name('red')
-                ? 'red' : 'idle';
+            let currentClass = 'idle';
+            if (seg.has_style_class_name('green')) currentClass = 'green';
+            else if (seg.has_style_class_name('yellow')) currentClass = 'yellow';
+            else if (seg.has_style_class_name('red')) currentClass = 'red';
 
             if (targetClass !== currentClass) {
                 seg.remove_style_class_name(currentClass);
