@@ -273,7 +273,7 @@ gnome-ext-dev: reinstall gnome-ext-install
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
     # (where the Secret Service is reachable) so the nested D-Bus service
-    # inherits them. The wrapper does this for the real service; gnome-ext-dev
+    # inherits them. The wrapper does this for the real service; dev
     # launches voice-to-text-dbus directly and must load keys here instead.
     if command -v secret-tool &>/dev/null; then
         export VOXTRAL_API_KEY=$(secret-tool lookup service voice-to-text username voxtral 2>/dev/null)
@@ -287,28 +287,18 @@ gnome-ext-dev: reinstall gnome-ext-install
         exit 1
     fi
     LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    LOG_FILE="$LOG_DIR/dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing..."
         if command -v rpm-ostree &>/dev/null; then
             sudo rpm-ostree install mutter-devkit
-            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-dev'." >&2
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just dev'." >&2
             exit 1
         else
             sudo dnf install -y mutter-devkit
         fi
-    fi
-    UUID="voice-to-text@happytomatoe.com"
-    # Enable extension via dconf (gnome-extensions CLI needs a running session)
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
     fi
     GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
     if [ "$GNOME_VERSION" -ge 49 ]; then
@@ -323,24 +313,10 @@ gnome-ext-dev: reinstall gnome-ext-install
     # GNOME extension can find and call it on real hardware.
     # Also start AT-SPI accessibility bus for UI inspection.
     # Trap EXIT/INT/TERM to kill the background services when the shell exits,
-    dbus-run-session -- sh -c "
-      # Start AT-SPI accessibility bus (needed for UI inspection)
-      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_PID=\$!
-      sleep 0.5
-
-      # Start AT-SPI registry daemon (registers accessibility providers)
-      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_REG_PID=\$!
-      sleep 0.5
-
-      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
-      DBUS_PID=\$!
-      sleep 1
-      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
-      echo 'AT-SPI bus running. Use: just atspi-tree' >> \"$LOG_FILE\"
-      gnome-shell --wayland $DEVKIT_FLAG
-    " 2>&1 | tee -a "$LOG_FILE"
+    # Remove gnome-shell-disable-extensions file (disables all extensions in nested session)
+    rm -f /run/user/1000/gnome-shell-disable-extensions
+    export LOG_FILE DEVKIT_FLAG
+    dbus-run-session -- sh "$PWD/scripts/gnome-ext-dev-session.sh"
     echo "Logs written to $LOG_FILE"
 # @category gnome-ext
 # Start nested GNOME Shell and wait for GDM registration, then check for errors
@@ -348,7 +324,7 @@ gnome-ext-check: reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euo pipefail
     LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    LOG_FILE="$LOG_DIR/dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then

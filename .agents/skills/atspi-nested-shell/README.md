@@ -23,7 +23,7 @@ atspi-nested-shell/
 
 Start the nested shell first:
 ```bash
-just gnome-ext-dev
+just dev
 ```
 
 ## Quick Start

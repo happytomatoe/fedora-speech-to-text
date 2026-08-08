@@ -47,6 +47,7 @@ Batch (`POST /v1/listen`) query parameters:
 | `detect_language` | Auto-detect language | `false` | boolean |
 | `dictation` | Optimize for dictation | `false` | boolean |
 | `measurements` | Include measurement output | `false` | boolean |
+| `keyterm` | Terms to bias recognition | none | repeatable param; 500 tokens max; Nova-3 & Flux only |
 
 Streaming-only query parameters (`wss://.../v1/listen`):
 

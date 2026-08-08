@@ -44,9 +44,11 @@ class SixtyProvider(BatchProvider, StreamingProvider):
     ) -> str:
         logger.info("Transcribing %s with 60db", audio_path)
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        data: dict[str, str] = {}
+        data: dict[str, str | list[str]] = {}
         if language and language != "auto":
             data["language"] = language
+        if custom_words:
+            data["context"] = ", ".join(custom_words)
         try:
             async with httpx.AsyncClient() as client:
                 with open(audio_path, "rb") as audio_file:
