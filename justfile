@@ -42,8 +42,6 @@ lint-fix:
     uv run ruff check --fix .
     uv run ruff format .
     echo "Lint fixes applied."
-# @category test
-test-all: test
 
 install:
     uv tool install -e .
@@ -254,21 +252,12 @@ wpm *ARGS:
 service-restart: service-stop
     @echo "Service stopped. It will auto-start when GNOME extension requests it."
 
-# @category service
-# Reinstall from source
-service-reinstall: reinstall
-    @echo "Done. Service will auto-start on next extension use."
-
-# @category service
-# Alias for reinstall (kept for backward compatibility)
-reinstall-all: reinstall
-    @echo "Done. Service and extension reinstalled."
 
 # @category gnome-ext
 # Install extension, then start a nested GNOME Shell for interactive development
 # Usage: just gnome-ext-dev
 [no-exit-message]
-gnome-ext-dev: reinstall
+gnome-ext-dev: reinstall gnome-ext-setup-devkit gnome-ext-enable
     #!/usr/bin/env bash
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
@@ -290,26 +279,6 @@ gnome-ext-dev: reinstall
     LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
-    if ! rpm -q mutter-devkit &>/dev/null; then
-        echo "mutter-devkit not installed, installing..."
-        if command -v rpm-ostree &>/dev/null; then
-            sudo rpm-ostree install mutter-devkit
-            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-dev'." >&2
-            exit 1
-        else
-            sudo dnf install -y mutter-devkit
-        fi
-    fi
-    UUID="voice-to-text@happytomatoe.com"
-    # Enable extension via dconf (gnome-extensions CLI needs a running session)
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
-    fi
     GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
     if [ "$GNOME_VERSION" -ge 49 ]; then
       DEVKIT_FLAG=--devkit
@@ -318,7 +287,6 @@ gnome-ext-dev: reinstall
       DEVKIT_FLAG=--nested
       export MUTTER_DEBUG_NESTED=1
     fi
-
     # Start the D-Bus service inside the isolated session bus so the
     # GNOME extension can find and call it on real hardware.
     # Also start AT-SPI accessibility bus for UI inspection.
@@ -342,91 +310,6 @@ gnome-ext-dev: reinstall
       gnome-shell --wayland $DEVKIT_FLAG
     " 2>&1 | tee -a "$LOG_FILE"
     echo "Logs written to $LOG_FILE"
-# @category gnome-ext
-# Start nested GNOME Shell and wait for GDM registration, then check for errors
-gnome-ext-check: reinstall
-    #!/usr/bin/env bash
-    set -euo pipefail
-    LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
-    mkdir -p "$LOG_DIR"
-    echo "" > "$LOG_FILE"
-    if ! rpm -q mutter-devkit &>/dev/null; then
-        echo "mutter-devkit not installed, installing..."
-        if command -v rpm-ostree &>/dev/null; then
-            sudo rpm-ostree install mutter-devkit
-            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun." >&2
-            exit 1
-        else
-            sudo dnf install -y mutter-devkit
-        fi
-    fi
-    UUID="voice-to-text@happytomatoe.com"
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
-    fi
-    GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
-    if [ "$GNOME_VERSION" -ge 49 ]; then
-      DEVKIT_FLAG=--devkit
-      export MUTTER_DEBUG_NESTED=
-    else
-      DEVKIT_FLAG=--nested
-      export MUTTER_DEBUG_NESTED=1
-    fi
-    # Start nested shell in background
-    dbus-run-session -- sh -c "
-      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_PID=\$!
-      sleep 0.5
-      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_REG_PID=\$!
-      sleep 0.5
-      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
-      DBUS_PID=\$!
-      sleep 1
-      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
-      gnome-shell --wayland $DEVKIT_FLAG
-    " >> "$LOG_FILE" 2>&1 &
-    NESTED_PID=$!
-    echo "Nested shell started (PID: $NESTED_PID), waiting for GDM..."
-    # Wait for GDM registration or timeout
-    TIMEOUT=15
-    for i in $(seq 1 $TIMEOUT); do
-      if grep -q "Registering display with GDM" "$LOG_FILE" 2>/dev/null; then
-        echo "✅ GDM registered (${i}s)"
-        sleep 1  # Let extension finish loading
-        break
-      fi
-      if ! ps -p $NESTED_PID >/dev/null 2>&1; then
-        echo "❌ Nested shell exited prematurely"
-        break
-      fi
-      sleep 1
-    done
-    if [ $i -eq $TIMEOUT ]; then
-      echo "⚠️  Timeout waiting for GDM (${TIMEOUT}s)"
-    fi
-    # Check for extension errors
-    echo ""
-    echo "=== Extension Status ==="
-    if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
-      echo "❌ Extension errors found:"
-      grep -E "CRITICAL|SyntaxError|Error.*extension" "$LOG_FILE" | tail -5
-    elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
-      echo "✅ Extension loaded successfully"
-      grep "VoiceToText" "$LOG_FILE" | tail -5
-    else
-      echo "⚠️  No extension messages found in logs"
-    fi
-    echo ""
-    echo "Full log: $LOG_FILE"
-    echo "Kill with: kill $NESTED_PID"
-    wait $NESTED_PID 2>/dev/null
 # Install extension files directly (no nested shell)
 gnome-ext-install:
     #!/usr/bin/env bash
@@ -450,19 +333,50 @@ gnome-ext-uninstall:
     echo "Extension uninstalled"
 
 # @category gnome-ext
-# Run nested GNOME Shell with stop-button-preview extension
-preview-buttons:
+# Install mutter-devkit if not present (helper for nested shell recipes)
+gnome-ext-setup-devkit:
     #!/usr/bin/env bash
     set -euo pipefail
+    if ! rpm -q mutter-devkit &>/dev/null; then
+        echo "mutter-devkit not installed, installing..."
+        if command -v rpm-ostree &>/dev/null; then
+            sudo rpm-ostree install mutter-devkit
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun." >&2
+            exit 1
+        else
+            sudo dnf install -y mutter-devkit
+        fi
+    fi
 
-    # Install extension
+# @category gnome-ext
+# Enable extension via dconf (helper for nested shell recipes)
+gnome-ext-enable:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    UUID="voice-to-text@happytomatoe.com"
+    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+    if ! echo "$CURRENT" | grep -q "$UUID"; then
+      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
+      else
+        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
+      fi
+    fi
+
+# @category gnome-ext
+# Install preview extension to extensions directory (helper)
+install-preview-extension:
+    #!/usr/bin/env bash
+    set -euo pipefail
     DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
     mkdir -p "$DEST"
     cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
-
-    # Enable it
     gnome-extensions enable stop-button-preview@local 2>/dev/null || true
-
+# @category gnome-ext
+# Run nested GNOME Shell with stop-button-preview extension
+preview-buttons: install-preview-extension
+    #!/usr/bin/env bash
+    set -euo pipefail
     echo "Starting nested GNOME Shell with button preview..."
     echo "A window should appear on your screen."
     echo "Click the puzzle piece icon in the top panel to see button options."
@@ -474,17 +388,9 @@ preview-buttons:
 
 # @category gnome-ext
 # Quick check: run preview extension for 10s and report errors
-check-preview:
+check-preview: install-preview-extension
     #!/usr/bin/env bash
     set -uo pipefail
-
-    # Install extension
-    DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
-    mkdir -p "$DEST"
-    cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
-
-    gnome-extensions enable stop-button-preview@local 2>/dev/null || true
-
     echo "Running preview extension for 10 seconds..."
     LOG=$(mktemp)
     # Run nested shell in a new process group; on EXIT/INT/TERM kill the whole tree.
@@ -540,7 +446,7 @@ gnome-ext-lint:
 
 # @category gnome-ext
 # Quick check: run nested shell for N seconds and report errors (headless by default)
-gnome-ext-quick-check TIMEOUT='8': reinstall
+gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-setup-devkit gnome-ext-enable
     #!/usr/bin/env bash
     set -uo pipefail
 
@@ -548,28 +454,6 @@ gnome-ext-quick-check TIMEOUT='8': reinstall
     LOG_FILE="$LOG_DIR/gnome-ext-quick-check.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
-
-    if ! rpm -q mutter-devkit &>/dev/null; then
-        echo "mutter-devkit not installed, installing...";
-        if command -v rpm-ostree &>/dev/null; then
-            sudo rpm-ostree install mutter-devkit;
-            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-quick-check'." >&2;
-            exit 1;
-        else
-            sudo dnf install -y mutter-devkit;
-        fi
-    fi
-
-    UUID="voice-to-text@happytomatoe.com"
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
-    fi
-
     export MUTTER_DEBUG_NESTED=
     export MUTTER_DEBUG=1
 
