@@ -298,16 +298,6 @@ gnome-ext-dev: reinstall gnome-ext-install
             sudo dnf install -y mutter-devkit
         fi
     fi
-    UUID="voice-to-text@happytomatoe.com"
-    # Enable extension via dconf (gnome-extensions CLI needs a running session)
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
-    fi
     GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
     if [ "$GNOME_VERSION" -ge 49 ]; then
       DEVKIT_FLAG=--devkit
@@ -321,24 +311,10 @@ gnome-ext-dev: reinstall gnome-ext-install
     # GNOME extension can find and call it on real hardware.
     # Also start AT-SPI accessibility bus for UI inspection.
     # Trap EXIT/INT/TERM to kill the background services when the shell exits,
-    dbus-run-session -- sh -c "
-      # Start AT-SPI accessibility bus (needed for UI inspection)
-      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_PID=\$!
-      sleep 0.5
-
-      # Start AT-SPI registry daemon (registers accessibility providers)
-      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_REG_PID=\$!
-      sleep 0.5
-
-      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
-      DBUS_PID=\$!
-      sleep 1
-      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
-      echo 'AT-SPI bus running. Use: just atspi-tree' >> \"$LOG_FILE\"
-      gnome-shell --wayland $DEVKIT_FLAG
-    " 2>&1 | tee -a "$LOG_FILE"
+    # Remove gnome-shell-disable-extensions file (disables all extensions in nested session)
+    rm -f /run/user/1000/gnome-shell-disable-extensions
+    export LOG_FILE DEVKIT_FLAG
+    dbus-run-session -- sh "$PWD/scripts/gnome-ext-dev-session.sh"
     echo "Logs written to $LOG_FILE"
 # @category gnome-ext
 # Start nested GNOME Shell and wait for GDM registration, then check for errors
