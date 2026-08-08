@@ -1,6 +1,7 @@
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const NUM_SEGMENTS = 10;
 const MARGIN_BOTTOM = 60;
@@ -57,9 +58,10 @@ export class AudioLevelWidget {
         // Stop button (X icon, ghost circle → red on hover)
         this._stopButton = new St.Button({
             style_class: 'osd-stop-button',
-            accessible_name: 'Stop recording',
+            accessible_name: _('Stop recording'),
             reactive: true,
             track_hover: true,
+            can_focus: true,
             x_align: 2,  // CENTER
             y_align: 2,  // CENTER
         });
