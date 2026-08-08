@@ -16,6 +16,7 @@ const VoiceToTextIface = `
       <arg type="s" name="config" direction="in"/>
     </method>
     <method name="StopRecording"/>
+    <method name="CancelRecording"/>
     <method name="GetStatus">
       <arg type="s" direction="out"/>
     </method>
@@ -72,6 +73,9 @@ export default class VoiceToTextExtension extends Extension {
         }
         console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
         this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
+        if (this._audioLevelWidget) {
+            this._audioLevelWidget.onCancel = () => this._cancel();
+        }
         this._typeTextService = new TypeTextService();
         this._typeTextService.enable();
         this._indicator.onStart = () => this._start();
@@ -93,6 +97,7 @@ export default class VoiceToTextExtension extends Extension {
                 console.log(`VoiceToText: show-audio-level-widget changed to ${enabled}`);
                 if (enabled && !this._audioLevelWidget) {
                     this._audioLevelWidget = new AudioLevelWidget();
+                    this._audioLevelWidget.onCancel = () => this._cancel();
                     if (this._recording) this._audioLevelWidget.show();
                     console.log('VoiceToText: AudioLevelWidget created');
                 } else if (!enabled && this._audioLevelWidget) {
@@ -337,6 +342,30 @@ export default class VoiceToTextExtension extends Extension {
             e => {
                 console.error(
                     'VoiceToText: D-Bus StopRecording failed:',
+                    e.message
+                );
+                this._setIdle();
+            }
+        );
+    }
+
+    _cancel() {
+        console.log('VoiceToText: _cancel called');
+        if (!this._recording) return;
+
+        if (!this._proxy) {
+            console.log('VoiceToText: D-Bus proxy not available');
+            this._setIdle();
+            return;
+        }
+
+        this._audioLevelWidget?.hide();
+
+        this._proxy.CancelRecordingAsync().then(
+            () => console.log('VoiceToText: CancelRecording called via D-Bus'),
+            e => {
+                console.error(
+                    'VoiceToText: D-Bus CancelRecording failed:',
                     e.message
                 );
                 this._setIdle();

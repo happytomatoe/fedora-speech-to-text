@@ -104,9 +104,23 @@ export class VmManager {
       }
     }
 
+    // Check if overlay is corrupted by verifying its backing file chain
+    // A missing socket alone is NOT evidence of corruption — QEMU removes
+    // the socket on normal shutdown. Only delete if the overlay is actually unusable.
+    const staleOverlay = existsSync(overlayImage) && (() => {
+      try {
+        const info = Bun.spawnSync(["qemu-img", "info", "--output=json", overlayImage]);
+        if (info.exitCode !== 0) return true; // corrupted/unreadable
+        const parsed = JSON.parse(info.stdout.toString());
+        return !parsed?.['backing-filename']; // missing backing file = corrupt
+      } catch {
+        return true; // can't inspect = assume stale
+      }
+    })();
+
     Bun.spawnSync(["rm", "-f", socketPath]);
 
-    if (updateMode || !existsSync(overlayImage)) {
+    if (updateMode || staleOverlay || !existsSync(overlayImage)) {
       console.log("Creating fresh VM overlay...");
       const proc = Bun.spawnSync([
         "qemu-img", "create", "-f", "qcow2",

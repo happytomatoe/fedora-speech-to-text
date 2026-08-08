@@ -194,6 +194,7 @@ class RecordingEngine:
         self._batch_provider = None
         self._task: asyncio.Task | None = None
         self._cancel_event = asyncio.Event()
+        self._skip_output = False
         self._typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
         # Initialize stop_timeout with default (will be overridden in start())
         config_mgr = ConfigManager()
@@ -241,6 +242,26 @@ class RecordingEngine:
                     await asyncio.wait_for(task, timeout=5.0)
                 except (TimeoutError, asyncio.CancelledError):
                     pass
+        if self.state != EngineState.IDLE:
+            self.state = EngineState.IDLE
+            self._notify_state()
+
+    async def cancel(self) -> None:
+        """Cancel recording and discard any output."""
+        logger.info("Cancelling recording")
+        self._skip_output = True
+        self._cancel_event.set()
+        task = self._task
+        if task and not task.done():
+            try:
+                await asyncio.wait_for(task, timeout=self._stop_timeout)
+            except (TimeoutError, asyncio.CancelledError):
+                task.cancel()
+                try:
+                    await asyncio.wait_for(task, timeout=5.0)
+                except (TimeoutError, asyncio.CancelledError):
+                    pass
+        self._skip_output = False
         if self.state != EngineState.IDLE:
             self.state = EngineState.IDLE
             self._notify_state()
@@ -430,6 +451,14 @@ class RecordingEngine:
             _step("recording_stopped")
             self.state = EngineState.PROCESSING
             self._notify_state()
+            if self._skip_output:
+                logger.info("Output skipped (cancel)")
+                if filepath:
+                    try:
+                        os.unlink(filepath)
+                    except OSError:
+                        pass
+                return
             if filepath:
                 try:
                     postprocess_cfg = config_mgr.config.get("postprocess", {})
@@ -453,6 +482,11 @@ class RecordingEngine:
                                 custom_filler_words=postprocess_cfg.get("custom_filler_words"),
                             )
                     _step("postprocess_done")
+
+                    # Check cancellation again after transcription completes
+                    if self._skip_output:
+                        logger.info("Output skipped (cancel) after transcription")
+                        return
 
                     # If we were typing incrementally, apply final corrections
                     if text and typer and typer._usable:
