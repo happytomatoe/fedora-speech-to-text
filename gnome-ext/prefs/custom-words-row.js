@@ -4,7 +4,6 @@
  */
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
-import Gio from 'gi://Gio';
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 /**
@@ -172,36 +171,4 @@ export function createCustomWordsGroup(
     };
 
     return {group, populate};
-}
-
-/**
- * Create the custom words threshold row.
- * @param {Gio.Settings} settings
- * @param {() => Promise<void>} syncAllToConfig
- * @returns {Adw.SpinRow}
- */
-export function createThresholdRow(settings, syncAllToConfig) {
-    const row = new Adw.SpinRow({
-        title: _('Matching Threshold'),
-        subtitle: _('How strict fuzzy matching is (0=any match, 1=exact)'),
-        digits: 2,
-        adjustment: new Gtk.Adjustment({
-            lower: 0.0,
-            upper: 1.0,
-            step_increment: 0.1,
-            page_increment: 0.25,
-        }),
-    });
-    settings.bind(
-        'custom-words-threshold',
-        row,
-        'value',
-        Gio.SettingsBindFlags.DEFAULT
-    );
-    row.connect('notify::value', () =>
-        syncAllToConfig().catch(e =>
-            console.error('VoiceToText: threshold sync failed:', e)
-        )
-    );
-    return row;
 }

@@ -201,7 +201,7 @@ class TestElevenLabsBiasing:
             result = await provider.transcribe_file(str(wav), custom_words=["ChatGPT", "OpenAI"])
 
         assert result == "hello"
-        assert captured["data"]["keyterms"] == "ChatGPT,OpenAI"
+        assert captured["data"]["keyterms"] == ["ChatGPT", "OpenAI"]
 
     @pytest.mark.asyncio
     async def test_no_keyterms_when_empty(self, tmp_path: Path) -> None:

@@ -13,8 +13,6 @@ dependencies = [
   "websockets~=14.0",
   "dbus-next~=0.2.3",
   "mistralai[realtime]~=2.4,!=2.4.6",
-  "rapidfuzz~=3.14",
-  "jellyfish~=1.2",
   "moonshine-voice~=0.1.1",
 ]
 
