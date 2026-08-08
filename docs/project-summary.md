@@ -15,11 +15,12 @@ Lint/format via ruff, types via pyright.
 
 ## Transcription providers
 
-| Provider   | Type  |
-|------------|-------|
-| Voxtral    | cloud |
-| Groq       | cloud |
-| Deepgram   | cloud |
-| 60db       | cloud |
-| ElevenLabs | cloud |
-| Parakeet   | local |
+| Provider   | Type  | Streaming |
+|------------|-------|-----------|
+| Moonshine  | local | ✅        |
+| Parakeet   | local | ❌        |
+| Voxtral    | cloud | ✅        |
+| Deepgram   | cloud | ✅        |
+| 60db       | cloud | ✅        |
+| Groq       | cloud | ❌        |
+| ElevenLabs | cloud | ❌        |
