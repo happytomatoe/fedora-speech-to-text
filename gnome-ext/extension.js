@@ -16,6 +16,7 @@ const VoiceToTextIface = `
       <arg type="s" name="config" direction="in"/>
     </method>
     <method name="StopRecording"/>
+    <method name="CancelRecording"/>
     <method name="GetStatus">
       <arg type="s" direction="out"/>
     </method>
