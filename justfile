@@ -445,6 +445,7 @@ gnome-ext-install:
 
 # Uninstall extension by removing it from the extensions directory
 gnome-ext-uninstall:
+    gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true
     rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
     echo "Extension uninstalled"
 
