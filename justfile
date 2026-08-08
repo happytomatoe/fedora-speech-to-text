@@ -287,8 +287,8 @@ gnome-ext-dev: reinstall
         exit 1
     fi
     # Disable extension on host so it only loads in nested shell
-    gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true
-    gnome-extensions uninstall voice-to-text@happytomatoe.com 2>/dev/null || true
+    gnome-extensions list | grep -q voice-to-text@happytomatoe.com && gnome-extensions disable voice-to-text@happytomatoe.com
+    gnome-extensions uninstall voice-to-text@happytomatoe.com
     LOG_DIR="$PWD/logs"
     LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
     mkdir -p "$LOG_DIR"
