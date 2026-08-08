@@ -1,0 +1,2030 @@
+{
+    "total": 9,
+    "p": 1,
+    "ps": 500,
+    "paging": {
+        "pageIndex": 1,
+        "pageSize": 500,
+        "total": 9
+    },
+    "effortTotal": 122,
+    "issues": [
+        {
+            "key": "36fd3644-a55b-493c-9f25-0d6c0ce2541f",
+            "rule": "python:S7503",
+            "severity": "MINOR",
+            "component": "voice-to-text:src/voice_to_text/mutter_virtual_paster.py",
+            "project": "voice-to-text",
+            "line": 76,
+            "hash": "1934ddb7168ea1b412973a312c60451c",
+            "textRange": {
+                "startLine": 76,
+                "endLine": 76,
+                "startOffset": 14,
+                "endOffset": 18
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/mutter_virtual_paster.py",
+                            "textRange": {
+                                "startLine": 76,
+                                "endLine": 76,
+                                "startOffset": 4,
+                                "endOffset": 9
+                            },
+                            "msg": "This function is async.",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Use asynchronous features in this function or remove the `async` keyword.",
+            "effort": "5min",
+            "debt": "5min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "async"
+            ],
+            "creationDate": "2026-08-02T18:37:01+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "CONVENTIONAL",
+            "cleanCodeAttributeCategory": "CONSISTENT",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "MEDIUM"
+                },
+                {
+                    "softwareQuality": "RELIABILITY",
+                    "severity": "LOW"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "288c0414-13ba-47ef-a58b-0a89ad42c6cf",
+            "rule": "python:S7503",
+            "severity": "MINOR",
+            "component": "voice-to-text:src/voice_to_text/mutter_virtual_typer.py",
+            "project": "voice-to-text",
+            "line": 97,
+            "hash": "1934ddb7168ea1b412973a312c60451c",
+            "textRange": {
+                "startLine": 97,
+                "endLine": 97,
+                "startOffset": 14,
+                "endOffset": 18
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/mutter_virtual_typer.py",
+                            "textRange": {
+                                "startLine": 97,
+                                "endLine": 97,
+                                "startOffset": 4,
+                                "endOffset": 9
+                            },
+                            "msg": "This function is async.",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Use asynchronous features in this function or remove the `async` keyword.",
+            "effort": "5min",
+            "debt": "5min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "async"
+            ],
+            "creationDate": "2026-08-02T18:37:01+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "CONVENTIONAL",
+            "cleanCodeAttributeCategory": "CONSISTENT",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "MEDIUM"
+                },
+                {
+                    "softwareQuality": "RELIABILITY",
+                    "severity": "LOW"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "09b10b81-0f7b-4ae5-a4fd-2ec0ce673c7a",
+            "rule": "python:S3776",
+            "severity": "CRITICAL",
+            "component": "voice-to-text:src/voice_to_text/engine.py",
+            "project": "voice-to-text",
+            "line": 266,
+            "hash": "08d5de27513d23c7c65f0388c34b69d7",
+            "textRange": {
+                "startLine": 266,
+                "endLine": 266,
+                "startOffset": 14,
+                "endOffset": 18
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 278,
+                                "endLine": 278,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 295,
+                                "endLine": 295,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 297,
+                                "endLine": 297,
+                                "startOffset": 20,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 301,
+                                "endLine": 301,
+                                "startOffset": 20,
+                                "endOffset": 24
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 305,
+                                "endLine": 305,
+                                "startOffset": 16,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 307,
+                                "endLine": 307,
+                                "startOffset": 20,
+                                "endOffset": 22
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 317,
+                                "endLine": 317,
+                                "startOffset": 12,
+                                "endOffset": 18
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 324,
+                                "endLine": 324,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 341,
+                                "endLine": 341,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 341,
+                                "endLine": 341,
+                                "startOffset": 24,
+                                "endOffset": 27
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 343,
+                                "endLine": 343,
+                                "startOffset": 16,
+                                "endOffset": 20
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 343,
+                                "endLine": 343,
+                                "startOffset": 26,
+                                "endOffset": 29
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 363,
+                                "endLine": 363,
+                                "startOffset": 26,
+                                "endOffset": 28
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 371,
+                                "endLine": 371,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 374,
+                                "endLine": 374,
+                                "startOffset": 20,
+                                "endOffset": 26
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 384,
+                                "endLine": 384,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 391,
+                                "endLine": 391,
+                                "startOffset": 16,
+                                "endOffset": 21
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 394,
+                                "endLine": 394,
+                                "startOffset": 20,
+                                "endOffset": 26
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 396,
+                                "endLine": 396,
+                                "startOffset": 20,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 400,
+                                "endLine": 400,
+                                "startOffset": 20,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 404,
+                                "endLine": 404,
+                                "startOffset": 20,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 404,
+                                "endLine": 404,
+                                "startOffset": 35,
+                                "endOffset": 38
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 406,
+                                "endLine": 406,
+                                "startOffset": 24,
+                                "endOffset": 26
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 408,
+                                "endLine": 408,
+                                "startOffset": 20,
+                                "endOffset": 24
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 416,
+                                "endLine": 416,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 426,
+                                "endLine": 426,
+                                "startOffset": 20,
+                                "endOffset": 26
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 429,
+                                "endLine": 429,
+                                "startOffset": 8,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 431,
+                                "endLine": 431,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 435,
+                                "endLine": 435,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 435,
+                                "endLine": 435,
+                                "startOffset": 33,
+                                "endOffset": 36
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 439,
+                                "endLine": 439,
+                                "startOffset": 16,
+                                "endOffset": 19
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 446,
+                                "endLine": 446,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 449,
+                                "endLine": 449,
+                                "startOffset": 16,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 453,
+                                "endLine": 453,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 456,
+                                "endLine": 456,
+                                "startOffset": 16,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 458,
+                                "endLine": 458,
+                                "startOffset": 12,
+                                "endOffset": 16
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 461,
+                                "endLine": 461,
+                                "startOffset": 16,
+                                "endOffset": 22
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Refactor this function to reduce its Cognitive Complexity from 56 to the 15 allowed.",
+            "effort": "46min",
+            "debt": "46min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "brain-overload"
+            ],
+            "creationDate": "2026-08-02T14:26:28+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "FOCUSED",
+            "cleanCodeAttributeCategory": "ADAPTABLE",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "HIGH"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "14ac0295-ad2c-4325-888f-17782095bcd6",
+            "rule": "python:S3776",
+            "severity": "CRITICAL",
+            "component": "voice-to-text:src/voice_to_text/typer.py",
+            "project": "voice-to-text",
+            "line": 188,
+            "hash": "d221602af12213412ef656034e01b49b",
+            "textRange": {
+                "startLine": 188,
+                "endLine": 188,
+                "startOffset": 14,
+                "endOffset": 30
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 194,
+                                "endLine": 194,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 194,
+                                "endLine": 194,
+                                "startOffset": 49,
+                                "endOffset": 51
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 196,
+                                "endLine": 196,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 205,
+                                "endLine": 205,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 205,
+                                "endLine": 205,
+                                "startOffset": 28,
+                                "endOffset": 31
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 210,
+                                "endLine": 210,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 212,
+                                "endLine": 212,
+                                "startOffset": 16,
+                                "endOffset": 20
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 217,
+                                "endLine": 217,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 230,
+                                "endLine": 230,
+                                "startOffset": 12,
+                                "endOffset": 17
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 234,
+                                "endLine": 234,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 240,
+                                "endLine": 240,
+                                "startOffset": 16,
+                                "endOffset": 21
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 240,
+                                "endLine": 240,
+                                "startOffset": 37,
+                                "endOffset": 40
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 245,
+                                "endLine": 245,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 245,
+                                "endLine": 245,
+                                "startOffset": 32,
+                                "endOffset": 35
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 249,
+                                "endLine": 249,
+                                "startOffset": 16,
+                                "endOffset": 20
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 254,
+                                "endLine": 254,
+                                "startOffset": 12,
+                                "endOffset": 15
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 257,
+                                "endLine": 257,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 261,
+                                "endLine": 261,
+                                "startOffset": 8,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/typer.py",
+                            "textRange": {
+                                "startLine": 264,
+                                "endLine": 264,
+                                "startOffset": 8,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Refactor this function to reduce its Cognitive Complexity from 24 to the 15 allowed.",
+            "effort": "14min",
+            "debt": "14min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "brain-overload"
+            ],
+            "creationDate": "2026-08-02T07:06:42+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "FOCUSED",
+            "cleanCodeAttributeCategory": "ADAPTABLE",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "HIGH"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "5d1f6976-9fc7-48f1-bb7a-5f0eeeba2d5d",
+            "rule": "python:S3776",
+            "severity": "CRITICAL",
+            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+            "project": "voice-to-text",
+            "line": 43,
+            "hash": "9a9202d311156e6e4e98c0a7f135f60a",
+            "textRange": {
+                "startLine": 43,
+                "endLine": 43,
+                "startOffset": 14,
+                "endOffset": 29
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 49,
+                                "endLine": 49,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 49,
+                                "endLine": 49,
+                                "startOffset": 20,
+                                "endOffset": 23
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 65,
+                                "endLine": 65,
+                                "startOffset": 44,
+                                "endOffset": 46
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 68,
+                                "endLine": 68,
+                                "startOffset": 8,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 69,
+                                "endLine": 69,
+                                "startOffset": 44,
+                                "endOffset": 46
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 71,
+                                "endLine": 71,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 75,
+                                "endLine": 75,
+                                "startOffset": 16,
+                                "endOffset": 22
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 77,
+                                "endLine": 77,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 78,
+                                "endLine": 78,
+                                "startOffset": 70,
+                                "endOffset": 72
+                            },
+                            "msg": "+4 (incl 3 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+                            "textRange": {
+                                "startLine": 81,
+                                "endLine": 81,
+                                "startOffset": 8,
+                                "endOffset": 14
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Refactor this function to reduce its Cognitive Complexity from 19 to the 15 allowed.",
+            "effort": "9min",
+            "debt": "9min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "brain-overload"
+            ],
+            "creationDate": "2026-08-01T07:20:39+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "FOCUSED",
+            "cleanCodeAttributeCategory": "ADAPTABLE",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "HIGH"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "69511507-0b4d-41e4-9acb-f14482b87c64",
+            "rule": "python:S3776",
+            "severity": "CRITICAL",
+            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+            "project": "voice-to-text",
+            "line": 172,
+            "hash": "7bb91a36400526a160c52b514244cc72",
+            "textRange": {
+                "startLine": 172,
+                "endLine": 172,
+                "startOffset": 4,
+                "endOffset": 20
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 182,
+                                "endLine": 182,
+                                "startOffset": 4,
+                                "endOffset": 6
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 182,
+                                "endLine": 182,
+                                "startOffset": 46,
+                                "endOffset": 48
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 188,
+                                "endLine": 188,
+                                "startOffset": 4,
+                                "endOffset": 7
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 193,
+                                "endLine": 193,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 196,
+                                "endLine": 196,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 196,
+                                "endLine": 196,
+                                "startOffset": 23,
+                                "endOffset": 26
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 199,
+                                "endLine": 199,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 199,
+                                "endLine": 199,
+                                "startOffset": 29,
+                                "endOffset": 32
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 206,
+                                "endLine": 206,
+                                "startOffset": 49,
+                                "endOffset": 52
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 207,
+                                "endLine": 207,
+                                "startOffset": 43,
+                                "endOffset": 46
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 208,
+                                "endLine": 208,
+                                "startOffset": 54,
+                                "endOffset": 57
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 210,
+                                "endLine": 210,
+                                "startOffset": 41,
+                                "endOffset": 43
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 212,
+                                "endLine": 212,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 212,
+                                "endLine": 212,
+                                "startOffset": 38,
+                                "endOffset": 41
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 216,
+                                "endLine": 216,
+                                "startOffset": 36,
+                                "endOffset": 38
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed.",
+            "effort": "10min",
+            "debt": "10min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "brain-overload"
+            ],
+            "creationDate": "2026-07-28T20:05:36+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "FOCUSED",
+            "cleanCodeAttributeCategory": "ADAPTABLE",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "HIGH"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "3e63762b-a61e-4d6e-88ae-95bd8475d27c",
+            "rule": "python:S3776",
+            "severity": "CRITICAL",
+            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+            "project": "voice-to-text",
+            "line": 219,
+            "hash": "ecbb6f737412c1653c3ffcac795571e7",
+            "textRange": {
+                "startLine": 219,
+                "endLine": 219,
+                "startOffset": 4,
+                "endOffset": 22
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 234,
+                                "endLine": 234,
+                                "startOffset": 4,
+                                "endOffset": 6
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 239,
+                                "endLine": 239,
+                                "startOffset": 4,
+                                "endOffset": 7
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 241,
+                                "endLine": 241,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 244,
+                                "endLine": 244,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 246,
+                                "endLine": 246,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 246,
+                                "endLine": 246,
+                                "startOffset": 49,
+                                "endOffset": 52
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 253,
+                                "endLine": 253,
+                                "startOffset": 4,
+                                "endOffset": 9
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 257,
+                                "endLine": 257,
+                                "startOffset": 8,
+                                "endOffset": 11
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 261,
+                                "endLine": 261,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 261,
+                                "endLine": 261,
+                                "startOffset": 21,
+                                "endOffset": 24
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 267,
+                                "endLine": 267,
+                                "startOffset": 12,
+                                "endOffset": 14
+                            },
+                            "msg": "+3 (incl 2 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 273,
+                                "endLine": 273,
+                                "startOffset": 55,
+                                "endOffset": 58
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 275,
+                                "endLine": 275,
+                                "startOffset": 41,
+                                "endOffset": 43
+                            },
+                            "msg": "+4 (incl 3 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 277,
+                                "endLine": 277,
+                                "startOffset": 16,
+                                "endOffset": 18
+                            },
+                            "msg": "+4 (incl 3 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 277,
+                                "endLine": 277,
+                                "startOffset": 38,
+                                "endOffset": 40
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 280,
+                                "endLine": 280,
+                                "startOffset": 8,
+                                "endOffset": 10
+                            },
+                            "msg": "+2 (incl 1 for nesting)",
+                            "msgFormattings": []
+                        }
+                    ]
+                },
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/postprocess.py",
+                            "textRange": {
+                                "startLine": 288,
+                                "endLine": 288,
+                                "startOffset": 8,
+                                "endOffset": 12
+                            },
+                            "msg": "+1",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Refactor this function to reduce its Cognitive Complexity from 33 to the 15 allowed.",
+            "effort": "23min",
+            "debt": "23min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "brain-overload"
+            ],
+            "creationDate": "2026-07-28T20:05:36+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "FOCUSED",
+            "cleanCodeAttributeCategory": "ADAPTABLE",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "HIGH"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "d57a406a-42ff-44ea-95ac-c544b84362ac",
+            "rule": "python:S7503",
+            "severity": "MINOR",
+            "component": "voice-to-text:src/voice_to_text/engine.py",
+            "project": "voice-to-text",
+            "line": 226,
+            "hash": "40fd28cb382c8660d9a74f56b42c8385",
+            "textRange": {
+                "startLine": 226,
+                "endLine": 226,
+                "startOffset": 14,
+                "endOffset": 19
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/engine.py",
+                            "textRange": {
+                                "startLine": 226,
+                                "endLine": 226,
+                                "startOffset": 4,
+                                "endOffset": 9
+                            },
+                            "msg": "This function is async.",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Use asynchronous features in this function or remove the `async` keyword.",
+            "effort": "5min",
+            "debt": "5min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "async"
+            ],
+            "creationDate": "2026-06-29T16:41:47+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "CONVENTIONAL",
+            "cleanCodeAttributeCategory": "CONSISTENT",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "MEDIUM"
+                },
+                {
+                    "softwareQuality": "RELIABILITY",
+                    "severity": "LOW"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        },
+        {
+            "key": "0201e276-c973-4bce-a22f-f816f6d6cdf0",
+            "rule": "python:S7503",
+            "severity": "MINOR",
+            "component": "voice-to-text:src/voice_to_text/providers/base.py",
+            "project": "voice-to-text",
+            "line": 64,
+            "hash": "23120c29ab016bd35e5976d48aa2b38c",
+            "textRange": {
+                "startLine": 64,
+                "endLine": 64,
+                "startOffset": 14,
+                "endOffset": 32
+            },
+            "flows": [
+                {
+                    "locations": [
+                        {
+                            "component": "voice-to-text:src/voice_to_text/providers/base.py",
+                            "textRange": {
+                                "startLine": 64,
+                                "endLine": 64,
+                                "startOffset": 4,
+                                "endOffset": 9
+                            },
+                            "msg": "This function is async.",
+                            "msgFormattings": []
+                        }
+                    ]
+                }
+            ],
+            "status": "OPEN",
+            "message": "Use asynchronous features in this function or remove the `async` keyword.",
+            "effort": "5min",
+            "debt": "5min",
+            "author": "2893931+happytomatoe@users.noreply.github.com",
+            "tags": [
+                "async"
+            ],
+            "creationDate": "2026-06-29T16:41:47+0000",
+            "updateDate": "2026-08-02T19:46:28+0000",
+            "type": "CODE_SMELL",
+            "scope": "MAIN",
+            "quickFixAvailable": false,
+            "messageFormattings": [],
+            "codeVariants": [],
+            "cleanCodeAttribute": "CONVENTIONAL",
+            "cleanCodeAttributeCategory": "CONSISTENT",
+            "impacts": [
+                {
+                    "softwareQuality": "MAINTAINABILITY",
+                    "severity": "MEDIUM"
+                },
+                {
+                    "softwareQuality": "RELIABILITY",
+                    "severity": "LOW"
+                }
+            ],
+            "issueStatus": "OPEN",
+            "prioritizedRule": false,
+            "fromSonarQubeUpdate": false,
+            "internalTags": [],
+            "linkedTicketStatus": "NOT_LINKED"
+        }
+    ],
+    "components": [
+        {
+            "key": "voice-to-text:src/voice_to_text/mutter_virtual_typer.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "mutter_virtual_typer.py",
+            "longName": "src/voice_to_text/mutter_virtual_typer.py",
+            "path": "src/voice_to_text/mutter_virtual_typer.py"
+        },
+        {
+            "key": "voice-to-text:src/voice_to_text/engine.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "engine.py",
+            "longName": "src/voice_to_text/engine.py",
+            "path": "src/voice_to_text/engine.py"
+        },
+        {
+            "key": "voice-to-text:src/voice_to_text/postprocess.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "postprocess.py",
+            "longName": "src/voice_to_text/postprocess.py",
+            "path": "src/voice_to_text/postprocess.py"
+        },
+        {
+            "key": "voice-to-text:src/voice_to_text/providers/sixty.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "sixty.py",
+            "longName": "src/voice_to_text/providers/sixty.py",
+            "path": "src/voice_to_text/providers/sixty.py"
+        },
+        {
+            "key": "voice-to-text",
+            "enabled": true,
+            "qualifier": "TRK",
+            "name": "Voice to Text",
+            "longName": "Voice to Text"
+        },
+        {
+            "key": "voice-to-text:src/voice_to_text/providers/base.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "base.py",
+            "longName": "src/voice_to_text/providers/base.py",
+            "path": "src/voice_to_text/providers/base.py"
+        },
+        {
+            "key": "voice-to-text:src/voice_to_text/typer.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "typer.py",
+            "longName": "src/voice_to_text/typer.py",
+            "path": "src/voice_to_text/typer.py"
+        },
+        {
+            "key": "voice-to-text:src/voice_to_text/mutter_virtual_paster.py",
+            "enabled": true,
+            "qualifier": "FIL",
+            "name": "mutter_virtual_paster.py",
+            "longName": "src/voice_to_text/mutter_virtual_paster.py",
+            "path": "src/voice_to_text/mutter_virtual_paster.py"
+        }
+    ],
+    "facets": []
+}

@@ -1,0 +1,1058 @@
+{
+  "voice-to-text:src/voice_to_text/mutter_virtual_paster.py:71:81": {
+    "component": "voice-to-text:src/voice_to_text/mutter_virtual_paster.py",
+    "start": 71,
+    "end": 81,
+    "lines": [
+      {
+        "line": 71,
+        "code": "        <span class=\"k\">except</span> Exception <span class=\"k\">as</span> <span class=\"sym-27 sym\">e</span>:",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 72,
+        "code": "            <span class=\"sym-5 sym\">logger</span>.warning(<span class=\"s\">\"MutterVirtualPaster: D-Bus call failed: %s\"</span>, <span class=\"sym-27 sym\">e</span>)",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 73,
+        "code": "            <span class=\"sym-25 sym\">self</span>.<span class=\"sym-12 sym\">_usable</span> = False",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 74,
+        "code": "            <span class=\"k\">return</span> False",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 75,
+        "code": "",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 76,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-28 sym\">stop</span>(<span class=\"sym-29 sym\">self</span>) -&gt; <span class=\"k\">None</span>:",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 77,
+        "code": "        <span class=\"j\">\"\"\"Cleanup.\"\"\"</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 78,
+        "code": "        <span class=\"k\">if</span> <span class=\"sym-29 sym\">self</span>.<span class=\"sym-14 sym\">_bus</span>:",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 79,
+        "code": "            <span class=\"sym-29 sym\">self</span>.<span class=\"sym-14 sym\">_bus</span>.disconnect()",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 80,
+        "code": "            <span class=\"sym-29 sym\">self</span>.<span class=\"sym-14 sym\">_bus</span> = <span class=\"k\">None</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 81,
+        "code": "        <span class=\"sym-29 sym\">self</span>.<span class=\"sym-13 sym\">_proxy</span> = <span class=\"k\">None</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/mutter_virtual_typer.py:92:102": {
+    "component": "voice-to-text:src/voice_to_text/mutter_virtual_typer.py",
+    "start": 92,
+    "end": 102,
+    "lines": [
+      {
+        "line": 92,
+        "code": "            <span class=\"sym-25 sym\">self</span>.<span class=\"sym-11 sym\">_typed_text</span> = <span class=\"sym-26 sym\">new_text</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 93,
+        "code": "        <span class=\"k\">except</span> Exception <span class=\"k\">as</span> <span class=\"sym-33 sym\">e</span>:  <span class=\"cd\"># noqa: BLE001 - D-Bus can fail in many ways</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 94,
+        "code": "            <span class=\"sym-4 sym\">logger</span>.warning(<span class=\"s\">\"MutterVirtualTyper: D-Bus call failed: %s\"</span>, <span class=\"sym-33 sym\">e</span>)",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 95,
+        "code": "            <span class=\"sym-25 sym\">self</span>.<span class=\"sym-12 sym\">_usable</span> = False",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 96,
+        "code": "",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 97,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-34 sym\">stop</span>(<span class=\"sym-35 sym\">self</span>) -&gt; <span class=\"k\">None</span>:",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 98,
+        "code": "        <span class=\"j\">\"\"\"Cleanup.\"\"\"</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 99,
+        "code": "        <span class=\"k\">if</span> <span class=\"sym-35 sym\">self</span>.<span class=\"sym-14 sym\">_bus</span>:",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 100,
+        "code": "            <span class=\"sym-35 sym\">self</span>.<span class=\"sym-14 sym\">_bus</span>.disconnect()",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 101,
+        "code": "            <span class=\"sym-35 sym\">self</span>.<span class=\"sym-14 sym\">_bus</span> = <span class=\"k\">None</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 102,
+        "code": "        <span class=\"sym-35 sym\">self</span>.<span class=\"sym-13 sym\">_proxy</span> = <span class=\"k\">None</span>",
+        "scmRevision": "deef0a0d5d2649e1b1b0074b2f839b025e1ff217",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T18:37:01+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/engine.py:261:271": {
+    "component": "voice-to-text:src/voice_to_text/engine.py",
+    "start": 261,
+    "end": 271,
+    "lines": [
+      {
+        "line": 261,
+        "code": "                    <span class=\"k\">pass</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 262,
+        "code": "        <span class=\"k\">if</span> <span class=\"sym-103 sym\">self</span>.<span class=\"sym-80 sym\">state</span> != <span class=\"sym-29 sym\">EngineState</span>.<span class=\"sym-30 sym\">IDLE</span>:",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 263,
+        "code": "            <span class=\"sym-103 sym\">self</span>.<span class=\"sym-80 sym\">state</span> = <span class=\"sym-29 sym\">EngineState</span>.<span class=\"sym-30 sym\">IDLE</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 264,
+        "code": "            <span class=\"sym-103 sym\">self</span>.<span class=\"sym-105 sym\">_notify_state</span>()",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 265,
+        "code": "",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 266,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> _run(<span class=\"sym-106 sym\">self</span>, <span class=\"sym-107 sym\">config</span>: dict[str, <span class=\"sym-7 sym\">Any</span>]) -&gt; <span class=\"k\">None</span>:",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 267,
+        "code": "        <span class=\"j\">\"\"\"Full recording + transcription pipeline.\"\"\"</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 268,
+        "code": "        <span class=\"k\">import</span> time <span class=\"k\">as</span> <span class=\"sym-108 sym\">_time</span>",
+        "scmRevision": "c44224c12178259bb734fa426687fcfadad1b773",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T21:39:11+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 269,
+        "code": "",
+        "scmRevision": "c44224c12178259bb734fa426687fcfadad1b773",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T21:39:11+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 270,
+        "code": "        <span class=\"cd\"># Check if profiling is enabled</span>",
+        "scmRevision": "c44224c12178259bb734fa426687fcfadad1b773",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T21:39:11+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 271,
+        "code": "        <span class=\"sym-109 sym\">config_mgr</span> = <span class=\"sym-11 sym\">ConfigManager</span>()",
+        "scmRevision": "c44224c12178259bb734fa426687fcfadad1b773",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T21:39:11+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/typer.py:183:193": {
+    "component": "voice-to-text:src/voice_to_text/typer.py",
+    "start": 183,
+    "end": 193,
+    "lines": [
+      {
+        "line": 183,
+        "code": "            <span class=\"sym-35 sym\">self</span>.<span class=\"sym-13 sym\">_usable</span> = False",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 184,
+        "code": "        <span class=\"k\">except</span> Exception <span class=\"k\">as</span> <span class=\"sym-43 sym\">e</span>:",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 185,
+        "code": "            <span class=\"sym-5 sym\">logger</span>.error(<span class=\"s\">\"Failed to stream text to dotoolc: %s\"</span>, <span class=\"sym-43 sym\">e</span>)",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 186,
+        "code": "            <span class=\"sym-35 sym\">self</span>.<span class=\"sym-13 sym\">_usable</span> = False",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 187,
+        "code": "",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 188,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-44 sym\">stream_backspace</span>(<span class=\"sym-45 sym\">self</span>, <span class=\"sym-46 sym\">count</span>: int) -&gt; <span class=\"k\">None</span>:",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 189,
+        "code": "        <span class=\"j\">\"\"\"Backspace ``count`` characters via the dotoolc pipe.</span>",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 190,
+        "code": "",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 191,
+        "code": "<span class=\"j\">        Optimized to use line-deletion (shift+home) and word-deletion (ctrl+backspace)</span>",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 192,
+        "code": "<span class=\"j\">        shortcuts to reduce the number of keystrokes.</span>",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 193,
+        "code": "<span class=\"j\">        \"\"\"</span>",
+        "scmRevision": "2b36320484b1558e2f02920f974f4a221ff83173",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-02T07:06:42+0000",
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/providers/sixty.py:38:48": {
+    "component": "voice-to-text:src/voice_to_text/providers/sixty.py",
+    "start": 38,
+    "end": 48,
+    "lines": [
+      {
+        "line": 38,
+        "code": "        <span class=\"sym-16 sym\">self</span>.<span class=\"sym-28 sym\">_session_started</span> = <span class=\"sym-1 sym\">asyncio</span>.Event()",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 39,
+        "code": "        <span class=\"sym-16 sym\">self</span>.<span class=\"sym-29 sym\">_session_stopped</span> = <span class=\"sym-1 sym\">asyncio</span>.Event()",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 40,
+        "code": "",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 41,
+        "code": "    <span class=\"cd\"># \u2500\u2500 Batch \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 42,
+        "code": "",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 43,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-30 sym\">transcribe_file</span>(",
+        "scmRevision": "5628a2911b2d441ce48e7dc0ce49e8c8c80ac24f",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T07:20:39+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 44,
+        "code": "        <span class=\"sym-31 sym\">self</span>, <span class=\"sym-32 sym\">audio_path</span>: str, <span class=\"sym-33 sym\">language</span>: str = <span class=\"s\">\"en\"</span>, <span class=\"sym-34 sym\">custom_words</span>: list[str] | <span class=\"k\">None</span> = <span class=\"k\">None</span>",
+        "scmRevision": "5628a2911b2d441ce48e7dc0ce49e8c8c80ac24f",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T07:20:39+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 45,
+        "code": "    ) -&gt; str:",
+        "scmRevision": "5628a2911b2d441ce48e7dc0ce49e8c8c80ac24f",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T07:20:39+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 46,
+        "code": "        <span class=\"sym-13 sym\">logger</span>.info(<span class=\"s\">\"Transcribing %s with 60db\"</span>, <span class=\"sym-32 sym\">audio_path</span>)",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 47,
+        "code": "        <span class=\"sym-35 sym\">headers</span> = {<span class=\"s\">\"Authorization\"</span>: f\"Bearer {<span class=\"sym-31 sym\">self</span>.<span class=\"sym-18 sym\">api_key</span>}\"}",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 48,
+        "code": "        <span class=\"sym-36 sym\">data</span>: dict[str, str] = {}",
+        "scmRevision": "acca0e48467b4bdd8976f5c7ed79a459d4f5df5c",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-11T22:20:20+0000",
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/postprocess.py:167:177": {
+    "component": "voice-to-text:src/voice_to_text/postprocess.py",
+    "start": 167,
+    "end": 177,
+    "lines": [
+      {
+        "line": 167,
+        "code": "    <span class=\"k\">elif</span> <span class=\"sym-48 sym\">original</span> <span class=\"k\">and</span> <span class=\"sym-48 sym\">original</span>[<span class=\"c\">0</span>].isupper():",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 168,
+        "code": "        <span class=\"k\">return</span> <span class=\"sym-49 sym\">replacement</span>[<span class=\"c\">0</span>].upper() + <span class=\"sym-49 sym\">replacement</span>[<span class=\"c\">1</span>:] <span class=\"k\">if</span> <span class=\"sym-49 sym\">replacement</span> <span class=\"k\">else</span> <span class=\"sym-49 sym\">replacement</span>",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 169,
+        "code": "    <span class=\"k\">return</span> <span class=\"sym-49 sym\">replacement</span>",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 170,
+        "code": "",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 171,
+        "code": "",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 172,
+        "code": "<span class=\"k\">def</span> <span class=\"sym-50 sym\">_find_best_match</span>(",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 173,
+        "code": "    <span class=\"sym-51 sym\">candidate</span>: str,",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 174,
+        "code": "    <span class=\"sym-52 sym\">custom_words</span>: list[str],",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 175,
+        "code": "    <span class=\"sym-53 sym\">custom_keys</span>: list[tuple[int, str]],",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 176,
+        "code": "    <span class=\"sym-54 sym\">threshold</span>: float,",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 177,
+        "code": ") -&gt; tuple[str, float] | <span class=\"k\">None</span>:",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/postprocess.py:214:224": {
+    "component": "voice-to-text:src/voice_to_text/postprocess.py",
+    "start": 214,
+    "end": 224,
+    "lines": [
+      {
+        "line": 214,
+        "code": "            <span class=\"sym-56 sym\">best_score</span> = <span class=\"sym-66 sym\">combined_score</span>",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 215,
+        "code": "",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 216,
+        "code": "    <span class=\"k\">return</span> (<span class=\"sym-55 sym\">best_match</span>, <span class=\"sym-56 sym\">best_score</span>) <span class=\"k\">if</span> <span class=\"sym-55 sym\">best_match</span> <span class=\"k\">is</span> <span class=\"k\">not</span> <span class=\"k\">None</span> <span class=\"k\">else</span> <span class=\"k\">None</span>",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 217,
+        "code": "",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 218,
+        "code": "",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 219,
+        "code": "<span class=\"k\">def</span> <span class=\"sym-67 sym\">apply_custom_words</span>(",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 220,
+        "code": "    <span class=\"sym-68 sym\">text</span>: str,",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 221,
+        "code": "    <span class=\"sym-69 sym\">custom_words</span>: list[str],",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 222,
+        "code": "    <span class=\"sym-70 sym\">threshold</span>: float = <span class=\"c\">0.5</span>,",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 223,
+        "code": ") -&gt; str:",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 224,
+        "code": "    <span class=\"j\">\"\"\"Apply fuzzy custom word corrections to transcribed text.</span>",
+        "scmRevision": "21f974d82e0a402b36795fdd84f033259582a4a8",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-28T20:05:36+0000",
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/engine.py:221:231": {
+    "component": "voice-to-text:src/voice_to_text/engine.py",
+    "start": 221,
+    "end": 231,
+    "lines": [
+      {
+        "line": 221,
+        "code": "        <span class=\"cd\"># Callbacks set by the D-Bus service to emit signals</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 222,
+        "code": "        <span class=\"sym-79 sym\">self</span>.<span class=\"sym-90 sym\">on_audio_level</span>: <span class=\"sym-5 sym\">Callable</span>[[float], <span class=\"k\">None</span>] | <span class=\"k\">None</span> = <span class=\"k\">None</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 223,
+        "code": "        <span class=\"sym-79 sym\">self</span>.<span class=\"sym-91 sym\">on_error</span>: <span class=\"sym-5 sym\">Callable</span>[[str], <span class=\"k\">None</span>] | <span class=\"k\">None</span> = <span class=\"k\">None</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 224,
+        "code": "        <span class=\"sym-79 sym\">self</span>.<span class=\"sym-92 sym\">on_state_change</span>: <span class=\"sym-5 sym\">Callable</span>[[<span class=\"sym-29 sym\">EngineState</span>], <span class=\"k\">None</span>] | <span class=\"k\">None</span> = <span class=\"k\">None</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 225,
+        "code": "",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 226,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-93 sym\">start</span>(<span class=\"sym-94 sym\">self</span>, <span class=\"sym-95 sym\">config</span>: dict[str, <span class=\"sym-7 sym\">Any</span>]) -&gt; <span class=\"k\">None</span>:",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 227,
+        "code": "        <span class=\"j\">\"\"\"Start recording and transcription.\"\"\"</span>",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 228,
+        "code": "        <span class=\"k\">if</span> <span class=\"sym-94 sym\">self</span>.<span class=\"sym-80 sym\">state</span> != <span class=\"sym-29 sym\">EngineState</span>.<span class=\"sym-30 sym\">IDLE</span>:",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 229,
+        "code": "            <span class=\"k\">raise</span> RuntimeError(f\"Cannot start: engine is {<span class=\"sym-94 sym\">self</span>.<span class=\"sym-80 sym\">state</span>.value}\")",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 230,
+        "code": "        <span class=\"sym-94 sym\">self</span>.<span class=\"sym-85 sym\">_cancel_event</span>.clear()",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 231,
+        "code": "        <span class=\"cd\"># Validate and resolve stop_timeout from D-Bus config</span>",
+        "scmRevision": "e6677039e3158c40f8fc122794052e970ea33b41",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-07-13T19:13:53+0000",
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  },
+  "voice-to-text:src/voice_to_text/providers/base.py:59:69": {
+    "component": "voice-to-text:src/voice_to_text/providers/base.py",
+    "start": 59,
+    "end": 69,
+    "lines": [
+      {
+        "line": 59,
+        "code": "    @<span class=\"sym-7 sym\">abstractmethod</span>",
+        "scmRevision": "c3998d7ee3853e5914d30d7009267b7860fc7052",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-13T16:56:17+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 60,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-33 sym\">send_audio</span>(<span class=\"sym-34 sym\">self</span>, <span class=\"sym-35 sym\">audio_chunk</span>: bytes) -&gt; <span class=\"k\">None</span>:",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 61,
+        "code": "        <span class=\"j\">\"\"\"Send an audio chunk for processing.\"\"\"</span>",
+        "scmRevision": "c3998d7ee3853e5914d30d7009267b7860fc7052",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-13T16:56:17+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 62,
+        "code": "        <span class=\"k\">pass</span>",
+        "scmRevision": "c3998d7ee3853e5914d30d7009267b7860fc7052",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-13T16:56:17+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 63,
+        "code": "",
+        "scmRevision": "c3998d7ee3853e5914d30d7009267b7860fc7052",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-13T16:56:17+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 64,
+        "code": "    <span class=\"k\">async</span> <span class=\"k\">def</span> <span class=\"sym-36 sym\">get_partial_result</span>(<span class=\"sym-37 sym\">self</span>) -&gt; str | <span class=\"k\">None</span>:",
+        "scmRevision": "f9fb6adc8e72b69346c42bb7fb5060915d023ea4",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-29T16:41:47+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 65,
+        "code": "        <span class=\"j\">\"\"\"Get latest partial transcript (may change).\"\"\"</span>",
+        "scmRevision": "c3998d7ee3853e5914d30d7009267b7860fc7052",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-06-13T16:56:17+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 66,
+        "code": "        <span class=\"k\">if</span> <span class=\"sym-37 sym\">self</span>.<span class=\"sym-24 sym\"><span class=\"sym-38 sym\">_partial_result</span></span>:",
+        "scmRevision": "794f1ed6f51104cfa65989fc9cafb838adb92856",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T20:13:04+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 67,
+        "code": "            <span class=\"k\">return</span> (",
+        "scmRevision": "794f1ed6f51104cfa65989fc9cafb838adb92856",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T20:13:04+0000",
+        "utLineHits": 0,
+        "lineHits": 0,
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 68,
+        "code": "                (<span class=\"sym-37 sym\">self</span>.<span class=\"sym-25 sym\"><span class=\"sym-39 sym\">_finalized_text</span></span> + <span class=\"s\">\" \"</span> + <span class=\"sym-37 sym\">self</span>.<span class=\"sym-24 sym\"><span class=\"sym-38 sym\">_partial_result</span></span>).strip()",
+        "scmRevision": "794f1ed6f51104cfa65989fc9cafb838adb92856",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T20:13:04+0000",
+        "duplicated": false,
+        "isNew": false
+      },
+      {
+        "line": 69,
+        "code": "                <span class=\"k\">if</span> <span class=\"sym-37 sym\">self</span>.<span class=\"sym-25 sym\"><span class=\"sym-39 sym\">_finalized_text</span></span>",
+        "scmRevision": "794f1ed6f51104cfa65989fc9cafb838adb92856",
+        "scmAuthor": "2893931+happytomatoe@users.noreply.github.com",
+        "scmDate": "2026-08-01T20:13:04+0000",
+        "duplicated": false,
+        "isNew": false
+      }
+    ]
+  }
+}

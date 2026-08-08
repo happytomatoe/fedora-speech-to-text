@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SonarQube Report — voice-to-text</title>
+<style>
+  :root { --bg: #1a1a2e; --surface: #16213e; --surface2: #0f3460; --text: #e0e0e0; --text2: #a0a0a0; --accent: #533483; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 24px; line-height: 1.6; }
+  h1 { font-size: 1.8rem; margin-bottom: 8px; }
+  h2 { font-size: 1.3rem; margin: 32px 0 16px; color: var(--text2); }
+  .subtitle { color: var(--text2); margin-bottom: 24px; }
+
+  .gate { display: inline-block; padding: 8px 20px; border-radius: 8px; font-weight: 700; font-size: 1.1rem; margin-bottom: 24px; }
+  .gate-OK { background: #27ae60; color: #fff; }
+  .gate-KO { background: #e74c3c; color: #fff; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .card { background: var(--surface); border-radius: 10px; padding: 16px; text-align: center; }
+  .card-value { font-size: 1.8rem; font-weight: 700; }
+  .card-label { font-size: 0.8rem; color: var(--text2); margin-top: 4px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border-radius: 8px; background: var(--surface); color: var(--text2); cursor: pointer; border: none; font-size: 0.9rem; }
+  .tab.active { background: var(--accent); color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 10px; overflow: hidden; }
+  th { background: var(--surface2); padding: 12px 16px; text-align: left; font-size: 0.85rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.9rem; vertical-align: top; }
+  tr:hover { background: rgba(255,255,255,0.03); }
+  .clickable { cursor: pointer; }
+
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; color: #fff; white-space: nowrap; }
+  .type-bug { background: #e74c3c; }
+  .type-vulnerability { background: #e67e22; }
+  .type-code_smell { background: #3498db; }
+  .type-security_hotspot { background: #9b59b6; }
+
+  .file-link { color: #5dade2; cursor: pointer; }
+  .file-link:hover { text-decoration: underline; }
+  .rule { color: var(--text2); }
+
+  .filter-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+  .filter-bar input { padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: var(--surface); color: var(--text); font-size: 0.9rem; width: 300px; }
+  .filter-bar button { padding: 8px 14px; border-radius: 8px; border: none; background: var(--accent); color: #fff; cursor: pointer; font-size: 0.9rem; }
+
+  /* Issue cards */
+  .issue-card { background: var(--surface); border-radius: 10px; margin-bottom: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); }
+  .issue-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; cursor: pointer; }
+  .issue-header:hover { background: rgba(255,255,255,0.03); }
+  .issue-header-left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .issue-header-right { display: flex; gap: 12px; align-items: center; }
+  .issue-location { color: #5dade2; font-family: monospace; font-size: 0.85rem; }
+  .issue-effort { color: var(--text2); font-size: 0.85rem; }
+  .expand-icon { color: var(--text2); transition: transform 0.2s; }
+  .expand-icon.open { transform: rotate(90deg); }
+  .issue-body { padding: 0 16px 16px; border-top: 1px solid rgba(255,255,255,0.05); }
+  .issue-message { padding: 12px 0; font-size: 0.95rem; }
+  .issue-rule { padding-bottom: 8px; }
+
+  /* Code blocks */
+  .code-block { background: #0d1117; border-radius: 8px; margin: 12px 0; overflow: hidden; }
+  .code-header { display: flex; justify-content: space-between; padding: 8px 12px; background: #161b22; border-bottom: 1px solid #30363d; }
+  .code-filename { color: #e6edf3; font-size: 0.85rem; }
+  .code-line-ref { color: #8b949e; font-size: 0.85rem; }
+  .code-scroll { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+  .code-table { width: 100%; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; }
+  .code-table td { padding: 2px 12px; border: none; white-space: pre; }
+  .code-line { color: #8b949e; }
+  .code-issue-line { background: rgba(255, 100, 100, 0.15); }
+  .ln-marker { color: #f97583; width: 24px; text-align: center; }
+  .ln-num { color: #8b949e; width: 50px; text-align: right; padding-right: 12px; user-select: none; }
+  .ln-code { color: #e6edf3; }
+
+  /* Rule description */
+  .rule-desc { margin-top: 12px; }
+  .desc-section { margin-bottom: 12px; }
+  .desc-title { font-weight: 600; margin-bottom: 4px; color: #e0e0e0; }
+  .desc-body { color: #a0a0a0; font-size: 0.9rem; }
+  .desc-body code { background: #1e293b; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>📊 SonarQube Report</h1>
+<div class="subtitle">voice-to-text · Generated from sonar-reports/</div>
+
+<div class="gate gate-OK">Quality Gate: OK</div>
+
+<div class="metrics">
+  <div class="card"><div class="card-value">2433</div><div class="card-label">Lines of Code</div></div>
+  <div class="card"><div class="card-value">0</div><div class="card-label">Bugs</div></div>
+  <div class="card"><div class="card-value">0</div><div class="card-label">Vulnerabilities</div></div>
+  <div class="card"><div class="card-value">9</div><div class="card-label">Code Smells</div></div>
+  <div class="card"><div class="card-value">4</div><div class="card-label">Security Hotspots</div></div>
+  <div class="card"><div class="card-value">0.0%</div><div class="card-label">Coverage</div></div>
+  <div class="card"><div class="card-value">0.0%</div><div class="card-label">Duplications</div></div>
+  <div class="card"><div class="card-value">A</div><div class="card-label">Security</div></div>
+  <div class="card"><div class="card-value">A</div><div class="card-label">Reliability</div></div>
+  <div class="card"><div class="card-value">A</div><div class="card-label">Maintainability</div></div>
+</div>
+
+<h2>Issues (9)</h2>
+
+<div class="filter-bar">
+  <input type="text" id="search" placeholder="Filter by file, rule, or message..." oninput="filterCards()">
+  <button onclick="clearFilter()">Clear</button>
+  <button onclick="expandAll()">Expand All</button>
+  <button onclick="collapseAll()">Collapse All</button>
+</div>
+
+<div id="issues-container">
+
+            <div class="issue-card" data-severity="CRITICAL" data-type="CODE_SMELL" data-file="src/voice_to_text/engine.py">
+              <div class="issue-header" onclick="toggleCard('issue-1')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#e67e22">🟠 CRITICAL</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/engine.py:266</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">46min</span>
+                  <span class="expand-icon" id="icon-issue-1">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-1" style="display:none">
+                <div class="issue-message">Refactor this function to reduce its Cognitive Complexity from 56 to the 15 allowed.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S3776</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/engine.py</span>
+        <span class="code-line-ref">Line 266</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">261</td>
+          <td class="ln-code">                    <span class="k">pass</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">262</td>
+          <td class="ln-code">        <span class="k">if</span> <span class="sym-103 sym">self</span>.<span class="sym-80 sym">state</span> != <span class="sym-29 sym">EngineState</span>.<span class="sym-30 sym">IDLE</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">263</td>
+          <td class="ln-code">            <span class="sym-103 sym">self</span>.<span class="sym-80 sym">state</span> = <span class="sym-29 sym">EngineState</span>.<span class="sym-30 sym">IDLE</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">264</td>
+          <td class="ln-code">            <span class="sym-103 sym">self</span>.<span class="sym-105 sym">_notify_state</span>()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">265</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">266</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> _run(<span class="sym-106 sym">self</span>, <span class="sym-107 sym">config</span>: dict[str, <span class="sym-7 sym">Any</span>]) -&gt; <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">267</td>
+          <td class="ln-code">        <span class="j">"""Full recording + transcription pipeline."""</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">268</td>
+          <td class="ln-code">        <span class="k">import</span> time <span class="k">as</span> <span class="sym-108 sym">_time</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">269</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">270</td>
+          <td class="ln-code">        <span class="cd"># Check if profiling is enabled</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">271</td>
+          <td class="ln-code">        <span class="sym-109 sym">config_mgr</span> = <span class="sym-11 sym">ConfigManager</span>()</td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Cognitive Complexity is a measure of how hard it is to understand the control flow of a unit of code. Code with high cognitive complexity is hard
+to read, understand, test, and modify.</p>
+<p>As a rule of thumb, high cognitive complexity is a sign that the code should be refactored into smaller, easier-to-manage pieces.</p>
+<h3>Which syntax in code does impact cognitive complexity score?</h3>
+<p>Here are the core concepts:</p>
+<ul>
+  <li><strong>Cognitive complexity is incremented each time the code breaks the normal linear reading flow.</strong>
+    <br>
+    This concerns, for example, loop structures, conditionals, catches, switches, jumps to labels, and conditions mixing multiple operators.</li>
+  <li><strong>Each nesting level increases complexity.</strong>
+    <br>
+    During code reading, the deeper you go through nested layers, the harder it becomes to keep the context in mind.</li>
+  <li><strong>Method calls are free</strong>
+    <br>
+    A well-picked method name is a summary of multiple lines of code. A reader can first explore a high-level view of what the code is performing then
+    go deeper and deeper by looking at called functions content.
+    <br>
+    <em>Note:</em> This does not apply to recursive calls, those will increment cognitive score.</li>
+</ul>
+<p>The method of computation is fully detailed in the pdf linked in the resources.</p>
+<h3>What is the potential impact?</h3>
+<p>Developers spend more time reading and understanding code than writing it. High cognitive complexity slows down changes and increases the cost of
+maintenance.</p></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Reducing cognitive complexity can be challenging.
+  <br>
+  Here are a few suggestions:</p>
+<ul>
+  <li><strong>Extract complex conditions in a new function.</strong>
+    <br>
+    Mixed operators in condition will increase complexity. Extracting the condition in a new function with an appropriate name will reduce cognitive
+    load.</li>
+  <li><strong>Break down large functions.</strong>
+    <br>
+    Large functions can be hard to understand and maintain. If a function is doing too many things, consider breaking it down into smaller, more
+    manageable functions. Each function should have a single responsibility.</li>
+  <li><strong>Avoid deep nesting by returning early.</strong>
+    <br>
+    To avoid the nesting of conditions, process exceptional cases first and return early.</li>
+</ul>
+
+<p><strong>Extraction of a complex condition in a new function.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The code is using a complex condition and has a cognitive cost of 5.</p>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if ((user.is_active and    # +1 (if) +1 (nested) +1 (multiple conditions)
+            user.has_profile) or   # +1 (mixed operator)
+            user.age &gt; 18 ):
+            user.process()
+</pre>
+<h4>Compliant solution</h4>
+<p>Even if the cognitive complexity of the whole program did not change, it is easier for a reader to understand the code of the
+<code>process_eligible_users</code> function, which now only has a cognitive cost of 3.</p>
+<pre data-diff-id="1" data-diff-type="compliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if is_eligible_user(user): # +1 (if) +1 (nested)
+            user.process()
+
+def is_eligible_user(user):
+    return ((user.is_active and user.has_profile) or user.age &gt; 18) # +1 (multiple conditions) +1 (mixed operators)
+</pre>
+<p><strong>Break down large functions.</strong></p>
+<h4>Noncompliant code example</h4>
+<p><em>Note:</em> The code is simplified here, to illustrate the purpose. Please imagine there is more happening in the process.
+  <br></p>
+<p>The bellow code has a cognitive complexity score of 8.</p>
+<pre data-diff-id="3" data-diff-type="noncompliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process active user with profile
+        else:                        # +1 (else)
+            ... # process active user without profile
+    else:                            # +1 (else)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process inactive user with profile
+        else:                        # +1 (else)
+            ... # process inactive user without profile
+</pre>
+<p>This function could be refactored into smaller functions: The complexity is spread over multiple functions and the breaks in flow are no more
+nested.
+  <br>
+  The <code>process_user</code> has now a complexity score of two.</p>
+<h4>Compliant solution</h4>
+<pre data-diff-id="3" data-diff-type="compliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        process_active_user(user)
+    else:                            # +1 (else)
+        process_inactive_user(user)
+
+def process_active_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process active user with profile
+    else:                            # +1 (else)
+        ... # process active user without profile
+
+def process_inactive_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process inactive user with profile
+    else:                            # +1 (else)
+        ... # process inactive user without profile
+</pre>
+<p><strong>Avoid deep nesting by returning early.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The below code has a cognitive complexity of 6.</p>
+<pre data-diff-id="4" data-diff-type="noncompliant">
+def calculate(data):
+    if data is not None:  # +1 (if)
+        total = 0
+        for item in data: # +1 (for) +1 (nested)
+            if item &gt; 0:  # +1 (if)  +2 (nested)
+                total += item * 2
+        return total
+</pre>
+<h4>Compliant solution</h4>
+<p>Checking for the edge case first flattens the <code>if</code> statements and reduces the cognitive complexity to 4.</p>
+<pre data-diff-id="4" data-diff-type="compliant">
+def calculate(data):
+    if data is None:      # +1 (if)
+        return None
+    total = 0
+    for item in data:     # +1 (for)
+        if item &gt; 0:      # +1 (if) +1 (nested)
+            total += item * 2
+    return total
+</pre>
+<h3>Pitfalls</h3>
+<p>As this code is complex, ensure that you have unit tests that cover the code before refactoring.</p></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="CRITICAL" data-type="CODE_SMELL" data-file="src/voice_to_text/typer.py">
+              <div class="issue-header" onclick="toggleCard('issue-1')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#e67e22">🟠 CRITICAL</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/typer.py:188</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">14min</span>
+                  <span class="expand-icon" id="icon-issue-1">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-1" style="display:none">
+                <div class="issue-message">Refactor this function to reduce its Cognitive Complexity from 24 to the 15 allowed.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S3776</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/typer.py</span>
+        <span class="code-line-ref">Line 188</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">183</td>
+          <td class="ln-code">            <span class="sym-35 sym">self</span>.<span class="sym-13 sym">_usable</span> = False</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">184</td>
+          <td class="ln-code">        <span class="k">except</span> Exception <span class="k">as</span> <span class="sym-43 sym">e</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">185</td>
+          <td class="ln-code">            <span class="sym-5 sym">logger</span>.error(<span class="s">"Failed to stream text to dotoolc: %s"</span>, <span class="sym-43 sym">e</span>)</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">186</td>
+          <td class="ln-code">            <span class="sym-35 sym">self</span>.<span class="sym-13 sym">_usable</span> = False</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">187</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">188</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-44 sym">stream_backspace</span>(<span class="sym-45 sym">self</span>, <span class="sym-46 sym">count</span>: int) -&gt; <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">189</td>
+          <td class="ln-code">        <span class="j">"""Backspace ``count`` characters via the dotoolc pipe.</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">190</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">191</td>
+          <td class="ln-code"><span class="j">        Optimized to use line-deletion (shift+home) and word-deletion (ctrl+backspace)</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">192</td>
+          <td class="ln-code"><span class="j">        shortcuts to reduce the number of keystrokes.</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">193</td>
+          <td class="ln-code"><span class="j">        """</span></td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Cognitive Complexity is a measure of how hard it is to understand the control flow of a unit of code. Code with high cognitive complexity is hard
+to read, understand, test, and modify.</p>
+<p>As a rule of thumb, high cognitive complexity is a sign that the code should be refactored into smaller, easier-to-manage pieces.</p>
+<h3>Which syntax in code does impact cognitive complexity score?</h3>
+<p>Here are the core concepts:</p>
+<ul>
+  <li><strong>Cognitive complexity is incremented each time the code breaks the normal linear reading flow.</strong>
+    <br>
+    This concerns, for example, loop structures, conditionals, catches, switches, jumps to labels, and conditions mixing multiple operators.</li>
+  <li><strong>Each nesting level increases complexity.</strong>
+    <br>
+    During code reading, the deeper you go through nested layers, the harder it becomes to keep the context in mind.</li>
+  <li><strong>Method calls are free</strong>
+    <br>
+    A well-picked method name is a summary of multiple lines of code. A reader can first explore a high-level view of what the code is performing then
+    go deeper and deeper by looking at called functions content.
+    <br>
+    <em>Note:</em> This does not apply to recursive calls, those will increment cognitive score.</li>
+</ul>
+<p>The method of computation is fully detailed in the pdf linked in the resources.</p>
+<h3>What is the potential impact?</h3>
+<p>Developers spend more time reading and understanding code than writing it. High cognitive complexity slows down changes and increases the cost of
+maintenance.</p></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Reducing cognitive complexity can be challenging.
+  <br>
+  Here are a few suggestions:</p>
+<ul>
+  <li><strong>Extract complex conditions in a new function.</strong>
+    <br>
+    Mixed operators in condition will increase complexity. Extracting the condition in a new function with an appropriate name will reduce cognitive
+    load.</li>
+  <li><strong>Break down large functions.</strong>
+    <br>
+    Large functions can be hard to understand and maintain. If a function is doing too many things, consider breaking it down into smaller, more
+    manageable functions. Each function should have a single responsibility.</li>
+  <li><strong>Avoid deep nesting by returning early.</strong>
+    <br>
+    To avoid the nesting of conditions, process exceptional cases first and return early.</li>
+</ul>
+
+<p><strong>Extraction of a complex condition in a new function.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The code is using a complex condition and has a cognitive cost of 5.</p>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if ((user.is_active and    # +1 (if) +1 (nested) +1 (multiple conditions)
+            user.has_profile) or   # +1 (mixed operator)
+            user.age &gt; 18 ):
+            user.process()
+</pre>
+<h4>Compliant solution</h4>
+<p>Even if the cognitive complexity of the whole program did not change, it is easier for a reader to understand the code of the
+<code>process_eligible_users</code> function, which now only has a cognitive cost of 3.</p>
+<pre data-diff-id="1" data-diff-type="compliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if is_eligible_user(user): # +1 (if) +1 (nested)
+            user.process()
+
+def is_eligible_user(user):
+    return ((user.is_active and user.has_profile) or user.age &gt; 18) # +1 (multiple conditions) +1 (mixed operators)
+</pre>
+<p><strong>Break down large functions.</strong></p>
+<h4>Noncompliant code example</h4>
+<p><em>Note:</em> The code is simplified here, to illustrate the purpose. Please imagine there is more happening in the process.
+  <br></p>
+<p>The bellow code has a cognitive complexity score of 8.</p>
+<pre data-diff-id="3" data-diff-type="noncompliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process active user with profile
+        else:                        # +1 (else)
+            ... # process active user without profile
+    else:                            # +1 (else)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process inactive user with profile
+        else:                        # +1 (else)
+            ... # process inactive user without profile
+</pre>
+<p>This function could be refactored into smaller functions: The complexity is spread over multiple functions and the breaks in flow are no more
+nested.
+  <br>
+  The <code>process_user</code> has now a complexity score of two.</p>
+<h4>Compliant solution</h4>
+<pre data-diff-id="3" data-diff-type="compliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        process_active_user(user)
+    else:                            # +1 (else)
+        process_inactive_user(user)
+
+def process_active_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process active user with profile
+    else:                            # +1 (else)
+        ... # process active user without profile
+
+def process_inactive_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process inactive user with profile
+    else:                            # +1 (else)
+        ... # process inactive user without profile
+</pre>
+<p><strong>Avoid deep nesting by returning early.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The below code has a cognitive complexity of 6.</p>
+<pre data-diff-id="4" data-diff-type="noncompliant">
+def calculate(data):
+    if data is not None:  # +1 (if)
+        total = 0
+        for item in data: # +1 (for) +1 (nested)
+            if item &gt; 0:  # +1 (if)  +2 (nested)
+                total += item * 2
+        return total
+</pre>
+<h4>Compliant solution</h4>
+<p>Checking for the edge case first flattens the <code>if</code> statements and reduces the cognitive complexity to 4.</p>
+<pre data-diff-id="4" data-diff-type="compliant">
+def calculate(data):
+    if data is None:      # +1 (if)
+        return None
+    total = 0
+    for item in data:     # +1 (for)
+        if item &gt; 0:      # +1 (if) +1 (nested)
+            total += item * 2
+    return total
+</pre>
+<h3>Pitfalls</h3>
+<p>As this code is complex, ensure that you have unit tests that cover the code before refactoring.</p></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="CRITICAL" data-type="CODE_SMELL" data-file="src/voice_to_text/providers/sixty.py">
+              <div class="issue-header" onclick="toggleCard('issue-1')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#e67e22">🟠 CRITICAL</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/providers/sixty.py:43</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">9min</span>
+                  <span class="expand-icon" id="icon-issue-1">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-1" style="display:none">
+                <div class="issue-message">Refactor this function to reduce its Cognitive Complexity from 19 to the 15 allowed.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S3776</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/providers/sixty.py</span>
+        <span class="code-line-ref">Line 43</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">38</td>
+          <td class="ln-code">        <span class="sym-16 sym">self</span>.<span class="sym-28 sym">_session_started</span> = <span class="sym-1 sym">asyncio</span>.Event()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">39</td>
+          <td class="ln-code">        <span class="sym-16 sym">self</span>.<span class="sym-29 sym">_session_stopped</span> = <span class="sym-1 sym">asyncio</span>.Event()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">40</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">41</td>
+          <td class="ln-code">    <span class="cd"># ── Batch ──────────────────────────────────────────────────────────</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">42</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">43</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-30 sym">transcribe_file</span>(</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">44</td>
+          <td class="ln-code">        <span class="sym-31 sym">self</span>, <span class="sym-32 sym">audio_path</span>: str, <span class="sym-33 sym">language</span>: str = <span class="s">"en"</span>, <span class="sym-34 sym">custom_words</span>: list[str] | <span class="k">None</span> = <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">45</td>
+          <td class="ln-code">    ) -&gt; str:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">46</td>
+          <td class="ln-code">        <span class="sym-13 sym">logger</span>.info(<span class="s">"Transcribing %s with 60db"</span>, <span class="sym-32 sym">audio_path</span>)</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">47</td>
+          <td class="ln-code">        <span class="sym-35 sym">headers</span> = {<span class="s">"Authorization"</span>: f"Bearer {<span class="sym-31 sym">self</span>.<span class="sym-18 sym">api_key</span>}"}</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">48</td>
+          <td class="ln-code">        <span class="sym-36 sym">data</span>: dict[str, str] = {}</td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Cognitive Complexity is a measure of how hard it is to understand the control flow of a unit of code. Code with high cognitive complexity is hard
+to read, understand, test, and modify.</p>
+<p>As a rule of thumb, high cognitive complexity is a sign that the code should be refactored into smaller, easier-to-manage pieces.</p>
+<h3>Which syntax in code does impact cognitive complexity score?</h3>
+<p>Here are the core concepts:</p>
+<ul>
+  <li><strong>Cognitive complexity is incremented each time the code breaks the normal linear reading flow.</strong>
+    <br>
+    This concerns, for example, loop structures, conditionals, catches, switches, jumps to labels, and conditions mixing multiple operators.</li>
+  <li><strong>Each nesting level increases complexity.</strong>
+    <br>
+    During code reading, the deeper you go through nested layers, the harder it becomes to keep the context in mind.</li>
+  <li><strong>Method calls are free</strong>
+    <br>
+    A well-picked method name is a summary of multiple lines of code. A reader can first explore a high-level view of what the code is performing then
+    go deeper and deeper by looking at called functions content.
+    <br>
+    <em>Note:</em> This does not apply to recursive calls, those will increment cognitive score.</li>
+</ul>
+<p>The method of computation is fully detailed in the pdf linked in the resources.</p>
+<h3>What is the potential impact?</h3>
+<p>Developers spend more time reading and understanding code than writing it. High cognitive complexity slows down changes and increases the cost of
+maintenance.</p></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Reducing cognitive complexity can be challenging.
+  <br>
+  Here are a few suggestions:</p>
+<ul>
+  <li><strong>Extract complex conditions in a new function.</strong>
+    <br>
+    Mixed operators in condition will increase complexity. Extracting the condition in a new function with an appropriate name will reduce cognitive
+    load.</li>
+  <li><strong>Break down large functions.</strong>
+    <br>
+    Large functions can be hard to understand and maintain. If a function is doing too many things, consider breaking it down into smaller, more
+    manageable functions. Each function should have a single responsibility.</li>
+  <li><strong>Avoid deep nesting by returning early.</strong>
+    <br>
+    To avoid the nesting of conditions, process exceptional cases first and return early.</li>
+</ul>
+
+<p><strong>Extraction of a complex condition in a new function.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The code is using a complex condition and has a cognitive cost of 5.</p>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if ((user.is_active and    # +1 (if) +1 (nested) +1 (multiple conditions)
+            user.has_profile) or   # +1 (mixed operator)
+            user.age &gt; 18 ):
+            user.process()
+</pre>
+<h4>Compliant solution</h4>
+<p>Even if the cognitive complexity of the whole program did not change, it is easier for a reader to understand the code of the
+<code>process_eligible_users</code> function, which now only has a cognitive cost of 3.</p>
+<pre data-diff-id="1" data-diff-type="compliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if is_eligible_user(user): # +1 (if) +1 (nested)
+            user.process()
+
+def is_eligible_user(user):
+    return ((user.is_active and user.has_profile) or user.age &gt; 18) # +1 (multiple conditions) +1 (mixed operators)
+</pre>
+<p><strong>Break down large functions.</strong></p>
+<h4>Noncompliant code example</h4>
+<p><em>Note:</em> The code is simplified here, to illustrate the purpose. Please imagine there is more happening in the process.
+  <br></p>
+<p>The bellow code has a cognitive complexity score of 8.</p>
+<pre data-diff-id="3" data-diff-type="noncompliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process active user with profile
+        else:                        # +1 (else)
+            ... # process active user without profile
+    else:                            # +1 (else)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process inactive user with profile
+        else:                        # +1 (else)
+            ... # process inactive user without profile
+</pre>
+<p>This function could be refactored into smaller functions: The complexity is spread over multiple functions and the breaks in flow are no more
+nested.
+  <br>
+  The <code>process_user</code> has now a complexity score of two.</p>
+<h4>Compliant solution</h4>
+<pre data-diff-id="3" data-diff-type="compliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        process_active_user(user)
+    else:                            # +1 (else)
+        process_inactive_user(user)
+
+def process_active_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process active user with profile
+    else:                            # +1 (else)
+        ... # process active user without profile
+
+def process_inactive_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process inactive user with profile
+    else:                            # +1 (else)
+        ... # process inactive user without profile
+</pre>
+<p><strong>Avoid deep nesting by returning early.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The below code has a cognitive complexity of 6.</p>
+<pre data-diff-id="4" data-diff-type="noncompliant">
+def calculate(data):
+    if data is not None:  # +1 (if)
+        total = 0
+        for item in data: # +1 (for) +1 (nested)
+            if item &gt; 0:  # +1 (if)  +2 (nested)
+                total += item * 2
+        return total
+</pre>
+<h4>Compliant solution</h4>
+<p>Checking for the edge case first flattens the <code>if</code> statements and reduces the cognitive complexity to 4.</p>
+<pre data-diff-id="4" data-diff-type="compliant">
+def calculate(data):
+    if data is None:      # +1 (if)
+        return None
+    total = 0
+    for item in data:     # +1 (for)
+        if item &gt; 0:      # +1 (if) +1 (nested)
+            total += item * 2
+    return total
+</pre>
+<h3>Pitfalls</h3>
+<p>As this code is complex, ensure that you have unit tests that cover the code before refactoring.</p></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="CRITICAL" data-type="CODE_SMELL" data-file="src/voice_to_text/postprocess.py">
+              <div class="issue-header" onclick="toggleCard('issue-1')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#e67e22">🟠 CRITICAL</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/postprocess.py:172</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">10min</span>
+                  <span class="expand-icon" id="icon-issue-1">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-1" style="display:none">
+                <div class="issue-message">Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S3776</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/postprocess.py</span>
+        <span class="code-line-ref">Line 172</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">167</td>
+          <td class="ln-code">    <span class="k">elif</span> <span class="sym-48 sym">original</span> <span class="k">and</span> <span class="sym-48 sym">original</span>[<span class="c">0</span>].isupper():</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">168</td>
+          <td class="ln-code">        <span class="k">return</span> <span class="sym-49 sym">replacement</span>[<span class="c">0</span>].upper() + <span class="sym-49 sym">replacement</span>[<span class="c">1</span>:] <span class="k">if</span> <span class="sym-49 sym">replacement</span> <span class="k">else</span> <span class="sym-49 sym">replacement</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">169</td>
+          <td class="ln-code">    <span class="k">return</span> <span class="sym-49 sym">replacement</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">170</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">171</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">172</td>
+          <td class="ln-code"><span class="k">def</span> <span class="sym-50 sym">_find_best_match</span>(</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">173</td>
+          <td class="ln-code">    <span class="sym-51 sym">candidate</span>: str,</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">174</td>
+          <td class="ln-code">    <span class="sym-52 sym">custom_words</span>: list[str],</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">175</td>
+          <td class="ln-code">    <span class="sym-53 sym">custom_keys</span>: list[tuple[int, str]],</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">176</td>
+          <td class="ln-code">    <span class="sym-54 sym">threshold</span>: float,</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">177</td>
+          <td class="ln-code">) -&gt; tuple[str, float] | <span class="k">None</span>:</td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Cognitive Complexity is a measure of how hard it is to understand the control flow of a unit of code. Code with high cognitive complexity is hard
+to read, understand, test, and modify.</p>
+<p>As a rule of thumb, high cognitive complexity is a sign that the code should be refactored into smaller, easier-to-manage pieces.</p>
+<h3>Which syntax in code does impact cognitive complexity score?</h3>
+<p>Here are the core concepts:</p>
+<ul>
+  <li><strong>Cognitive complexity is incremented each time the code breaks the normal linear reading flow.</strong>
+    <br>
+    This concerns, for example, loop structures, conditionals, catches, switches, jumps to labels, and conditions mixing multiple operators.</li>
+  <li><strong>Each nesting level increases complexity.</strong>
+    <br>
+    During code reading, the deeper you go through nested layers, the harder it becomes to keep the context in mind.</li>
+  <li><strong>Method calls are free</strong>
+    <br>
+    A well-picked method name is a summary of multiple lines of code. A reader can first explore a high-level view of what the code is performing then
+    go deeper and deeper by looking at called functions content.
+    <br>
+    <em>Note:</em> This does not apply to recursive calls, those will increment cognitive score.</li>
+</ul>
+<p>The method of computation is fully detailed in the pdf linked in the resources.</p>
+<h3>What is the potential impact?</h3>
+<p>Developers spend more time reading and understanding code than writing it. High cognitive complexity slows down changes and increases the cost of
+maintenance.</p></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Reducing cognitive complexity can be challenging.
+  <br>
+  Here are a few suggestions:</p>
+<ul>
+  <li><strong>Extract complex conditions in a new function.</strong>
+    <br>
+    Mixed operators in condition will increase complexity. Extracting the condition in a new function with an appropriate name will reduce cognitive
+    load.</li>
+  <li><strong>Break down large functions.</strong>
+    <br>
+    Large functions can be hard to understand and maintain. If a function is doing too many things, consider breaking it down into smaller, more
+    manageable functions. Each function should have a single responsibility.</li>
+  <li><strong>Avoid deep nesting by returning early.</strong>
+    <br>
+    To avoid the nesting of conditions, process exceptional cases first and return early.</li>
+</ul>
+
+<p><strong>Extraction of a complex condition in a new function.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The code is using a complex condition and has a cognitive cost of 5.</p>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if ((user.is_active and    # +1 (if) +1 (nested) +1 (multiple conditions)
+            user.has_profile) or   # +1 (mixed operator)
+            user.age &gt; 18 ):
+            user.process()
+</pre>
+<h4>Compliant solution</h4>
+<p>Even if the cognitive complexity of the whole program did not change, it is easier for a reader to understand the code of the
+<code>process_eligible_users</code> function, which now only has a cognitive cost of 3.</p>
+<pre data-diff-id="1" data-diff-type="compliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if is_eligible_user(user): # +1 (if) +1 (nested)
+            user.process()
+
+def is_eligible_user(user):
+    return ((user.is_active and user.has_profile) or user.age &gt; 18) # +1 (multiple conditions) +1 (mixed operators)
+</pre>
+<p><strong>Break down large functions.</strong></p>
+<h4>Noncompliant code example</h4>
+<p><em>Note:</em> The code is simplified here, to illustrate the purpose. Please imagine there is more happening in the process.
+  <br></p>
+<p>The bellow code has a cognitive complexity score of 8.</p>
+<pre data-diff-id="3" data-diff-type="noncompliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process active user with profile
+        else:                        # +1 (else)
+            ... # process active user without profile
+    else:                            # +1 (else)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process inactive user with profile
+        else:                        # +1 (else)
+            ... # process inactive user without profile
+</pre>
+<p>This function could be refactored into smaller functions: The complexity is spread over multiple functions and the breaks in flow are no more
+nested.
+  <br>
+  The <code>process_user</code> has now a complexity score of two.</p>
+<h4>Compliant solution</h4>
+<pre data-diff-id="3" data-diff-type="compliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        process_active_user(user)
+    else:                            # +1 (else)
+        process_inactive_user(user)
+
+def process_active_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process active user with profile
+    else:                            # +1 (else)
+        ... # process active user without profile
+
+def process_inactive_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process inactive user with profile
+    else:                            # +1 (else)
+        ... # process inactive user without profile
+</pre>
+<p><strong>Avoid deep nesting by returning early.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The below code has a cognitive complexity of 6.</p>
+<pre data-diff-id="4" data-diff-type="noncompliant">
+def calculate(data):
+    if data is not None:  # +1 (if)
+        total = 0
+        for item in data: # +1 (for) +1 (nested)
+            if item &gt; 0:  # +1 (if)  +2 (nested)
+                total += item * 2
+        return total
+</pre>
+<h4>Compliant solution</h4>
+<p>Checking for the edge case first flattens the <code>if</code> statements and reduces the cognitive complexity to 4.</p>
+<pre data-diff-id="4" data-diff-type="compliant">
+def calculate(data):
+    if data is None:      # +1 (if)
+        return None
+    total = 0
+    for item in data:     # +1 (for)
+        if item &gt; 0:      # +1 (if) +1 (nested)
+            total += item * 2
+    return total
+</pre>
+<h3>Pitfalls</h3>
+<p>As this code is complex, ensure that you have unit tests that cover the code before refactoring.</p></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="CRITICAL" data-type="CODE_SMELL" data-file="src/voice_to_text/postprocess.py">
+              <div class="issue-header" onclick="toggleCard('issue-1')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#e67e22">🟠 CRITICAL</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/postprocess.py:219</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">23min</span>
+                  <span class="expand-icon" id="icon-issue-1">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-1" style="display:none">
+                <div class="issue-message">Refactor this function to reduce its Cognitive Complexity from 33 to the 15 allowed.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S3776</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/postprocess.py</span>
+        <span class="code-line-ref">Line 219</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">214</td>
+          <td class="ln-code">            <span class="sym-56 sym">best_score</span> = <span class="sym-66 sym">combined_score</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">215</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">216</td>
+          <td class="ln-code">    <span class="k">return</span> (<span class="sym-55 sym">best_match</span>, <span class="sym-56 sym">best_score</span>) <span class="k">if</span> <span class="sym-55 sym">best_match</span> <span class="k">is</span> <span class="k">not</span> <span class="k">None</span> <span class="k">else</span> <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">217</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">218</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">219</td>
+          <td class="ln-code"><span class="k">def</span> <span class="sym-67 sym">apply_custom_words</span>(</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">220</td>
+          <td class="ln-code">    <span class="sym-68 sym">text</span>: str,</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">221</td>
+          <td class="ln-code">    <span class="sym-69 sym">custom_words</span>: list[str],</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">222</td>
+          <td class="ln-code">    <span class="sym-70 sym">threshold</span>: float = <span class="c">0.5</span>,</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">223</td>
+          <td class="ln-code">) -&gt; str:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">224</td>
+          <td class="ln-code">    <span class="j">"""Apply fuzzy custom word corrections to transcribed text.</span></td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Cognitive Complexity is a measure of how hard it is to understand the control flow of a unit of code. Code with high cognitive complexity is hard
+to read, understand, test, and modify.</p>
+<p>As a rule of thumb, high cognitive complexity is a sign that the code should be refactored into smaller, easier-to-manage pieces.</p>
+<h3>Which syntax in code does impact cognitive complexity score?</h3>
+<p>Here are the core concepts:</p>
+<ul>
+  <li><strong>Cognitive complexity is incremented each time the code breaks the normal linear reading flow.</strong>
+    <br>
+    This concerns, for example, loop structures, conditionals, catches, switches, jumps to labels, and conditions mixing multiple operators.</li>
+  <li><strong>Each nesting level increases complexity.</strong>
+    <br>
+    During code reading, the deeper you go through nested layers, the harder it becomes to keep the context in mind.</li>
+  <li><strong>Method calls are free</strong>
+    <br>
+    A well-picked method name is a summary of multiple lines of code. A reader can first explore a high-level view of what the code is performing then
+    go deeper and deeper by looking at called functions content.
+    <br>
+    <em>Note:</em> This does not apply to recursive calls, those will increment cognitive score.</li>
+</ul>
+<p>The method of computation is fully detailed in the pdf linked in the resources.</p>
+<h3>What is the potential impact?</h3>
+<p>Developers spend more time reading and understanding code than writing it. High cognitive complexity slows down changes and increases the cost of
+maintenance.</p></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Reducing cognitive complexity can be challenging.
+  <br>
+  Here are a few suggestions:</p>
+<ul>
+  <li><strong>Extract complex conditions in a new function.</strong>
+    <br>
+    Mixed operators in condition will increase complexity. Extracting the condition in a new function with an appropriate name will reduce cognitive
+    load.</li>
+  <li><strong>Break down large functions.</strong>
+    <br>
+    Large functions can be hard to understand and maintain. If a function is doing too many things, consider breaking it down into smaller, more
+    manageable functions. Each function should have a single responsibility.</li>
+  <li><strong>Avoid deep nesting by returning early.</strong>
+    <br>
+    To avoid the nesting of conditions, process exceptional cases first and return early.</li>
+</ul>
+
+<p><strong>Extraction of a complex condition in a new function.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The code is using a complex condition and has a cognitive cost of 5.</p>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if ((user.is_active and    # +1 (if) +1 (nested) +1 (multiple conditions)
+            user.has_profile) or   # +1 (mixed operator)
+            user.age &gt; 18 ):
+            user.process()
+</pre>
+<h4>Compliant solution</h4>
+<p>Even if the cognitive complexity of the whole program did not change, it is easier for a reader to understand the code of the
+<code>process_eligible_users</code> function, which now only has a cognitive cost of 3.</p>
+<pre data-diff-id="1" data-diff-type="compliant">
+def process_eligible_users(users):
+    for user in users:             # +1 (for)
+        if is_eligible_user(user): # +1 (if) +1 (nested)
+            user.process()
+
+def is_eligible_user(user):
+    return ((user.is_active and user.has_profile) or user.age &gt; 18) # +1 (multiple conditions) +1 (mixed operators)
+</pre>
+<p><strong>Break down large functions.</strong></p>
+<h4>Noncompliant code example</h4>
+<p><em>Note:</em> The code is simplified here, to illustrate the purpose. Please imagine there is more happening in the process.
+  <br></p>
+<p>The bellow code has a cognitive complexity score of 8.</p>
+<pre data-diff-id="3" data-diff-type="noncompliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process active user with profile
+        else:                        # +1 (else)
+            ... # process active user without profile
+    else:                            # +1 (else)
+        if user.has_profile():       # +1 (if) +1 (nested)
+            ... # process inactive user with profile
+        else:                        # +1 (else)
+            ... # process inactive user without profile
+</pre>
+<p>This function could be refactored into smaller functions: The complexity is spread over multiple functions and the breaks in flow are no more
+nested.
+  <br>
+  The <code>process_user</code> has now a complexity score of two.</p>
+<h4>Compliant solution</h4>
+<pre data-diff-id="3" data-diff-type="compliant">
+def process_user(user):
+    if user.is_active():             # +1 (if)
+        process_active_user(user)
+    else:                            # +1 (else)
+        process_inactive_user(user)
+
+def process_active_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process active user with profile
+    else:                            # +1 (else)
+        ... # process active user without profile
+
+def process_inactive_user(user):
+    if user.has_profile():           # +1 (if) +1 (nested)
+        ... # process inactive user with profile
+    else:                            # +1 (else)
+        ... # process inactive user without profile
+</pre>
+<p><strong>Avoid deep nesting by returning early.</strong></p>
+<h4>Noncompliant code example</h4>
+<p>The below code has a cognitive complexity of 6.</p>
+<pre data-diff-id="4" data-diff-type="noncompliant">
+def calculate(data):
+    if data is not None:  # +1 (if)
+        total = 0
+        for item in data: # +1 (for) +1 (nested)
+            if item &gt; 0:  # +1 (if)  +2 (nested)
+                total += item * 2
+        return total
+</pre>
+<h4>Compliant solution</h4>
+<p>Checking for the edge case first flattens the <code>if</code> statements and reduces the cognitive complexity to 4.</p>
+<pre data-diff-id="4" data-diff-type="compliant">
+def calculate(data):
+    if data is None:      # +1 (if)
+        return None
+    total = 0
+    for item in data:     # +1 (for)
+        if item &gt; 0:      # +1 (if) +1 (nested)
+            total += item * 2
+    return total
+</pre>
+<h3>Pitfalls</h3>
+<p>As this code is complex, ensure that you have unit tests that cover the code before refactoring.</p></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="MINOR" data-type="CODE_SMELL" data-file="src/voice_to_text/mutter_virtual_paster.py">
+              <div class="issue-header" onclick="toggleCard('issue-3')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#3498db">🔵 MINOR</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/mutter_virtual_paster.py:76</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">5min</span>
+                  <span class="expand-icon" id="icon-issue-3">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-3" style="display:none">
+                <div class="issue-message">Use asynchronous features in this function or remove the `async` keyword.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S7503</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/mutter_virtual_paster.py</span>
+        <span class="code-line-ref">Line 76</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">71</td>
+          <td class="ln-code">        <span class="k">except</span> Exception <span class="k">as</span> <span class="sym-27 sym">e</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">72</td>
+          <td class="ln-code">            <span class="sym-5 sym">logger</span>.warning(<span class="s">"MutterVirtualPaster: D-Bus call failed: %s"</span>, <span class="sym-27 sym">e</span>)</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">73</td>
+          <td class="ln-code">            <span class="sym-25 sym">self</span>.<span class="sym-12 sym">_usable</span> = False</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">74</td>
+          <td class="ln-code">            <span class="k">return</span> False</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">75</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">76</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-28 sym">stop</span>(<span class="sym-29 sym">self</span>) -&gt; <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">77</td>
+          <td class="ln-code">        <span class="j">"""Cleanup."""</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">78</td>
+          <td class="ln-code">        <span class="k">if</span> <span class="sym-29 sym">self</span>.<span class="sym-14 sym">_bus</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">79</td>
+          <td class="ln-code">            <span class="sym-29 sym">self</span>.<span class="sym-14 sym">_bus</span>.disconnect()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">80</td>
+          <td class="ln-code">            <span class="sym-29 sym">self</span>.<span class="sym-14 sym">_bus</span> = <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">81</td>
+          <td class="ln-code">        <span class="sym-29 sym">self</span>.<span class="sym-13 sym">_proxy</span> = <span class="k">None</span></td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Declaring a function with <code>async def</code> signals that it’s a coroutine, typically because it needs to use <code>await</code> for
+non-blocking operations (like I/O), or employs other asynchronous features like <code>async for</code> or <code>async with</code>.</p>
+<p>If none of these asynchronous mechanisms are utilized within the function’s body, the <code>async</code> declaration is superfluous.</p>
+<p>Using <code>async</code> unnecessarily can:</p>
+<ul>
+  <li><strong>Reduce Code Clarity:</strong> It misleads developers into thinking the function performs asynchronous operations when it doesn’t, making
+  the codebase harder to understand and reason about.</li>
+  <li><strong>Introduce Minor Overhead:</strong> Calling an <code>async def</code> function creates a coroutine object. While modern Python is
+  efficient, this still incurs more overhead than a direct synchronous function call if the asynchronicity isn’t actually leveraged. The function’s
+  body will execute synchronously until an <code>await</code> (if any) is encountered. If there’s no <code>await</code> or other async feature, it
+  essentially runs synchronously but wrapped as a coroutine.</li>
+  <li><strong>Complicate Usage:</strong> Callers must use <code>await</code> (or schedule it as a task) to execute the coroutine and get its result.
+  This is an unnecessary ceremony if the function itself isn’t truly asynchronous.</li>
+</ul></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Either remove the <code>async</code> keyword, or start using the appropriate asynchronous features.</p>
+
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+async def my_function():  # Noncompliant
+    print("Hello from my function")
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="1" data-diff-type="compliant">
+def my_function():  # Compliant
+    print("Hello from my function")
+</pre>
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="2" data-diff-type="noncompliant">
+def another_function(): ...
+
+async def my_function():  # Noncompliant
+    return another_function()
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="2" data-diff-type="compliant">
+async def another_function(): ...
+
+async def my_function():  # Compliant
+    return await another_function()
+</pre></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="MINOR" data-type="CODE_SMELL" data-file="src/voice_to_text/mutter_virtual_typer.py">
+              <div class="issue-header" onclick="toggleCard('issue-3')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#3498db">🔵 MINOR</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/mutter_virtual_typer.py:97</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">5min</span>
+                  <span class="expand-icon" id="icon-issue-3">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-3" style="display:none">
+                <div class="issue-message">Use asynchronous features in this function or remove the `async` keyword.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S7503</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/mutter_virtual_typer.py</span>
+        <span class="code-line-ref">Line 97</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">92</td>
+          <td class="ln-code">            <span class="sym-25 sym">self</span>.<span class="sym-11 sym">_typed_text</span> = <span class="sym-26 sym">new_text</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">93</td>
+          <td class="ln-code">        <span class="k">except</span> Exception <span class="k">as</span> <span class="sym-33 sym">e</span>:  <span class="cd"># noqa: BLE001 - D-Bus can fail in many ways</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">94</td>
+          <td class="ln-code">            <span class="sym-4 sym">logger</span>.warning(<span class="s">"MutterVirtualTyper: D-Bus call failed: %s"</span>, <span class="sym-33 sym">e</span>)</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">95</td>
+          <td class="ln-code">            <span class="sym-25 sym">self</span>.<span class="sym-12 sym">_usable</span> = False</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">96</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">97</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-34 sym">stop</span>(<span class="sym-35 sym">self</span>) -&gt; <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">98</td>
+          <td class="ln-code">        <span class="j">"""Cleanup."""</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">99</td>
+          <td class="ln-code">        <span class="k">if</span> <span class="sym-35 sym">self</span>.<span class="sym-14 sym">_bus</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">100</td>
+          <td class="ln-code">            <span class="sym-35 sym">self</span>.<span class="sym-14 sym">_bus</span>.disconnect()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">101</td>
+          <td class="ln-code">            <span class="sym-35 sym">self</span>.<span class="sym-14 sym">_bus</span> = <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">102</td>
+          <td class="ln-code">        <span class="sym-35 sym">self</span>.<span class="sym-13 sym">_proxy</span> = <span class="k">None</span></td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Declaring a function with <code>async def</code> signals that it’s a coroutine, typically because it needs to use <code>await</code> for
+non-blocking operations (like I/O), or employs other asynchronous features like <code>async for</code> or <code>async with</code>.</p>
+<p>If none of these asynchronous mechanisms are utilized within the function’s body, the <code>async</code> declaration is superfluous.</p>
+<p>Using <code>async</code> unnecessarily can:</p>
+<ul>
+  <li><strong>Reduce Code Clarity:</strong> It misleads developers into thinking the function performs asynchronous operations when it doesn’t, making
+  the codebase harder to understand and reason about.</li>
+  <li><strong>Introduce Minor Overhead:</strong> Calling an <code>async def</code> function creates a coroutine object. While modern Python is
+  efficient, this still incurs more overhead than a direct synchronous function call if the asynchronicity isn’t actually leveraged. The function’s
+  body will execute synchronously until an <code>await</code> (if any) is encountered. If there’s no <code>await</code> or other async feature, it
+  essentially runs synchronously but wrapped as a coroutine.</li>
+  <li><strong>Complicate Usage:</strong> Callers must use <code>await</code> (or schedule it as a task) to execute the coroutine and get its result.
+  This is an unnecessary ceremony if the function itself isn’t truly asynchronous.</li>
+</ul></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Either remove the <code>async</code> keyword, or start using the appropriate asynchronous features.</p>
+
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+async def my_function():  # Noncompliant
+    print("Hello from my function")
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="1" data-diff-type="compliant">
+def my_function():  # Compliant
+    print("Hello from my function")
+</pre>
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="2" data-diff-type="noncompliant">
+def another_function(): ...
+
+async def my_function():  # Noncompliant
+    return another_function()
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="2" data-diff-type="compliant">
+async def another_function(): ...
+
+async def my_function():  # Compliant
+    return await another_function()
+</pre></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="MINOR" data-type="CODE_SMELL" data-file="src/voice_to_text/engine.py">
+              <div class="issue-header" onclick="toggleCard('issue-3')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#3498db">🔵 MINOR</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/engine.py:226</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">5min</span>
+                  <span class="expand-icon" id="icon-issue-3">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-3" style="display:none">
+                <div class="issue-message">Use asynchronous features in this function or remove the `async` keyword.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S7503</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/engine.py</span>
+        <span class="code-line-ref">Line 226</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">221</td>
+          <td class="ln-code">        <span class="cd"># Callbacks set by the D-Bus service to emit signals</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">222</td>
+          <td class="ln-code">        <span class="sym-79 sym">self</span>.<span class="sym-90 sym">on_audio_level</span>: <span class="sym-5 sym">Callable</span>[[float], <span class="k">None</span>] | <span class="k">None</span> = <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">223</td>
+          <td class="ln-code">        <span class="sym-79 sym">self</span>.<span class="sym-91 sym">on_error</span>: <span class="sym-5 sym">Callable</span>[[str], <span class="k">None</span>] | <span class="k">None</span> = <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">224</td>
+          <td class="ln-code">        <span class="sym-79 sym">self</span>.<span class="sym-92 sym">on_state_change</span>: <span class="sym-5 sym">Callable</span>[[<span class="sym-29 sym">EngineState</span>], <span class="k">None</span>] | <span class="k">None</span> = <span class="k">None</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">225</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">226</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-93 sym">start</span>(<span class="sym-94 sym">self</span>, <span class="sym-95 sym">config</span>: dict[str, <span class="sym-7 sym">Any</span>]) -&gt; <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">227</td>
+          <td class="ln-code">        <span class="j">"""Start recording and transcription."""</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">228</td>
+          <td class="ln-code">        <span class="k">if</span> <span class="sym-94 sym">self</span>.<span class="sym-80 sym">state</span> != <span class="sym-29 sym">EngineState</span>.<span class="sym-30 sym">IDLE</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">229</td>
+          <td class="ln-code">            <span class="k">raise</span> RuntimeError(f"Cannot start: engine is {<span class="sym-94 sym">self</span>.<span class="sym-80 sym">state</span>.value}")</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">230</td>
+          <td class="ln-code">        <span class="sym-94 sym">self</span>.<span class="sym-85 sym">_cancel_event</span>.clear()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">231</td>
+          <td class="ln-code">        <span class="cd"># Validate and resolve stop_timeout from D-Bus config</span></td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Declaring a function with <code>async def</code> signals that it’s a coroutine, typically because it needs to use <code>await</code> for
+non-blocking operations (like I/O), or employs other asynchronous features like <code>async for</code> or <code>async with</code>.</p>
+<p>If none of these asynchronous mechanisms are utilized within the function’s body, the <code>async</code> declaration is superfluous.</p>
+<p>Using <code>async</code> unnecessarily can:</p>
+<ul>
+  <li><strong>Reduce Code Clarity:</strong> It misleads developers into thinking the function performs asynchronous operations when it doesn’t, making
+  the codebase harder to understand and reason about.</li>
+  <li><strong>Introduce Minor Overhead:</strong> Calling an <code>async def</code> function creates a coroutine object. While modern Python is
+  efficient, this still incurs more overhead than a direct synchronous function call if the asynchronicity isn’t actually leveraged. The function’s
+  body will execute synchronously until an <code>await</code> (if any) is encountered. If there’s no <code>await</code> or other async feature, it
+  essentially runs synchronously but wrapped as a coroutine.</li>
+  <li><strong>Complicate Usage:</strong> Callers must use <code>await</code> (or schedule it as a task) to execute the coroutine and get its result.
+  This is an unnecessary ceremony if the function itself isn’t truly asynchronous.</li>
+</ul></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Either remove the <code>async</code> keyword, or start using the appropriate asynchronous features.</p>
+
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+async def my_function():  # Noncompliant
+    print("Hello from my function")
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="1" data-diff-type="compliant">
+def my_function():  # Compliant
+    print("Hello from my function")
+</pre>
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="2" data-diff-type="noncompliant">
+def another_function(): ...
+
+async def my_function():  # Noncompliant
+    return another_function()
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="2" data-diff-type="compliant">
+async def another_function(): ...
+
+async def my_function():  # Compliant
+    return await another_function()
+</pre></div>
+        </div></div>
+              </div>
+            </div>
+            <div class="issue-card" data-severity="MINOR" data-type="CODE_SMELL" data-file="src/voice_to_text/providers/base.py">
+              <div class="issue-header" onclick="toggleCard('issue-3')">
+                <div class="issue-header-left">
+                  <span class="badge" style="background:#3498db">🔵 MINOR</span>
+                  <span class="badge type-code_smell">CODE_SMELL</span>
+                  <span class="issue-location">src/voice_to_text/providers/base.py:64</span>
+                </div>
+                <div class="issue-header-right">
+                  <span class="issue-effort">5min</span>
+                  <span class="expand-icon" id="icon-issue-3">▶</span>
+                </div>
+              </div>
+              <div class="issue-body" id="issue-3" style="display:none">
+                <div class="issue-message">Use asynchronous features in this function or remove the `async` keyword.</div>
+                <div class="issue-rule"><small class="rule">Rule: python:S7503</small></div>
+                <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">📄 src/voice_to_text/providers/base.py</span>
+        <span class="code-line-ref">Line 64</span>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">59</td>
+          <td class="ln-code">    @<span class="sym-7 sym">abstractmethod</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">60</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-33 sym">send_audio</span>(<span class="sym-34 sym">self</span>, <span class="sym-35 sym">audio_chunk</span>: bytes) -&gt; <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">61</td>
+          <td class="ln-code">        <span class="j">"""Send an audio chunk for processing."""</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">62</td>
+          <td class="ln-code">        <span class="k">pass</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">63</td>
+          <td class="ln-code"></td>
+        </tr><tr class="code-issue-line">
+          <td class="ln-marker">➤</td>
+          <td class="ln-num">64</td>
+          <td class="ln-code">    <span class="k">async</span> <span class="k">def</span> <span class="sym-36 sym">get_partial_result</span>(<span class="sym-37 sym">self</span>) -&gt; str | <span class="k">None</span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">65</td>
+          <td class="ln-code">        <span class="j">"""Get latest partial transcript (may change)."""</span></td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">66</td>
+          <td class="ln-code">        <span class="k">if</span> <span class="sym-37 sym">self</span>.<span class="sym-24 sym"><span class="sym-38 sym">_partial_result</span></span>:</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">67</td>
+          <td class="ln-code">            <span class="k">return</span> (</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">68</td>
+          <td class="ln-code">                (<span class="sym-37 sym">self</span>.<span class="sym-25 sym"><span class="sym-39 sym">_finalized_text</span></span> + <span class="s">" "</span> + <span class="sym-37 sym">self</span>.<span class="sym-24 sym"><span class="sym-38 sym">_partial_result</span></span>).strip()</td>
+        </tr><tr class="code-line">
+          <td class="ln-marker">&nbsp;</td>
+          <td class="ln-num">69</td>
+          <td class="ln-code">                <span class="k">if</span> <span class="sym-37 sym">self</span>.<span class="sym-25 sym"><span class="sym-39 sym">_finalized_text</span></span></td>
+        </tr></tbody></table>
+      </div>
+    </div>
+                <div class="rule-desc"><div class="desc-section">
+          <div class="desc-title">❓ What is the issue?</div>
+          <div class="desc-body"><p>Declaring a function with <code>async def</code> signals that it’s a coroutine, typically because it needs to use <code>await</code> for
+non-blocking operations (like I/O), or employs other asynchronous features like <code>async for</code> or <code>async with</code>.</p>
+<p>If none of these asynchronous mechanisms are utilized within the function’s body, the <code>async</code> declaration is superfluous.</p>
+<p>Using <code>async</code> unnecessarily can:</p>
+<ul>
+  <li><strong>Reduce Code Clarity:</strong> It misleads developers into thinking the function performs asynchronous operations when it doesn’t, making
+  the codebase harder to understand and reason about.</li>
+  <li><strong>Introduce Minor Overhead:</strong> Calling an <code>async def</code> function creates a coroutine object. While modern Python is
+  efficient, this still incurs more overhead than a direct synchronous function call if the asynchronicity isn’t actually leveraged. The function’s
+  body will execute synchronously until an <code>await</code> (if any) is encountered. If there’s no <code>await</code> or other async feature, it
+  essentially runs synchronously but wrapped as a coroutine.</li>
+  <li><strong>Complicate Usage:</strong> Callers must use <code>await</code> (or schedule it as a task) to execute the coroutine and get its result.
+  This is an unnecessary ceremony if the function itself isn’t truly asynchronous.</li>
+</ul></div>
+        </div><div class="desc-section">
+          <div class="desc-title">🔧 How to fix it</div>
+          <div class="desc-body"><p>Either remove the <code>async</code> keyword, or start using the appropriate asynchronous features.</p>
+
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="1" data-diff-type="noncompliant">
+async def my_function():  # Noncompliant
+    print("Hello from my function")
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="1" data-diff-type="compliant">
+def my_function():  # Compliant
+    print("Hello from my function")
+</pre>
+<h4>Noncompliant code example</h4>
+<pre data-diff-id="2" data-diff-type="noncompliant">
+def another_function(): ...
+
+async def my_function():  # Noncompliant
+    return another_function()
+</pre>
+<h4>Compliant solution</h4>
+<pre data-diff-id="2" data-diff-type="compliant">
+async def another_function(): ...
+
+async def my_function():  # Compliant
+    return await another_function()
+</pre></div>
+        </div></div>
+              </div>
+            </div>
+</div>
+
+<h2>Files (7)</h2>
+<table id="files-table">
+<thead>
+<tr><th>File</th><th>Issues</th><th>Critical</th><th>Major</th><th>Minor</th></tr>
+</thead>
+<tbody>
+
+            <tr onclick="filterByFile('src/voice_to_text/engine.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/engine.py</td>
+                <td>2</td>
+                <td>🔴 1</td>
+                <td></td>
+                <td>🔵 1</td>
+            </tr>
+            <tr onclick="filterByFile('src/voice_to_text/mutter_virtual_paster.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/mutter_virtual_paster.py</td>
+                <td>1</td>
+                <td></td>
+                <td></td>
+                <td>🔵 1</td>
+            </tr>
+            <tr onclick="filterByFile('src/voice_to_text/mutter_virtual_typer.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/mutter_virtual_typer.py</td>
+                <td>1</td>
+                <td></td>
+                <td></td>
+                <td>🔵 1</td>
+            </tr>
+            <tr onclick="filterByFile('src/voice_to_text/postprocess.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/postprocess.py</td>
+                <td>2</td>
+                <td>🔴 2</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr onclick="filterByFile('src/voice_to_text/providers/base.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/providers/base.py</td>
+                <td>1</td>
+                <td></td>
+                <td></td>
+                <td>🔵 1</td>
+            </tr>
+            <tr onclick="filterByFile('src/voice_to_text/providers/sixty.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/providers/sixty.py</td>
+                <td>1</td>
+                <td>🔴 1</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr onclick="filterByFile('src/voice_to_text/typer.py')" class="clickable">
+                <td class="file-link">src/voice_to_text/typer.py</td>
+                <td>1</td>
+                <td>🔴 1</td>
+                <td></td>
+                <td></td>
+            </tr>
+</tbody>
+</table>
+
+<script>
+function toggleCard(id) {
+  const el = document.getElementById(id);
+  const icon = document.getElementById('icon-' + id);
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    icon.classList.add('open');
+  } else {
+    el.style.display = 'none';
+    icon.classList.remove('open');
+  }
+}
+
+function expandAll() {
+  document.querySelectorAll('.issue-body').forEach(el => el.style.display = 'block');
+  document.querySelectorAll('.expand-icon').forEach(el => el.classList.add('open'));
+}
+
+function collapseAll() {
+  document.querySelectorAll('.issue-body').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.expand-icon').forEach(el => el.classList.remove('open'));
+}
+
+function filterCards() {
+  const q = document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('.issue-card').forEach(card => {
+    const text = card.textContent.toLowerCase();
+    const file = card.dataset.file || '';
+    card.style.display = (text.includes(q) || file.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+
+function clearFilter() {
+  document.getElementById('search').value = '';
+  filterCards();
+}
+
+function filterByFile(file) {
+  document.getElementById('search').value = file;
+  filterCards();
+  document.getElementById('issues-container').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
