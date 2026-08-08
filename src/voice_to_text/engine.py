@@ -437,12 +437,6 @@ class RecordingEngine:
                     custom_words = (
                         raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
                     )
-                    raw_threshold = config.get("custom_words_threshold")
-                    custom_words_threshold = (
-                        raw_threshold
-                        if raw_threshold is not None
-                        else postprocess_cfg.get("custom_words_threshold", 0.5)
-                    )
                     if transcriber:
                         text = await transcriber.on_recording_stop(filepath, language, custom_words)
                     else:
@@ -456,8 +450,6 @@ class RecordingEngine:
                             text = postprocess(
                                 text,
                                 lang=postprocess_cfg.get("language") or language,
-                                custom_words=custom_words,
-                                custom_words_threshold=custom_words_threshold,
                                 custom_filler_words=postprocess_cfg.get("custom_filler_words"),
                             )
                     _step("postprocess_done")

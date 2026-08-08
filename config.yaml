@@ -74,8 +74,7 @@ engine:
 postprocess:
   enabled: true
   language: null  # null falls back to the recording language
-  custom_words: []  # sent to provider for recognition biasing + fuzzy post-correction, e.g. ["R&D", "API", "OAuth"]
-  custom_words_threshold: 0.5  # 0.0=exact, 0.5=moderate, 1.0=any match
+  custom_words: []  # sent to provider for recognition biasing, e.g. ["R&D", "API", "OAuth"]
   # custom_filler_words: null  # override filler list; null=language defaults, []=disable
 
 # Performance profiling (logs timing for each startup step)
