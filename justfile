@@ -287,8 +287,7 @@ gnome-ext-dev: reinstall
         exit 1
     fi
     # Disable extension on host so it only loads in nested shell
-    gnome-extensions list | grep -q voice-to-text@happytomatoe.com && gnome-extensions disable voice-to-text@happytomatoe.com
-    gnome-extensions uninstall voice-to-text@happytomatoe.com
+    gnome-extensions list | grep -q voice-to-text@happytomatoe.com && gnome-extensions disable voice-to-text@happytomatoe.com && gnome-extensions uninstall voice-to-text@happytomatoe.com
     LOG_DIR="$PWD/logs"
     LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
     mkdir -p "$LOG_DIR"
@@ -302,16 +301,6 @@ gnome-ext-dev: reinstall
         else
             sudo dnf install -y mutter-devkit
         fi
-    fi
-    UUID="voice-to-text@happytomatoe.com"
-    # Enable extension via dconf (gnome-extensions CLI needs a running session)
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
     fi
     GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
     if [ "$GNOME_VERSION" -ge 49 ]; then
@@ -343,8 +332,8 @@ gnome-ext-dev: reinstall
       trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
       echo 'AT-SPI bus running. Use: just atspi-tree' >> \"$LOG_FILE\"
       # Enable extension in nested session's isolated dconf
-      dbus-launch dconf write /org/gnome/shell/enabled-extensions "['voice-to-text@happytomatoe.com']"
-      dbus-launch dconf write /org/gnome/shell/disable-user-extensions false
+      gsettings set org.gnome.shell enabled-extensions "['voice-to-text@happytomatoe.com']"
+      gsettings set org.gnome.shell disable-user-extensions false
       gnome-shell --wayland $DEVKIT_FLAG
     " 2>&1 | tee -a "$LOG_FILE"
     echo "Logs written to $LOG_FILE"
