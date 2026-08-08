@@ -1,1 +1,0 @@
-- [ ] optimize e2e test so that it takes less time

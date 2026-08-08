@@ -150,6 +150,12 @@ class VoiceToTextInterface(ServiceInterface):
         loop.create_task(self._engine.stop())
 
     @method()
+    def CancelRecording(self) -> None:  # noqa: N802
+        """Cancel recording and discard output."""
+        loop = asyncio.get_running_loop()
+        loop.create_task(self._engine.cancel())
+
+    @method()
     def GetStatus(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
         """Return current state: idle/recording/processing."""
         return self._state
