@@ -455,20 +455,20 @@ gnome-ext-uninstall:
 preview-buttons:
     #!/usr/bin/env bash
     set -euo pipefail
-    
+
     # Install extension
     DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
     mkdir -p "$DEST"
     cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
-    
+
     # Enable it
     gnome-extensions enable stop-button-preview@local 2>/dev/null || true
-    
+
     echo "Starting nested GNOME Shell with button preview..."
     echo "A window should appear on your screen."
     echo "Click the puzzle piece icon in the top panel to see button options."
     echo ""
-    
+
     # Run nested shell
     export MUTTER_DEBUG_NESTED=
     dbus-run-session -- gnome-shell --wayland --devkit
@@ -478,22 +478,22 @@ preview-buttons:
 check-preview:
     #!/usr/bin/env bash
     set -uo pipefail
-    
+
     # Install extension
     DEST="$HOME/.local/share/gnome-shell/extensions/stop-button-preview@local"
     mkdir -p "$DEST"
     cp stop-button-preview/metadata.json stop-button-preview/extension.js "$DEST/"
-    
+
     gnome-extensions enable stop-button-preview@local 2>/dev/null || true
-    
+
     echo "Running preview extension for 10 seconds..."
     LOG=$(mktemp)
     timeout 10 bash -c 'export MUTTER_DEBUG_NESTED=; dbus-run-session -- gnome-shell --wayland --devkit' 2>&1 | tee "$LOG"
-    
+
     # Check for extension errors (ignore known harmless warnings)
     ERRORS=$(grep -i 'stop-button-preview.*error\|stop-button-preview.*critical\|CRITICAL.*stop-button' "$LOG" || true)
     rm -f "$LOG"
-    
+
     if [ -n "$ERRORS" ]; then
         echo ""
         echo "❌ ERRORS FOUND:"
@@ -537,17 +537,17 @@ gnome-ext-lint:
 gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -uo pipefail
-    
+
     LOG_DIR="$PWD/logs"
     LOG_FILE="$LOG_DIR/gnome-ext-quick-check.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
-    
+
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing..."
         sudo dnf install -y mutter-devkit
     fi
-    
+
     UUID="voice-to-text@happytomatoe.com"
     CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
     if ! echo "$CURRENT" | grep -q "$UUID"; then
@@ -557,10 +557,10 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
         dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
       fi
     fi
-    
+
     export MUTTER_DEBUG_NESTED=
     export MUTTER_DEBUG=1
-    
+
     echo "Running nested shell for {{ TIMEOUT }}s (headless)..."
     timeout {{ TIMEOUT }} bash -c '
       dbus-run-session -- sh -c "
@@ -572,10 +572,10 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
       "
     ' 2>&1 | tee -a "$LOG_FILE"
     EXIT_CODE=${PIPESTATUS[0]}
-    
+
     echo ""
     echo "=== Results ==="
-    
+
     # Check for extension errors
     if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
         echo "❌ Extension errors found:"
@@ -587,11 +587,11 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
     else
         echo "⚠️  No extension messages found"
     fi
-    
+
     if [ $EXIT_CODE -eq 124 ]; then
         echo "✅ Timeout reached (expected)"
     fi
-    
+
     echo ""
     echo "Full log: $LOG_FILE"
 gnome-ext-reload:
@@ -969,33 +969,33 @@ qemu-e2e-download-golden:
     set -euo pipefail
     echo "Downloading golden image from Filen..."
     echo ""
-    
+
     VM_DIR="e2e/qemu-images"
     GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
-    
+
     # Check if already exists
     if [[ -f "$GOLDEN_FILE" ]]; then
         echo "Golden image already exists: $GOLDEN_FILE"
         echo "Delete it first to re-download."
         exit 0
     fi
-    
+
     # Check for megatools
     if ! command -v megatools &>/dev/null; then
         echo "megatools not found. Installing via toolbox..."
         toolbox run --container fedora-toolbox-44 -- sudo dnf install -y megatools
     fi
-    
+
     # Download from Filen
     FILEN_LINK="https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q"
     echo "Downloading 2.2GB image (this may take a few minutes)..."
     toolbox run --container fedora-toolbox-44 -- fish -c "megatools dl $FILEN_LINK -u \$FILLEN_USER -p \$FILLEN_PASSWORD" 2>&1 | tail -5
-    
+
     # Move to correct location if downloaded to current dir
     if [[ -f "golden-gnome-deps.qcow2" ]]; then
         mv golden-gnome-deps.qcow2 "$GOLDEN_FILE"
     fi
-    
+
     if [[ -f "$GOLDEN_FILE" ]]; then
         echo ""
         echo "✓ Golden image downloaded: $GOLDEN_FILE"
