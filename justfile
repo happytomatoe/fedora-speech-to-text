@@ -267,10 +267,10 @@ reinstall-all: reinstall
 # @category gnome-ext
 # Install extension, then start a nested GNOME Shell
 # Run nested GNOME Shell with headless mode and configurable timeout (default 8s)
-# Usage: just gnome-ext-dev [TIMEOUT]
+# Usage: just gnome-ext-dev
 # Example: just gnome-ext-dev 15
 [no-exit-message]
-gnome-ext-dev TIMEOUT='8': reinstall gnome-ext-install
+gnome-ext-dev: reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
@@ -489,7 +489,7 @@ check-preview:
     echo "Running preview extension for 10 seconds..."
     LOG=$(mktemp)
     timeout 10 bash -c 'export MUTTER_DEBUG_NESTED=; dbus-run-session -- gnome-shell --wayland --devkit' 2>&1 | tee "$LOG"
-
+    PREVIEW_EXIT=${PIPESTATUS[0]}
     # Check for extension errors (ignore known harmless warnings)
     ERRORS=$(grep -i 'stop-button-preview.*error\|stop-button-preview.*critical\|CRITICAL.*stop-button' "$LOG" || true)
     rm -f "$LOG"
@@ -502,6 +502,10 @@ check-preview:
     else
         echo ""
         echo "✅ No errors from stop-button-preview extension"
+    fi
+    if [ "$PREVIEW_EXIT" -ne 0 ] && [ "$PREVIEW_EXIT" -ne 124 ]; then
+        echo "❌ Nested shell exited with status $PREVIEW_EXIT"
+        exit "$PREVIEW_EXIT"
     fi
 
 # @category gnome-ext
@@ -590,6 +594,10 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
 
     if [ $EXIT_CODE -eq 124 ]; then
         echo "✅ Timeout reached (expected)"
+    fi
+    if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 124 ]; then
+        echo "❌ Nested GNOME Shell exited with status $EXIT_CODE"
+        exit "$EXIT_CODE"
     fi
 
     echo ""
