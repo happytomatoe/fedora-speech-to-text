@@ -55,7 +55,7 @@ export class AudioLevelWidget {
             this._segments.push(seg);
         }
 
-        // Stop button (X icon, ghost circle → red on hover)
+        // Cancel button (X icon, ghost circle → red on hover)
         this._cancelButton = new St.Button({
             style_class: 'osd-stop-button',
             accessible_name: _('Cancel recording'),
