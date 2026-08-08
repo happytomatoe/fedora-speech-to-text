@@ -15,7 +15,7 @@ export class AudioLevelWidget {
         this._smoothedLevel = 0;
         this._visible = false;
         this._showTimeoutId = 0;
-        this.onStop = null;  // callback when stop button clicked
+        this.onCancel = null;  // callback when cancel button clicked
     }
     show() {
         if (this._widget) return;
@@ -58,7 +58,7 @@ export class AudioLevelWidget {
         // Stop button (X icon, ghost circle → red on hover)
         this._stopButton = new St.Button({
             style_class: 'osd-stop-button',
-            accessible_name: _('Stop recording'),
+            accessible_name: _('Cancel recording'),
             reactive: true,
             track_hover: true,
             can_focus: true,
@@ -72,7 +72,7 @@ export class AudioLevelWidget {
         });
         this._stopButton.add_child(stopIcon);
         this._stopButton.connect('clicked', () => {
-            if (this.onStop) this.onStop();
+            if (this.onCancel) this.onCancel();
         });
         this._widget.add_child(this._stopButton);
 
