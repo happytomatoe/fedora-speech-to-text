@@ -104,12 +104,19 @@ export class VmManager {
       }
     }
 
-    // If overlay exists but socket is missing, QEMU likely crashed last time — force fresh overlay
-    const staleOverlay = existsSync(overlayImage) && !existsSync(socketPath);
-    if (staleOverlay) {
-      console.log("Stale overlay detected (no socket), forcing fresh overlay...");
-      Bun.spawnSync(["rm", "-f", overlayImage]);
-    }
+    // Check if overlay is corrupted by verifying its backing file chain
+    // A missing socket alone is NOT evidence of corruption — QEMU removes
+    // the socket on normal shutdown. Only delete if the overlay is actually unusable.
+    const staleOverlay = existsSync(overlayImage) && (() => {
+      try {
+        const info = Bun.spawnSync(["qemu-img", "info", "--output=json", overlayImage]);
+        if (info.exitCode !== 0) return true; // corrupted/unreadable
+        const parsed = JSON.parse(info.stdout.toString());
+        return !parsed?.format?.file; // missing backing file = corrupt
+      } catch {
+        return true; // can't inspect = assume stale
+      }
+    })();
 
     Bun.spawnSync(["rm", "-f", socketPath]);
 

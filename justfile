@@ -487,7 +487,10 @@ check-preview:
 
     echo "Running preview extension for 10 seconds..."
     LOG=$(mktemp)
-    timeout 10 bash -c 'export MUTTER_DEBUG_NESTED=; dbus-run-session -- gnome-shell --wayland --devkit' 2>&1 | tee "$LOG"
+    # Run nested shell in a new process group; on EXIT/INT/TERM kill the whole tree.
+    cleanup() { kill -- -$(ps -o pgid= -p $BASHPID | tr -d ' ') 2>/dev/null || true; }
+    trap cleanup EXIT INT TERM
+    timeout 10 setsid bash -c 'export MUTTER_DEBUG_NESTED=; dbus-run-session -- gnome-shell --wayland --devkit' 2>&1 | tee "$LOG"
     PREVIEW_EXIT=${PIPESTATUS[0]}
     # Check for extension errors (ignore known harmless warnings)
     ERRORS=$(grep -i 'stop-button-preview.*error\|stop-button-preview.*critical\|CRITICAL.*stop-button' "$LOG" || true)
@@ -547,8 +550,14 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
     echo "" > "$LOG_FILE"
 
     if ! rpm -q mutter-devkit &>/dev/null; then
-        echo "mutter-devkit not installed, installing..."
-        sudo dnf install -y mutter-devkit
+        echo "mutter-devkit not installed, installing...";
+        if command -v rpm-ostree &>/dev/null; then
+            sudo rpm-ostree install mutter-devkit;
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-quick-check'." >&2;
+            exit 1;
+        else
+            sudo dnf install -y mutter-devkit;
+        fi
     fi
 
     UUID="voice-to-text@happytomatoe.com"
@@ -564,8 +573,11 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
     export MUTTER_DEBUG_NESTED=
     export MUTTER_DEBUG=1
 
+    # Run in a new process group; on EXIT/INT/TERM kill the whole tree.
+    cleanup() { kill -- -$(ps -o pgid= -p $BASHPID | tr -d ' ') 2>/dev/null || true; }
+    trap cleanup EXIT INT TERM
     echo "Running nested shell for {{ TIMEOUT }}s (headless)..."
-    timeout {{ TIMEOUT }} bash -c '
+    timeout {{ TIMEOUT }} setsid bash -c '
       dbus-run-session -- sh -c "
         /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
         sleep 0.3

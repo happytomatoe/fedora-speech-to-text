@@ -241,7 +241,8 @@
             "Open preferences",
             "Enter API key",
             "Save settings",
-            "Verify config file contains API key"
+            "Verify API key is NOT stored in plaintext config",
+            "Verify API key is stored via secret mechanism (keyring/env)"
           ]
         },
         {
@@ -260,8 +261,9 @@
           "description": "Verify config file has correct permissions",
           "priority": "low",
           "steps": [
-            "Check file permissions are 600 or 644",
-            "Verify file is owned by current user"
+            "Check file permissions are 600 (not 644)",
+            "Verify file is owned by current user",
+            "Verify no world-readable sensitive config files"
           ]
         }
       ]
