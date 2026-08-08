@@ -1,0 +1,623 @@
+{
+  "test-suites": {
+    "transcription": {
+      "description": "Core transcription tests with different audio files and output methods",
+      "enabled": true,
+      "matrix": {
+        "audio-files": [
+          {
+            "id": "audio-01",
+            "file": "test-01-weather.wav",
+            "expected": "the weather to nadien sunny with a high on 75 degrees",
+            "category": "weather"
+          },
+          {
+            "id": "audio-02",
+            "file": "test-02-reminder.wav",
+            "expected": "remember to buy groceries after work today",
+            "category": "reminder"
+          },
+          {
+            "id": "audio-03",
+            "file": "test-03-hello.wav",
+            "expected": "good morning, how are you today?",
+            "category": "greeting"
+          },
+          {
+            "id": "audio-04",
+            "file": "test-04-calendar.wav",
+            "expected": "our meeting is scheduled for 3pm on monday",
+            "category": "calendar"
+          },
+          {
+            "id": "audio-05",
+            "file": "test-05-note.wav",
+            "expected": "take a note that the project deadline is next friday",
+            "category": "note"
+          }
+        ],
+        "output-methods": [
+          {
+            "id": "type",
+            "name": "Dotool Type",
+            "description": "Types via dotool (requires dotoolc)",
+            "enabled": true,
+            "requires": ["dotoolc"]
+          },
+          {
+            "id": "mutter-virtual",
+            "name": "Mutter Virtual",
+            "description": "Char-by-char typing via GNOME extension D-Bus (virtual keyboard)",
+            "enabled": true,
+            "requires": ["gnome-extension"]
+          },
+          {
+            "id": "mutter-commit",
+            "name": "Mutter Commit",
+            "description": "Commits text via Main.inputMethod.commit()",
+            "enabled": true,
+            "requires": ["gnome-extension"]
+          }
+        ]
+      },
+      "test-cases": [
+        {
+          "id": "T01",
+          "audio": "audio-01",
+          "output-method": "type",
+          "priority": "high",
+          "description": "Weather transcription with dotool type"
+        },
+        {
+          "id": "T02",
+          "audio": "audio-01",
+          "output-method": "mutter-virtual",
+          "priority": "medium",
+          "description": "Weather transcription with mutter virtual"
+        },
+        {
+          "id": "T03",
+          "audio": "audio-01",
+          "output-method": "mutter-commit",
+          "priority": "medium",
+          "description": "Weather transcription with mutter commit"
+        },
+        {
+          "id": "T04",
+          "audio": "audio-02",
+          "output-method": "type",
+          "priority": "high",
+          "description": "Reminder transcription with dotool type"
+        },
+        {
+          "id": "T05",
+          "audio": "audio-02",
+          "output-method": "mutter-virtual",
+          "priority": "medium",
+          "description": "Reminder transcription with mutter virtual"
+        },
+        {
+          "id": "T06",
+          "audio": "audio-02",
+          "output-method": "mutter-commit",
+          "priority": "medium",
+          "description": "Reminder transcription with mutter commit"
+        },
+        {
+          "id": "T07",
+          "audio": "audio-03",
+          "output-method": "type",
+          "priority": "high",
+          "description": "Hello transcription with dotool type"
+        },
+        {
+          "id": "T08",
+          "audio": "audio-03",
+          "output-method": "mutter-virtual",
+          "priority": "medium",
+          "description": "Hello transcription with mutter virtual"
+        },
+        {
+          "id": "T09",
+          "audio": "audio-03",
+          "output-method": "mutter-commit",
+          "priority": "medium",
+          "description": "Hello transcription with mutter commit"
+        },
+        {
+          "id": "T10",
+          "audio": "audio-04",
+          "output-method": "type",
+          "priority": "high",
+          "description": "Calendar transcription with dotool type"
+        },
+        {
+          "id": "T11",
+          "audio": "audio-04",
+          "output-method": "mutter-virtual",
+          "priority": "medium",
+          "description": "Calendar transcription with mutter virtual"
+        },
+        {
+          "id": "T12",
+          "audio": "audio-04",
+          "output-method": "mutter-commit",
+          "priority": "medium",
+          "description": "Calendar transcription with mutter commit"
+        },
+        {
+          "id": "T13",
+          "audio": "audio-05",
+          "output-method": "type",
+          "priority": "high",
+          "description": "Note transcription with dotool type"
+        },
+        {
+          "id": "T14",
+          "audio": "audio-05",
+          "output-method": "mutter-virtual",
+          "priority": "medium",
+          "description": "Note transcription with mutter virtual"
+        },
+        {
+          "id": "T15",
+          "audio": "audio-05",
+          "output-method": "mutter-commit",
+          "priority": "medium",
+          "description": "Note transcription with mutter commit"
+        }
+      ]
+    },
+    "config": {
+      "description": "Config and settings persistence tests",
+      "enabled": true,
+      "test-cases": [
+        {
+          "id": "C01",
+          "name": "Provider Selection",
+          "description": "Change provider in preferences, verify config file",
+          "priority": "high",
+          "steps": [
+            "Open preferences",
+            "Change provider to 'parakeet'",
+            "Save settings",
+            "Verify config file contains correct provider"
+          ]
+        },
+        {
+          "id": "C02",
+          "name": "Output Method",
+          "description": "Change output method, verify config file",
+          "priority": "high",
+          "steps": [
+            "Open preferences",
+            "Change output method to 'mutter-commit'",
+            "Save settings",
+            "Verify config file contains correct output method"
+          ]
+        },
+        {
+          "id": "C03",
+          "name": "Language Selection",
+          "description": "Change language, verify config file",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Change language to 'es'",
+            "Save settings",
+            "Verify config file contains correct language"
+          ]
+        },
+        {
+          "id": "C04",
+          "name": "Hotkey Configuration",
+          "description": "Change hotkey, verify dconf settings",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Change hotkey to '<Ctrl><Alt>r'",
+            "Save settings",
+            "Verify dconf contains correct hotkey"
+          ]
+        },
+        {
+          "id": "C05",
+          "name": "Debug Mode",
+          "description": "Toggle debug mode, verify config file",
+          "priority": "low",
+          "steps": [
+            "Open preferences",
+            "Toggle debug mode",
+            "Save settings",
+            "Verify config file contains debug flag"
+          ]
+        },
+        {
+          "id": "C06",
+          "name": "API Key Storage",
+          "description": "Set API key, verify it's saved securely",
+          "priority": "high",
+          "steps": [
+            "Open preferences",
+            "Enter API key",
+            "Save settings",
+            "Verify config file contains API key"
+          ]
+        },
+        {
+          "id": "C07",
+          "name": "Config File Location",
+          "description": "Verify config is in correct location",
+          "priority": "medium",
+          "steps": [
+            "Check ~/.config/voice-to-text/config.yaml exists",
+            "Verify file format is correct"
+          ]
+        },
+        {
+          "id": "C08",
+          "name": "Config File Permissions",
+          "description": "Verify config file has correct permissions",
+          "priority": "low",
+          "steps": [
+            "Check file permissions are 600 or 644",
+            "Verify file is owned by current user"
+          ]
+        }
+      ]
+    },
+    "ui": {
+      "description": "Preferences UI tests",
+      "enabled": true,
+      "test-cases": [
+        {
+          "id": "P01",
+          "name": "Open Preferences",
+          "description": "Open preferences window via indicator",
+          "priority": "high",
+          "steps": [
+            "Click indicator",
+            "Click Preferences",
+            "Verify window opens"
+          ]
+        },
+        {
+          "id": "P02",
+          "name": "Close Preferences",
+          "description": "Close preferences window",
+          "priority": "high",
+          "steps": [
+            "Open preferences",
+            "Click close button",
+            "Verify window closes"
+          ]
+        },
+        {
+          "id": "P03",
+          "name": "Tab Navigation",
+          "description": "Navigate between preference tabs",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Click each tab",
+            "Verify tab content changes"
+          ]
+        },
+        {
+          "id": "P04",
+          "name": "Scroll Preferences",
+          "description": "Scroll through long preference pages",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Scroll down",
+            "Verify content scrolls"
+          ]
+        },
+        {
+          "id": "P05",
+          "name": "Save Button",
+          "description": "Click save, verify settings applied",
+          "priority": "high",
+          "steps": [
+            "Open preferences",
+            "Change a setting",
+            "Click Save",
+            "Verify setting is applied"
+          ]
+        },
+        {
+          "id": "P06",
+          "name": "Cancel Button",
+          "description": "Click cancel, verify changes discarded",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Change a setting",
+            "Click Cancel",
+            "Verify setting is reverted"
+          ]
+        },
+        {
+          "id": "P07",
+          "name": "Reset to Defaults",
+          "description": "Reset preferences to defaults",
+          "priority": "low",
+          "steps": [
+            "Open preferences",
+            "Change multiple settings",
+            "Click Reset",
+            "Verify all settings are defaults"
+          ]
+        },
+        {
+          "id": "P08",
+          "name": "Visual Regression",
+          "description": "Screenshot comparison of preferences UI",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Take screenshot",
+            "Compare with reference image"
+          ]
+        }
+      ]
+    },
+    "hotkey": {
+      "description": "Hotkey tests",
+      "enabled": true,
+      "test-cases": [
+        {
+          "id": "H01",
+          "name": "Start Recording",
+          "description": "Press hotkey, verify recording starts",
+          "priority": "high",
+          "steps": [
+            "Focus terminal",
+            "Press hotkey (Ctrl+Alt+r)",
+            "Verify recording indicator appears"
+          ]
+        },
+        {
+          "id": "H02",
+          "name": "Stop Recording",
+          "description": "Press hotkey again, verify recording stops",
+          "priority": "high",
+          "steps": [
+            "Start recording",
+            "Press hotkey again",
+            "Verify recording indicator disappears"
+          ]
+        },
+        {
+          "id": "H03",
+          "name": "Custom Hotkey",
+          "description": "Set custom hotkey, verify it works",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Set custom hotkey",
+            "Save settings",
+            "Press custom hotkey",
+            "Verify recording starts"
+          ]
+        },
+        {
+          "id": "H04",
+          "name": "Hotkey Conflict",
+          "description": "Test hotkey conflict detection",
+          "priority": "low",
+          "steps": [
+            "Set hotkey to existing system shortcut",
+            "Verify conflict is detected",
+            "Verify warning message appears"
+          ]
+        },
+        {
+          "id": "H05",
+          "name": "Global Hotkey",
+          "description": "Verify hotkey works from any window",
+          "priority": "high",
+          "steps": [
+            "Open a different application",
+            "Press hotkey",
+            "Verify recording starts"
+          ]
+        }
+      ]
+    },
+    "error": {
+      "description": "Error handling tests",
+      "enabled": true,
+      "test-cases": [
+        {
+          "id": "E01",
+          "name": "No Audio Device",
+          "description": "Test behavior when no microphone available",
+          "priority": "medium",
+          "steps": [
+            "Disable audio device",
+            "Try to start recording",
+            "Verify error message appears"
+          ]
+        },
+        {
+          "id": "E02",
+          "name": "API Error",
+          "description": "Test behavior when API returns error",
+          "priority": "high",
+          "steps": [
+            "Configure invalid API key",
+            "Start recording",
+            "Verify error message appears"
+          ]
+        },
+        {
+          "id": "E03",
+          "name": "Network Timeout",
+          "description": "Test behavior when network is slow",
+          "priority": "medium",
+          "steps": [
+            "Simulate network delay",
+            "Start recording",
+            "Verify timeout handling"
+          ]
+        },
+        {
+          "id": "E04",
+          "name": "Invalid Config",
+          "description": "Test behavior with corrupted config file",
+          "priority": "low",
+          "steps": [
+            "Corrupt config file",
+            "Start application",
+            "Verify error handling"
+          ]
+        },
+        {
+          "id": "E05",
+          "name": "Permission Denied",
+          "description": "Test behavior when config dir not writable",
+          "priority": "low",
+          "steps": [
+            "Make config directory read-only",
+            "Try to save settings",
+            "Verify error message appears"
+          ]
+        },
+        {
+          "id": "E06",
+          "name": "Service Not Running",
+          "description": "Test behavior when D-Bus service not available",
+          "priority": "high",
+          "steps": [
+            "Stop D-Bus service",
+            "Try to start recording",
+            "Verify error message appears"
+          ]
+        },
+        {
+          "id": "E07",
+          "name": "Parallel Recording",
+          "description": "Test behavior when recording already active",
+          "priority": "medium",
+          "steps": [
+            "Start recording",
+            "Press hotkey again",
+            "Verify second recording is rejected"
+          ]
+        }
+      ]
+    },
+    "visual": {
+      "description": "Visual regression tests",
+      "enabled": true,
+      "test-cases": [
+        {
+          "id": "V01",
+          "name": "Desktop Clean",
+          "description": "Screenshot of clean desktop",
+          "priority": "medium",
+          "steps": [
+            "Boot VM",
+            "Wait for desktop",
+            "Take screenshot",
+            "Compare with reference"
+          ]
+        },
+        {
+          "id": "V02",
+          "name": "Terminal Open",
+          "description": "Screenshot with terminal open",
+          "priority": "medium",
+          "steps": [
+            "Open terminal",
+            "Take screenshot",
+            "Compare with reference"
+          ]
+        },
+        {
+          "id": "V03",
+          "name": "Recording Active",
+          "description": "Screenshot during recording",
+          "priority": "medium",
+          "steps": [
+            "Start recording",
+            "Take screenshot",
+            "Compare with reference"
+          ]
+        },
+        {
+          "id": "V04",
+          "name": "Transcription Visible",
+          "description": "Screenshot after transcription",
+          "priority": "high",
+          "steps": [
+            "Complete transcription",
+            "Take screenshot",
+            "Compare with reference"
+          ]
+        },
+        {
+          "id": "V05",
+          "name": "Preferences Window",
+          "description": "Screenshot of preferences",
+          "priority": "medium",
+          "steps": [
+            "Open preferences",
+            "Take screenshot",
+            "Compare with reference"
+          ]
+        },
+        {
+          "id": "V06",
+          "name": "Error State",
+          "description": "Screenshot of error notification",
+          "priority": "low",
+          "steps": [
+            "Trigger error",
+            "Take screenshot",
+            "Compare with reference"
+          ]
+        }
+      ]
+    }
+  },
+  "execution": {
+    "parallel": {
+      "enabled": false,
+      "max-vm": 1,
+      "description": "Enable parallel test execution"
+    },
+    "video-recording": {
+      "enabled": true,
+      "format": "mp4",
+      "fps": 30,
+      "description": "Record video of each test"
+    },
+    "screenshot": {
+      "enabled": true,
+      "format": "png",
+      "description": "Take screenshots at key moments"
+    },
+    "reporting": {
+      "junit": true,
+      "html": true,
+      "description": "Generate test reports"
+    }
+  },
+  "priorities": {
+    "high": {
+      "description": "Must pass for release",
+      "tests": ["T01", "T04", "T07", "T10", "T13", "C01", "C02", "C06", "P01", "P02", "P05", "H01", "H02", "H05", "E02", "E06", "V04"]
+    },
+    "medium": {
+      "description": "Should pass for release",
+      "tests": ["T02", "T03", "T05", "T06", "T08", "T09", "T11", "T12", "T14", "T15", "C03", "C04", "C07", "P03", "P04", "P06", "P08", "H03", "E01", "E03", "E07", "V01", "V02", "V03", "V05"]
+    },
+    "low": {
+      "description": "Nice to have",
+      "tests": ["C05", "C08", "P07", "H04", "E04", "E05", "V06"]
+    }
+  }
+}
