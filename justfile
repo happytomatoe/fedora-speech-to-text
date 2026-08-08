@@ -46,14 +46,8 @@ lint-fix:
 test-all: test
 
 install:
-    uv tool install -e ".[moonshine]"
+    uv tool install -e .
 
-# @category setup
-# Install moonshine-voice optional dependency (for local streaming transcription)
-install-moonshine:
-    uv pip install -e ".[moonshine]"
-    uv tool install -e ".[moonshine]" --force
-    @echo "moonshine-voice installed (venv + tool)."
 
 uninstall:
     rm -f ~/.local/bin/voice-to-text-dbus
@@ -64,7 +58,7 @@ reinstall: gnome-ext-install service-install
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Reinstalling voice-to-text from source..."
-    uv tool install -e ".[moonshine]" --force
+    uv tool install -e . --force
     echo "voice-to-text-dbus reinstalled from source"
 
 # @category setup
@@ -156,7 +150,7 @@ build-python:
 # @category service
 # Install the D-Bus service (D-Bus activation only, no systemd)
 service-install:
-    uv tool install -e ".[moonshine]"
+    uv tool install -e .
     mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/ ~/.config/systemd/user/
     cp service/com.happytomatoe.VoiceToText.service ~/.local/share/dbus-1/services/
     cp service/com.happytomatoe.VoiceToText.user.service ~/.config/systemd/user/

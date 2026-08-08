@@ -15,10 +15,8 @@ dependencies = [
   "mistralai[realtime]~=2.4,!=2.4.6",
   "rapidfuzz~=3.14",
   "jellyfish~=1.2",
+  "moonshine-voice~=0.1.1",
 ]
-
-[project.optional-dependencies]
-moonshine = ["moonshine-voice"]
 
 [project.scripts]
 voice-to-text-dbus = "voice_to_text.__main__:main"
