@@ -51,5 +51,5 @@ commit-msg:
 pre-push:
   commands:
     e2e-test:
-      run: bash -c 'if [ -f e2e/qemu-images/base.qcow2 ]; then cd e2e && bun run e2e.ts --shutdown; else echo "Skipping e2e test (VM image not found)"; fi'
+      run: bash -c 'if [ -f e2e/qemu-images/base.qcow2 ] && [ -f e2e/qemu-images/cloud-init.iso ]; then cd e2e && bun run e2e.ts --shutdown; else echo "Skipping e2e test (missing base.qcow2 or cloud-init.iso)"; fi'
       interactive: true
