@@ -1,4 +1,4 @@
-# Local Model Evaluation
+# Model Evaluation
 
 Comparison of all transcription providers evaluated for voice-to-text.
 
