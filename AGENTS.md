@@ -51,7 +51,7 @@ When adding or removing an output method, update ALL of these files:
   - `just run <args>` — run the CLI with `PYTHONPATH=src`.
   - `just service-run` — run the D-Bus service in the foreground.
   - `just service-install` / `service-uninstall` — install/uninstall the user D-Bus service.
-  - `just gnome-ext-dev [TIMEOUT]` — install extension and run nested GNOME Shell (headless, default 8s). Use `just gnome-ext-dev 15` for longer checks.
+  - `just gnome-ext-quick-check [TIMEOUT]` — install extension and run nested GNOME Shell (headless, default 8s). Use `just gnome-ext-quick-check 15` for longer checks.
 - Python version: **3.13+** (`requires-python`).
 
 ## Linting and type checking
@@ -67,8 +67,8 @@ When modifying files in `gnome-ext/`:
 
 1. **Quick check** — verify extension loads without errors:
    ```sh
-   just gnome-ext-dev          # 8s headless check (default)
-   just gnome-ext-dev 15       # 15s timeout
+   just gnome-ext-quick-check          # 8s headless check (default)
+   just gnome-ext-quick-check 15       # 15s timeout
    ```
 2. **Lint** — run JS linting:
    ```sh
@@ -76,7 +76,7 @@ When modifying files in `gnome-ext/`:
    ```
 3. **Visual testing** — if you need to see the UI:
    - E2E tests: `just e2e` (runs in QEMU VM)
-   - AT-SPI inspection: `just atspi-tree` (after `just gnome-ext-dev`)
+   - AT-SPI inspection: `just atspi-tree` (after `just gnome-ext-quick-check`)
 
 **Common errors:**
 - `errcode:15` in stylesheet = CSS syntax error in `gnome-ext/stylesheet.css`

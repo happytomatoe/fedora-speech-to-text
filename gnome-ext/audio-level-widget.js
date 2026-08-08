@@ -55,9 +55,9 @@ export class AudioLevelWidget {
             this._segments.push(seg);
         }
 
-        // Stop button (X icon, ghost circle → red on hover)
-        this._stopButton = new St.Button({
-            style_class: 'osd-stop-button',
+        // Cancel button (X icon, ghost circle → red on hover)
+        this._cancelButton = new St.Button({
+            style_class: 'osd-cancel-button',
             accessible_name: _('Cancel recording'),
             reactive: true,
             track_hover: true,
@@ -65,16 +65,16 @@ export class AudioLevelWidget {
             x_align: 2,  // CENTER
             y_align: 2,  // CENTER
         });
-        this._stopButton.set_size(36, 36);
-        const stopIcon = new St.Icon({
+        this._cancelButton.set_size(36, 36);
+        const cancelIcon = new St.Icon({
             icon_name: 'window-close-symbolic',
-            style_class: 'osd-stop-icon',
+            style_class: 'osd-cancel-icon',
         });
-        this._stopButton.add_child(stopIcon);
-        this._stopButton.connect('clicked', () => {
+        this._cancelButton.add_child(cancelIcon);
+        this._cancelButton.connect('clicked', () => {
             if (this.onCancel) this.onCancel();
         });
-        this._widget.add_child(this._stopButton);
+        this._widget.add_child(this._cancelButton);
 
         Main.layoutManager.addTopChrome(this._widget);
         this._positionWidget();

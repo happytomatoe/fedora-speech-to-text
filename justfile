@@ -149,7 +149,7 @@ build-python:
 # @category service
 # Install the D-Bus service (D-Bus activation only, no systemd)
 service-install:
-    uv tool install -e .
+    # NOTE: Python package must be installed first (use `uv tool install -e .`)
     mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/ ~/.config/systemd/user/
     cp service/com.happytomatoe.VoiceToText.service ~/.local/share/dbus-1/services/
     cp service/com.happytomatoe.VoiceToText.user.service ~/.config/systemd/user/
@@ -268,7 +268,7 @@ reinstall-all: reinstall
 # Install extension, then start a nested GNOME Shell for interactive development
 # Usage: just gnome-ext-dev
 [no-exit-message]
-gnome-ext-dev: reinstall gnome-ext-install
+gnome-ext-dev: reinstall
     #!/usr/bin/env bash
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
@@ -344,7 +344,7 @@ gnome-ext-dev: reinstall gnome-ext-install
     echo "Logs written to $LOG_FILE"
 # @category gnome-ext
 # Start nested GNOME Shell and wait for GDM registration, then check for errors
-gnome-ext-check: reinstall gnome-ext-install
+gnome-ext-check: reinstall
     #!/usr/bin/env bash
     set -euo pipefail
     LOG_DIR="$PWD/logs"
@@ -540,7 +540,7 @@ gnome-ext-lint:
 
 # @category gnome-ext
 # Quick check: run nested shell for N seconds and report errors (headless by default)
-gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
+gnome-ext-quick-check TIMEOUT='8': reinstall
     #!/usr/bin/env bash
     set -uo pipefail
 

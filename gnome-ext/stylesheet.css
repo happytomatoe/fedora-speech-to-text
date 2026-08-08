@@ -36,8 +36,8 @@
 .osd-segment.red {
     background-color: #f54242;
 }
-/* Stop button — ghost circle → red on hover (option #37) */
-.osd-stop-button {
+/* Cancel button — ghost circle → red on hover (option #37) */
+.osd-cancel-button {
     width: 36px;
     height: 36px;
     border-radius: 999px;
@@ -49,17 +49,17 @@
     transition-property: background-color, border-color;
 }
 
-.osd-stop-button:hover {
+.osd-cancel-button:hover {
     background-color: rgba(245, 66, 66, 0.8);
     border-color: transparent;
 }
 
-.osd-stop-button:active {
+.osd-cancel-button:active {
     background-color: #f54242;
     border-color: transparent;
 }
 
-.osd-stop-icon {
+.osd-cancel-icon {
     icon-size: 14px;
     color: rgba(255, 255, 255, 0.6);
     transition-duration: 200ms;
@@ -68,6 +68,6 @@
     y-align: center;
 }
 
-.osd-stop-button:hover .osd-stop-icon {
+.osd-cancel-button:hover .osd-cancel-icon {
     color: white;
 }
