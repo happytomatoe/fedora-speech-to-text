@@ -265,10 +265,8 @@ reinstall-all: reinstall
     @echo "Done. Service and extension reinstalled."
 
 # @category gnome-ext
-# Install extension, then start a nested GNOME Shell
-# Run nested GNOME Shell with headless mode and configurable timeout (default 8s)
+# Install extension, then start a nested GNOME Shell for interactive development
 # Usage: just gnome-ext-dev
-# Example: just gnome-ext-dev 15
 [no-exit-message]
 gnome-ext-dev: reinstall gnome-ext-install
     #!/usr/bin/env bash
