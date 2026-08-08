@@ -44,6 +44,8 @@ class ElevenLabsProvider(BatchProvider):
             "timestamps_granularity": "none",
             "tag_audio_events": str(self.tag_audio_events).lower(),
         }
+        if custom_words:
+            data["keyterms"] = ",".join(custom_words)
         # ElevenLabs accepts ISO-639-1 (2-letter, e.g. "en") and ISO-639-3
         # (3-letter, e.g. "eng") language codes. Forward the configured language
         # when present so the user's choice is respected instead of auto-detecting.

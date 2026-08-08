@@ -62,7 +62,9 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
             async with httpx.AsyncClient() as client:
                 with open(audio_path, "rb") as audio_file:
                     files = {"file": (os.path.basename(audio_path), audio_file)}
-                    data = {"model": self.model, "language": language}
+                    data: dict[str, str | list[str]] = {"model": self.model, "language": language}
+                    if custom_words:
+                        data["context_bias"] = custom_words
                     response = await client.post(
                         f"{self._api_url}/v1/audio/transcriptions",
                         headers={"Authorization": f"Bearer {self.api_key}"},

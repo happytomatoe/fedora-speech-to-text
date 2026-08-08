@@ -73,6 +73,8 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
                 "language": language,
             }
             params.update(self.batch_options)
+            if custom_words:
+                params["keyterm"] = custom_words
             if audio_path.startswith(("http://", "https://")):
                 headers = {"Authorization": f"Token {self.api_key}"}
                 content = None
