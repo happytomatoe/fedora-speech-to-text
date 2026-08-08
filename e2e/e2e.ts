@@ -792,7 +792,7 @@ async function main(): Promise<void> {
       // Fresh mode: original behavior
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
-        { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
+        { name: "boot-vm", fn: async () => { RunContext.cleanupPersistentRun(CONFIG.paths.projectRoot); await vm.boot(); }, timeout: 120_000 },
         { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
         { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
         { name: "test-flow", fn: () => runTestFlow(vm, run) },

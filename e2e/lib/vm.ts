@@ -104,9 +104,16 @@ export class VmManager {
       }
     }
 
+    // If overlay exists but socket is missing, QEMU likely crashed last time — force fresh overlay
+    const staleOverlay = existsSync(overlayImage) && !existsSync(socketPath);
+    if (staleOverlay) {
+      console.log("Stale overlay detected (no socket), forcing fresh overlay...");
+      Bun.spawnSync(["rm", "-f", overlayImage]);
+    }
+
     Bun.spawnSync(["rm", "-f", socketPath]);
 
-    if (updateMode || !existsSync(overlayImage)) {
+    if (updateMode || staleOverlay || !existsSync(overlayImage)) {
       console.log("Creating fresh VM overlay...");
       const proc = Bun.spawnSync([
         "qemu-img", "create", "-f", "qcow2",
