@@ -25,6 +25,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the Moonshine provider."""
         self.model_name = config.get("model", "medium")
         self.language = config.get("language", "en")
         self._transcriber: Any = None
@@ -38,7 +39,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
     def _ensure_imported(self) -> None:
         """Lazily import moonshine_voice."""
         if self._moonshine is None:
-            import moonshine_voice  # pyright: ignore[reportMissingImports]
+            import moonshine_voice  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
             self._moonshine = moonshine_voice
 
@@ -71,6 +72,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
     # --- StreamingProvider interface ---
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
+        """Start a streaming transcription session."""
         self._sample_rate = sample_rate
         await asyncio.to_thread(self._ensure_model, language)
         self._finalized_text = ""
@@ -95,6 +97,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         logger.info("Moonshine streaming started")
 
     async def send_audio(self, audio_chunk: bytes) -> None:
+        """Send an audio chunk to the streaming transcriber."""
         if self._transcriber is None:
             raise RuntimeError("Stream not started. Call start_stream() first.")
         # Convert int16 bytes to float32 array (normalized to [-1, 1])
@@ -102,6 +105,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         self._transcriber.add_audio(samples.tolist(), self._sample_rate)
 
     async def finalize_stream(self) -> str:
+        """Finalize the streaming session and return the complete text."""
         if self._transcriber is not None:
             try:
                 self._transcriber.stop()
@@ -119,6 +123,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
+        """Transcribe an audio file using Moonshine."""
         await asyncio.to_thread(self._ensure_model, language)
         audio_data, sample_rate = self._moonshine.load_wav_file(audio_path)
         transcript = self._transcriber.transcribe_without_streaming(audio_data, sample_rate=sample_rate)
@@ -130,9 +135,11 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "moonshine"
 
     async def close(self) -> None:
+        """Close the Moonshine transcriber."""
         if self._transcriber is not None:
             try:
                 self._transcriber.stop()
