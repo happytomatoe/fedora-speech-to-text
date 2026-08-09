@@ -10,7 +10,7 @@ import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
 import {createHotkeyRow} from './prefs/hotkey-row.js';
 import {createDeviceRow} from './prefs/device-row.js';
 import {createProviderRows, createOutputMethodRow} from './prefs/provider-row.js';
-import {createCustomWordsGroup, createThresholdRow} from './prefs/custom-words-row.js';
+import {createCustomWordsGroup} from './prefs/custom-words-row.js';
 
 export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -179,9 +179,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             _syncAllToConfig
         );
         page.add(customWordsGroup);
-
-        // Add threshold row to recording group
-        recordingGroup.add(createThresholdRow(settings, _syncAllToConfig));
 
         // Configuration Group
         const configGroup = new Adw.PreferencesGroup({

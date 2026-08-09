@@ -47,7 +47,8 @@ const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
-const SNAPSHOT_MODE = args.includes("--snapshot");
+const NO_SNAPSHOT = args.includes("--no-snapshot");
+const SNAPSHOT_MODE = !NO_SNAPSHOT;
 const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
@@ -127,9 +128,18 @@ interface TestCaseFile {
   expected: string;
 }
 
-// Load test matrix
-const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
-const testMatrix = JSON.parse(readFileSync(testMatrixPath, "utf-8"));
+// Load test matrix (only needed for parallel mode)
+let testMatrix: any = undefined;
+function loadTestMatrix(): any {
+  if (!testMatrix) {
+    const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
+    if (!existsSync(testMatrixPath)) {
+      throw new Error(`Test matrix not found: ${testMatrixPath}\nCreate it or run without --parallel.`);
+    }
+    testMatrix = JSON.parse(readFileSync(testMatrixPath, "utf-8"));
+  }
+  return testMatrix;
+}
 
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
@@ -629,6 +639,44 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-scrolled-3.png");
   
+  // Test adding a new word via the Add Word button
+  console.log("  Testing Add Word functionality...");
+  // Click on "Add Word..." button (it's at the top of the custom words list)
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.39 0.43\nclick left" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  // Type a new word in the dialog
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "type E2E" | dotool`
+  );
+  await Bun.sleep(500);
+  // Click the Add button
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.62 0.58\nclick left" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  // Take screenshot after adding word
+  const afterAddPpm = join(prefsDir, "prefs-after-add.ppm");
+  const afterAddPng = join(prefsDir, "prefs-after-add.png");
+  await vm.qemu.screendump(afterAddPpm);
+  await Bun.sleep(500);
+  execSync(`convert "${afterAddPpm}" "${afterAddPng}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${afterAddPpm}"`, { encoding: "utf-8" });
+  
+  // Verify screenshot was captured and has content
+  if (!existsSync(afterAddPng)) {
+    throw new Error("prefs-after-add.png was not created");
+  }
+  const stats = Bun.file(afterAddPng);
+  if (stats.size < 1000) {
+    throw new Error(`prefs-after-add.png is too small (${stats.size} bytes), screenshot likely failed`);
+  }
+  console.log("  📷 Captured: prefs-after-add.png (should show E2E at top of list)");
+  console.log(`  ✅ Screenshot verified: ${stats.size} bytes`);
+  
   // Close preferences window using dotool
   console.log("  Closing preferences window...");
   await vm.deployer.exec(
@@ -691,10 +739,10 @@ async function main(): Promise<void> {
     console.log(`\n🚀 Running in parallel mode with ${PARALLEL_VMS} VMs`);
     
     // Load test cases from matrix
-    const testCases: TestCase[] = testMatrix["test-suites"].transcription["test-cases"].map((tc: any) => ({
+    const testCases: TestCase[] = loadTestMatrix()["test-suites"].transcription["test-cases"].map((tc: any) => ({
       id: tc.id,
-      audioFile: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).file,
-      expectedText: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).expected,
+      audioFile: loadTestMatrix()["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).file,
+      expectedText: loadTestMatrix()["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).expected,
       outputMethod: tc["output-method"],
       priority: tc.priority
     }));

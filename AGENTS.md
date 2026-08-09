@@ -19,7 +19,7 @@ Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and l
 The engine supports three output methods (configured via `output-method` in preferences):
 
 | Method | Class | How it works |
-|--------|-------|--------------|
+| -------- | ------- | -------------- |
 | `type` | `DotoolTyper` | Dotool Type — Types via dotool (requires dotoolc) |
 | `mutter-virtual` | `MutterVirtualTyper` | Mutter Type — Char-by-char typing via GNOME extension D-Bus (virtual keyboard) |
 | `mutter-commit` | `MutterVirtualPaster` | Mutter Commit — Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation entirely |
@@ -27,6 +27,7 @@ The engine supports three output methods (configured via `output-method` in pref
 ### Adding/Removing Output Methods
 
 When adding or removing an output method, update ALL of these files:
+
 1. `src/voice_to_text/engine.py` — handle the new method in the output method switch
 2. `gnome-ext/prefs/provider-row.js` — add to `createOutputMethodRow()` combo box
 3. `gnome-ext/schemas/*.xml` — update allowed values if needed
@@ -51,7 +52,7 @@ When adding or removing an output method, update ALL of these files:
   - `just run <args>` — run the CLI with `PYTHONPATH=src`.
   - `just service-run` — run the D-Bus service in the foreground.
   - `just service-install` / `service-uninstall` — install/uninstall the user D-Bus service.
-  - `just gnome-ext-dev` — install extension and launch a nested GNOME Shell for development.
+  - `just gnome-ext-dev` — install extension and run nested GNOME Shell
 - Python version: **3.13+** (`requires-python`).
 
 ## Linting and type checking
@@ -61,39 +62,41 @@ When adding or removing an output method, update ALL of these files:
 - **bun** + **eslint** for GNOME extension JS linting (see `eslint.config.cjs`).
 - **lefthook** is configured (see `lefthook.yml`); run `lefthook run pre-commit` or `just setup` to install hooks.
 
-## Testing
+## GNOME Extension Development
 
-- Tests use pytest with `pytest-asyncio` (auto mode) and `pytest-xdist` (`-n auto`).
-- `testpaths = tests`, `pythonpath = src` (set in `pyproject.toml`).
-- Run a single test file with `uv run pytest tests/test_audio.py`.
+When modifying files in `gnome-ext/`:
+
+1. **Quick check** — verify extension loads without errors (exits with failure if errors found):
+
+   ```sh
+      just gnome-ext-check
+   ```
+
+2. **Lint** — run JS linting:
+
+   ```sh
+   bun run eslint gnome-ext/   # or specific file
+   ```
+
+3. **Visual testing** — if you need to see the UI:
+   - E2E tests: `just e2e` (runs in QEMU VM with `--snapshot` for visual regression)
 
 ### E2E / Snapshot tests
 
 See `e2e/AGENTS.md` for detailed instructions.
 
 **Key commands:**
+
 - Update references: `just qemu-e2e-update-ts` or `cd e2e && bun run e2e.ts --update`
-- Run tests: `just e2e` or `cd e2e && bun run e2e.ts`
-
-## Conventions
-
-- Python imports stay at module level (see above).
-- Match existing style; ruff/pyright must pass before committing.
-- Commit messages follow Conventional Commits (the repo rejects `Co-Authored-By` trailers via lefthook commit-msg hook).
-
-## Changelog
-
-Sections under `## [Unreleased]`: `### Breaking Changes` (API changes requiring migration), `### Added`, `### Changed`, `### Deprecated`, `### Fixed`, `### Removed`, `### Security`.
-
-Rules:
-- All new entries go under `## [Unreleased]`. Read the full section first and append to existing subsections; never duplicate them.
-- Released version sections (e.g. `## [0.12.2]`) are immutable; never modify them.
+- Run snapshot tests: `cd e2e && bun run e2e.ts --snapshot`
+- Run full E2E (full VM boot): `just e2e` or `cd e2e && bun run e2e.ts`
 
 ## Semantic Release
 
 This project uses [python-semantic-release](https://python-semantic-release.readthedocs.io/) for automated versioning.
 
 **How it works:**
+
 - Every merge to `main` with conventional commits triggers automatic:
   - Version bump (based on commit types)
   - CHANGELOG.md update
@@ -101,32 +104,23 @@ This project uses [python-semantic-release](https://python-semantic-release.read
   - GitHub Release creation
 
 **Version bump rules:**
+
 - `feat:` → minor bump (0.x.0)
 - `fix:`, `perf:` → patch bump (0.0.x)
 - `feat!:` or `BREAKING CHANGE:` → major bump (x.0.0)
 - `chore:`, `docs:`, `style:`, `refactor:`, `test:` → no bump
 
 **Configuration:** `pyproject.toml` → `[tool.semantic_release]`
+
 ## JavaScript/TypeScript Error Handling (gnome-ext/)
 
 - **Never leave catch blocks empty.** At minimum, log the error: `catch (e) { console.error(e); }`
 - **If you must intentionally ignore an error**, add a comment explaining WHY it's safe:
+
   ```js
   try { await api.call(); } catch { /* ignore: best-effort notification */ }
   ```
+
 - **Use `catch { }` (no parameter)** when intentionally ignoring — signals intent and avoids unused-variable lint errors.
 - **Don't just swallow errors** — this makes debugging impossible and hides production failures.
 - **Use `finally` for cleanup** (disconnect signals, close connections, release locks).
-
-## Interacting with the QEMU E2E VM
-
-- **Always use `shell-use`** for SSH sessions into the QEMU E2E VM — never raw `ssh` commands in bash.
-- `shell-use` provides persistent PTY sessions, screen inspection, keystroke injection, and assertion support.
-- For the E2E VM:
-  ```sh
-  shell-use open --env SSH_KEY=e2e/qemu-images/id_ed25519 --env SSH_PORT=2222
-  shell-use submit "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $SSH_PORT testuser@localhost '<command>'"
-  shell-use wait text "<expected output>"
-  ```
-- Use `shell-use wait text` / `shell-use expect text` to poll for output instead of `sleep` loops.
-- For screenshots: `shell-use screenshot /path/to/output.png`.

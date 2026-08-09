@@ -1,9 +1,6 @@
 """Tests for transcription text post-processing."""
 
 from voice_to_text.postprocess import (
-    _extract_punctuation,
-    _preserve_case_pattern,
-    apply_custom_words,
     collapse_stutters,
     filter_transcription_output,
     get_filler_words,
@@ -110,82 +107,6 @@ class TestCollapseStutters:
         assert collapse_stutters("I I I 123 123 123") == "I 123 123 123"
 
 
-class TestExtractPunctuation:
-    def test_no_punctuation(self):
-        assert _extract_punctuation("hello") == ("", "")
-
-    def test_surrounding(self):
-        assert _extract_punctuation("!hello?") == ("!", "?")
-
-    def test_multiple_prefix(self):
-        assert _extract_punctuation("...hello...") == ("...", "...")
-
-    def test_unicode_suffix(self):
-        assert _extract_punctuation("你好。") == ("", "。")
-
-    def test_unicode_brackets(self):
-        assert _extract_punctuation("「你好」") == ("「", "」")
-
-
-class TestPreserveCasePattern:
-    def test_all_caps(self):
-        assert _preserve_case_pattern("HELLO", "world") == "WORLD"
-
-    def test_title_case(self):
-        assert _preserve_case_pattern("Hello", "world") == "World"
-
-    def test_lowercase(self):
-        assert _preserve_case_pattern("hello", "WORLD") == "WORLD"
-
-
-class TestApplyCustomWords:
-    def test_exact_match(self):
-        result = apply_custom_words("hello world", ["Hello", "World"], 0.5)
-        assert result == "Hello World"
-
-    def test_fuzzy_match(self):
-        result = apply_custom_words("helo wrold", ["hello", "world"], 0.5)
-        assert result == "hello world"
-
-    def test_empty_custom_words(self):
-        result = apply_custom_words("hello world", [], 0.5)
-        assert result == "hello world"
-
-    def test_ngram_two_words(self):
-        result = apply_custom_words("Charge B is great", ["ChargeBee"], 0.5)
-        assert "ChargeBee" in result
-
-    def test_ngram_three_words(self):
-        result = apply_custom_words("use Chat G P T for this", ["ChatGPT"], 0.5)
-        assert "ChatGPT" in result
-
-    def test_prefers_longer_ngram(self):
-        result = apply_custom_words("Open AI GPT model", ["OpenAI", "GPT"], 0.5)
-        assert result == "OpenAI GPT model"
-
-    def test_preserves_case(self):
-        result = apply_custom_words("CHARGE B is great", ["ChargeBee"], 0.5)
-        assert "CHARGEBEE" in result
-
-    def test_handles_unicode_punctuation(self):
-        result = apply_custom_words("「Handee。」", ["Handy"], 0.5)
-        assert result == "「Handy。」"
-
-    def test_skips_cjk_fuzzy_matching(self):
-        text = "你好。"
-        result = apply_custom_words(text, ["你号"], 1.0)
-        assert result == text
-
-    def test_matches_ampersand_word(self):
-        result = apply_custom_words("send it to RD for review", ["R&D"], 0.5)
-        assert result == "send it to R&D for review"
-
-    def test_matches_spoken_ampersand(self):
-        # Current behavior: "to R and" is matched as 3-gram
-        result = apply_custom_words("send it to R and D for review", ["R&D"], 0.5)
-        assert "R&D" in result
-
-
 class TestGetFillerWords:
     def test_english(self):
         assert "um" in get_filler_words("en")
@@ -202,15 +123,11 @@ class TestGetFillerWords:
 
 class TestPostprocess:
     def test_combined_pipeline(self):
-        # Current behavior: filler removal works, custom words partially work
         result = postprocess(
-            "So uhm I was thinking uh about Chat G P T",
+            "So uhm I was thinking uh about this",
             lang="en",
-            custom_words=["ChatGPT"],
         )
-        assert "ChatGPT" in result
-        assert "uhm" not in result
-        assert "uh" not in result
+        assert result == "So I was thinking about this"
 
     def test_no_custom_words(self):
         result = postprocess("So uhm I was thinking uh about this", lang="en")

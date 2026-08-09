@@ -9,7 +9,7 @@ FILTER="${1:-}"
 # Find the nested GNOME Shell process
 NESTED_PID=$(pgrep -f "gnome-shell --.*--(devkit|nested)" | head -1 || true)
 if [ -z "$NESTED_PID" ]; then
-  echo "No nested GNOME Shell running. Run 'just gnome-ext-dev' first." >&2
+  echo "No nested GNOME Shell running. Run 'just dev' first." >&2
   exit 1
 fi
 

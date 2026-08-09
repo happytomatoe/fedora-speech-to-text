@@ -265,13 +265,15 @@ reinstall-all: reinstall
     @echo "Done. Service and extension reinstalled."
 
 # @category gnome-ext
-# Install extension, then start a nested GNOME Shell
+# Install extension, then start a nested GNOME Shell for interactive development
+# Usage: just gnome-ext-dev
+[no-exit-message]
 gnome-ext-dev: reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euxo pipefail
     # Load provider API keys from the system keyring in the parent session
     # (where the Secret Service is reachable) so the nested D-Bus service
-    # inherits them. The wrapper does this for the real service; gnome-ext-dev
+    # inherits them. The wrapper does this for the real service; dev
     # launches voice-to-text-dbus directly and must load keys here instead.
     if command -v secret-tool &>/dev/null; then
         export VOXTRAL_API_KEY=$(secret-tool lookup service voice-to-text username voxtral 2>/dev/null)
@@ -285,28 +287,18 @@ gnome-ext-dev: reinstall gnome-ext-install
         exit 1
     fi
     LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    LOG_FILE="$LOG_DIR/dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing..."
         if command -v rpm-ostree &>/dev/null; then
             sudo rpm-ostree install mutter-devkit
-            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-dev'." >&2
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just dev'." >&2
             exit 1
         else
             sudo dnf install -y mutter-devkit
         fi
-    fi
-    UUID="voice-to-text@happytomatoe.com"
-    # Enable extension via dconf (gnome-extensions CLI needs a running session)
-    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-    if ! echo "$CURRENT" | grep -q "$UUID"; then
-      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
-      else
-        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
-      fi
     fi
     GNOME_VERSION=$(gnome-shell --version | awk '{print int($3)}')
     if [ "$GNOME_VERSION" -ge 49 ]; then
@@ -321,24 +313,10 @@ gnome-ext-dev: reinstall gnome-ext-install
     # GNOME extension can find and call it on real hardware.
     # Also start AT-SPI accessibility bus for UI inspection.
     # Trap EXIT/INT/TERM to kill the background services when the shell exits,
-    dbus-run-session -- sh -c "
-      # Start AT-SPI accessibility bus (needed for UI inspection)
-      /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_PID=\$!
-      sleep 0.5
-
-      # Start AT-SPI registry daemon (registers accessibility providers)
-      /usr/libexec/at-spi2-registryd --use-gnome-session >> \"$LOG_FILE\" 2>&1 &
-      ATSPI_REG_PID=\$!
-      sleep 0.5
-
-      voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
-      DBUS_PID=\$!
-      sleep 1
-      trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
-      echo 'AT-SPI bus running. Use: just atspi-tree' >> \"$LOG_FILE\"
-      gnome-shell --wayland $DEVKIT_FLAG
-    " 2>&1 | tee -a "$LOG_FILE"
+    # Remove gnome-shell-disable-extensions file (disables all extensions in nested session)
+    rm -f /run/user/1000/gnome-shell-disable-extensions
+    export LOG_FILE DEVKIT_FLAG
+    dbus-run-session -- sh "$PWD/scripts/gnome-ext-dev-session.sh"
     echo "Logs written to $LOG_FILE"
 # @category gnome-ext
 # Start nested GNOME Shell and wait for GDM registration, then check for errors
@@ -346,7 +324,7 @@ gnome-ext-check: reinstall gnome-ext-install
     #!/usr/bin/env bash
     set -euo pipefail
     LOG_DIR="$PWD/logs"
-    LOG_FILE="$LOG_DIR/gnome-ext-dev.log"
+    LOG_FILE="$LOG_DIR/dev.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
     if ! rpm -q mutter-devkit &>/dev/null; then
@@ -415,6 +393,7 @@ gnome-ext-check: reinstall gnome-ext-install
     if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
       echo "❌ Extension errors found:"
       grep -E "CRITICAL|SyntaxError|Error.*extension" "$LOG_FILE" | tail -5
+      exit 1
     elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
       echo "✅ Extension loaded successfully"
       grep "VoiceToText" "$LOG_FILE" | tail -5
@@ -443,6 +422,7 @@ gnome-ext-install:
 
 # Uninstall extension by removing it from the extensions directory
 gnome-ext-uninstall:
+    gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true
     rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
     echo "Extension uninstalled"
 
@@ -473,6 +453,82 @@ gnome-ext-lint:
     glib-compile-schemas --strict gnome-ext/schemas/ 2>&1 || exit 1
     echo "All checks passed!"
 # Reinstall files and reset in GNOME Shell
+
+# @category gnome-ext
+# Quick check: run nested shell for N seconds and report errors (headless by default)
+gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
+    #!/usr/bin/env bash
+    set -uo pipefail
+
+    LOG_DIR="$PWD/logs"
+    LOG_FILE="$LOG_DIR/gnome-ext-quick-check.log"
+    mkdir -p "$LOG_DIR"
+    echo "" > "$LOG_FILE"
+
+    if ! rpm -q mutter-devkit &>/dev/null; then
+        echo "mutter-devkit not installed, installing...";
+        if command -v rpm-ostree &>/dev/null; then
+            sudo rpm-ostree install mutter-devkit;
+            echo "mutter-devkit was staged via rpm-ostree. Reboot, then rerun 'just gnome-ext-quick-check'." >&2;
+            exit 1;
+        else
+            sudo dnf install -y mutter-devkit;
+        fi
+    fi
+
+    UUID="voice-to-text@happytomatoe.com"
+    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+    if ! echo "$CURRENT" | grep -q "$UUID"; then
+      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+        dconf write /org/gnome/shell/enabled-extensions "['$UUID']"
+      else
+        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$UUID']"
+      fi
+    fi
+
+    export MUTTER_DEBUG_NESTED=
+    export MUTTER_DEBUG=1
+
+    # Run in a new process group; on EXIT/INT/TERM kill the whole tree.
+    cleanup() { kill -- -$(ps -o pgid= -p $BASHPID | tr -d ' ') 2>/dev/null || true; }
+    trap cleanup EXIT INT TERM
+    echo "Running nested shell for {{ TIMEOUT }}s (headless)..."
+    timeout {{ TIMEOUT }} setsid bash -c '
+      dbus-run-session -- sh -c "
+        /usr/libexec/at-spi-bus-launcher >> \"$LOG_FILE\" 2>&1 &
+        sleep 0.3
+        voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
+        sleep 0.5
+        gnome-shell --wayland --headless --devkit
+      "
+    ' 2>&1 | tee -a "$LOG_FILE"
+    EXIT_CODE=${PIPESTATUS[0]}
+
+    echo ""
+    echo "=== Results ==="
+
+    # Check for extension errors
+    if grep -q "CRITICAL.*extension" "$LOG_FILE" 2>/dev/null || grep -q "SyntaxError" "$LOG_FILE" 2>/dev/null; then
+        echo "❌ Extension errors found:"
+        grep -E "CRITICAL|SyntaxError|Error.*extension|parsing error" "$LOG_FILE" | tail -10
+        exit 1
+    elif grep -q "VoiceToText" "$LOG_FILE" 2>/dev/null; then
+        echo "✅ Extension loaded successfully"
+        grep "VoiceToText" "$LOG_FILE" | tail -5
+    else
+        echo "⚠️  No extension messages found"
+    fi
+
+    if [ $EXIT_CODE -eq 124 ]; then
+        echo "✅ Timeout reached (expected)"
+    fi
+    if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 124 ]; then
+        echo "❌ Nested GNOME Shell exited with status $EXIT_CODE"
+        exit "$EXIT_CODE"
+    fi
+
+    echo ""
+    echo "Full log: $LOG_FILE"
 gnome-ext-reload:
     ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
 
@@ -842,50 +898,92 @@ qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
 
 # @category e2e-qemu
-# Download pre-built golden image from Filen (fastest setup)
-qemu-e2e-download-golden:
+# Set up E2E test environment (download images, create SSH key, cloud-init ISO)
+qemu-e2e-setup:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Downloading golden image from Filen..."
+    echo "Setting up E2E test environment..."
     echo ""
-    
+
     VM_DIR="e2e/qemu-images"
+    mkdir -p "$VM_DIR"
+
+    # 1. Download golden image from Filen
     GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
-    
-    # Check if already exists
     if [[ -f "$GOLDEN_FILE" ]]; then
-        echo "Golden image already exists: $GOLDEN_FILE"
-        echo "Delete it first to re-download."
-        exit 0
-    fi
-    
-    # Check for megatools
-    if ! command -v megatools &>/dev/null; then
-        echo "megatools not found. Installing via toolbox..."
-        toolbox run --container fedora-toolbox-44 -- sudo dnf install -y megatools
-    fi
-    
-    # Download from Filen
-    FILEN_LINK="https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q"
-    echo "Downloading 2.2GB image (this may take a few minutes)..."
-    toolbox run --container fedora-toolbox-44 -- fish -c "megatools dl $FILEN_LINK -u \$FILLEN_USER -p \$FILLEN_PASSWORD" 2>&1 | tail -5
-    
-    # Move to correct location if downloaded to current dir
-    if [[ -f "golden-gnome-deps.qcow2" ]]; then
-        mv golden-gnome-deps.qcow2 "$GOLDEN_FILE"
-    fi
-    
-    if [[ -f "$GOLDEN_FILE" ]]; then
-        echo ""
-        echo "✓ Golden image downloaded: $GOLDEN_FILE"
-        echo ""
-        echo "Run 'just e2e' to execute tests."
+        echo "✓ Golden image already exists: $GOLDEN_FILE"
     else
-        echo ""
-        echo "❌ Download failed. Check credentials and try again."
-        echo "Set FILLEN_USER and FILLEN_PASSWORD in your environment."
-        exit 1
+        echo "Downloading golden-gnome-deps.qcow2 from Filen..."
+        filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
+        echo "✓ Downloaded: $GOLDEN_FILE"
     fi
+    echo ""
+
+    # 2. Download SSH keys from Filen (matching the golden image)
+    if [[ -f "$VM_DIR/id_ed25519" && -f "$VM_DIR/id_ed25519.pub" ]]; then
+        echo "✓ SSH keys already exist"
+    else
+        echo "Downloading SSH keys from Filen..."
+        [[ -f "$VM_DIR/id_ed25519" ]] || filen download "/id_ed25519" "$VM_DIR/id_ed25519"
+        [[ -f "$VM_DIR/id_ed25519.pub" ]] || filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
+        chmod 600 "$VM_DIR/id_ed25519"
+        echo "✓ SSH keys downloaded: $VM_DIR/id_ed25519"
+    fi
+    echo ""
+
+    # 3. Create cloud-init ISO (required by QEMU boot)
+    CLOUD_INIT="$VM_DIR/cloud-init.iso"
+    if [[ -f "$CLOUD_INIT" ]]; then
+        echo "✓ Cloud-init ISO already exists: $CLOUD_INIT"
+    else
+        echo "Creating cloud-init ISO..."
+        PUB_KEY=$(cat "$VM_DIR/id_ed25519.pub")
+        TEMP_DIR=$(mktemp -d)
+        mkdir -p "$TEMP_DIR/cloud-init"
+        echo "#cloud-config" > "$TEMP_DIR/cloud-init/user-data"
+        echo "users:" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - name: testuser" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    ssh-authorized-keys:" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "      - $PUB_KEY" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    sudo: ALL=(ALL) NOPASSWD:ALL" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    groups: wheel,input" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "    shell: /bin/bash" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "password: ''" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "chpasswd: { expire: false }" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "package_update: false" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "packages: []" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "runcmd:" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - systemctl set-default graphical.target" >> "$TEMP_DIR/cloud-init/user-data"
+        mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
+        rm -rf "$TEMP_DIR"
+        echo "✓ Cloud-init ISO created: $CLOUD_INIT"
+    fi
+    echo ""
+
+    # 4. Create base.qcow2 overlay (backing image for VM runs)
+    BASE_IMAGE="$VM_DIR/base.qcow2"
+    if [[ -f "$BASE_IMAGE" ]]; then
+        echo "✓ Base image already exists: $BASE_IMAGE"
+    else
+        echo "Creating base.qcow2 overlay from golden image..."
+        qemu-img create -f qcow2 -b "$GOLDEN_FILE" -F qcow2 "$BASE_IMAGE"
+        echo "✓ Base image created: $BASE_IMAGE"
+    fi
+    echo ""
+
+    echo "═══════════════════════════════════════════════════"
+    echo "  E2E environment ready!"
+    echo ""
+    echo "  Images:"
+    echo "    $GOLDEN_FILE"
+    echo "    $CLOUD_INIT"
+    echo ""
+    echo "  Run tests:  just e2e"
+    echo "═══════════════════════════════════════════════════"
+
 
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
@@ -898,36 +996,34 @@ qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
 # @category e2e-qemu
-# Run E2E tests with snapshot restore (fast, ~40s)
+# Run E2E tests (snapshot mode by default, fast ~40s after first run)
 e2e:
-    cd e2e && bun run e2e.ts --snapshot
+    cd e2e && bun run e2e.ts
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
 e2e-parallel *ARGS:
-    cd e2e && bun run e2e.ts --snapshot --parallel {{ ARGS }}
+    cd e2e && bun run e2e.ts --parallel {{ ARGS }}
 
 # @category e2e-qemu
 # Run preferences screenshot tests
 e2e-prefs:
-    cd e2e && bun run e2e.ts --snapshot --test-prefs
+    cd e2e && bun run e2e.ts --test-prefs
 
 # @category e2e-qemu
 # Run all E2E tests (parallel + preferences)
 e2e-all *ARGS:
-    cd e2e && bun run e2e.ts --snapshot --parallel 2 {{ ARGS }}
+    cd e2e && bun run e2e.ts --parallel 2 {{ ARGS }}
 
 # @category e2e-qemu
 # Run E2E tests without snapshots (full boot, ~75s)
-e2e-full:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd e2e && bun run e2e.ts
+e2e-no-snapshot:
+    cd e2e && bun run e2e.ts --no-snapshot
 
 # @category e2e-qemu
 # Update E2E reference images in snapshot mode
-e2e-update-snapshot:
-    cd e2e && bun run e2e.ts --snapshot --update
+e2e-update:
+    cd e2e && bun run e2e.ts --update
 
 # @category gnome-ext
 # Query AT-SPI accessibility tree in the nested GNOME Shell

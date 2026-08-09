@@ -1,6 +1,6 @@
 ---
 name: voice-to-text-debug
-description: Debug the voice-to-text GNOME Shell extension + Python D-Bus backend, especially the "spinner hangs on recording start" symptom. Use when the mic indicator spinner never stops, recording never starts, or StateChanged/AudioLevel signals misbehave in the nested gnome-ext-dev environment.
+description: Debug the voice-to-text GNOME Shell extension + Python D-Bus backend, especially the "spinner hangs on recording start" symptom. Use when the mic indicator spinner never stops, recording never starts, or StateChanged/AudioLevel signals misbehave in the nested dev environment.
 ---
 
 # voice-to-text Debugging
@@ -9,7 +9,7 @@ Project-specific debugging for the voice-to-text stack:
 
 - **GNOME extension (JS)** in `gnome-ext/` — panel indicator, spinner, meter, D-Bus proxy.
 - **Python D-Bus service (backend)** in `src/voice_to_text/` — `dbus_service.py`, `engine.py`, `typer.py`, `bluetooth.py`, `providers/`.
-- **Dev runner**: `just gnome-ext-dev` starts an isolated `dbus-run-session` containing BOTH the backend (`voice-to-text-dbus`) and a nested `gnome-shell` running the extension.
+- **Dev runner**: `just dev` starts an isolated `dbus-run-session` containing BOTH the backend (`voice-to-text-dbus`) and a nested `gnome-shell` running the extension.
 
 ## When to use
 
@@ -44,7 +44,7 @@ So "spinner hangs" == "engine is stuck/frozen somewhere before `self.state = Eng
 
 ## Phase 1 — Read the backend log (primary evidence)
 
-`just gnome-ext-dev` redirects the service to `/tmp/voice-to-text.log` and the shell to `/tmp/gnome-shell-nested.log`:
+`just dev` redirects the service to `/tmp/voice-to-text.log` and the shell to `/tmp/gnome-shell-nested.log`:
 
 ```bash
 tail -n 80 /tmp/voice-to-text.log
@@ -69,7 +69,7 @@ Engine: recording started                                  # => state RECORDING 
 
 | Last visible line | Stuck on | Likely cause |
 |---|---|---|
-| import-time `Traceback` (IndentationError / ImportError) before any `Engine:` line | service never started | broken source; re-run `just gnome-ext-dev` (does `reinstall` → `uv tool install -e . --force`) or fix the import. The editable install points at `src/` (see `_editable_impl_voice_to_text.pth` / `direct_url.json` in the uv tool venv), so the source tree IS what runs. |
+| import-time `Traceback` (IndentationError / ImportError) before any `Engine:` line | service never started | broken source; re-run `just dev` (does `reinstall` → `uv tool install -e . --force`) or fix the import. The editable install points at `src/` (see `_editable_impl_voice_to_text.pth` / `direct_url.json` in the uv tool venv), so the source tree IS what runs. |
 | `...opening dotoolc...` (no "opened") | `await typer.start()` (`engine.py` ~256) | dotoolc/dotoold pipe not available in nested session; `DOTOOL_PIPE`/`XDG_RUNTIME_DIR` not set; daemon not running |
 | `...activating headset...` | `await asyncio.to_thread(activate_headset_mic)` (~273) | Bluetooth mic activation blocking on a `bluetoothctl`/D-Bus call in the isolated session |
 | **`...initializing providers...` then a multi-second (10s–40s+) gap with NO further `Engine:` line** | **synchronous `keyring.get_password()` inside `resolve_api_key()` (`providers/base.py` ~94), called from the provider `__init__` during provider construction** | **THE COMMON ROOT CAUSE — see Phase 2. The secret service is unreachable in the nested `dbus-run-session`, so the blocking D-Bus keyring lookup hangs, freezing the event loop before `RECORDING` is ever set.** |
@@ -86,7 +86,7 @@ If the log stops mid-phase with NO exception and NO "recording started", the eng
 key = keyring_lib.get_password("voice-to-text", provider_name)   # BLOCKING D-Bus round-trip
 ```
 
-This is called **synchronously** from `VoxtralProvider.__init__` / `DeepgramProvider.__init__` (and others), which `engine._run()` calls directly (not in a thread/executor). Inside the `just gnome-ext-dev` `dbus-run-session`, the secret service (`org.freedesktop.secrets`) is unreachable, so `keyring.get_password()` **hangs for tens of seconds** (reproduced: >40s, never returned). Because it runs on the asyncio event loop, it freezes the whole engine before `recorder.start()` → `EngineState.RECORDING` is never set → `StateChanged('recording')` is never emitted → the spinner hangs.
+This is called **synchronously** from `VoxtralProvider.__init__` / `DeepgramProvider.__init__` (and others), which `engine._run()` calls directly (not in a thread/executor). Inside the `just dev` `dbus-run-session`, the secret service (`org.freedesktop.secrets`) is unreachable, so `keyring.get_password()` **hangs for tens of seconds** (reproduced: >40s, never returned). Because it runs on the asyncio event loop, it freezes the whole engine before `recorder.start()` → `EngineState.RECORDING` is never set → `StateChanged('recording')` is never emitted → the spinner hangs.
 
 **Confirm it:**
 ```bash
@@ -124,7 +124,7 @@ Now the fault is in signal delivery or the JS UI, not the engine. (In practice t
    - `VoiceToText: state changed to recording` → signal arrived but UI not updated (`setRecordingActive`/`_setRecordingUI` bug).
    - No `state changed` line at all → signal never reached the extension.
 
-2. **Bus mismatch (common in `gnome-ext-dev`).** Both backend and nested shell run inside the `dbus-run-session` subshell, so they SHOULD share one isolated bus. The host's `busctl`/`gdbus`/`dbus-monitor` target the HOST session bus and will NOT see the nested service. To introspect the nested bus you must run the tool with the nested bus address:
+2. **Bus mismatch (common in `dev`).** Both backend and nested shell run inside the `dbus-run-session` subshell, so they SHOULD share one isolated bus. The host's `busctl`/`gdbus`/`dbus-monitor` target the HOST session bus and will NOT see the nested service. To introspect the nested bus you must run the tool with the nested bus address:
    ```bash
    DBUS_SESSION_BUS_ADDRESS=<nested-addr> gdbus introspect \
      --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText

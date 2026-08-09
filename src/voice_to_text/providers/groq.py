@@ -34,9 +34,15 @@ class GroqProvider(BatchProvider):
     ) -> str:
         logger.info("Transcribing %s with Groq model %s", audio_path, self.model)
         try:
-            transcription = await self.client.audio.transcriptions.create(
-                model=self.model, file=Path(audio_path), language=language, response_format="text"
-            )
+            kwargs: dict[str, Any] = {
+                "model": self.model,
+                "file": Path(audio_path),
+                "language": language,
+                "response_format": "text",
+            }
+            if custom_words:
+                kwargs["prompt"] = ", ".join(custom_words)
+            transcription = await self.client.audio.transcriptions.create(**kwargs)
             result = str(transcription).strip()
             logger.info("Transcription result: %s", result[:100])
             return result

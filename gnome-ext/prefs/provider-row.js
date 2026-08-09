@@ -26,6 +26,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     providerCombo.append('parakeet', 'Parakeet');
     providerCombo.append('60db', '60db');
     providerCombo.append('elevenlabs', 'ElevenLabs');
+    providerCombo.append('moonshine', 'Moonshine');
     providerCombo.set_active_id(settings.get_string('provider'));
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();
@@ -63,6 +64,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     streamingProviderCombo.append('deepgram', 'Deepgram');
     streamingProviderCombo.append('voxtral', 'Voxtral');
     streamingProviderCombo.append('60db', '60db');
+    streamingProviderCombo.append('moonshine', 'Moonshine');
     streamingProviderCombo.set_active_id(
         settings.get_string('streaming-provider')
     );
@@ -90,6 +92,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     batchProviderCombo.append('parakeet', 'Parakeet');
     batchProviderCombo.append('60db', '60db');
     batchProviderCombo.append('elevenlabs', 'ElevenLabs');
+    batchProviderCombo.append('moonshine', 'Moonshine');
     batchProviderCombo.set_active_id(settings.get_string('batch-provider'));
     batchProviderCombo.connect('changed', () => {
         const activeId = batchProviderCombo.get_active_id();
