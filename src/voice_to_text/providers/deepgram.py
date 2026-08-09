@@ -29,6 +29,7 @@ Available query parameters (set via deepgram.batch_options in config.yaml):
 - mip_opt_out:     Opt out of the Model Improvement Program
 """
 
+import contextlib
 import logging
 from typing import Any
 
@@ -37,6 +38,10 @@ import httpx
 from .base import BatchProvider, WebSocketStreamingProvider, resolve_api_key
 
 logger = logging.getLogger(__name__)
+
+# HTTP status codes
+_HTTP_UNAUTHORIZED = 401
+_API_KEY_MIN_LEN = 10
 
 
 class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
@@ -47,6 +52,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the Deepgram provider."""
         self.api_key = resolve_api_key(config, "DEEPGRAM_API_KEY", provider_name="deepgram")
         self.model = config.get("model", "nova-3")
         self.api_url = config.get("api_url", "https://api.deepgram.com")
@@ -66,6 +72,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
+        """Transcribe an audio file using Deepgram."""
         logger.info("Transcribing %s with Deepgram model %s", audio_path, self.model)
         try:
             params = {
@@ -115,16 +122,22 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
                     logger.error("Deepgram response body: %s", body)
                 except ValueError:
                     logger.error("Deepgram response text: %s", e.response.text[:500])
-                if status == 401:
-                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if len(self.api_key) > 10 else self.api_key
+                if status == _HTTP_UNAUTHORIZED:
+                    key_len = len(self.api_key)
+                    fp = (
+                        self.api_key[:6] + "..." + self.api_key[-4:]
+                        if key_len > _API_KEY_MIN_LEN
+                        else self.api_key
+                    )
                     logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fp, len(self.api_key))
             raise RuntimeError(f"Deepgram API request failed (HTTP {status}): {e}") from e
         except Exception as e:
             logger.exception("Deepgram transcription failed")
-            raise RuntimeError(f"Deepgram transcription failed: {e}")
+            raise RuntimeError(f"Deepgram transcription failed: {e}") from e
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
-        import time as _time
+        """Start a WebSocket streaming session with Deepgram."""
+        import time as _time  # noqa: PLC0415
 
         _t0 = _time.monotonic()
         ws_url = (
@@ -145,13 +158,12 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "deepgram"
 
     async def close(self) -> None:
         """Close the persistent HTTP client and WebSocket."""
         if self._ws is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await self._ws.close()
-            except Exception:
-                pass
         await self._client.aclose()
