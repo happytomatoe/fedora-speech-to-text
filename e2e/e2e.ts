@@ -665,7 +665,17 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   await Bun.sleep(500);
   execSync(`convert "${afterAddPpm}" "${afterAddPng}" 2>/dev/null || true`, { encoding: "utf-8" });
   execSync(`rm -f "${afterAddPpm}"`, { encoding: "utf-8" });
+  
+  // Verify screenshot was captured and has content
+  if (!existsSync(afterAddPng)) {
+    throw new Error("prefs-after-add.png was not created");
+  }
+  const stats = Bun.file(afterAddPng);
+  if (stats.size < 1000) {
+    throw new Error(`prefs-after-add.png is too small (${stats.size} bytes), screenshot likely failed`);
+  }
   console.log("  📷 Captured: prefs-after-add.png (should show E2E at top of list)");
+  console.log(`  ✅ Screenshot verified: ${stats.size} bytes`);
   
   // Close preferences window using dotool
   console.log("  Closing preferences window...");

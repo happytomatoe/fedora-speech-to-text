@@ -32,23 +32,9 @@ export function createCustomWordsGroup(
     /** @type {Adw.ActionRow|null} */
     let addWordRow = null;
 
-    // Collect current words from the list widget
-    const getCustomWordsFromList = () => {
-        const words = [];
-        let child = customWordsList.get_first_child();
-        while (child) {
-            if (
-                child instanceof Adw.ActionRow &&
-                addWordRow &&
-                child !== addWordRow &&
-                child.title
-            ) {
-                words.push(child.title);
-            }
-            child = child.get_next_sibling();
-        }
-        return words;
-    };
+    // Use a mutable reference to break circular dependency between
+    // createWordRow (which calls populate) and populate (which calls createWordRow)
+    const ref = {populate: () => {}};
 
     // Helper to create a word row
     const createWordRow = word => {
@@ -60,8 +46,13 @@ export function createCustomWordsGroup(
             valign: Gtk.Align.CENTER,
         });
         deleteButton.connect('clicked', () => {
-            customWordsList.remove(row);
-            settings.set_strv('custom-words', getCustomWordsFromList());
+            const wordToDelete = row.title;
+            const currentWords = settings.get_strv('custom-words');
+            settings.set_strv(
+                'custom-words',
+                currentWords.filter(w => w !== wordToDelete)
+            );
+            ref.populate();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
@@ -70,7 +61,30 @@ export function createCustomWordsGroup(
         return row;
     };
 
-    // "Add Word…" row at the bottom
+    // Populate existing words from GSettings (called after config sync)
+    ref.populate = () => {
+        // Remove all word rows (but keep addWordRow)
+        let child = customWordsList.get_first_child();
+        while (child) {
+            const next = child.get_next_sibling();
+            if (
+                child instanceof Adw.ActionRow &&
+                addWordRow &&
+                child !== addWordRow
+            ) {
+                customWordsList.remove(child);
+            }
+            child = next;
+        }
+        // Add words in reverse order so most recent appears at top
+        const customWords = settings.get_strv('custom-words');
+        for (let i = customWords.length - 1; i >= 0; i--) {
+            if (customWords[i])
+                customWordsList.append(createWordRow(customWords[i]));
+        }
+    };
+
+    // "Add Word…" row at the top
     addWordRow = new Adw.ActionRow({
         activatable: true,
         title: _('Add Word…'),
@@ -128,35 +142,14 @@ export function createCustomWordsGroup(
             const text = entry.get_text().trim();
             if (text) {
                 // Check for duplicates
-                const existing = getCustomWordsFromList();
+                const existing = settings.get_strv('custom-words');
                 if (existing.includes(text)) {
                     dialog.close();
                     return;
                 }
-                // Insert new word at the top of the word list (after addWordRow)
-                const wordRow = createWordRow(text);
-                // Rebuild list: addWordRow first, then new word, then existing words
-                const existingWords = getCustomWordsFromList();
-                customWordsList.remove(addWordRow);
-                // Remove all word rows
-                let child = customWordsList.get_first_child();
-                while (child) {
-                    const next = child.get_next_sibling();
-                    if (
-                        child instanceof Adw.ActionRow &&
-                        child !== addWordRow
-                    ) {
-                        customWordsList.remove(child);
-                    }
-                    child = next;
-                }
-                // Add in correct order: addWordRow, new word, then existing words
-                customWordsList.append(addWordRow);
-                customWordsList.append(wordRow);
-                for (const word of existingWords) {
-                    if (word) customWordsList.append(createWordRow(word));
-                }
-                settings.set_strv('custom-words', getCustomWordsFromList());
+                // Persist insertion order (append to end of stored array)
+                settings.set_strv('custom-words', [...existing, text]);
+                ref.populate();
                 try {
                     await syncAllToConfig();
                 } catch (e) {
@@ -178,28 +171,5 @@ export function createCustomWordsGroup(
     // Add "Add Word…" row first so it appears at the top of the list
     customWordsList.append(addWordRow);
 
-    // Populate existing words from GSettings (called after config sync)
-    const populate = () => {
-        // Remove all word rows (but keep addWordRow)
-        let child = customWordsList.get_first_child();
-        while (child) {
-            const next = child.get_next_sibling();
-            if (
-                child instanceof Adw.ActionRow &&
-                addWordRow &&
-                child !== addWordRow
-            ) {
-                customWordsList.remove(child);
-            }
-            child = next;
-        }
-        // Add words in reverse order so most recent appears at top
-        const customWords = settings.get_strv('custom-words');
-        for (let i = customWords.length - 1; i >= 0; i--) {
-            if (customWords[i])
-                {customWordsList.append(createWordRow(customWords[i]));}
-        }
-    };
-
-    return {group, populate};
+    return {group, populate: () => ref.populate()};
 }
