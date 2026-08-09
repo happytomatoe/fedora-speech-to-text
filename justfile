@@ -984,26 +984,6 @@ qemu-e2e-setup:
     echo "  Run tests:  just e2e"
     echo "═══════════════════════════════════════════════════"
 
-# @category e2e-qemu
-# Download pre-built golden image + SSH keys from Filen (use qemu-e2e-setup for full setup)
-qemu-e2e-download-golden:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    VM_DIR="e2e/qemu-images"
-    mkdir -p "$VM_DIR"
-    GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
-    if [[ -f "$GOLDEN_FILE" ]]; then
-        echo "Golden image already exists: $GOLDEN_FILE"
-    else
-        echo "Downloading golden-gnome-deps.qcow2 from Filen..."
-        filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
-        echo "✓ Downloaded: $GOLDEN_FILE"
-    fi
-    # Download SSH keys (check each independently)
-    [[ -f "$VM_DIR/id_ed25519" ]] || filen download "/id_ed25519" "$VM_DIR/id_ed25519"
-    [[ -f "$VM_DIR/id_ed25519.pub" ]] || filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
-    [[ -f "$VM_DIR/id_ed25519" ]] && chmod 600 "$VM_DIR/id_ed25519"
-    echo "✓ SSH keys ready"
 
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)

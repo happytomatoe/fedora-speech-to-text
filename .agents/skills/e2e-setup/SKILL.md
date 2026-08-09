@@ -43,14 +43,9 @@ curl -fsSL https://bun.sh/install | bash
 The fastest way to get started is to download the pre-built golden image with all dependencies from Filen:
 
 ```bash
-cd e2e/qemu-images
-
-# Download golden image + SSH keys from Filen
-filen download /golden-gnome-deps.qcow2 .
-filen download /id_ed25519 .
-filen download /id_ed25519.pub .
-chmod 600 id_ed25519
-
+```bash
+just qemu-e2e-setup
+```
 # The image includes:
 # - Fedora 44 + GNOME Shell
 # - GDM with auto-login configured

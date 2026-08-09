@@ -26,9 +26,7 @@ End-to-end testing of the voice-to-text GNOME extension runs in a QEMU VM with S
 
 | Task | Command |
 |------|---------|
-| Start VM | `just qemu-e2e-vm` (interactive) or `just e2e` (full E2E with snapshot) |
-| Run tests (fast) | `just e2e` — uses `--snapshot` for ~40s runs after first boot |
-| Run tests (fresh) | `cd e2e && bun run e2e.ts` — no snapshot, ~85s per run |
+| Run tests | `just e2e` — uses `--snapshot` for ~40s runs after first boot |
 | Stop VM | `kill $(pgrep qemu-system-x86)` |
 | Screenshot (host) | `echo 'screendump /tmp/s.ppm' \| socat - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock` |
 | SSH into VM | `ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost` |
