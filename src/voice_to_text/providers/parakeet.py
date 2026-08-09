@@ -21,6 +21,7 @@ class ParakeetProvider(BatchProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the Parakeet provider."""
         self.model_name = config.get("model", "nvidia/parakeet-tdt-0.6b-v3")
         self.http_endpoint = config.get("http_endpoint", "http://localhost:5092")
         self.timeout = config.get("timeout", 120.0)
@@ -29,6 +30,7 @@ class ParakeetProvider(BatchProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
+        """Transcribe an audio file using Parakeet HTTP API."""
         logger.info("Transcribing %s via HTTP", audio_path)
         url = f"{self.http_endpoint}/v1/audio/transcriptions"
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -43,6 +45,7 @@ class ParakeetProvider(BatchProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "parakeet"
 
     async def close(self) -> None:
