@@ -101,9 +101,8 @@ scp voice-to-text.zip testuser@localhost:~/
 ssh testuser@localhost 'cd ~/.local/share/gnome-shell/extensions/ && unzip ~/voice-to-text.zip'
 ```
 
-### 3. Skip GDM Restart When Possible (-25s)
-**Current:** Always restart GDM to load extension
-**Optimized:** Use `gnome-extensions enable/disable` if extension is already installed
+### 3. ~~Skip GDM Restart When Possible~~ (Not Available in GNOME 50)
+**Note:** `org.gnome.Shell.Eval` is disabled in GNOME 50, so GDM restart is the only way to load extensions. `gnome-extensions enable/disable` only works for already-loaded extensions, not for loading new code.
 
 ### 4. Persistent Dev VM (-30s)
 **Current:** Boot → Setup → Test → Shutdown
@@ -132,6 +131,7 @@ ssh testuser@localhost 'cd ~/.local/share/gnome-shell/extensions/ && unzip ~/voi
 1. **Pre-install deps in golden image** (-15s) - Easy
 2. **Package extension as zip** (-10s) - Easy
 3. **Snapshot/restore loop** (-25s) - Medium
-4. **Skip GDM restart** (-10s) - Hard
 
-**Total potential savings: ~50s (77.6s → ~27s)**
+**Total potential savings: ~40s (77.6s → ~37s)**
+
+**Note:** Skipping GDM restart is NOT possible in GNOME 50 because `org.gnome.Shell.Eval` is disabled.

@@ -50,8 +50,9 @@ virsh snapshot-revert e2e-vm "golden"
 # rsync changes to VM
 rsync -avz --exclude='.git' src/ testuser@localhost:~/voice-to-text/
 
-# Reload extension
-ssh testuser@localhost 'gnome-extensions disable voice-to-text && gnome-extensions enable voice-to-text'
+# Reload extension (requires GDM restart in GNOME 50)
+# gnome-extensions disable/enable only works for already-loaded extensions
+sudo systemctl restart gdm
 ```
 
 ### 3. Pre-built Extension Package (Expected: -5s)

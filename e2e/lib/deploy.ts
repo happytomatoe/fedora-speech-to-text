@@ -24,7 +24,7 @@ export class Deployer {
     this.config = config;
   }
 
-  async connect(maxRetries = 3, retryDelayMs = 2000): Promise<void> {
+  async connect(maxRetries = 5, retryDelayMs = 3000): Promise<void> {
     if (this.connected) return;
     if (this._connectPromise) return this._connectPromise;
 
@@ -111,7 +111,7 @@ export class Deployer {
             reject(new Error("Connection closed before ready"));
           }
         })
-        .connect(this.config);
+        .connect({ ...this.config, readyTimeout: 30000 });
     });
   }
 
