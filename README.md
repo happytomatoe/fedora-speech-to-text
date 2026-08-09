@@ -1,6 +1,6 @@
 # Fedora speech to text
 
-Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.  
+Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.
 
 # Providers
 
