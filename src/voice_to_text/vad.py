@@ -26,10 +26,12 @@ class VAD:
     """
 
     def __init__(self, threshold: float = 0.01, sample_rate: int = 16000):
-        """
+        """Initialize the VAD.
+
         Args:
             threshold: RMS energy threshold. Speech above this level.
             sample_rate: Expected sample rate (for frame duration calc).
+
         """
         self.threshold = threshold
         self.sample_rate = sample_rate
@@ -44,6 +46,7 @@ class VAD:
 
         Returns:
             True if RMS energy exceeds threshold.
+
         """
         if len(frame) == 0:
             return False
@@ -60,7 +63,7 @@ class SmoothedVAD:
     - Prefill: rolls back to include pre-speech audio
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         inner: VAD | None = None,
         onset_frames: int = 2,
@@ -68,7 +71,8 @@ class SmoothedVAD:
         prefill_frames: int = 15,
         threshold: float = 0.01,
         sample_rate: int = 16000,
-    ):
+    ) -> None:
+        """Initialize the smoothed VAD."""
         self.inner = inner or VAD(threshold=threshold, sample_rate=sample_rate)
         self.onset_frames = onset_frames
         self.hangover_frames = hangover_frames
@@ -87,6 +91,7 @@ class SmoothedVAD:
 
         Returns:
             VADFrame.SPEECH or VADFrame.NOISE.
+
         """
         # Buffer for prefill
         self._frame_buffer.append(frame.copy())
