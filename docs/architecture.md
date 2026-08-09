@@ -121,11 +121,11 @@ Selected by `transcription.mode` in `config.yaml` (also overridable per call):
 
 ## Output Methods
 
-| Method | Class | How it works |
-|--------|-------|--------------|
-| `type` | `DotoolTyper` | Types via dotool (requires `dotoolc`) |
-| `mutter-virtual` | `MutterVirtualTyper` | Char-by-char typing via D-Bus virtual keyboard |
-| `mutter-commit` | `MutterVirtualPaster` | Commits text via `Main.inputMethod.commit()` |
+| Method | Class | How it works | Speed | Internal API |
+|--------|-------|--------------|-------|--------------|
+| `type` | `DotoolTyper` | Types via dotool (requires `dotoolc`) | Slow (keystroke-by-keystroke) | No (external tool) |
+| `mutter-virtual` | `MutterVirtualTyper` | Char-by-char typing via D-Bus virtual keyboard | Slow (keystroke-by-keystroke) | Yes (`Clutter.InputDevice`) |
+| `mutter-commit` | `MutterVirtualPaster` | Commits text via `Main.inputMethod.commit()` | Fast (single call) | Yes (`Clutter.InputMethod`) |
 
 
 

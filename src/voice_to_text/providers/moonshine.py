@@ -33,6 +33,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         self._sample_rate: int = 16000
         # Lazy imports to avoid slow startup
         self._moonshine: Any = None
+        self._model_arch: Any = None  # Resolved ModelArch enum
 
     def _ensure_imported(self) -> None:
         """Lazily import moonshine_voice."""
@@ -46,7 +47,21 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         self._ensure_imported()
         lang = language or self.language
         if self._transcriber is None:
-            model_path, model_arch = self._moonshine.get_model_for_language(lang, self.model_name)
+            # Map model name string to ModelArch enum
+            model_name_upper = self.model_name.upper()
+            try:
+                self._model_arch = self._moonshine.ModelArch[model_name_upper]
+            except KeyError:
+                # Try adding _STREAMING suffix for streaming models
+                streaming_name = f"{model_name_upper}_STREAMING"
+                try:
+                    self._model_arch = self._moonshine.ModelArch[streaming_name]
+                except KeyError:
+                    # Fallback to MEDIUM_STREAMING
+                    self._model_arch = self._moonshine.ModelArch.MEDIUM_STREAMING
+                    logger.warning("Unknown model '%s', falling back to MEDIUM_STREAMING", self.model_name)
+
+            model_path, model_arch = self._moonshine.get_model_for_language(lang, self._model_arch)
             self._transcriber = self._moonshine.Transcriber(
                 model_path=model_path,
                 model_arch=model_arch,

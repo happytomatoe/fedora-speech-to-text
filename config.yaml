@@ -3,7 +3,7 @@
 
 # Provider selection
 transcription:
-  mode: "batch"           # "batch", "hybrid", or "streaming"
+  mode: "streaming"        # "batch", "hybrid", or "streaming"
   provider: "voxtral"   # batch: "deepgram", "groq", "voxtral", "parakeet", or "elevenlabs"
   language: "en"
   hybrid:
