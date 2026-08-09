@@ -40,32 +40,28 @@ curl -fsSL https://bun.sh/install | bash
 
 ## Quick Start: Download Pre-built Image
 
-The fastest way to get started is to download the pre-built golden image with all dependencies:
-
-**Direct Link:** [golden-gnome-deps.qcow2](https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q)
+The fastest way to get started is to download the pre-built golden image with all dependencies from Filen:
 
 ```bash
-# Download using megatools
-cd e2e/qemu-images
-toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.nz/#!HpgWTYrS!XkQxF5V1TbOfcre2GM7BAb_Zkj-YYCVK2Xci_2YQl9Q -u $MEGA_USER -p $MEGA_PASSWORD'
-
+```bash
+just qemu-e2e-setup
+```
 # The image includes:
 # - Fedora 44 + GNOME Shell
 # - GDM with auto-login configured
 # - gnome-terminal, ghostty, dotool
 # - Python packages (httpx, dbus-next, numpy, etc.)
 # - uv package manager
+# - SSH keys for testuser access
 ```
+
+**Important:** The SSH keys (`id_ed25519`, `id_ed25519.pub`) on Filen are the ones baked into the golden image. You MUST use these keys — generating new ones will cause SSH auth failures.
 
 ### Using the Downloaded Image
 
 ```bash
-# The E2E test will auto-detect golden-gnome-deps.qcow2
-# and skip dependency installation automatically
-cd e2e && bun run e2e.ts
-
-# For faster subsequent runs, use snapshot mode (reduces time from ~80s to ~40s)
-cd e2e && bun run e2e.ts --snapshot
+# Just run it — uses --snapshot by default (~40s after first boot)
+just e2e
 ```
 
 ## Base Image Setup

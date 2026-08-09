@@ -38,23 +38,25 @@ E2E tests verify the GNOME extension end-to-end: boot a QEMU VM, deploy the exte
 ## Running Tests
 
 ```bash
-# Update reference screenshots
-cd e2e && bun run e2e.ts --update
-
-# Run tests against references
-cd e2e && bun run e2e.ts
-
-# Or via just
-just qemu-e2e-update-ts   # update references
-just e2e                   # run tests
+just qemu-e2e-update-ts   # update reference screenshots
+just e2e                   # run tests (~40s with snapshot)
 ```
+
+**Snapshot mode**: First run deploys everything and saves a QEMU snapshot. Subsequent runs restore the snapshot, skipping deployment (~50s saved). The snapshot persists between runs using a fixed overlay in `persistent-run/main/`.
+
+Transcription uses the local Parakeet provider (no API key needed).
 
 Transcription uses the local Parakeet provider (no API key needed).
 
 ## VM Setup
 
-- **Base image**: `e2e/qemu-images/base.qcow2` (QEMU qcow2 image with Fedora + GNOME Shell)
-- **SSH**: port 2222, user `testuser`, key `e2e/qemu-images/id_ed25519`
+**First time setup:**
+```bash
+just qemu-e2e-setup  # Downloads golden image + SSH keys from Filen
+```
+
+- **Golden image**: `e2e/qemu-images/golden-gnome-deps.qcow2` (Fedora 44 + GNOME Shell + deps)
+- **SSH**: port 2222, user `testuser`, key `e2e/qemu-images/id_ed25519` (from Filen, must match golden image)
 - **Python**: 3.13 via uv venv (deployed to VM via SSH)
 - **Extension**: installed to VM via SSH rsync
 - **Services**: D-Bus service for voice-to-text transcription (started inside VM)

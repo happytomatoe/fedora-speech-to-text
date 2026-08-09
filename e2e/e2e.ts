@@ -47,7 +47,8 @@ const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
-const SNAPSHOT_MODE = args.includes("--snapshot");
+const NO_SNAPSHOT = args.includes("--no-snapshot");
+const SNAPSHOT_MODE = !NO_SNAPSHOT;
 const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
@@ -127,9 +128,18 @@ interface TestCaseFile {
   expected: string;
 }
 
-// Load test matrix
-const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
-const testMatrix = JSON.parse(readFileSync(testMatrixPath, "utf-8"));
+// Load test matrix (only needed for parallel mode)
+let testMatrix: any = undefined;
+function loadTestMatrix(): any {
+  if (!testMatrix) {
+    const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
+    if (!existsSync(testMatrixPath)) {
+      throw new Error(`Test matrix not found: ${testMatrixPath}\nCreate it or run without --parallel.`);
+    }
+    testMatrix = JSON.parse(readFileSync(testMatrixPath, "utf-8"));
+  }
+  return testMatrix;
+}
 
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
@@ -691,10 +701,10 @@ async function main(): Promise<void> {
     console.log(`\n🚀 Running in parallel mode with ${PARALLEL_VMS} VMs`);
     
     // Load test cases from matrix
-    const testCases: TestCase[] = testMatrix["test-suites"].transcription["test-cases"].map((tc: any) => ({
+    const testCases: TestCase[] = loadTestMatrix()["test-suites"].transcription["test-cases"].map((tc: any) => ({
       id: tc.id,
-      audioFile: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).file,
-      expectedText: testMatrix["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).expected,
+      audioFile: loadTestMatrix()["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).file,
+      expectedText: loadTestMatrix()["test-suites"].transcription["matrix"]["audio-files"].find((a: any) => a.id === tc.audio).expected,
       outputMethod: tc["output-method"],
       priority: tc.priority
     }));
