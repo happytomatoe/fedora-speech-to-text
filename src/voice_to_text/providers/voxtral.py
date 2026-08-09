@@ -6,6 +6,7 @@ Project docs:  docs/providers/voxtral.md
 
 import asyncio
 import concurrent.futures
+import contextlib
 import logging
 import os
 import threading
@@ -16,6 +17,10 @@ import httpx
 from .base import BatchProvider, StreamingProvider, resolve_api_key
 
 logger = logging.getLogger(__name__)
+
+# HTTP status codes
+_HTTP_UNAUTHORIZED = 401
+_API_KEY_MIN_LEN = 10
 
 
 class VoxtralProvider(BatchProvider, StreamingProvider):
@@ -29,6 +34,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the Voxtral provider."""
         self.api_key = resolve_api_key(
             config, "VOXTRAL_API_KEY", extra_envs=("MISTRAL_API_KEY",), provider_name="voxtral"
         )
@@ -86,16 +92,22 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
                     logger.error("Voxtral response body: %s", body)
                 except ValueError:
                     logger.error("Voxtral response text: %s", e.response.text[:500])
-                if status == 401:
+                if status == _HTTP_UNAUTHORIZED:
+                    key_len = len(self.api_key)
+                    fp = (
+                        self.api_key[:6] + "..." + self.api_key[-4:]
+                        if key_len > _API_KEY_MIN_LEN
+                        else self.api_key
+                    )
                     logger.error(
                         "401 Unauthorized - key fingerprint=%s (len=%d)",
-                        self.api_key[:6] + "..." + self.api_key[-4:] if len(self.api_key) > 10 else self.api_key,
+                        fp,
                         len(self.api_key),
                     )
             raise RuntimeError(f"Voxtral API request failed (HTTP {status}): {e}") from e
         except Exception as e:
             logger.exception("Voxtral transcription failed")
-            raise RuntimeError(f"Voxtral transcription failed: {e}")
+            raise RuntimeError(f"Voxtral transcription failed: {e}") from e
 
     # ── Streaming ──────────────────────────────────────────────────────
 
@@ -108,7 +120,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Initialize a streaming session via Voxtral SDK."""
-        import time as _time
+        import time as _time  # noqa: PLC0415
 
         _t0 = _time.monotonic()
         # Ensure the SDK sees the correct key even if only VOXTRAL_API_KEY is set
@@ -143,8 +155,8 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
     async def _stream(self, language: str, sample_rate: int) -> None:
         """Run the Voxtral realtime streaming in the event loop thread."""
-        from mistralai.client import Mistral
-        from mistralai.extra.realtime import AudioFormat
+        from mistralai.client import Mistral  # noqa: PLC0415
+        from mistralai.extra.realtime import AudioFormat  # noqa: PLC0415
 
         client = Mistral(api_key=self.api_key)
         rt = client.audio.realtime
@@ -255,6 +267,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "voxtral"
 
     async def close(self) -> None:
@@ -264,11 +277,9 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
             self._loop.call_soon_threadsafe(self._audio_queue.put_nowait, None)
 
         if self._loop is not None:
-            try:
+            with contextlib.suppress(Exception):
                 # Use run_in_executor to stop the loop in its own thread
-                await asyncio.get_event_loop().run_in_executor(None, lambda: self._loop.stop())
-            except Exception:
-                pass
+                await asyncio.get_event_loop().run_in_executor(None, self._loop.stop)
 
         if self._thread is not None:
             self._thread.join(timeout=1.0)
