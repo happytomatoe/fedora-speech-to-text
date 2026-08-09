@@ -74,69 +74,28 @@ class MutterVirtualPaster:
             logger.warning("MutterVirtualPaster: commit_text failed: %s", e)
             return False
 
-    async def set_preedit_text(self, text: str, cursor: int = 0, anchor: int = 0, commit: bool = False) -> bool:
-        """Set preedit text via GNOME Shell's inputMethod.
-
-        During streaming, use commit=False to show text as preedit (composing).
-        When done, use commit=True to commit the preedit to the input field.
-        """
-        if not self._proxy or not self._usable:
-            logger.debug("MutterVirtualPaster: set_preedit_text() called but proxy not available")
-            return False
-
-        try:
-            logger.info("MutterVirtualPaster: set_preedit_text() called with %d chars, commit=%s", len(text), commit)
-            await self._proxy.call_set_preedit_text(text, cursor, anchor, commit)  # type: ignore[reportAttributeAccessIssue]
-            logger.info("MutterVirtualPaster: set_preedit_text completed")
-            return True
-        except Exception as e:
-            logger.warning("MutterVirtualPaster: set_preedit_text failed: %s", e)
-            return False
-
     async def stream_diff(self, new_text: str) -> None:
-        """Diff new_text against previously typed text and only output the new part.
+        """Store streaming text. Actual commit happens via commit_text() at the end.
 
-        During streaming, uses preedit text to show progress without committing.
-        This avoids the issue where commit() would append text instead of replacing.
+        During streaming, we only track the text without making D-Bus calls.
+        This avoids issues with preedit rendering and commit appending.
         """
-        if not self._usable or not new_text:
+        if not self._usable:
             return
 
-        old_text = self._typed_text
-
-        # Skip if no change
-        if new_text == old_text:
-            return
-
-        # Find common prefix length
-        common_len = 0
-        min_len = min(len(old_text), len(new_text))
-        while common_len < min_len and old_text[common_len] == new_text[common_len]:
-            common_len += 1
-
-        new_suffix = new_text[common_len:]
-
-        if new_suffix:
-            # Use preedit text during streaming (commit=False)
-            # This shows the text as composing/underline without committing
-            success = await self.set_preedit_text(new_text, cursor=len(new_text), anchor=0, commit=False)
-            if not success:
-                logger.warning("MutterVirtualPaster: stream_diff: set_preedit_text failed, not advancing state")
-                return
-
+        # Just store the text - no D-Bus calls during streaming
         self._typed_text = new_text
 
-    async def commit_preedit(self) -> bool:
-        """Commit the current preedit text to the input field."""
+    async def flush(self) -> bool:
+        """Commit the accumulated text to the input field."""
         if not self._usable or not self._typed_text:
             return False
 
         try:
-            # Commit the preedit text
-            success = await self.set_preedit_text(self._typed_text, cursor=len(self._typed_text), anchor=0, commit=True)
+            success = await self.commit_text(self._typed_text)
             if success:
-                logger.info("MutterVirtualPaster: commit_preedit completed")
+                logger.info("MutterVirtualPaster: flush completed")
             return success
         except Exception as e:
-            logger.warning("MutterVirtualPaster: commit_preedit failed: %s", e)
+            logger.warning("MutterVirtualPaster: flush failed: %s", e)
             return False
