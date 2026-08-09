@@ -453,6 +453,8 @@ class RecordingEngine:
             self._notify_state()
             if self._skip_output:
                 logger.info("Output skipped (cancel)")
+                if typer and isinstance(typer, MutterVirtualPaster):
+                    await typer.flush()
                 if filepath:
                     try:
                         os.unlink(filepath)
@@ -486,6 +488,8 @@ class RecordingEngine:
                     # Check cancellation again after transcription completes
                     if self._skip_output:
                         logger.info("Output skipped (cancel) after transcription")
+                        if typer and isinstance(typer, MutterVirtualPaster):
+                            await typer.flush()
                         return
 
                     # If we were typing incrementally, apply final corrections
@@ -496,6 +500,9 @@ class RecordingEngine:
                             len(text),
                         )
                         await typer.stream_diff(text)
+                        # For MutterVirtualPaster, commit the accumulated text after streaming
+                        if isinstance(typer, MutterVirtualPaster):
+                            await typer.flush()
                     elif text and typer and not typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
 

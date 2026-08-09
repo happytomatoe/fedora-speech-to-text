@@ -51,7 +51,7 @@
     <key name="batch-provider" type="s">
       <default>"voxtral"</default>
       <summary>Batch provider for hybrid mode</summary>
-      <description>Provider used for final batch transcription in hybrid mode (deepgram, groq, voxtral, parakeet, or elevenlabs)</description>
+      <description>Provider used for final batch transcription in hybrid mode</description>
     </key>
     <key name="show-audio-level-widget" type="b">
       <default>true</default>

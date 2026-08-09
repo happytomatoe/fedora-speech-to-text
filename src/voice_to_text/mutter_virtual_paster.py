@@ -5,6 +5,7 @@ Uses Main.inputMethod.commit() to bypass clipboard and keystroke simulation enti
 
 import logging
 
+from dbus_next import DBusError
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
 
@@ -40,7 +41,7 @@ class MutterVirtualPaster:
             self._is_running = True
             logger.info("MutterVirtualPaster: TypeText D-Bus service available")
             return
-        except (ConnectionError, OSError, dbus_exceptions.DBusError) as e:
+        except (ConnectionError, OSError, DBusError) as e:
             logger.debug("MutterVirtualPaster: D-Bus check failed: %s", e)
             if bus is not None:
                 bus.disconnect()
@@ -74,28 +75,28 @@ class MutterVirtualPaster:
             return False
 
     async def stream_diff(self, new_text: str) -> None:
-        """Diff new_text against previously typed text and only output the new part."""
-        if not self._usable or not new_text:
+        """Store streaming text. Actual commit happens via commit_text() at the end.
+
+        During streaming, we only track the text without making D-Bus calls.
+        This avoids issues with preedit rendering and commit appending.
+        """
+        if not self._usable:
             return
 
-        old_text = self._typed_text
-
-        # Skip if no change
-        if new_text == old_text:
-            return
-
-        # Find common prefix length
-        common_len = 0
-        min_len = min(len(old_text), len(new_text))
-        while common_len < min_len and old_text[common_len] == new_text[common_len]:
-            common_len += 1
-
-        new_suffix = new_text[common_len:]
-
-        if new_suffix:
-            success = await self.commit_text(new_suffix)
-            if not success:
-                logger.warning("MutterVirtualPaster: stream_diff: commit failed, not advancing state")
-                return
-
+        # Just store the text - no D-Bus calls during streaming
         self._typed_text = new_text
+
+    async def flush(self) -> bool:
+        """Commit the accumulated text to the input field."""
+        if not self._usable or not self._typed_text:
+            return False
+
+        try:
+            success = await self.commit_text(self._typed_text)
+            if success:
+                self._typed_text = ""
+                logger.info("MutterVirtualPaster: flush completed")
+            return success
+        except Exception as e:
+            logger.warning("MutterVirtualPaster: flush failed: %s", e)
+            return False
