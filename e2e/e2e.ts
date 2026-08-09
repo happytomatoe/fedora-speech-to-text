@@ -639,6 +639,34 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-scrolled-3.png");
   
+  // Test adding a new word via the Add Word button
+  console.log("  Testing Add Word functionality...");
+  // Click on "Add Word..." button (it's at the top of the custom words list)
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.39 0.43\nclick left" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  // Type a new word in the dialog
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "type E2E" | dotool`
+  );
+  await Bun.sleep(500);
+  // Click the Add button
+  await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.62 0.58\nclick left" | dotool`
+  );
+  await Bun.sleep(1000);
+  
+  // Take screenshot after adding word
+  const afterAddPpm = join(prefsDir, "prefs-after-add.ppm");
+  const afterAddPng = join(prefsDir, "prefs-after-add.png");
+  await vm.qemu.screendump(afterAddPpm);
+  await Bun.sleep(500);
+  execSync(`convert "${afterAddPpm}" "${afterAddPng}" 2>/dev/null || true`, { encoding: "utf-8" });
+  execSync(`rm -f "${afterAddPpm}"`, { encoding: "utf-8" });
+  console.log("  📷 Captured: prefs-after-add.png (should show E2E at top of list)");
+  
   // Close preferences window using dotool
   console.log("  Closing preferences window...");
   await vm.deployer.exec(

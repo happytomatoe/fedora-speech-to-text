@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Custom words list widget for fuzzy correction.
+ * Custom words list widget for transcription correction.
  */
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
@@ -20,9 +20,7 @@ export function createCustomWordsGroup(
 ) {
     const group = new Adw.PreferencesGroup({
         title: _('Custom Words'),
-        description: _(
-            'Words/phrases for fuzzy correction in transcription output'
-        ),
+        description: _('Words/phrases for correction in transcription output'),
     });
 
     const customWordsList = new Gtk.ListBox({
@@ -76,7 +74,7 @@ export function createCustomWordsGroup(
     addWordRow = new Adw.ActionRow({
         activatable: true,
         title: _('Add Word…'),
-        subtitle: _('Add a new word or phrase for fuzzy correction'),
+        subtitle: _('Add a new word or phrase for correction'),
         icon_name: 'list-add-symbolic',
     });
     addWordRow.add_css_class('activatable');
@@ -135,10 +133,29 @@ export function createCustomWordsGroup(
                     dialog.close();
                     return;
                 }
-                // GTK4 Gtk.ListBox has no insert_child_before; remove/re-add to insert before addWordRow
+                // Insert new word at the top of the word list (after addWordRow)
+                const wordRow = createWordRow(text);
+                // Rebuild list: addWordRow first, then new word, then existing words
+                const existingWords = getCustomWordsFromList();
                 customWordsList.remove(addWordRow);
-                customWordsList.append(createWordRow(text));
+                // Remove all word rows
+                let child = customWordsList.get_first_child();
+                while (child) {
+                    const next = child.get_next_sibling();
+                    if (
+                        child instanceof Adw.ActionRow &&
+                        child !== addWordRow
+                    ) {
+                        customWordsList.remove(child);
+                    }
+                    child = next;
+                }
+                // Add in correct order: addWordRow, new word, then existing words
                 customWordsList.append(addWordRow);
+                customWordsList.append(wordRow);
+                for (const word of existingWords) {
+                    if (word) customWordsList.append(createWordRow(word));
+                }
                 settings.set_strv('custom-words', getCustomWordsFromList());
                 try {
                     await syncAllToConfig();
@@ -158,16 +175,30 @@ export function createCustomWordsGroup(
 
         dialog.present();
     });
+    // Add "Add Word…" row first so it appears at the top of the list
     customWordsList.append(addWordRow);
 
     // Populate existing words from GSettings (called after config sync)
     const populate = () => {
-        customWordsList.remove(addWordRow);
-        const customWords = settings.get_strv('custom-words');
-        for (const word of customWords) {
-            if (word) customWordsList.append(createWordRow(word));
+        // Remove all word rows (but keep addWordRow)
+        let child = customWordsList.get_first_child();
+        while (child) {
+            const next = child.get_next_sibling();
+            if (
+                child instanceof Adw.ActionRow &&
+                addWordRow &&
+                child !== addWordRow
+            ) {
+                customWordsList.remove(child);
+            }
+            child = next;
         }
-        customWordsList.append(addWordRow);
+        // Add words in reverse order so most recent appears at top
+        const customWords = settings.get_strv('custom-words');
+        for (let i = customWords.length - 1; i >= 0; i--) {
+            if (customWords[i])
+                {customWordsList.append(createWordRow(customWords[i]));}
+        }
     };
 
     return {group, populate};

@@ -168,6 +168,7 @@ export async function deployExtension(
   await shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
 #!/bin/bash
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
+dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
