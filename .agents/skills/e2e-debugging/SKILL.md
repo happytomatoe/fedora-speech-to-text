@@ -26,7 +26,9 @@ End-to-end testing of the voice-to-text GNOME extension runs in a QEMU VM with S
 
 | Task | Command |
 |------|---------|
-| Start VM | `just qemu-e2e-vm` (interactive) or `just e2e` (full E2E) |
+| Start VM | `just qemu-e2e-vm` (interactive) or `just e2e` (full E2E with snapshot) |
+| Run tests (fast) | `just e2e` — uses `--snapshot` for ~40s runs after first boot |
+| Run tests (fresh) | `cd e2e && bun run e2e.ts` — no snapshot, ~85s per run |
 | Stop VM | `kill $(pgrep qemu-system-x86)` |
 | Screenshot (host) | `echo 'screendump /tmp/s.ppm' \| socat - UNIX-CONNECT:e2e/qemu-images/qemu-monitor.sock` |
 | SSH into VM | `ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost` |
@@ -195,6 +197,9 @@ $SSH "export DBUS_SESSION_BUS_ADDRESS='$DBUS_ADDR'; export DEEPGRAM_API_KEY='$DE
 
 ```bash
 $SSH "gnome-extensions enable voice-to-text@happytomatoe.com"
+# Note: gnome-extensions enable only works for already-loaded extensions.
+# In GNOME 50, org.gnome.Shell.Eval is disabled, so GDM restart is required
+# to load new extension code: sudo systemctl restart gdm
 ```
 
 ### D-Bus Helper Functions

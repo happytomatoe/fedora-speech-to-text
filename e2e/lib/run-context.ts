@@ -27,7 +27,9 @@ export class RunContext {
   readonly serialLog: string;
 
   constructor(config: RunConfig, customId?: string) {
-    this.id = customId ?? randomUUID().slice(0, 8);
+    // In single (non-parallel) snapshot mode, use a fixed ID so overlays persist between runs.
+    // Parallel workers get unique IDs to avoid socket/port conflicts.
+    this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : "main");
     
     // In update mode, use a temp directory; otherwise use persistent directory for snapshots
     if (config.updateMode) {

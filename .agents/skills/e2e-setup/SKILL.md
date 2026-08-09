@@ -66,6 +66,9 @@ cd e2e && bun run e2e.ts
 
 # For faster subsequent runs, use snapshot mode (reduces time from ~80s to ~40s)
 cd e2e && bun run e2e.ts --snapshot
+
+# Or use just (which includes --snapshot by default)
+just e2e  # ~40s with snapshot restore
 ```
 
 ## Base Image Setup

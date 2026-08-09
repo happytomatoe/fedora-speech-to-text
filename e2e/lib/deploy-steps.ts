@@ -11,9 +11,20 @@ function sshOpts(sshKey: string, sshPort: number): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
 }
 
-export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser"): string {
+export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
   const host = `${sshUser}@localhost`;
-  return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`).toString();
+  let lastErr: Error | null = null;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: 30000 }).toString();
+    } catch (err) {
+      lastErr = err as Error;
+      if (i < retries - 1) {
+        execSync(`sleep 2`);
+      }
+    }
+  }
+  throw lastErr!;
 }
 
 export function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
@@ -272,7 +283,6 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
             const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
             // Extension must exist AND be in ACTIVE state (not just INITIALIZED/ENABLED)
             return result.includes("State: ACTIVE");
-            return !result.includes("doesn't exist");
           } catch {
             return false;
           }

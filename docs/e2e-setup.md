@@ -139,11 +139,19 @@ just qemu-e2e-update-ts
 ### Run Tests
 
 ```bash
-# Run tests against reference screenshots
-cd e2e && bun run e2e.ts
+# Run tests with snapshot (fast, ~40s after first boot)
+cd e2e && bun run e2e.ts --snapshot
 
-# Or via just
+# Or via just (includes --snapshot by default)
 just e2e
+
+# Run tests without snapshot (fresh deploy every time, ~85s)
+cd e2e && bun run e2e.ts
+```
+
+**Snapshot mode** (`--snapshot`): First run deploys everything and saves a QEMU snapshot. Subsequent runs restore the snapshot, skipping deployment (~50s saved). The snapshot persists between runs using a fixed overlay in `persistent-run/main/`.
+
+**Fresh mode** (no flag): Deploys from scratch every run. Useful for testing deployment logic or when snapshot is corrupted.
 ```
 
 ### Test Specific Output Methods
@@ -246,6 +254,8 @@ journalctl --user -f | grep voice
 gnome-extensions list | grep voice-to-text
 
 # Manually enable extension
+# Note: In GNOME 50, gnome-extensions enable only works for already-loaded extensions.
+# To load new extension code, restart GDM: sudo systemctl restart gdm
 gnome-extensions enable voice-to-text@happytomatoe.com
 ```
 

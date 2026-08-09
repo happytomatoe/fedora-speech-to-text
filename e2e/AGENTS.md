@@ -41,12 +41,20 @@ E2E tests verify the GNOME extension end-to-end: boot a QEMU VM, deploy the exte
 # Update reference screenshots
 cd e2e && bun run e2e.ts --update
 
-# Run tests against references
+# Run tests (fresh, no snapshot) — ~85s per run
 cd e2e && bun run e2e.ts
 
-# Or via just
+# Run tests with snapshot (fast, ~40s after first boot)
+cd e2e && bun run e2e.ts --snapshot
+
+# Or via just (uses --snapshot by default)
 just qemu-e2e-update-ts   # update references
-just e2e                   # run tests
+just e2e                   # run tests (~40s with snapshot)
+```
+
+**Snapshot mode**: First run deploys everything and saves a QEMU snapshot. Subsequent runs restore the snapshot, skipping deployment (~50s saved). The snapshot persists between runs using a fixed overlay in `persistent-run/main/`.
+
+Transcription uses the local Parakeet provider (no API key needed).
 ```
 
 Transcription uses the local Parakeet provider (no API key needed).
