@@ -28,6 +28,7 @@ class MutterVirtualTyper:
     DBUS_INTERFACE = "com.happytomatoe.TypeText"
 
     def __init__(self):
+        """Initialize the Mutter virtual typer."""
         self._typed_text: str = ""
         self._usable: bool = True
         self._proxy = None
@@ -90,7 +91,7 @@ class MutterVirtualTyper:
                 logger.debug("MutterVirtualTyper: Sending %d chars via D-Bus", len(new_suffix))
 
             self._typed_text = new_text
-        except Exception as e:  # noqa: BLE001 - D-Bus can fail in many ways
+        except Exception as e:
             logger.warning("MutterVirtualTyper: D-Bus call failed: %s", e)
             self._usable = False
 
@@ -104,8 +105,10 @@ class MutterVirtualTyper:
 
     @property
     def is_running(self) -> bool:
+        """Return True if connected to the D-Bus service."""
         return self._usable and self._proxy is not None
 
     @property
     def typed_text(self) -> str:
+        """Return the text that has been typed so far."""
         return self._typed_text
