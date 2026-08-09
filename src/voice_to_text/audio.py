@@ -28,6 +28,7 @@ class AudioRecorder:
         sample_rate: int | None = None,
         block_size: int = BLOCK_SIZE,
     ):
+        """Initialize the audio recorder."""
         self.device = device
         self.smooth_factor = smooth_factor
         self.sample_rate = sample_rate or SAMPLE_RATE
@@ -41,6 +42,7 @@ class AudioRecorder:
         self.on_audio_data: Callable[[bytes], None] | None = None
 
     def start(self):
+        """Start recording audio."""
         sample_rate = self.sample_rate
         if not self._explicit_sample_rate and self.device is not None:
             try:
@@ -53,7 +55,7 @@ class AudioRecorder:
 
         fd, self.filepath = tempfile.mkstemp(suffix=".wav")
         fh = os.fdopen(fd, "wb")
-        self._wav = wave.open(fh, "wb")
+        self._wav = wave.open(fh, "wb")  # noqa: SIM115 - file must stay open for recording duration
         self._wav.setnchannels(1)
         self._wav.setsampwidth(2)
         self._wav.setframerate(sample_rate)
@@ -70,6 +72,7 @@ class AudioRecorder:
         self._stream.start()
 
     def stop(self, *, delete: bool = False) -> str | None:
+        """Stop recording and optionally delete the file."""
         if self._stream:
             self._stream.stop()
             self._stream.close()
@@ -87,6 +90,7 @@ class AudioRecorder:
         return filepath
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
+        """Handle audio data from the sounddevice callback thread."""
         raw = indata.tobytes()
         if self._wav is not None:
             self._wav.writeframes(raw)
@@ -105,6 +109,7 @@ class SpeakerVolumeManager:
     """Save, decrease, and restore speaker output volume."""
 
     def __init__(self):
+        """Initialize the speaker volume manager."""
         self._saved_volume: float | None = None
 
     def _get_volume(self) -> float | None:
@@ -113,7 +118,7 @@ class SpeakerVolumeManager:
             (["pactl", "get-sink-volume", "@DEFAULT_SINK@"], self._parse_pactl),
         ]:
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3, check=False)
                 if result.returncode == 0:
                     vol = parse_fn(result.stdout)
                     if vol is not None:
@@ -128,7 +133,7 @@ class SpeakerVolumeManager:
             ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{int(volume * 100)}%"],
         ]:
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3, check=False)
                 if result.returncode == 0:
                     return True
             except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -137,9 +142,10 @@ class SpeakerVolumeManager:
 
     @staticmethod
     def _parse_wpctl(output: str) -> float | None:
+        """Parse volume from wpctl output."""
         try:
-            for part in output.split():
-                part = part.strip()
+            for token in output.split():
+                part = token.strip()
                 if part and part.replace(".", "", 1).lstrip("-").isdigit():
                     return float(part) if part != "0.00" else 0.0
         except (ValueError, IndexError):
@@ -148,17 +154,20 @@ class SpeakerVolumeManager:
 
     @staticmethod
     def _parse_pactl(output: str) -> float | None:
+        """Parse volume from pactl output."""
         match = re.search(r"(\d+)%", output)
         if match:
             return int(match.group(1)) / 100.0
         return None
 
     def save(self):
+        """Save the current speaker volume."""
         self._saved_volume = self._get_volume()
         if self._saved_volume is not None:
             logger.info("Saved speaker volume: %.0f%%", self._saved_volume * 100)
 
     def decrease(self, percent: int):
+        """Decrease the speaker volume by a percentage."""
         percent = max(0, min(100, percent))
         if percent <= 0:
             return
@@ -175,6 +184,7 @@ class SpeakerVolumeManager:
             )
 
     def restore(self):
+        """Restore the saved speaker volume."""
         if self._saved_volume is None:
             return
         if self._set_volume(self._saved_volume):
@@ -185,13 +195,16 @@ class SpeakerVolumeManager:
         self._saved_volume = None
 
     def __enter__(self):
+        """Enter the context manager."""
         return self
 
     def __exit__(self, *args):
+        """Exit the context manager."""
         self.restore()
 
     @classmethod
     def with_decrease(cls, percent: int) -> "SpeakerVolumeManager":
+        """Create a volume manager with decreased volume."""
         mgr = cls()
         try:
             pct = max(0, min(100, int(percent)))
