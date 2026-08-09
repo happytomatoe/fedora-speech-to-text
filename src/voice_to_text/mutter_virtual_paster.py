@@ -23,6 +23,7 @@ class MutterVirtualPaster:
     DBUS_INTERFACE = "com.happytomatoe.TypeText"
 
     def __init__(self):
+        """Initialize the Mutter virtual paster."""
         self._usable: bool = True
         self._proxy = None
         self._bus: MessageBus | None = None
@@ -57,6 +58,7 @@ class MutterVirtualPaster:
 
     @property
     def is_running(self) -> bool:
+        """Return True if connected to the D-Bus service."""
         return self._usable and self._proxy is not None
 
     async def commit_text(self, text: str) -> bool:
