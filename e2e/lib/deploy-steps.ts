@@ -12,6 +12,7 @@ function sshOpts(sshKey: string, sshPort: number): string {
 }
 
 export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
+  if (retries < 1) retries = 1;
   const host = `${sshUser}@localhost`;
   let lastErr: Error | null = null;
   for (let i = 0; i < retries; i++) {

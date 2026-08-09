@@ -60,15 +60,8 @@ toolbox run --container fedora-toolbox-44 -- fish -c 'megatools dl https://mega.
 ### Using the Downloaded Image
 
 ```bash
-# The E2E test will auto-detect golden-gnome-deps.qcow2
-# and skip dependency installation automatically
-cd e2e && bun run e2e.ts
-
-# For faster subsequent runs, use snapshot mode (reduces time from ~80s to ~40s)
-cd e2e && bun run e2e.ts --snapshot
-
-# Or use just (which includes --snapshot by default)
-just e2e  # ~40s with snapshot restore
+# Just run it — uses --snapshot by default (~40s after first boot)
+just e2e
 ```
 
 ## Base Image Setup

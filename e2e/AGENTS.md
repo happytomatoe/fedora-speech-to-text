@@ -38,17 +38,7 @@ E2E tests verify the GNOME extension end-to-end: boot a QEMU VM, deploy the exte
 ## Running Tests
 
 ```bash
-# Update reference screenshots
-cd e2e && bun run e2e.ts --update
-
-# Run tests (fresh, no snapshot) — ~85s per run
-cd e2e && bun run e2e.ts
-
-# Run tests with snapshot (fast, ~40s after first boot)
-cd e2e && bun run e2e.ts --snapshot
-
-# Or via just (uses --snapshot by default)
-just qemu-e2e-update-ts   # update references
+just qemu-e2e-update-ts   # update reference screenshots
 just e2e                   # run tests (~40s with snapshot)
 ```
 
