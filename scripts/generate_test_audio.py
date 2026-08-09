@@ -72,6 +72,7 @@ def generate_test_audio(duration_sec: float) -> bytes:
 
 
 def write_wav(filepath: str, samples: bytes):
+    """Write raw audio samples to a WAV file."""
     with wave.open(filepath, "wb") as wav:
         wav.setnchannels(CHANNELS)
         wav.setsampwidth(SAMPLE_WIDTH)
@@ -82,6 +83,7 @@ def write_wav(filepath: str, samples: bytes):
 
 
 def main():
+    """Generate synthetic test audio and write to a WAV file."""
     parser = argparse.ArgumentParser(description="Generate synthetic test audio")
     parser.add_argument("--duration", type=float, default=10.0, help="Duration in seconds")
     parser.add_argument("--output", default="test_audio.wav", help="Output WAV path")

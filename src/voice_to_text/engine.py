@@ -1,5 +1,4 @@
-"""
-Async recording engine — state machine for the D-Bus service.
+"""Async recording engine — state machine for the D-Bus service.
 
 States:
   idle       Waiting for StartRecording call
@@ -11,9 +10,9 @@ the callback thread into the async event loop.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
-import subprocess
 import tempfile
 import time as _time
 import wave
@@ -65,7 +64,7 @@ class AsyncAudioRecorder:
         self.smoothed_level: float = 0.0
         self.frame_count: int = 0
         self._stream: Any = None
-        # ~2 minutes of audio buffer (1000 chunks × 2048 samples ÷ 16kHz ≈ 128s)
+        # ~2 minutes of audio buffer (1000 chunks x 2048 samples / 16kHz ~ 128s)
         self._queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=1000)
         self._wav_file = None
         self._filepath: str | None = None
@@ -111,7 +110,7 @@ class AsyncAudioRecorder:
                 self._stream.start()
                 opened_device = cand
                 break
-            except Exception as e:  # noqa: BLE001 - try next candidate
+            except Exception as e:
                 last_err = e
                 self._stream = None
         else:
@@ -144,10 +143,8 @@ class AsyncAudioRecorder:
         self._vad.push_frame(float_data)
 
         def _safe_put():
-            try:
-                self._queue.put_nowait(raw)
-            except asyncio.QueueFull:
-                pass  # drop frame if consumer is too slow
+            with contextlib.suppress(asyncio.QueueFull):
+                self._queue.put_nowait(raw)  # drop frame if consumer is too slow
 
         self._loop.call_soon_threadsafe(_safe_put)
 
@@ -172,10 +169,8 @@ class AsyncAudioRecorder:
     def stop_and_delete(self) -> None:
         filepath = self.stop()
         if filepath:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(filepath)
-            except OSError:
-                pass
 
 
 class RecordingEngine:
@@ -186,6 +181,7 @@ class RecordingEngine:
         on_audio_level: Callback invoked with a float level (0.0-1.0).
         on_error: Callback invoked with an error message string.
         on_state_change: Callback invoked with the new :class:`EngineState`.
+
     """
 
     def __init__(self):
@@ -238,10 +234,8 @@ class RecordingEngine:
                 task.cancel()
                 # If the task's finally block already nulled self._task,
                 # that's fine — our local reference still lets us wait
-                try:
+                with contextlib.suppress(TimeoutError, asyncio.CancelledError):
                     await asyncio.wait_for(task, timeout=5.0)
-                except (TimeoutError, asyncio.CancelledError):
-                    pass
         if self.state != EngineState.IDLE:
             self.state = EngineState.IDLE
             self._notify_state()
@@ -385,10 +379,8 @@ class RecordingEngine:
 
             with SpeakerVolumeManager.with_decrease(decrease_pct):
                 if self._cancel_event.is_set():
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(audio_path)
-                    except OSError:
-                        pass
                     return
                 await recorder.start(audio_path)
                 self.state = EngineState.RECORDING
@@ -478,10 +470,8 @@ class RecordingEngine:
 
                 finally:
                     # Clean up temp WAV file after transcription
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(filepath)
-                    except OSError:
-                        pass
 
         except Exception as e:
             logger.exception("Recording failed")
@@ -501,32 +491,24 @@ class RecordingEngine:
 
             # Close dotoolc pipe
             if self._typer:
-                try:
+                with contextlib.suppress(Exception):
                     await self._typer.stop()
-                except Exception:
-                    pass
                 self._typer = None
             # Close providers
             if self._transcriber:
-                try:
+                with contextlib.suppress(Exception):
                     await self._transcriber.close()
-                except Exception:
-                    pass
             elif self._batch_provider:
-                try:
+                with contextlib.suppress(Exception):
                     await self._batch_provider.close()
-                except Exception:
-                    pass
             self.state = EngineState.IDLE
             self._notify_state()
             self._cleanup()
 
     def _cleanup(self):
         if self._recorder:
-            try:
+            with contextlib.suppress(Exception):
                 self._recorder.stop_and_delete()
-            except Exception:
-                pass
             self._recorder = None
         self._transcriber = None
         self._batch_provider = None
