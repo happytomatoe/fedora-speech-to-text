@@ -919,13 +919,15 @@ qemu-e2e-setup:
     fi
     echo ""
 
-    # 2. Generate SSH key pair if missing
+    # 2. Download SSH keys from Filen (matching the golden image)
     if [[ -f "$VM_DIR/id_ed25519" ]]; then
         echo "✓ SSH key already exists: $VM_DIR/id_ed25519"
     else
-        echo "Generating SSH key pair..."
-        ssh-keygen -t ed25519 -f "$VM_DIR/id_ed25519" -N ""
-        echo "✓ SSH key generated: $VM_DIR/id_ed25519"
+        echo "Downloading SSH keys from Filen..."
+        filen download "/id_ed25519" "$VM_DIR/id_ed25519"
+        filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
+        chmod 600 "$VM_DIR/id_ed25519"
+        echo "✓ SSH keys downloaded: $VM_DIR/id_ed25519"
     fi
     echo ""
 
@@ -980,11 +982,10 @@ qemu-e2e-setup:
     echo "    $CLOUD_INIT"
     echo ""
     echo "  Run tests:  just e2e"
-    echo "  Run push:   git push"
     echo "═══════════════════════════════════════════════════"
 
 # @category e2e-qemu
-# Download pre-built golden image from Filen (use qemu-e2e-setup for full setup)
+# Download pre-built golden image + SSH keys from Filen (use qemu-e2e-setup for full setup)
 qemu-e2e-download-golden:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -993,11 +994,19 @@ qemu-e2e-download-golden:
     GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
     if [[ -f "$GOLDEN_FILE" ]]; then
         echo "Golden image already exists: $GOLDEN_FILE"
-        exit 0
+    else
+        echo "Downloading golden-gnome-deps.qcow2 from Filen..."
+        filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
+        echo "✓ Downloaded: $GOLDEN_FILE"
     fi
-    echo "Downloading golden-gnome-deps.qcow2 from Filen..."
-    filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
-    echo "✓ Downloaded: $GOLDEN_FILE"
+    # Download SSH keys
+    if [[ ! -f "$VM_DIR/id_ed25519" ]]; then
+        echo "Downloading SSH keys from Filen..."
+        filen download "/id_ed25519" "$VM_DIR/id_ed25519"
+        filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
+        chmod 600 "$VM_DIR/id_ed25519"
+        echo "✓ SSH keys downloaded"
+    fi
 
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
@@ -1010,36 +1019,34 @@ qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
 # @category e2e-qemu
-# Run E2E tests with snapshot restore (fast, ~40s)
+# Run E2E tests (snapshot mode by default, fast ~40s after first run)
 e2e:
-    cd e2e && bun run e2e.ts --snapshot
+    cd e2e && bun run e2e.ts
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
 e2e-parallel *ARGS:
-    cd e2e && bun run e2e.ts --snapshot --parallel {{ ARGS }}
+    cd e2e && bun run e2e.ts --parallel {{ ARGS }}
 
 # @category e2e-qemu
 # Run preferences screenshot tests
 e2e-prefs:
-    cd e2e && bun run e2e.ts --snapshot --test-prefs
+    cd e2e && bun run e2e.ts --test-prefs
 
 # @category e2e-qemu
 # Run all E2E tests (parallel + preferences)
 e2e-all *ARGS:
-    cd e2e && bun run e2e.ts --snapshot --parallel 2 {{ ARGS }}
+    cd e2e && bun run e2e.ts --parallel 2 {{ ARGS }}
 
 # @category e2e-qemu
 # Run E2E tests without snapshots (full boot, ~75s)
-e2e-full:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd e2e && bun run e2e.ts
+e2e-no-snapshot:
+    cd e2e && bun run e2e.ts --no-snapshot
 
 # @category e2e-qemu
 # Update E2E reference images in snapshot mode
-e2e-update-snapshot:
-    cd e2e && bun run e2e.ts --snapshot --update
+e2e-update:
+    cd e2e && bun run e2e.ts --update
 
 # @category gnome-ext
 # Query AT-SPI accessibility tree in the nested GNOME Shell

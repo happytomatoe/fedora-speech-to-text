@@ -51,8 +51,13 @@ Transcription uses the local Parakeet provider (no API key needed).
 
 ## VM Setup
 
-- **Base image**: `e2e/qemu-images/base.qcow2` (QEMU qcow2 image with Fedora + GNOME Shell)
-- **SSH**: port 2222, user `testuser`, key `e2e/qemu-images/id_ed25519`
+**First time setup:**
+```bash
+just qemu-e2e-setup  # Downloads golden image + SSH keys from Filen
+```
+
+- **Golden image**: `e2e/qemu-images/golden-gnome-deps.qcow2` (Fedora 44 + GNOME Shell + deps)
+- **SSH**: port 2222, user `testuser`, key `e2e/qemu-images/id_ed25519` (from Filen, must match golden image)
 - **Python**: 3.13 via uv venv (deployed to VM via SSH)
 - **Extension**: installed to VM via SSH rsync
 - **Services**: D-Bus service for voice-to-text transcription (started inside VM)

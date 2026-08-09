@@ -78,7 +78,8 @@ export class ShellHelper {
     const beforeLen = before.length;
 
     await this.session.shell.submit(command);
-    await this.session.shell.waitCommand({ timeout: timeoutMs });
+    // Wait for the shell prompt to reappear after command completes
+    await this.session.shell.waitText(`${this.session.sshUser}@localhost`, { timeout: timeoutMs });
 
     // Get full screen text after command
     const after = await this.session.shell.text();
