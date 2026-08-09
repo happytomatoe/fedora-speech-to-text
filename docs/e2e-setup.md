@@ -143,7 +143,6 @@ just e2e
 ```
 
 Uses `--snapshot` by default. First run saves snapshot (~85s), subsequent runs restore it (~40s).
-```
 
 ### Test Specific Output Methods
 

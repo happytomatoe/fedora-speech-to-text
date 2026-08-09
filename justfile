@@ -920,12 +920,12 @@ qemu-e2e-setup:
     echo ""
 
     # 2. Download SSH keys from Filen (matching the golden image)
-    if [[ -f "$VM_DIR/id_ed25519" ]]; then
-        echo "✓ SSH key already exists: $VM_DIR/id_ed25519"
+    if [[ -f "$VM_DIR/id_ed25519" && -f "$VM_DIR/id_ed25519.pub" ]]; then
+        echo "✓ SSH keys already exist"
     else
         echo "Downloading SSH keys from Filen..."
-        filen download "/id_ed25519" "$VM_DIR/id_ed25519"
-        filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
+        [[ -f "$VM_DIR/id_ed25519" ]] || filen download "/id_ed25519" "$VM_DIR/id_ed25519"
+        [[ -f "$VM_DIR/id_ed25519.pub" ]] || filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
         chmod 600 "$VM_DIR/id_ed25519"
         echo "✓ SSH keys downloaded: $VM_DIR/id_ed25519"
     fi
@@ -999,14 +999,11 @@ qemu-e2e-download-golden:
         filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
         echo "✓ Downloaded: $GOLDEN_FILE"
     fi
-    # Download SSH keys
-    if [[ ! -f "$VM_DIR/id_ed25519" ]]; then
-        echo "Downloading SSH keys from Filen..."
-        filen download "/id_ed25519" "$VM_DIR/id_ed25519"
-        filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
-        chmod 600 "$VM_DIR/id_ed25519"
-        echo "✓ SSH keys downloaded"
-    fi
+    # Download SSH keys (check each independently)
+    [[ -f "$VM_DIR/id_ed25519" ]] || filen download "/id_ed25519" "$VM_DIR/id_ed25519"
+    [[ -f "$VM_DIR/id_ed25519.pub" ]] || filen download "/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
+    [[ -f "$VM_DIR/id_ed25519" ]] && chmod 600 "$VM_DIR/id_ed25519"
+    echo "✓ SSH keys ready"
 
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)

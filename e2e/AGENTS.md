@@ -45,7 +45,6 @@ just e2e                   # run tests (~40s with snapshot)
 **Snapshot mode**: First run deploys everything and saves a QEMU snapshot. Subsequent runs restore the snapshot, skipping deployment (~50s saved). The snapshot persists between runs using a fixed overlay in `persistent-run/main/`.
 
 Transcription uses the local Parakeet provider (no API key needed).
-```
 
 Transcription uses the local Parakeet provider (no API key needed).
 
