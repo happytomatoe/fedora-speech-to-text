@@ -94,6 +94,7 @@ class MutterVirtualPaster:
         try:
             success = await self.commit_text(self._typed_text)
             if success:
+                self._typed_text = ""
                 logger.info("MutterVirtualPaster: flush completed")
             return success
         except Exception as e:
