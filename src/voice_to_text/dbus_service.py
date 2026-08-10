@@ -1,5 +1,4 @@
-"""
-D-Bus service definition for voice-to-text.
+"""D-Bus service definition for voice-to-text.
 
 Uses dbus-next (pure Python, native asyncio, zero dependencies).
 
@@ -75,15 +74,18 @@ class VoiceToTextInterface(ServiceInterface):
     """
 
     def __init__(self, engine: RecordingEngine | None = None):
+        """Initialize the D-Bus service interface."""
         super().__init__("com.happytomatoe.VoiceToText")
         self._engine = engine or RecordingEngine()
         self._state = "idle"
         self._last_level: float = 0.0
         self._last_error: str = ""
+        self._tasks: set[asyncio.Task] = set()
         self._connect_engine_signals()
         self._bus: MessageBus | None = None
 
     def set_bus(self, bus: MessageBus) -> None:
+        """Set the D-Bus message bus reference."""
         self._bus = bus
 
     def _connect_engine_signals(self):
@@ -129,11 +131,11 @@ class VoiceToTextInterface(ServiceInterface):
             )
         try:
             parsed_config = json.loads(config)
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError as err:
             raise DBusError(
                 "com.happytomatoe.VoiceToText.Error.InvalidConfig",
-                f"Invalid JSON config: {e}",
-            )
+                f"Invalid JSON config: {err}",
+            ) from err
         if not isinstance(parsed_config, dict):
             raise DBusError(
                 "com.happytomatoe.VoiceToText.Error.InvalidConfig",
@@ -141,19 +143,19 @@ class VoiceToTextInterface(ServiceInterface):
             )
         logger.info("D-Bus StartRecording received config: %s", parsed_config)
         loop = asyncio.get_running_loop()
-        loop.create_task(self._engine.start(parsed_config))
+        self._tasks.add(loop.create_task(self._engine.start(parsed_config)))
 
     @method()
     def StopRecording(self) -> None:  # noqa: N802
         """Stop the current recording session."""
         loop = asyncio.get_running_loop()
-        loop.create_task(self._engine.stop())
+        self._tasks.add(loop.create_task(self._engine.stop()))
 
     @method()
     def CancelRecording(self) -> None:  # noqa: N802
         """Cancel recording and discard output."""
         loop = asyncio.get_running_loop()
-        loop.create_task(self._engine.cancel())
+        self._tasks.add(loop.create_task(self._engine.cancel()))
 
     @method()
     def GetStatus(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
@@ -175,15 +177,15 @@ class VoiceToTextInterface(ServiceInterface):
 
     @signal()
     def AudioLevel(self) -> "d":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
-        """Emitted during recording with current audio level (0.0-1.0)."""
+        """Emit current audio level during recording (0.0-1.0)."""
         return self._last_level
 
     @signal()
     def Error(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
-        """Emitted on error during recording or transcription."""
+        """Emit error during recording or transcription."""
         return self._last_error
 
     @signal()
     def StateChanged(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
-        """Emitted when engine state changes (idle/recording/processing)."""
+        """Emit state change (idle/recording/processing)."""
         return self._state

@@ -45,7 +45,7 @@ def test_provider_instantiation(groq_config):
         provider = get_batch_provider(provider_name, provider_config)
         assert provider.name == provider_name
     except ValueError as e:
-        assert "GROQ_API_KEY" in str(e)
+        assert "GROQ_API_KEY" in str(e)  # noqa: PT017 — testing error message content
 
 
 def test_speaker_config_defaults(groq_config):
