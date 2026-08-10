@@ -1,5 +1,4 @@
-"""
-Continuous dotoolc typing engine for voice-to-text.
+r"""Continuous dotoolc typing engine for voice-to-text.
 
 Keeps a persistent ``dotoolc`` (client to ``dotoold`` daemon) process open
 and feeds it a stream of ``type ...\n`` and ``key backspace\n`` commands
@@ -13,6 +12,7 @@ assumed running (set up by ``dotool-quickstart.sh`` as a systemd user service).
 References:
   - dotool docs: https://git.sr.ht/~geb/dotool
   - nerd-dictation diff algorithm: https://github.com/ideasman42/nerd-dictation
+
 """
 
 import asyncio
@@ -41,6 +41,7 @@ class DotoolTyper:
     """
 
     def __init__(self):
+        """Initialize the dotoolc typer."""
         self._process: asyncio.subprocess.Process | None = None
         self._dotoolc_path: str | None = None
         self._typed_text: str = ""
@@ -48,7 +49,10 @@ class DotoolTyper:
         self._pipe_path: str | None = None
 
     def _find_pipe_path(self) -> str | None:
-        """Find the dotool pipe path, checking in order:
+        """Find the dotool pipe path.
+
+        Checking in order:
+
         1. $DOTOOL_PIPE environment variable
         2. $XDG_RUNTIME_DIR/dotool-pipe (proper per-user location per XDG spec)
         """
@@ -104,7 +108,7 @@ class DotoolTyper:
         self._process.stdin.write(b"keydelay 0\ntypedelay 0\n")
         try:
             await self._process.stdin.drain()
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError) as err:
             # dotoold not running — process started but pipe is dead
             try:
                 stderr_output = await asyncio.wait_for(self._process.stderr.read(), timeout=2.0)
@@ -117,7 +121,7 @@ class DotoolTyper:
             formatted_msg = (
                 self._format_dotoolc_error(error_msg) if error_msg else ("dotoolc pipe broken (dotoold not running?)")
             )
-            raise DotoolcNotFoundError(formatted_msg)
+            raise DotoolcNotFoundError(formatted_msg) from err
 
         # Check if dotoolc exited with error (no health check wait — errors caught by BrokenPipeError + returncode)
         if self._process.returncode is not None and self._process.returncode != 0:
@@ -149,9 +153,9 @@ class DotoolTyper:
             return f"{error_msg}\n\nInstall dotool: {base_url}\ndotoolc requires dotoold running (dotool-quickstart.sh)"
 
     async def stream_type(self, text: str) -> None:
-        """Push text instantly into the open dotoolc pipe.
+        r"""Push text instantly into the open dotoolc pipe.
 
-        Text is written as ``type <text>\\n`` and flushed immediately.
+        Text is written as ``type <text>\n`` and flushed immediately.
         Handles newlines by emitting ``key enter`` between lines.
         """
         if not self._usable:
@@ -185,6 +189,28 @@ class DotoolTyper:
             logger.error("Failed to stream text to dotoolc: %s", e)
             self._usable = False
 
+    def _delete_words(self, count: int) -> int:
+        """Delete whole words via ctrl+backspace, returning remaining count."""
+        while count > 1:
+            text_len = len(self._typed_text)
+            if text_len == 0:
+                break
+
+            # Find the start of the last word
+            word_end = text_len
+            word_start = word_end
+            while word_start > 0 and self._typed_text[word_start - 1] != " ":
+                word_start -= 1
+
+            word_len = word_end - word_start
+            if word_len > 1 and word_len <= count:
+                self._process.stdin.write(b"key ctrl+backspace\n")
+                self._typed_text = self._typed_text[:word_start]
+                count -= word_len
+            else:
+                break
+        return count
+
     async def stream_backspace(self, count: int) -> None:
         """Backspace ``count`` characters via the dotoolc pipe.
 
@@ -203,57 +229,26 @@ class DotoolTyper:
             line_len = len(current_line)
 
             if line_len > 0 and count >= line_len:
-                # Select to start of line and delete
                 self._process.stdin.write(b"key shift+home\nkey backspace\n")
-
-                # Update internal state: remove the last line
                 if len(lines) > 1:
                     self._typed_text = "\n".join(lines[:-1])
                 else:
                     self._typed_text = ""
-
                 remaining = count - line_len
-                # The newline itself counts as 1 character; delete it to move up
                 if remaining > 0:
                     self._process.stdin.write(b"key backspace\n")
                     remaining -= 1
-                    # Recurse to handle any remaining characters (previous lines)
                     await self.stream_backspace(remaining)
                     return
-
                 await self._process.stdin.drain()
                 return
 
             # 2. Word-level optimization: use ctrl+backspace for whole words
-            # We can use ctrl+backspace if the segment we are deleting ends at a word boundary
-            # and the whole word is within the 'count' limit.
-            while count > 1:
-                # Find the length of the last word in the current text
-                # A word is defined as a sequence of non-space characters
-                text_len = len(self._typed_text)
-                if text_len == 0:
-                    break
-
-                # Find the start of the last word
-                word_end = text_len
-                word_start = word_end
-                while word_start > 0 and self._typed_text[word_start - 1] != " ":
-                    word_start -= 1
-
-                word_len = word_end - word_start
-
-                if word_len > 1 and word_len <= count:
-                    self._process.stdin.write(b"key ctrl+backspace\n")
-                    self._typed_text = self._typed_text[:word_start]
-                    count -= word_len
-                else:
-                    # No more whole words can be deleted safely
-                    break
+            count = self._delete_words(count)
 
             # 3. Fallback: individual backspaces for the remainder
             for _ in range(count):
                 self._process.stdin.write(b"key backspace\n")
-
             if count > 0:
                 self._typed_text = self._typed_text[:-count]
 
@@ -315,10 +310,12 @@ class DotoolTyper:
             self._usable = False
 
     async def stream_diff(self, new_text: str) -> None:
-        """Diff ``new_text`` against the previously typed text and send only
-        the necessary corrections (backspaces + new suffix).
+        """Diff ``new_text`` against the previously typed text.
+
+        Sends only the necessary corrections (backspaces + new suffix).
 
         This is the nerd-dictation incremental typing algorithm:
+
         1. Find common prefix length between old and new text.
         2. Backspace the differing suffix.
         3. Type only the new suffix.
@@ -361,8 +358,10 @@ class DotoolTyper:
 
     @property
     def is_running(self) -> bool:
+        """Return True if the dotoolc process is alive."""
         return self._process is not None and self._process.returncode is None
 
     @property
     def typed_text(self) -> str:
+        """Return the text typed so far."""
         return self._typed_text
