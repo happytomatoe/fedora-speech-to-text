@@ -35,20 +35,6 @@ This repo contains gnome extension and python application
 
 If you want to use Parakeet check out [this script](./parakeet-v2.sh)
 
-If you want to use Moonshine (local streaming + batch, CPU-only), install the moonshine-voice package:
-
-```bash
-uv add moonshine-voice
-```
-
-Or install directly:
-
-```bash
-pip install moonshine-voice
-```
-
-First run downloads the model (~245MB, cached after). See [Moonshine docs](./docs/providers/moonshine.md) for configuration options.
-
 ## How to use
 
 - Press Super+W

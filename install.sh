@@ -222,13 +222,18 @@ echo ""
 echo "--- Installing Python D-Bus service ---"
 echo "Fetching latest release tag..."
 LATEST_TAG=$(
-  git ls-remote --tags --sort=-v:refname "https://github.com/$REPO.git" |
-    awk -F'/' '$NF !~ /\^\{\}$/ { print $NF; exit }'
+  # GIT_TERMINAL_PROMPT=0 prevents git from hanging on credential prompts
+  # timeout prevents indefinite hang if git ls-remote stalls
+  # Keep stderr separate so git errors don't get parsed by awk as tags
+  GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --sort=-v:refname "https://github.com/$REPO.git" |
+    awk -F'/' '$NF !~ /\^\{\}$/ { print $NF; exit }' || true
 )
 if [ -z "$LATEST_TAG" ]; then
-  echo "WARNING: No releases found for $REPO; installing from source."
+  echo "WARNING: Could not fetch release tags for $REPO."
+  echo "  This can happen due to network issues or authentication prompts."
+  echo "  Falling back to installing from source..."
   REPO_DIR=$(mktemp -d)
-  git clone --depth 1 "https://github.com/$REPO.git" "$REPO_DIR"
+  GIT_TERMINAL_PROMPT=0 git clone --depth 1 "https://github.com/$REPO.git" "$REPO_DIR"
   uv tool install "$REPO_DIR" --force
   rm -rf "$REPO_DIR"
 else
