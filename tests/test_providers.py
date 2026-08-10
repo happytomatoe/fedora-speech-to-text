@@ -19,7 +19,7 @@ class TestProviderFactory:
         assert provider.name == "groq"
 
     def test_invalid_provider(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid"):
             get_batch_provider("invalid", {})
 
 
@@ -32,7 +32,7 @@ class TestGroqProvider:
     def test_missing_api_key(self):
         old_key = os.environ.pop("GROQ_API_KEY", None)
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="api_key"):
                 GroqProvider({})
         finally:
             if old_key is not None:
@@ -63,7 +63,7 @@ class TestSixtyProvider:
 
         old_key = os.environ.pop("SIXTYDB_API_KEY", None)
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="api_key"):
                 SixtyProvider({"api_key_source": "env"})
         finally:
             if old_key is not None:
@@ -81,7 +81,7 @@ class TestElevenLabsProvider:
     def test_missing_api_key(self):
         old_key = os.environ.pop("ELEVENLABS_API_KEY", None)
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="api_key"):
                 ElevenLabsProvider({"api_key_source": "env"})
         finally:
             if old_key is not None:

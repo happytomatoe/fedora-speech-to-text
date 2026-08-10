@@ -84,7 +84,7 @@ async def test_stream_diff_skip_if_same(mock_dbus):
 
 @pytest.mark.asyncio
 async def test_flush_commits_text(mock_dbus):
-    """flush should commit the accumulated text."""
+    """Flush should commit the accumulated text."""
     from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 
     paster = MutterVirtualPaster()
@@ -103,7 +103,7 @@ async def test_flush_commits_text(mock_dbus):
 
 @pytest.mark.asyncio
 async def test_flush_empty_text(mock_dbus):
-    """flush should return False if no text to commit."""
+    """Flush should return False if no text to commit."""
     from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 
     paster = MutterVirtualPaster()

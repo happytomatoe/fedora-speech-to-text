@@ -73,7 +73,7 @@ class TestMoonshineProviderClose:
     """Test cleanup."""
 
     def test_close_without_model(self):
-        """close should not raise when no model loaded."""
+        """Close should not raise when no model loaded."""
         import asyncio
 
         provider = MoonshineProvider({})

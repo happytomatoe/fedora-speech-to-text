@@ -38,7 +38,7 @@ class TestVoxtralProvider:
         old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
         old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="api_key"):
                 VoxtralProvider({"api_key_source": "env"})
         finally:
             if old_voxtral_key is not None:

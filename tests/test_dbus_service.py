@@ -1,5 +1,4 @@
-"""
-Unit tests for the D-Bus service interface.
+"""Unit tests for the D-Bus service interface.
 
 These tests exercise the VoiceToTextInterface and MockRecordingEngine
 without requiring a real dbus-daemon. The interface methods are called
@@ -190,7 +189,7 @@ class TestSignals:
         """AudioLevel signal fires with float value."""
         # Wire up callback on the engine
         levels = []
-        mock_engine.on_audio_level = lambda level: levels.append(level)
+        mock_engine.on_audio_level = levels.append
 
         # Trigger the callback
         mock_engine.on_audio_level(0.5)
@@ -200,7 +199,7 @@ class TestSignals:
     async def test_multiple_audio_level_events(self, interface, mock_engine):
         """Multiple AudioLevel signals fire correctly."""
         levels = []
-        mock_engine.on_audio_level = lambda level: levels.append(level)
+        mock_engine.on_audio_level = levels.append
 
         for level in [0.1, 0.5, 0.9]:
             mock_engine.on_audio_level(level)
@@ -210,7 +209,7 @@ class TestSignals:
     async def test_error_signal(self, interface, mock_engine):
         """Error signal fires with error message."""
         errors = []
-        mock_engine.on_error = lambda msg: errors.append(msg)
+        mock_engine.on_error = errors.append
 
         mock_engine.on_error("test error")
 

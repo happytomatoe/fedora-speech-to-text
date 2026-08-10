@@ -39,6 +39,9 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "PT", "PERF", "PL", "D", "SIM", "C90", "TID", "RUF", "FA", "LOG", "ICN"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "PLC0415", "PLR2004"]
+
 [tool.mypy]
 ignore_missing_imports = true
 
