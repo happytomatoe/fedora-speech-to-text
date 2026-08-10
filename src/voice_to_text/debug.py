@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from voice_to_text.config import ConfigManager
+from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,12 @@ logger = logging.getLogger(__name__)
 # Debug recording duration in seconds (show audio level before using test file)
 DEBUG_RECORDING_DURATION = 3
 
+# Audio level simulation thresholds
+_RAMP_UP_END = 0.2
+_RAMP_DOWN_START = 0.8
 
-async def handle_debug_recording(
+
+async def handle_debug_recording(  # noqa: C901, PLR0912
     config: dict[str, Any],
     on_level: "Callable[[float], None] | None" = None,
     _cancel_event: "asyncio.Event | None" = None,
@@ -41,7 +46,8 @@ async def handle_debug_recording(
         _cancel_event: Optional cancellation event to allow early exit
 
     Returns:
-        Transcription text if successful, None otherwise
+        Transcription text if successful, None otherwise.
+
     """
     debug_file = os.environ.get("VOICE_TO_TEXT_DEBUG_FILE")
     if not debug_file:
@@ -76,9 +82,9 @@ async def handle_debug_recording(
             await asyncio.sleep(0.1)
             # Ramp up, hold, then ramp down
             progress = i / (DEBUG_RECORDING_DURATION * 10)
-            if progress < 0.2:
+            if progress < _RAMP_UP_END:
                 level = progress * 2.5  # ramp up 0 -> 0.5
-            elif progress < 0.8:
+            elif progress < _RAMP_DOWN_START:
                 # Deterministic waveform using sin wave for visual variety
                 level = 0.4 + 0.15 * math.sin(progress * 60)  # hold ~0.5 with sine wave
             else:
@@ -111,8 +117,6 @@ async def handle_debug_recording(
         if text:
             postprocess_cfg = config_mgr.config.get("postprocess", {})
             if postprocess_cfg.get("enabled", True):
-                from voice_to_text.postprocess import postprocess
-
                 text = postprocess(
                     text,
                     lang=postprocess_cfg.get("language") or language,

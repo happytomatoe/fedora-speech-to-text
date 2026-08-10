@@ -898,7 +898,7 @@ qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
 
 # @category e2e-qemu
-# Set up E2E test environment (download images, create SSH key, cloud-init ISO)
+# Set up E2E test environment (check local copies first, fall back to Filen)
 qemu-e2e-setup:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -906,12 +906,17 @@ qemu-e2e-setup:
     echo ""
 
     VM_DIR="e2e/qemu-images"
+    MAIN_VM_DIR="../../main/e2e/qemu-images"
     mkdir -p "$VM_DIR"
 
-    # 1. Download golden image from Filen
+    # 1. Golden image
     GOLDEN_FILE="$VM_DIR/golden-gnome-deps.qcow2"
     if [[ -f "$GOLDEN_FILE" ]]; then
         echo "✓ Golden image already exists: $GOLDEN_FILE"
+    elif [[ -f "$MAIN_VM_DIR/golden-gnome-deps.qcow2" ]]; then
+        echo "Copying golden image from main branch..."
+        cp "$MAIN_VM_DIR/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
+        echo "✓ Copied: $GOLDEN_FILE"
     else
         echo "Downloading golden-gnome-deps.qcow2 from Filen..."
         filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
@@ -919,9 +924,15 @@ qemu-e2e-setup:
     fi
     echo ""
 
-    # 2. Download SSH keys from Filen (matching the golden image)
+    # 2. SSH keys
     if [[ -f "$VM_DIR/id_ed25519" && -f "$VM_DIR/id_ed25519.pub" ]]; then
         echo "✓ SSH keys already exist"
+    elif [[ -f "$MAIN_VM_DIR/id_ed25519" ]]; then
+        echo "Copying SSH keys from main branch..."
+        cp "$MAIN_VM_DIR/id_ed25519" "$VM_DIR/id_ed25519"
+        cp "$MAIN_VM_DIR/id_ed25519.pub" "$VM_DIR/id_ed25519.pub"
+        chmod 600 "$VM_DIR/id_ed25519"
+        echo "✓ SSH keys copied: $VM_DIR/id_ed25519"
     else
         echo "Downloading SSH keys from Filen..."
         [[ -f "$VM_DIR/id_ed25519" ]] || filen download "/id_ed25519" "$VM_DIR/id_ed25519"
@@ -931,10 +942,14 @@ qemu-e2e-setup:
     fi
     echo ""
 
-    # 3. Create cloud-init ISO (required by QEMU boot)
+    # 3. Cloud-init ISO (required by QEMU boot)
     CLOUD_INIT="$VM_DIR/cloud-init.iso"
     if [[ -f "$CLOUD_INIT" ]]; then
         echo "✓ Cloud-init ISO already exists: $CLOUD_INIT"
+    elif [[ -f "$MAIN_VM_DIR/cloud-init.iso" ]]; then
+        echo "Copying cloud-init ISO from main branch..."
+        cp "$MAIN_VM_DIR/cloud-init.iso" "$CLOUD_INIT"
+        echo "✓ Copied: $CLOUD_INIT"
     else
         echo "Creating cloud-init ISO..."
         PUB_KEY=$(cat "$VM_DIR/id_ed25519.pub")
@@ -969,7 +984,7 @@ qemu-e2e-setup:
         echo "✓ Base image already exists: $BASE_IMAGE"
     else
         echo "Creating base.qcow2 overlay from golden image..."
-        qemu-img create -f qcow2 -b "$GOLDEN_FILE" -F qcow2 "$BASE_IMAGE"
+        qemu-img create -f qcow2 -b "$(realpath "$GOLDEN_FILE")" -F qcow2 "$BASE_IMAGE"
         echo "✓ Base image created: $BASE_IMAGE"
     fi
     echo ""

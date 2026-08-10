@@ -31,6 +31,9 @@ FILLER_WORDS: dict[str, list[str]] = {
 # Conservative fallback — no "um", "eh", "ha" (real words in some languages)
 FILLER_FALLBACK = ["uh", "uhm", "umm", "uhh", "uhhh", "ah", "hmm", "hm", "mmm", "mm", "mh", "ehh"]
 
+# Minimum consecutive repetitions to collapse as stutter
+STUTTER_MIN_COUNT = 3
+
 
 def get_filler_words(lang: str) -> list[str]:
     """Return filler words for a language code (e.g. 'en', 'pt-BR')."""
@@ -63,7 +66,7 @@ def collapse_stutters(text: str) -> str:
             while i + count < len(words) and words[i + count].lower() == word_lower:
                 count += 1
 
-            if count >= 3:
+            if count >= STUTTER_MIN_COUNT:
                 result.append(word)
                 i += count
             else:
@@ -91,6 +94,7 @@ def filter_transcription_output(
         lang: Language code (e.g. "en", "pt-BR").
         custom_filler_words: Override filler list. None = language defaults.
             Empty list = disable filler removal.
+
     """
     if custom_filler_words is not None:
         patterns = [re.compile(rf"(?i)\b{re.escape(w)}\b[,.]?", re.IGNORECASE) for w in custom_filler_words]

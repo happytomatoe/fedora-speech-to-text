@@ -29,6 +29,7 @@ class ElevenLabsProvider(BatchProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the ElevenLabs provider."""
         self.api_key = resolve_api_key(config, "ELEVENLABS_API_KEY", provider_name="elevenlabs")
         self.model = config.get("model", DEFAULT_MODEL)
         self.api_url = config.get("api_url", "https://api.elevenlabs.io")
@@ -37,6 +38,7 @@ class ElevenLabsProvider(BatchProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
+        """Transcribe an audio file using ElevenLabs."""
         logger.info("Transcribing %s with ElevenLabs model %s", audio_path, self.model)
         headers = {"xi-api-key": self.api_key}
         data: dict[str, Any] = {
@@ -86,4 +88,5 @@ class ElevenLabsProvider(BatchProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "elevenlabs"

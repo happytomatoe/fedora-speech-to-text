@@ -1,6 +1,7 @@
 """Base provider interface for transcription services."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -10,12 +11,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# API key fingerprint threshold
+_API_KEY_MIN_LEN = 10
+
 
 class BatchProvider(ABC):
     """Provider that transcribes complete audio files."""
 
     @abstractmethod
     def __init__(self, config: dict[str, Any]):
+        """Initialize the batch provider."""
         pass
 
     @abstractmethod
@@ -32,6 +37,7 @@ class BatchProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
+        """Return the provider name."""
         pass
 
 
@@ -49,6 +55,7 @@ class StreamingProvider(ABC):
 
     @abstractmethod
     def __init__(self, config: dict[str, Any]):
+        """Initialize the streaming provider."""
         pass
 
     @abstractmethod
@@ -83,6 +90,7 @@ class StreamingProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
+        """Return the provider name."""
         pass
 
 
@@ -103,7 +111,7 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
         except subprocess.TimeoutExpired:
             os.killpg(proc.pid, 9)
             proc.communicate()
-            raise ValueError(f"API key command timed out after {timeout:.0f}s")
+            raise ValueError(f"API key command timed out after {timeout:.0f}s") from None
 
         if proc.returncode != 0:
             raise ValueError(f"API key command failed (exit {proc.returncode}): {stderr.strip()}")
@@ -115,8 +123,8 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
         logger.debug("Command executed successfully")
         return api_key
 
-    except FileNotFoundError:
-        raise ValueError(f"API key command not found: {command}")
+    except FileNotFoundError as e:
+        raise ValueError(f"API key command not found: {command}") from e
     except ValueError:
         raise
     except Exception as e:
@@ -154,13 +162,10 @@ def resolve_api_key(
             source_used = "config:api_key"
 
     if not key:
-        all_vars = (config.get("api_key_env", default_env),) + extra_envs
+        all_vars = (*extra_envs, config.get("api_key_env", default_env))
         raise ValueError(f"No API key found in environment ({all_vars}) or config")
     # Log key fingerprint for debugging (first 6 + last 4 chars)
-    if len(key) > 10:
-        fingerprint = f"{key[:6]}...{key[-4:]}"
-    else:
-        fingerprint = f"{key[:3]}...{key[-2:]}"
+    fingerprint = f"{key[:6]}...{key[-4:]}" if len(key) > _API_KEY_MIN_LEN else f"{key[:3]}...{key[-2:]}"
     logger.info("API key resolved: provider=%s source=%s fingerprint=%s", provider_name, source_used, fingerprint)
 
     # 4. Command substitution (!command)
@@ -190,23 +195,22 @@ class WebSocketStreamingProvider(StreamingProvider):
 
     async def _connect_ws(self, ws_url: str, headers: dict[str, str]) -> None:
         """Open a persistent WebSocket connection."""
-        import time as _time
+        import time as _time  # noqa: PLC0415
 
-        import websockets
+        import websockets  # noqa: PLC0415
 
         _t0 = _time.monotonic()
         if self._ws is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await self._ws.close()
-            except Exception:
-                pass
         ws_headers = list(headers.items())
         self._ws = await websockets.connect(ws_url, additional_headers=ws_headers)
         self._partial_result = None
         self._finalized_text = ""
-        logger.info("[PROFIL] WS connect to %s: %.3fs", ws_url.split("?")[0], _time.monotonic() - _t0)
+        logger.info("[PROFIL] WS connect to %s: %.3fs", ws_url.split("?", maxsplit=1)[0], _time.monotonic() - _t0)
 
     async def send_audio(self, audio_chunk: bytes) -> None:
+        """Send an audio chunk to the WebSocket."""
         if self._ws is None:
             raise RuntimeError("Stream not started. Call start_stream() first.")
         try:
@@ -218,6 +222,7 @@ class WebSocketStreamingProvider(StreamingProvider):
             raise RuntimeError("Streaming connection lost") from e
 
     async def get_partial_result(self) -> str | None:
+        """Get the latest partial transcript."""
         if self._partial_result:
             return (
                 (self._finalized_text + " " + self._partial_result).strip()
@@ -227,6 +232,7 @@ class WebSocketStreamingProvider(StreamingProvider):
         return self._finalized_text or None
 
     async def finalize_stream(self) -> str:
+        """Finalize the streaming session and return the complete text."""
         if self._ws is None:
             result = (
                 (self._finalized_text + " " + self._partial_result).strip()
@@ -258,10 +264,8 @@ class WebSocketStreamingProvider(StreamingProvider):
             logger.warning("Error closing %s stream: %s", self.name, e)
         finally:
             if self._ws is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await self._ws.close()
-                except Exception:
-                    pass
 
         result = self._finalized_text
         self._ws = None
@@ -293,7 +297,7 @@ class WebSocketStreamingProvider(StreamingProvider):
                                 self._partial_result = transcript
                         elif msg_type == "Error":
                             logger.error("%s stream error: %s", self.name, data.get("message"))
-        except (TimeoutError, asyncio.CancelledError):  # noqa: UP041
+        except (TimeoutError, asyncio.CancelledError):
             pass
         except Exception as e:
             logger.warning("Error processing %s messages: %s", self.name, e)

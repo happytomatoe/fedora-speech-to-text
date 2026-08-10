@@ -6,6 +6,7 @@ Project docs:  docs/providers/60db.md
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 import os
@@ -18,11 +19,16 @@ from .base import BatchProvider, StreamingProvider, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
+# HTTP status codes
+_HTTP_UNAUTHORIZED = 401
+_API_KEY_MIN_LEN = 10
+
 
 class SixtyProvider(BatchProvider, StreamingProvider):
     """60db Speech-to-Text provider (batch REST + realtime WebSocket)."""
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the 60db provider."""
         self.api_key = resolve_api_key(config, "SIXTYDB_API_KEY", provider_name="60db")
         self.api_url = config.get("api_url", "https://api.60db.ai").rstrip("/")
         self.ws_url = config.get("ws_url", "wss://api.60db.ai/ws/stt")
@@ -42,6 +48,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
+        """Transcribe an audio file using 60db."""
         logger.info("Transcribing %s with 60db", audio_path)
         headers = {"Authorization": f"Bearer {self.api_key}"}
         data: dict[str, str | list[str]] = {}
@@ -75,17 +82,23 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                     logger.error("60db response body: %s", body)
                 except ValueError:
                     logger.error("60db response text: %s", e.response.text[:500])
-                if status == 401:
-                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if len(self.api_key) > 10 else self.api_key
+                if status == _HTTP_UNAUTHORIZED:
+                    key_len = len(self.api_key)
+                    fp = (
+                        self.api_key[:6] + "..." + self.api_key[-4:]
+                        if key_len > _API_KEY_MIN_LEN
+                        else self.api_key
+                    )
                     logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fp, len(self.api_key))
             raise RuntimeError(f"60db API request failed (HTTP {status}): {e}") from e
         except Exception as e:
             logger.exception("60db transcription failed")
-            raise RuntimeError(f"60db transcription failed: {e}")
+            raise RuntimeError(f"60db transcription failed: {e}") from e
 
     # ── Streaming ──────────────────────────────────────────────────────
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
+        """Start a WebSocket streaming session with 60db."""
         self._sample_rate = sample_rate
         self._finalized_text = ""
         self._partial_result = None
@@ -100,8 +113,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         # Wait for auth before sending start
         try:
             await asyncio.wait_for(self._connected.wait(), timeout=10.0)
-        except TimeoutError:
-            raise RuntimeError("60db: connection_established not received")
+        except TimeoutError as e:
+            raise RuntimeError("60db: connection_established not received") from e
 
         start_msg: dict[str, Any] = {
             "type": "start",
@@ -117,8 +130,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
 
         try:
             await asyncio.wait_for(self._session_started.wait(), timeout=10.0)
-        except TimeoutError:
-            raise RuntimeError("60db: session_started not received")
+        except TimeoutError as e:
+            raise RuntimeError("60db: session_started not received") from e
 
     async def _receive_loop(self) -> None:
         assert self._ws is not None
@@ -163,6 +176,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         self._partial_result = None
 
     async def send_audio(self, audio_chunk: bytes) -> None:
+        """Send an audio chunk to the streaming transcriber."""
         if self._ws is None or not self._session_started.is_set():
             return  # drop frames before session is ready
         frame = json.dumps(
@@ -181,6 +195,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             raise RuntimeError("Streaming connection lost") from e
 
     async def finalize_stream(self) -> str:
+        """Finalize the streaming session and return the complete text."""
         if self._ws is not None:
             try:
                 await self._ws.send(json.dumps({"type": "stop"}))
@@ -192,10 +207,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             except Exception as e:
                 logger.warning("Error stopping 60db stream: %s", e)
             finally:
-                try:
+                with contextlib.suppress(Exception):
                     await self._ws.close()
-                except Exception:
-                    pass
                 self._ws = None
         if self._recv_task is not None:
             self._recv_task.cancel()
@@ -208,10 +221,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
     async def close(self) -> None:
         """Close provider resources (tear down the streaming WebSocket if open)."""
         if self._ws is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await self._ws.close()
-            except Exception:
-                pass
             self._ws = None
         if self._recv_task is not None:
             self._recv_task.cancel()
@@ -219,4 +230,5 @@ class SixtyProvider(BatchProvider, StreamingProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "60db"

@@ -12,6 +12,7 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
+from voice_to_text.dbus_service import list_input_devices
 from voice_to_text.engine import AsyncAudioRecorder
 
 
@@ -62,8 +63,6 @@ def test_pipewire_failure_falls_back_to_default():
 
 def test_list_input_devices_exposes_pipewire(monkeypatch):
     """ListInputDevices surfaces pipewire plus a system-default entry."""
-    from voice_to_text.dbus_service import list_input_devices
-
     fake_devices = [
         {"max_input_channels": 0, "name": "HDMI output"},
         {"max_input_channels": 2, "name": "pipewire"},
