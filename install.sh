@@ -224,7 +224,8 @@ echo "Fetching latest release tag..."
 LATEST_TAG=$(
   # GIT_TERMINAL_PROMPT=0 prevents git from hanging on credential prompts
   # timeout prevents indefinite hang if git ls-remote stalls
-  GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --sort=-v:refname "https://github.com/$REPO.git" 2>&1 |
+  # Keep stderr separate so git errors don't get parsed by awk as tags
+  GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --sort=-v:refname "https://github.com/$REPO.git" |
     awk -F'/' '$NF !~ /\^\{\}$/ { print $NF; exit }' || true
 )
 if [ -z "$LATEST_TAG" ]; then
