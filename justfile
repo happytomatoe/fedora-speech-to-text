@@ -366,7 +366,7 @@ gnome-ext-check: reinstall gnome-ext-install
       DBUS_PID=\$!
       sleep 1
       trap 'kill \$DBUS_PID \$ATSPI_PID \$ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
-      gnome-shell --wayland $DEVKIT_FLAG
+      gnome-shell --wayland --headless $DEVKIT_FLAG
     " >> "$LOG_FILE" 2>&1 &
     NESTED_PID=$!
     echo "Nested shell started (PID: $NESTED_PID), waiting for GDM..."
