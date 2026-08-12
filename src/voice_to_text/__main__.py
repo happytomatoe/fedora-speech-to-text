@@ -13,6 +13,7 @@ from dbus_next import BusType, NameFlag, RequestNameReply
 from dbus_next.aio import MessageBus
 
 from voice_to_text.dbus_service import OBJECT_PATH, SERVICE_NAME, VoiceToTextInterface
+from voice_to_text.providers.base import close_shared_client
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +67,13 @@ async def run_service() -> None:
             await asyncio.wait_for(engine_stop_task, timeout=16.0)
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Engine did not stop in time, disconnecting anyway")
+    await close_shared_client()
 
     bus.disconnect()
 
 
 def main() -> None:
+    """Entry point for the D-Bus service."""
     setup_logging()
     asyncio.run(run_service())
 

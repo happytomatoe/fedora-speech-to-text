@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
-from .base import BatchProvider, StreamingProvider, resolve_api_key
+from .base import BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         self.api_url = config.get("api_url", "https://api.60db.ai").rstrip("/")
         self.ws_url = config.get("ws_url", "wss://api.60db.ai/ws/stt")
         self.model = config.get("model", "60db-stt-v01")
+        # Use shared HTTP client (created once at service startup)
+        self._client = get_shared_client()
         # Streaming state
         self._ws: Any = None
         self._recv_task: asyncio.Task | None = None
@@ -57,22 +59,21 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         if custom_words:
             data["context"] = ", ".join(custom_words)
         try:
-            async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    files = {"file": (os.path.basename(audio_path), audio_file)}
-                    response = await client.post(
-                        f"{self.api_url}/stt",
-                        headers=headers,
-                        data=data,
-                        files=files,
-                        timeout=120,
-                    )
-                response.raise_for_status()
-                result = response.json()
-                payload = result.get("data", result)
-                text = (payload.get("text") or "").strip()
-                logger.info("60db transcription result: %s", text[:100])
-                return text
+            with open(audio_path, "rb") as audio_file:
+                files = {"file": (os.path.basename(audio_path), audio_file)}
+                response = await self._client.post(
+                    f"{self.api_url}/stt",
+                    headers=headers,
+                    data=data,
+                    files=files,
+                    timeout=120,
+                )
+            response.raise_for_status()
+            result = response.json()
+            payload = result.get("data", result)
+            text = (payload.get("text") or "").strip()
+            logger.info("60db transcription result: %s", text[:100])
+            return text
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
             logger.error("60db API error: HTTP %s", status)
@@ -84,11 +85,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                     logger.error("60db response text: %s", e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
                     key_len = len(self.api_key)
-                    fp = (
-                        self.api_key[:6] + "..." + self.api_key[-4:]
-                        if key_len > _API_KEY_MIN_LEN
-                        else self.api_key
-                    )
+                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
                     logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fp, len(self.api_key))
             raise RuntimeError(f"60db API request failed (HTTP {status}): {e}") from e
         except Exception as e:
@@ -219,7 +216,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         return result
 
     async def close(self) -> None:
-        """Close provider resources (tear down the streaming WebSocket if open)."""
+        """Close provider resources (WebSocket)."""
         if self._ws is not None:
             with contextlib.suppress(Exception):
                 await self._ws.close()
