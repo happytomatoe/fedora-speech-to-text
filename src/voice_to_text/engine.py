@@ -10,6 +10,7 @@ the callback thread into the async event loop.
 """
 
 import asyncio
+import collections
 import contextlib
 import logging
 import os
@@ -29,9 +30,10 @@ from voice_to_text.hybrid import HybridTranscriber
 from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 from voice_to_text.mutter_virtual_typer import MutterVirtualTyper
 from voice_to_text.postprocess import postprocess
+from voice_to_text.preroll import PrerollFrameMetadata, select_preroll_frames
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
 from voice_to_text.typer import DotoolcNotFoundError, DotoolTyper
-from voice_to_text.vad import SmoothedVAD
+from voice_to_text.vad import SmoothedVAD, VADFrame
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,12 @@ class AsyncAudioRecorder:
             threshold=0.01,
             sample_rate=self.sample_rate,
         )
+        # Preroll buffer: ~1 second of audio before VAD triggers
+        # At 30ms frames: 1000ms / 30ms ≈ 33 frames
+        self._preroll_enabled = False
+        self._preroll_buffer: collections.deque[bytes] = collections.deque(maxlen=33)
+        self._preroll_metadata: list[PrerollFrameMetadata] = []
+        self._preroll_max_metadata = 33
 
     async def start(self, filepath: str) -> None:
         """Start recording audio to a file."""
@@ -144,7 +152,22 @@ class AsyncAudioRecorder:
         db_normalized = max(0.0, min(1.0, (db + 50) / 50))
         self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * db_normalized
         # Feed VAD with float32 samples
-        self._vad.push_frame(float_data)
+        vad_result = self._vad.push_frame(float_data)
+
+        # Append to preroll buffer if enabled
+        if self._preroll_enabled:
+            self._preroll_buffer.append(raw)
+            is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
+            self._preroll_metadata.append(
+                PrerollFrameMetadata(
+                    sample_count=len(float_data),
+                    is_speech=is_speech,
+                    rms=rms,
+                )
+            )
+            # Trim metadata to match buffer size
+            if len(self._preroll_metadata) > self._preroll_max_metadata:
+                self._preroll_metadata = self._preroll_metadata[-self._preroll_max_metadata :]
 
         def _safe_put():
             with contextlib.suppress(asyncio.QueueFull):
@@ -169,7 +192,74 @@ class AsyncAudioRecorder:
         self._filepath = None
         # Signal consumer that no more data
         self._queue.put_nowait(None)
+
+        # Prepend preroll audio to WAV file if enabled
+        if self._preroll_enabled and filepath:
+            self._prepend_preroll_to_wav(filepath)
+
+        # Clear preroll state
+        self._preroll_buffer.clear()
+        self._preroll_metadata.clear()
+        self._preroll_enabled = False
+
         return filepath
+
+    def enable_preroll(self, enabled: bool = True) -> None:
+        """Enable or disable the preroll buffer."""
+        self._preroll_enabled = enabled
+        if not enabled:
+            self._preroll_buffer.clear()
+            self._preroll_metadata.clear()
+
+    def _prepend_preroll_to_wav(self, filepath: str) -> None:
+        """Select preroll frames and prepend them to the WAV file."""
+        if not self._preroll_metadata:
+            return
+
+        selection = select_preroll_frames(
+            self._preroll_metadata,
+            self.sample_rate,
+        )
+
+        logger.info(
+            "Preroll selection: reason=%s, frames=%d, samples=%d, seconds=%.3f",
+            selection.reason,
+            selection.selected_frame_count,
+            selection.included_sample_count,
+            selection.included_seconds,
+        )
+
+        if selection.selected_frame_count <= 0:
+            return
+
+        # Get the selected preroll frames
+        preroll_frames = list(self._preroll_buffer)[selection.start_index :]
+        if not preroll_frames:
+            return
+
+        preroll_audio = b"".join(preroll_frames)
+
+        try:
+            # Read existing WAV file
+            with wave.open(filepath, "rb") as wf:
+                params = wf.getparams()
+                original_data = wf.readframes(params.nframes)
+
+            # Write preroll + original audio to the same file
+            with wave.open(filepath, "wb") as wf:
+                wf.setnchannels(params.nchannels)
+                wf.setsampwidth(params.sampwidth)
+                wf.setframerate(params.framerate)
+                wf.writeframes(preroll_audio)
+                wf.writeframes(original_data)
+
+            logger.info(
+                "Prepended %.3fs of preroll audio to %s",
+                selection.included_seconds,
+                filepath,
+            )
+        except Exception:
+            logger.warning("Failed to prepend preroll audio to WAV file", exc_info=True)
 
     def stop_and_delete(self) -> None:
         """Stop recording and delete the audio file."""
@@ -402,6 +492,12 @@ class RecordingEngine:
                 sample_rate=SAMPLE_RATE,
             )
             self._recorder = recorder
+
+            # Enable preroll buffer for batch mode only (not streaming)
+            use_preroll = not transcriber
+            recorder.enable_preroll(use_preroll)
+            if use_preroll:
+                logger.info("Preroll buffer enabled for batch mode")
 
             with SpeakerVolumeManager.with_decrease(decrease_pct):
                 if self._cancel_event.is_set():
