@@ -31,7 +31,7 @@ from voice_to_text.mutter_virtual_typer import MutterVirtualTyper
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
 from voice_to_text.typer import DotoolcNotFoundError, DotoolTyper
-from voice_to_text.vad import SmoothedVAD
+from voice_to_text.vad import SileroVAD, SmoothedVAD
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +73,13 @@ class AsyncAudioRecorder:
         self._filepath: str | None = None
         # Voice Activity Detection
         self._vad = SmoothedVAD(
+            inner=SileroVAD(
+                threshold=0.5,
+                sample_rate=self.sample_rate,
+            ),
             onset_frames=2,
             hangover_frames=15,
             prefill_frames=15,
-            threshold=0.01,
-            sample_rate=self.sample_rate,
         )
 
     async def start(self, filepath: str) -> None:

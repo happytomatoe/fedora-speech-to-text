@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from voice_to_text.vad import VAD, SmoothedVAD, VADFrame
+from voice_to_text.vad import VAD, SileroVAD, SmoothedVAD, VADFrame
 
 
 class TestVAD:
@@ -77,3 +77,49 @@ class TestSmoothedVAD:
         speech = self._make_speech(3)
         vad.push_frame(speech[0])
         assert vad.in_speech is True
+
+
+class TestSileroVAD:
+    """Tests for Silero neural VAD."""
+
+    def test_init(self):
+        vad = SileroVAD()
+        assert vad.threshold == 0.5
+        assert vad.sample_rate == 16000
+        assert vad.frame_samples == 512
+
+    def test_silence_is_noise(self):
+        vad = SileroVAD(threshold=0.5)
+        frame = np.zeros(512, dtype=np.float32)
+        assert vad.is_voice(frame) is False
+
+    def test_empty_frame(self):
+        vad = SileroVAD()
+        assert vad.is_voice(np.array([], dtype=np.float32)) is False
+
+    def test_inference_runs(self):
+        vad = SileroVAD()
+        frame = np.random.randn(512).astype(np.float32) * 0.1
+        result = vad.is_voice(frame)
+        assert isinstance(result, bool)
+
+    def test_state_update(self):
+        vad = SileroVAD()
+        initial_state = vad._state.copy()
+        frame = np.random.randn(512).astype(np.float32) * 0.1
+        vad.is_voice(frame)
+        # State should have changed after inference
+        assert not np.array_equal(vad._state, initial_state)
+
+
+class TestSmoothedVADWithSilero:
+    """Tests for SmoothedVAD wrapping SileroVAD."""
+
+    def _make_silence(self, n_frames=10):
+        return [np.zeros(512, dtype=np.float32) for _ in range(n_frames)]
+
+    def test_silence_produces_noise(self):
+        inner = SileroVAD(threshold=0.5)
+        vad = SmoothedVAD(inner=inner, onset_frames=2)
+        results = [vad.push_frame(f) for f in self._make_silence(20)]
+        assert all(r == VADFrame.NOISE for r in results)
