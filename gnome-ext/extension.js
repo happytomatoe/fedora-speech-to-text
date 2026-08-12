@@ -62,7 +62,10 @@ export default class VoiceToTextExtension extends Extension {
         this._proxy = null;
         this._recording = false;
         this._hotkeySignalId = null;
+        this._profilingSignalId = null;
         this._signalIds = [];
+        this._profiling = this._settings.get_boolean('profiling');
+        console.log(`VoiceToText: profiling = ${this._profiling}`);
         // Log audio level widget setting on startup
         let showAudioLevel = false;
         try {
@@ -107,6 +110,15 @@ export default class VoiceToTextExtension extends Extension {
                 }
             }
         );
+        // Listen for profiling changes
+        this._profilingSignalId = this._settings.connect(
+            'changed::profiling',
+            () => {
+                this._profiling = this._settings.get_boolean('profiling');
+                console.log(`VoiceToText: profiling changed to ${this._profiling}`);
+            }
+        );
+        this._signalIds.push(this._profilingSignalId);
 
         this._inhibitCookie = 0;
         this._sessionManager = new SessionManagerProxy(
@@ -128,6 +140,10 @@ export default class VoiceToTextExtension extends Extension {
         if (this._audioLevelWidgetSignalId) {
             this._settings.disconnect(this._audioLevelWidgetSignalId);
             this._audioLevelWidgetSignalId = null;
+        }
+        if (this._profilingSignalId) {
+            this._settings.disconnect(this._profilingSignalId);
+            this._profilingSignalId = null;
         }
 
         this._disconnectDBusSignals();
@@ -196,10 +212,20 @@ export default class VoiceToTextExtension extends Extension {
             const stateId = this._proxy.connectSignal(
                 'StateChanged',
                 (proxy, name, [state]) => {
-                    console.log('VoiceToText: state changed to', state);
+                    const elapsed = this._startTime ? Date.now() - this._startTime : 0;
+                    if (this._profiling) {
+                        console.log(
+                            `VoiceToText: [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`
+                        );
+                    }
                     if (state === 'recording') {
                         this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
+                        if (this._profiling) {
+                            console.log(
+                                `VoiceToText: [PROFIL] USER CAN SPEAK NOW, total elapsed: ${elapsed}ms`
+                            );
+                        }
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
                     } else if (state === 'idle') {
@@ -273,6 +299,8 @@ export default class VoiceToTextExtension extends Extension {
     }
 
     _start() {
+        this._startTime = Date.now();
+        if (this._profiling) console.log(`VoiceToText: [PROFIL] _start called at ${this._startTime}`);
         console.log('VoiceToText: _start called');
         if (this._recording) return;
 
@@ -306,7 +334,14 @@ export default class VoiceToTextExtension extends Extension {
         };
 
         this._proxy.StartRecordingAsync(JSON.stringify(config)).then(
-            () => console.log('VoiceToText: StartRecording called via D-Bus'),
+            () => {
+                if (this._profiling) {
+                    console.log(
+                        `VoiceToText: [PROFIL] StartRecording sent via D-Bus, elapsed: ${
+                            Date.now() - this._startTime}ms`
+                    );
+                }
+            },
             e => {
                 console.error(
                     'VoiceToText: D-Bus StartRecording failed:',
