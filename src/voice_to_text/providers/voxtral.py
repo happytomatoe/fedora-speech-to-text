@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from .base import BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
+from .base import AsyncKeyMixin, BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ _HTTP_UNAUTHORIZED = 401
 _API_KEY_MIN_LEN = 10
 
 
-class VoxtralProvider(BatchProvider, StreamingProvider):
+class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
     """Voxtral transcription provider (batch and streaming).
 
     Uses Mistral's Voxtral models for both file transcription (batch)
@@ -34,10 +34,17 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
-        """Initialize the Voxtral provider."""
-        self.api_key = resolve_api_key(
+        """Initialize the Voxtral provider.
+
+        Args:
+            config: Provider configuration.
+
+        """
+        self._config = config
+        key_or_future = resolve_api_key(
             config, "VOXTRAL_API_KEY", extra_envs=("MISTRAL_API_KEY",), provider_name="voxtral"
         )
+        self._init_async_key(key_or_future)  # from AsyncKeyMixin
         self._api_url = config.get("api_url", "https://api.mistral.ai")
         # Batch model
         self.model = config.get("model", "voxtral-mini-latest")
@@ -66,6 +73,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
         """Transcribe audio file using Voxtral batch transcription API."""
+        await self._ensure_api_key()  # Resolve async key if needed
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
         try:
             with open(audio_path, "rb") as audio_file:
@@ -118,6 +126,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Initialize a streaming session via Voxtral SDK."""
+        await self._ensure_api_key()  # Resolve async key if needed
         import time as _time  # noqa: PLC0415
 
         _t0 = _time.monotonic()
