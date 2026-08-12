@@ -163,9 +163,9 @@ class AsyncAudioRecorder:
 
         # Append to preroll buffer if enabled
         if self._preroll_enabled:
-            self._preroll_buffer.append(raw)
-            is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
             with self._preroll_lock:
+                self._preroll_buffer.append(raw)
+                is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
                 self._preroll_metadata.append(
                     PrerollFrameMetadata(
                         sample_count=len(float_data),
@@ -249,7 +249,10 @@ class AsyncAudioRecorder:
             return
 
         # Get the selected preroll frames
-        preroll_frames = buffer_snapshot[selection.start_index :]
+        # Clamp to skip boundary: WAV starts at _preroll_skipped, so only
+        # prepend frames that are NOT already in the WAV file.
+        effective_start = max(selection.start_index, self._preroll_skipped)
+        preroll_frames = buffer_snapshot[effective_start:]
         if not preroll_frames:
             return
 
