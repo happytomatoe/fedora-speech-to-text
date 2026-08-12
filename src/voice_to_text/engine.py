@@ -231,6 +231,7 @@ class AsyncAudioRecorder:
                 return
             metadata_snapshot = list(self._preroll_metadata)
             buffer_snapshot = list(self._preroll_buffer)
+            skipped_snapshot = self._preroll_skipped
 
         selection = select_preroll_frames(
             metadata_snapshot,
@@ -251,7 +252,7 @@ class AsyncAudioRecorder:
         # Get the selected preroll frames
         # Only prepend frames that were skipped from WAV (before _preroll_skipped).
         # Frames from _preroll_skipped onward are already in the WAV file.
-        preroll_frames = buffer_snapshot[selection.start_index : self._preroll_skipped]
+        preroll_frames = buffer_snapshot[selection.start_index : skipped_snapshot]
         if not preroll_frames:
             return
 
