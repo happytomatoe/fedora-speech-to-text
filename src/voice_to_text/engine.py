@@ -144,13 +144,7 @@ class AsyncAudioRecorder:
         ``asyncio.Queue`` from the callback thread.
         """
         raw = indata.tobytes()
-        # Skip writing preroll frames to WAV — they'll be prepended on stop.
-        # This avoids duplicating audio when preroll is selected.
-        if self._wav_file is not None and self._preroll_enabled and self._preroll_skipped < PREROLL_BUFFER_SIZE:
-            self._preroll_skipped += 1
-        elif self._wav_file is not None:
-            self._wav_file.writeframes(raw)
-        self.frame_count += 1
+
         # Smoothed level for D-Bus AudioLevel signal
         float_data = indata[:, 0].astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(float_data**2)))
@@ -164,6 +158,11 @@ class AsyncAudioRecorder:
         # Append to preroll buffer if enabled
         if self._preroll_enabled:
             with self._preroll_lock:
+                # Skip writing preroll frames to WAV — they'll be prepended on stop.
+                if self._wav_file is not None and self._preroll_skipped < PREROLL_BUFFER_SIZE:
+                    self._preroll_skipped += 1
+                elif self._wav_file is not None:
+                    self._wav_file.writeframes(raw)
                 self._preroll_buffer.append(raw)
                 is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
                 self._preroll_metadata.append(
@@ -173,8 +172,12 @@ class AsyncAudioRecorder:
                         rms=rms,
                     )
                 )
+        elif self._wav_file is not None:
+            self._wav_file.writeframes(raw)
 
-        def _safe_put():
+        self.frame_count += 1
+
+        def _safe_put() -> None:
             with contextlib.suppress(asyncio.QueueFull):
                 self._queue.put_nowait(raw)  # drop frame if consumer is too slow
 
