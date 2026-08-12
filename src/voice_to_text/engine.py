@@ -10,7 +10,6 @@ the callback thread into the async event loop.
 """
 
 import asyncio
-import collections
 import contextlib
 import logging
 import os
@@ -41,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
+PREROLL_BUFFER_SIZE = 33  # ~4 seconds at 2048 samples/frame, 16kHz
 
 
 class EngineState(Enum):
@@ -82,11 +82,11 @@ class AsyncAudioRecorder:
             threshold=0.01,
             sample_rate=self.sample_rate,
         )
-        # Preroll buffer: circular buffer of recent audio before VAD triggers.
+        # Preroll buffer: stores ALL frames before VAD triggers (unbounded list).
         # At 2048 samples/frame and 16kHz, each frame is ~128ms.
-        # 33 frames x 128ms ~ 4 seconds of audio context.
+        # Used to select and prepend clean pre-speech audio on stop().
         self._preroll_enabled = False
-        self._preroll_buffer: collections.deque[bytes] = collections.deque(maxlen=33)
+        self._preroll_buffer: list[bytes] = []
         self._preroll_skipped = 0  # frames skipped from WAV (to avoid duplication)
         self._preroll_metadata: list[PrerollFrameMetadata] = []  # guarded by _preroll_lock
         self._preroll_max_metadata = 33
@@ -147,7 +147,7 @@ class AsyncAudioRecorder:
         raw = indata.tobytes()
         # Skip writing preroll frames to WAV — they'll be prepended on stop.
         # This avoids duplicating audio when preroll is selected.
-        if self._wav_file is not None and self._preroll_skipped < self._preroll_buffer.maxlen:
+        if self._wav_file is not None and self._preroll_enabled and self._preroll_skipped < PREROLL_BUFFER_SIZE:
             self._preroll_skipped += 1
         elif self._wav_file is not None:
             self._wav_file.writeframes(raw)
@@ -225,11 +225,16 @@ class AsyncAudioRecorder:
                 self._preroll_metadata.clear()
 
     def _prepend_preroll_to_wav(self, filepath: str) -> None:
-        """Select preroll frames and prepend them to the WAV file."""
+        """Select preroll frames and prepend them to the WAV file.
+
+        Writes to a temporary file first, then replaces the original to avoid
+        data loss on I/O failure.
+        """
         with self._preroll_lock:
             if not self._preroll_metadata:
                 return
             metadata_snapshot = list(self._preroll_metadata)
+            buffer_snapshot = list(self._preroll_buffer)
 
         selection = select_preroll_frames(
             metadata_snapshot,
@@ -248,7 +253,7 @@ class AsyncAudioRecorder:
             return
 
         # Get the selected preroll frames
-        preroll_frames = list(self._preroll_buffer)[selection.start_index :]
+        preroll_frames = buffer_snapshot[selection.start_index :]
         if not preroll_frames:
             return
 
@@ -260,13 +265,23 @@ class AsyncAudioRecorder:
                 params = wf.getparams()
                 original_data = wf.readframes(params.nframes)
 
-            # Write preroll + original audio to the same file
-            with wave.open(filepath, "wb") as wf:
-                wf.setnchannels(params.nchannels)
-                wf.setsampwidth(params.sampwidth)
-                wf.setframerate(params.framerate)
-                wf.writeframes(preroll_audio)
-                wf.writeframes(original_data)
+            # Write to temp file, then replace (safe against I/O failure)
+            dir_name = os.path.dirname(filepath) or "."
+            fd, tmp_path = tempfile.mkstemp(suffix=".wav", dir=dir_name)
+            os.close(fd)
+            try:
+                with wave.open(tmp_path, "wb") as wf:
+                    wf.setnchannels(params.nchannels)
+                    wf.setsampwidth(params.sampwidth)
+                    wf.setframerate(params.framerate)
+                    wf.writeframes(preroll_audio)
+                    wf.writeframes(original_data)
+                os.replace(tmp_path, filepath)
+            except Exception:
+                # Clean up temp file on failure
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_path)
+                raise
 
             logger.info(
                 "Prepended %.3fs of preroll audio to %s",
