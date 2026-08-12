@@ -124,6 +124,9 @@ class VoiceToTextInterface(ServiceInterface):
           decrease_speaker_volume (int): 0-100
           output_method (str): "type", "mutter-virtual", or "mutter-commit"
         """
+        import time as _time  # noqa: PLC0415
+
+        _t_start = _time.monotonic()
         if self._engine.state != EngineState.IDLE:
             raise DBusError(
                 "com.happytomatoe.VoiceToText.Error.AlreadyRecording",
@@ -144,6 +147,7 @@ class VoiceToTextInterface(ServiceInterface):
         logger.info("D-Bus StartRecording received config: %s", parsed_config)
         loop = asyncio.get_running_loop()
         self._tasks.add(loop.create_task(self._engine.start(parsed_config)))
+        logger.info("[PROFIL] StartRecording task created, total: %.3fs", _time.monotonic() - _t_start)
 
     @method()
     def StopRecording(self) -> None:  # noqa: N802

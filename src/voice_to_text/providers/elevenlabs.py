@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from .base import BatchProvider, resolve_api_key
+from .base import BatchProvider, get_shared_client, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,8 @@ class ElevenLabsProvider(BatchProvider):
         self.model = config.get("model", DEFAULT_MODEL)
         self.api_url = config.get("api_url", "https://api.elevenlabs.io")
         self.tag_audio_events = config.get("tag_audio_events", False)
+        # Use shared HTTP client (created once at service startup)
+        self._client = get_shared_client()
 
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
@@ -54,15 +56,14 @@ class ElevenLabsProvider(BatchProvider):
         if language and len(language) in (2, 3):
             data["language_code"] = language
         try:
-            async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    response = await client.post(
-                        f"{self.api_url}/v1/speech-to-text",
-                        headers=headers,
-                        data=data,
-                        files={"file": (Path(audio_path).name, audio_file, "application/octet-stream")},
-                        timeout=120,
-                    )
+            with open(audio_path, "rb") as audio_file:
+                response = await self._client.post(
+                    f"{self.api_url}/v1/speech-to-text",
+                    headers=headers,
+                    data=data,
+                    files={"file": (Path(audio_path).name, audio_file, "application/octet-stream")},
+                    timeout=120,
+                )
             response.raise_for_status()
             result = response.json()
             text = (result.get("text") or "").strip()

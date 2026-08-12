@@ -212,6 +212,9 @@ class RecordingEngine:
 
     async def start(self, config: dict[str, Any]) -> None:
         """Start recording and transcription."""
+        import time as _time  # noqa: PLC0415
+
+        _t_start = _time.monotonic()
         if self.state != EngineState.IDLE:
             raise RuntimeError(f"Cannot start: engine is {self.state.value}")
         self._cancel_event.clear()
@@ -227,6 +230,7 @@ class RecordingEngine:
         # Only accept positive integers; otherwise fall back to configured default
         self._stop_timeout = val if (val is not None and val > 0) else default_timeout
         self._task = asyncio.create_task(self._run(config))
+        logger.info("[PROFIL] Engine.start() task created, total: %.3fs", _time.monotonic() - _t_start)
 
     async def stop(self) -> None:
         """Stop recording gracefully."""
