@@ -203,11 +203,11 @@ class AsyncAudioRecorder:
             self._prepend_preroll_to_wav(filepath)
 
         # Clear preroll state
-        self._preroll_buffer.clear()
         self._preroll_skipped = 0
-        with self._preroll_lock:
-            self._preroll_metadata.clear()
         self._preroll_enabled = False
+        with self._preroll_lock:
+            self._preroll_buffer.clear()
+            self._preroll_metadata.clear()
 
         return filepath
 
@@ -215,9 +215,9 @@ class AsyncAudioRecorder:
         """Enable or disable the preroll buffer."""
         self._preroll_enabled = enabled
         if not enabled:
-            self._preroll_buffer.clear()
             self._preroll_skipped = 0
             with self._preroll_lock:
+                self._preroll_buffer.clear()
                 self._preroll_metadata.clear()
 
     def _prepend_preroll_to_wav(self, filepath: str) -> None:
@@ -249,10 +249,9 @@ class AsyncAudioRecorder:
             return
 
         # Get the selected preroll frames
-        # Clamp to skip boundary: WAV starts at _preroll_skipped, so only
-        # prepend frames that are NOT already in the WAV file.
-        effective_start = max(selection.start_index, self._preroll_skipped)
-        preroll_frames = buffer_snapshot[effective_start:]
+        # Only prepend frames that were skipped from WAV (before _preroll_skipped).
+        # Frames from _preroll_skipped onward are already in the WAV file.
+        preroll_frames = buffer_snapshot[selection.start_index : self._preroll_skipped]
         if not preroll_frames:
             return
 
