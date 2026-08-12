@@ -271,6 +271,8 @@ if [ -z "$LATEST_TAG" ]; then
   TMPDIR=$(mktemp -d)
   git clone --depth 1 "https://github.com/$REPO.git" "$TMPDIR/repo"
   cp "$TMPDIR/repo/gnome-ext"/*.js "$TMPDIR/repo/gnome-ext"/*.json "$INSTALL_DIR/"
+  mkdir -p "$INSTALL_DIR/prefs"
+  cp "$TMPDIR/repo/gnome-ext/prefs/"*.js "$INSTALL_DIR/prefs/" 2>/dev/null || true
   cp "$TMPDIR/repo/gnome-ext"/*.css "$INSTALL_DIR/" 2>/dev/null || true
   cp "$TMPDIR/repo/gnome-ext"/schemas/*.xml "$INSTALL_DIR/schemas/"
   glib-compile-schemas "$INSTALL_DIR/schemas/"
