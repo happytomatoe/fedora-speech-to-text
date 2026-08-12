@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from .base import AsyncKeyMixin, BatchProvider, StreamingProvider, resolve_api_key
+from .base import AsyncKeyMixin, BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,9 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
         self._realtime_model = config.get("realtime_model", "voxtral-mini-transcribe-realtime-2602")
         self._target_delay_ms = config.get("target_delay_ms", 400)
 
+        # Use shared HTTP client (created once at service startup)
+        self._client = get_shared_client()
+
         # Streaming state
         self._audio_queue: asyncio.Queue[bytes | None] | None = None
         self._partial_result: str | None = None
@@ -73,24 +76,23 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
         await self._ensure_api_key()  # Resolve async key if needed
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
         try:
-            async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    files = {"file": (os.path.basename(audio_path), audio_file)}
-                    data: dict[str, str | list[str]] = {"model": self.model, "language": language}
-                    if custom_words:
-                        data["context_bias"] = custom_words
-                    response = await client.post(
-                        f"{self._api_url}/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {self.api_key}"},
-                        files=files,
-                        data=data,
-                        timeout=120,
-                    )
-                response.raise_for_status()
-                result = response.json()
-                text = result.get("text", "").strip()
-                logger.info("Transcription result: %s", text[:100])
-                return text
+            with open(audio_path, "rb") as audio_file:
+                files = {"file": (os.path.basename(audio_path), audio_file)}
+                data: dict[str, str | list[str]] = {"model": self.model, "language": language}
+                if custom_words:
+                    data["context_bias"] = custom_words
+                response = await self._client.post(
+                    f"{self._api_url}/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    files=files,
+                    data=data,
+                    timeout=120,
+                )
+            response.raise_for_status()
+            result = response.json()
+            text = result.get("text", "").strip()
+            logger.info("Transcription result: %s", text[:100])
+            return text
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
             logger.error("Voxtral API error: HTTP %s", status)
@@ -276,7 +278,7 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
         return "voxtral"
 
     async def close(self) -> None:
-        """Clean up the event loop thread and streaming resources."""
+        """Clean up event loop thread and streaming resources."""
         self._closed = True
         if self._audio_queue is not None and self._loop is not None:
             self._loop.call_soon_threadsafe(self._audio_queue.put_nowait, None)

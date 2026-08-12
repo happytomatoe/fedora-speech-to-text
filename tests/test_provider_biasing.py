@@ -1,10 +1,10 @@
-"""Tests for provider-side terminology biasing (custom_words → provider API params)."""
+"""Tests for provider-side terminology biasing (custom_words -> provider API params)."""
 
 from __future__ import annotations
 
 import struct
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,7 +14,7 @@ from voice_to_text.providers.groq import GroqProvider
 from voice_to_text.providers.sixty import SixtyProvider
 from voice_to_text.providers.voxtral import VoxtralProvider
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# -- Helpers -------------------------------------------------------------------
 
 
 def _make_wav(tmp_path: Path) -> Path:
@@ -32,7 +32,7 @@ def _make_wav(tmp_path: Path) -> Path:
     return wav
 
 
-# ── Deepgram ─────────────────────────────────────────────────────────────────
+# -- Deepgram ------------------------------------------------------------------
 
 
 class TestDeepgramBiasing:
@@ -80,7 +80,7 @@ class TestDeepgramBiasing:
         assert "keyterm" not in captured["params"]
 
 
-# ── Voxtral ──────────────────────────────────────────────────────────────────
+# -- Voxtral -------------------------------------------------------------------
 
 
 class TestVoxtralBiasing:
@@ -100,11 +100,9 @@ class TestVoxtralBiasing:
             resp.json.return_value = {"text": "hello"}
             return resp
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(post=_fake_post))
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            result = await provider.transcribe_file(str(wav), custom_words=["Prometheus", "Grafana"])
+        result = await provider.transcribe_file(str(wav), custom_words=["Prometheus", "Grafana"])
 
         assert result == "hello"
         assert captured["data"]["context_bias"] == ["Prometheus", "Grafana"]
@@ -123,16 +121,14 @@ class TestVoxtralBiasing:
             resp.json.return_value = {"text": "hello"}
             return resp
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(post=_fake_post))
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            await provider.transcribe_file(str(wav))
+        await provider.transcribe_file(str(wav))
 
         assert "context_bias" not in captured["data"]
 
 
-# ── Groq ─────────────────────────────────────────────────────────────────────
+# -- Groq ----------------------------------------------------------------------
 
 
 class TestGroqBiasing:
@@ -174,7 +170,7 @@ class TestGroqBiasing:
         assert "prompt" not in captured
 
 
-# ── ElevenLabs ───────────────────────────────────────────────────────────────
+# -- ElevenLabs ----------------------------------------------------------------
 
 
 class TestElevenLabsBiasing:
@@ -194,11 +190,9 @@ class TestElevenLabsBiasing:
             resp.json.return_value = {"text": "hello"}
             return resp
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(post=_fake_post))
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            result = await provider.transcribe_file(str(wav), custom_words=["ChatGPT", "OpenAI"])
+        result = await provider.transcribe_file(str(wav), custom_words=["ChatGPT", "OpenAI"])
 
         assert result == "hello"
         assert captured["data"]["keyterms"] == ["ChatGPT", "OpenAI"]
@@ -217,16 +211,14 @@ class TestElevenLabsBiasing:
             resp.json.return_value = {"text": "hello"}
             return resp
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(post=_fake_post))
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            await provider.transcribe_file(str(wav))
+        await provider.transcribe_file(str(wav))
 
         assert "keyterms" not in captured["data"]
 
 
-# ── 60db ─────────────────────────────────────────────────────────────────────
+# -- 60db ----------------------------------------------------------------------
 
 
 class TestSixtyBiasing:
@@ -246,11 +238,9 @@ class TestSixtyBiasing:
             resp.json.return_value = {"data": {"text": "hello"}}
             return resp
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(post=_fake_post))
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            result = await provider.transcribe_file(str(wav), custom_words=["Rust", "Cargo"])
+        result = await provider.transcribe_file(str(wav), custom_words=["Rust", "Cargo"])
 
         assert result == "hello"
         assert captured["data"]["context"] == "Rust, Cargo"
@@ -269,10 +259,8 @@ class TestSixtyBiasing:
             resp.json.return_value = {"data": {"text": "hello"}}
             return resp
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(post=_fake_post))
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            await provider.transcribe_file(str(wav))
+        await provider.transcribe_file(str(wav))
 
         assert "context" not in captured["data"]
