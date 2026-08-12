@@ -35,7 +35,7 @@ class ParakeetProvider(BatchProvider):
         with open(audio_path, "rb") as f:
             files = {"file": (os.path.basename(audio_path), f, "audio/wav")}
             data = {"model": self.model_name}
-            response = await self._client.post(url, files=files, data=data)
+            response = await self._client.post(url, files=files, data=data, timeout=self.timeout)
         response.raise_for_status()
         result = response.json().get("text", "").strip()
         logger.info("Transcription result: %s", result[:100])
