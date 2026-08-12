@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
 PREROLL_BUFFER_SIZE = 33  # ~4 seconds at 2048 samples/frame, 16kHz
+PREROLL_MAX_FRAMES = PREROLL_BUFFER_SIZE * 3  # cap buffer growth to prevent memory issues
 
 
 class EngineState(Enum):
@@ -163,7 +164,9 @@ class AsyncAudioRecorder:
                     self._preroll_skipped += 1
                 elif self._wav_file is not None:
                     self._wav_file.writeframes(raw)
-                self._preroll_buffer.append(raw)
+                # Cap buffer to prevent unbounded memory growth
+                if len(self._preroll_buffer) < PREROLL_MAX_FRAMES:
+                    self._preroll_buffer.append(raw)
                 is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
                 self._preroll_metadata.append(
                     PrerollFrameMetadata(
@@ -218,8 +221,8 @@ class AsyncAudioRecorder:
         """Enable or disable the preroll buffer."""
         self._preroll_enabled = enabled
         if not enabled:
-            self._preroll_skipped = 0
             with self._preroll_lock:
+                self._preroll_skipped = 0
                 self._preroll_buffer.clear()
                 self._preroll_metadata.clear()
 
