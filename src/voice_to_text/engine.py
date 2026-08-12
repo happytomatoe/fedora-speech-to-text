@@ -89,7 +89,6 @@ class AsyncAudioRecorder:
         self._preroll_buffer: list[bytes] = []
         self._preroll_skipped = 0  # frames skipped from WAV (to avoid duplication)
         self._preroll_metadata: list[PrerollFrameMetadata] = []  # guarded by _preroll_lock
-        self._preroll_max_metadata = 33
         self._preroll_lock = threading.Lock()
 
     async def start(self, filepath: str) -> None:
@@ -174,9 +173,6 @@ class AsyncAudioRecorder:
                         rms=rms,
                     )
                 )
-                # Trim metadata to match buffer size
-                if len(self._preroll_metadata) > self._preroll_max_metadata:
-                    self._preroll_metadata = self._preroll_metadata[-self._preroll_max_metadata :]
 
         def _safe_put():
             with contextlib.suppress(asyncio.QueueFull):
