@@ -15,6 +15,7 @@ import contextlib
 import logging
 import os
 import tempfile
+import threading
 import time as _time
 import wave
 from collections.abc import Callable
@@ -81,12 +82,15 @@ class AsyncAudioRecorder:
             threshold=0.01,
             sample_rate=self.sample_rate,
         )
-        # Preroll buffer: ~1 second of audio before VAD triggers
-        # At 30ms frames: 1000ms / 30ms ≈ 33 frames
+        # Preroll buffer: circular buffer of recent audio before VAD triggers.
+        # At 2048 samples/frame and 16kHz, each frame is ~128ms.
+        # 33 frames x 128ms ~ 4 seconds of audio context.
         self._preroll_enabled = False
         self._preroll_buffer: collections.deque[bytes] = collections.deque(maxlen=33)
-        self._preroll_metadata: list[PrerollFrameMetadata] = []
+        self._preroll_skipped = 0  # frames skipped from WAV (to avoid duplication)
+        self._preroll_metadata: list[PrerollFrameMetadata] = []  # guarded by _preroll_lock
         self._preroll_max_metadata = 33
+        self._preroll_lock = threading.Lock()
 
     async def start(self, filepath: str) -> None:
         """Start recording audio to a file."""
@@ -141,7 +145,11 @@ class AsyncAudioRecorder:
         ``asyncio.Queue`` from the callback thread.
         """
         raw = indata.tobytes()
-        if self._wav_file is not None:
+        # Skip writing preroll frames to WAV — they'll be prepended on stop.
+        # This avoids duplicating audio when preroll is selected.
+        if self._wav_file is not None and self._preroll_skipped < self._preroll_buffer.maxlen:
+            self._preroll_skipped += 1
+        elif self._wav_file is not None:
             self._wav_file.writeframes(raw)
         self.frame_count += 1
         # Smoothed level for D-Bus AudioLevel signal
@@ -158,16 +166,17 @@ class AsyncAudioRecorder:
         if self._preroll_enabled:
             self._preroll_buffer.append(raw)
             is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
-            self._preroll_metadata.append(
-                PrerollFrameMetadata(
-                    sample_count=len(float_data),
-                    is_speech=is_speech,
-                    rms=rms,
+            with self._preroll_lock:
+                self._preroll_metadata.append(
+                    PrerollFrameMetadata(
+                        sample_count=len(float_data),
+                        is_speech=is_speech,
+                        rms=rms,
+                    )
                 )
-            )
-            # Trim metadata to match buffer size
-            if len(self._preroll_metadata) > self._preroll_max_metadata:
-                self._preroll_metadata = self._preroll_metadata[-self._preroll_max_metadata :]
+                # Trim metadata to match buffer size
+                if len(self._preroll_metadata) > self._preroll_max_metadata:
+                    self._preroll_metadata = self._preroll_metadata[-self._preroll_max_metadata :]
 
         def _safe_put():
             with contextlib.suppress(asyncio.QueueFull):
@@ -199,7 +208,9 @@ class AsyncAudioRecorder:
 
         # Clear preroll state
         self._preroll_buffer.clear()
-        self._preroll_metadata.clear()
+        self._preroll_skipped = 0
+        with self._preroll_lock:
+            self._preroll_metadata.clear()
         self._preroll_enabled = False
 
         return filepath
@@ -209,15 +220,19 @@ class AsyncAudioRecorder:
         self._preroll_enabled = enabled
         if not enabled:
             self._preroll_buffer.clear()
-            self._preroll_metadata.clear()
+            self._preroll_skipped = 0
+            with self._preroll_lock:
+                self._preroll_metadata.clear()
 
     def _prepend_preroll_to_wav(self, filepath: str) -> None:
         """Select preroll frames and prepend them to the WAV file."""
-        if not self._preroll_metadata:
-            return
+        with self._preroll_lock:
+            if not self._preroll_metadata:
+                return
+            metadata_snapshot = list(self._preroll_metadata)
 
         selection = select_preroll_frames(
-            self._preroll_metadata,
+            metadata_snapshot,
             self.sample_rate,
         )
 

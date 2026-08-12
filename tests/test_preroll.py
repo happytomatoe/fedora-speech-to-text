@@ -1,4 +1,4 @@
-"""Tests for preroll buffer selection algorithm."""
+import pytest
 
 from voice_to_text.preroll import (
     REASON_BELOW_MINIMUM,
@@ -165,8 +165,6 @@ class TestPrerollSelection:
 
     def test_negative_sample_rate_raises(self):
         """Negative sample rate should raise ValueError."""
-        import pytest
-
         with pytest.raises(ValueError, match="sample_rate must be positive"):
             select_preroll_frames([], -1)
 
