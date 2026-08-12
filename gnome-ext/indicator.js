@@ -95,7 +95,9 @@ export const VoiceIndicator = GObject.registerClass(
 
             // Add Preferences menu item
             const prefsItem = new PopupMenu.PopupMenuItem(_('Preferences'));
+            // @ts-expect-error - set_accessible_name and connect exist at runtime via St.Widget inheritance
             prefsItem.set_accessible_name('Preferences');
+            // @ts-expect-error - connect exists at runtime via GObject
             prefsItem.connect('activate', () => {
                 this.onConfigure?.();
             });

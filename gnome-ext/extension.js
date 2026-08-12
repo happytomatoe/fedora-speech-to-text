@@ -85,6 +85,7 @@ export default class VoiceToTextExtension extends Extension {
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
 
+        // @ts-expect-error - uuid is on ExtensionBase but types don't reflect inheritance correctly
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
         this._registerHotkey();
 
@@ -121,6 +122,7 @@ export default class VoiceToTextExtension extends Extension {
         this._signalIds.push(this._profilingSignalId);
 
         this._inhibitCookie = 0;
+        // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
         this._sessionManager = new SessionManagerProxy(
             Gio.DBus.session,
             'org.gnome.SessionManager',
@@ -200,6 +202,7 @@ export default class VoiceToTextExtension extends Extension {
 
     _connectDBus() {
         try {
+            // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
             this._proxy = new VoiceToTextProxy(
                 Gio.DBus.session,
                 'com.happytomatoe.VoiceToText',
@@ -476,6 +479,7 @@ export default class VoiceToTextExtension extends Extension {
         console.log('VoiceToText: opening preferences dialog');
         try {
             const launcher = new Gio.SubprocessLauncher();
+            // @ts-expect-error - uuid is on ExtensionBase but types don't reflect inheritance correctly
             launcher.spawnv(['gnome-extensions', 'prefs', this.uuid]);
         } catch (e) {
             console.error('VoiceToText: failed to open preferences:', e);

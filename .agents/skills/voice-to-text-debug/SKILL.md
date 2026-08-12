@@ -83,7 +83,7 @@ If the log stops mid-phase with NO exception and NO "recording started", the eng
 `config.yaml` sets `voxtral.api_key_source: "keyring"` and `deepgram.api_key_source: "keyring"`. `resolve_api_key()` (`providers/base.py`) does:
 
 ```python
-key = keyring_lib.get_password("voice-to-text", provider_name)   # BLOCKING D-Bus round-trip
+key = keyring_lib.get_password("voice-to-text", provider_name)  # BLOCKING D-Bus round-trip
 ```
 
 This is called **synchronously** from `VoxtralProvider.__init__` / `DeepgramProvider.__init__` (and others), which `engine._run()` calls directly (not in a thread/executor). Inside the `just dev` `dbus-run-session`, the secret service (`org.freedesktop.secrets`) is unreachable, so `keyring.get_password()` **hangs for tens of seconds** (reproduced: >40s, never returned). Because it runs on the asyncio event loop, it freezes the whole engine before `recorder.start()` → `EngineState.RECORDING` is never set → `StateChanged('recording')` is never emitted → the spinner hangs.

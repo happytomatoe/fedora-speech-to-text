@@ -4,6 +4,7 @@
  */
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
+import Gio from 'gi://Gio'; // eslint-disable-line no-unused-vars -- used in JSDoc
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 /**
@@ -79,8 +80,9 @@ export function createCustomWordsGroup(
         // Add words in reverse order so most recent appears at top
         const customWords = settings.get_strv('custom-words');
         for (let i = customWords.length - 1; i >= 0; i--) {
-            if (customWords[i])
+            if (customWords[i]) {
                 customWordsList.append(createWordRow(customWords[i]));
+            }
         }
     };
 

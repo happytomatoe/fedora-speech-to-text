@@ -157,6 +157,77 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
         raise ValueError(f"API key command error: {e}") from e
 
 
+# Max retries for 401 errors
+_MAX_API_KEY_RETRIES = 3
+
+
+class AsyncKeyMixin:
+    """Mixin for providers that support async API key resolution.
+
+    Generic - works with any provider that uses resolve_api_key().
+    """
+
+    _api_key_future: asyncio.Future[str] | None = None
+    _pending_key_command: str | None = None  # !!command string for deferred resolution
+    api_key: str
+    _config: dict[str, Any]
+
+    def _init_async_key(self, key_or_future: str | asyncio.Future[str]) -> None:
+        """Initialize async key storage.
+
+        If key_or_future is a "!!command" string, store it for deferred
+        future creation in _ensure_api_key (runs in main async context).
+        """
+        if isinstance(key_or_future, asyncio.Future):
+            self._api_key_future = key_or_future
+            self._pending_key_command = None
+            self.api_key = ""  # placeholder
+        elif isinstance(key_or_future, str) and key_or_future.startswith("!!"):
+            # Deferred: store command, create Future later in async context
+            self._pending_key_command = key_or_future[2:]  # strip leading !!
+            self._api_key_future = None
+            self.api_key = ""  # placeholder
+        else:
+            self._api_key_future = None
+            self._pending_key_command = None
+            self.api_key = key_or_future
+
+    async def _ensure_api_key(self) -> str:
+        """Ensure API key is resolved, awaiting future if needed.
+
+        Creates the Future from pending !!command in the main async context.
+        """
+        # Create future from pending !!command (now in async context)
+        if self._pending_key_command is not None:
+            logger.info("Starting async API key resolution: %s", self._pending_key_command)
+            self._api_key_future = _execute_command_for_key_async(self._pending_key_command)
+            self._pending_key_command = None
+        if self._api_key_future is not None:
+            self.api_key = await await_api_key(self._api_key_future)
+            self._api_key_future = None
+        return self.api_key
+
+
+def _execute_command_for_key_async(command: str, *, timeout: float = 10) -> asyncio.Future[str]:
+    """Execute shell command in background, return Future for API key.
+
+    Returns a Future that resolves to the API key string.
+    The Future can be awaited or checked with .done() / .result().
+    """
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(None, _execute_command_for_key, command)
+
+
+async def await_api_key(key_or_future: str | asyncio.Future[str]) -> str:
+    """Await an API key Future, or return the string directly.
+
+    Generic helper for ALL providers.
+    """
+    if isinstance(key_or_future, str):
+        return key_or_future
+    return await key_or_future
+
+
 def resolve_api_key(
     config: dict[str, Any],
     default_env: str,
@@ -194,12 +265,41 @@ def resolve_api_key(
     fingerprint = f"{key[:6]}...{key[-4:]}" if len(key) > _API_KEY_MIN_LEN else f"{key[:3]}...{key[-2:]}"
     logger.info("API key resolved: provider=%s source=%s fingerprint=%s", provider_name, source_used, fingerprint)
 
-    # 4. Command substitution (!command)
-    if key and key.startswith("!"):
+    # 4. Command substitution (!command or !!command)
+    if key and key.startswith("!!"):
+        # Async mode: return raw command string; Future created later in async context
+        command = key[2:]  # strip leading !!
+        logger.info("API key command will run in background: %s", command)
+        return key  # return "!!command" as-is for deferred resolution
+    elif key and key.startswith("!"):
+        # Sync mode (existing behavior)
         command = key[1:]  # strip leading !
         return _execute_command_for_key(command)
 
     return key
+
+
+def resolve_api_key_with_retry(
+    config: dict[str, Any],
+    default_env: str,
+    extra_envs: tuple[str, ...] = (),
+    provider_name: str | None = None,
+) -> str:
+    """Resolve API key, re-running !command on failure.
+
+    Used during 401 retry - re-runs the command to get fresh key.
+    Generic for ALL providers.
+    """
+    for attempt in range(_MAX_API_KEY_RETRIES):
+        try:
+            return resolve_api_key(config, default_env, extra_envs, provider_name)
+        except ValueError as e:
+            if attempt < _MAX_API_KEY_RETRIES - 1:
+                logger.warning("API key attempt %d failed, retrying: %s", attempt + 1, e)
+                continue
+            raise
+    # This should not be reached, but pyright requires it
+    raise ValueError("Failed to resolve API key after all retries")
 
 
 class WebSocketStreamingProvider(StreamingProvider):

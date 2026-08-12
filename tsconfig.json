@@ -25,7 +25,9 @@
       "gi://Clutter": ["./node_modules/@girs/clutter-16"],
       "gi://Shell": ["./node_modules/@girs/shell-13"],
       "gi://Meta": ["./node_modules/@girs/meta-14"],
-      "resource:///org/gnome/Shell/Extensions/js/*": ["./node_modules/@girs/gnome-shell/js/*"]
+      "resource:///org/gnome/Shell/Extensions/js/*": ["./node_modules/@girs/gnome-shell/dist/extensions/*"],
+      "resource:///org/gnome/shell/extensions/*": ["./node_modules/@girs/gnome-shell/dist/extensions/*"],
+      "resource:///org/gnome/shell/ui/*": ["./node_modules/@girs/gnome-shell/dist/ui/*"]
     }
   },
   "include": ["gnome-ext/**/*.js", "gnome-ext/**/*.d.ts"],
