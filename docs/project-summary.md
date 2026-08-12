@@ -9,7 +9,7 @@ text using free cloud or local APIs. It ships as two cooperating parts:
 - **GNOME Shell extension** (`gnome-ext/`): the JS UI (indicator, hotkey,
   preferences, and an auto-typer) that drives the D-Bus service.
 
-API keys are resolved from environment variables, `config.yaml`, or command substitution (`!command`).
+API keys are resolved from environment variables, `config.yaml`, or command substitution (`!command` or `!!command`).
 
 Lint/format via ruff, types via pyright.
 
