@@ -31,6 +31,7 @@ export interface VmConfig {
   outputMethod?: string;
   skipDeps?: boolean;
   vmMemMb?: number;
+  vmSmp?: number;
 }
 
 export class VmManager {
@@ -138,7 +139,7 @@ export class VmManager {
       "-enable-kvm",
       "-cpu", "host",
       "-m", String(this.config.vmMemMb ?? 4096),
-      "-smp", "2",
+      "-smp", String(this.config.vmSmp ?? 1),
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
       "-display", "none",

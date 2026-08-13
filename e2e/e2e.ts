@@ -7,6 +7,7 @@ import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio } from "./lib/deploy-steps.js";
 import { checkRamPreflight } from "./lib/ram-check.js";
+import { loadConfig, type E2eConfig } from "./lib/config.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -52,6 +53,9 @@ const NO_SNAPSHOT = args.includes("--no-snapshot");
 const SNAPSHOT_MODE = !NO_SNAPSHOT;
 const SKIP_DEPS = args.includes("--skip-deps");
 
+// Load E2E config from config.yaml (CLI flags override these)
+const YAML_CONFIG = loadConfig(join(import.meta.dir, ".."));
+
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
 const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
@@ -70,7 +74,11 @@ const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1
 
 // Parse --vm-mem <MB> (RAM per VM, default 4096)
 const vmMemIdx = args.indexOf("--vm-mem");
-const VM_MEM_MB = vmMemIdx >= 0 ? parseInt(args[vmMemIdx + 1]) || 4096 : 4096;
+const VM_MEM_MB = vmMemIdx >= 0 ? parseInt(args[vmMemIdx + 1]) || YAML_CONFIG.vm.memoryMb : YAML_CONFIG.vm.memoryMb;
+
+// Parse --vm-smp <N> (vCPUs per VM, default from config.yaml)
+const vmSmpIdx = args.indexOf("--vm-smp");
+const VM_SMP = vmSmpIdx >= 0 ? parseInt(args[vmSmpIdx + 1]) || YAML_CONFIG.vm.smp : YAML_CONFIG.vm.smp;
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
@@ -104,7 +112,11 @@ const CONFIG = {
   },
   ssh: {
     port: 2222,
-    user: "testuser",
+    user: YAML_CONFIG.test.sshUser,
+  },
+  vm: {
+    memoryMb: YAML_CONFIG.vm.memoryMb,
+    smp: YAML_CONFIG.vm.smp,
   },
   extension: {
     uuid: "voice-to-text@happytomatoe.com",
@@ -728,6 +740,8 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    vmMemMb: VM_MEM_MB,
+    vmSmp: VM_SMP,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();

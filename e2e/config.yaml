@@ -1,0 +1,10 @@
+# E2E test configuration
+# CLI flags (--vm-mem, --vm-smp) override these values.
+
+vm:
+  memory_mb: 4096    # RAM per VM in MB
+  smp: 1             # Virtual CPUs per VM
+
+test:
+  ssh_user: testuser
+  output_method: type  # type, clipboard, mutter-virtual
