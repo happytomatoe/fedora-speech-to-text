@@ -330,8 +330,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Step 6: Stop recording
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
-  // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
-  await timedSleep(200, "sleep:dbus-settle");
+  // Wait for recording state to clear (sendHotkey is synchronous via D-Bus)
+  await shell.waitForRecordingStop();
 
   await vm.captureFrame("06-recording-stopped");
 

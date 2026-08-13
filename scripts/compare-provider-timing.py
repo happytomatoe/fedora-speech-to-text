@@ -42,7 +42,7 @@ async def test_provider_timing(provider_name: str, audio_file: str, runs: int):
             end = time.perf_counter()
             elapsed_ms = (end - start) * 1000
             print(f"{elapsed_ms:.0f}ms - ERROR: {e}")
-            timings.append(elapsed_ms)
+            # Don't append failed attempts to timings
 
     await provider.close()
     return timings
@@ -50,14 +50,14 @@ async def test_provider_timing(provider_name: str, audio_file: str, runs: int):
 
 async def main():
     """Run the main comparison."""
-    audio_file = "e2e/fixtures/test-01-weather.wav"
+    audio_file = Path(__file__).parent.parent / "e2e" / "fixtures" / "test-01-weather.wav"
 
-    if not Path(audio_file).exists():
+    if not audio_file.exists():
         print(f"❌ Audio file not found: {audio_file}")
         return
 
     print(f"Audio file: {audio_file}")
-    print(f"File size: {Path(audio_file).stat().st_size} bytes")
+    print(f"File size: {audio_file.stat().st_size} bytes")
 
     # Test Parakeet
     parakeet_timings = await test_provider_timing("parakeet", audio_file, runs=5)

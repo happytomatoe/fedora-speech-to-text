@@ -42,7 +42,7 @@ export function checkRamPreflight(requestedNewVms: number, vmMemMb = 4096): void
   console.log(`  RAM check: ${availableMb}MB available, ${runningVms} E2E VM(s) running`);
   console.log(`  Requesting ${requestedNewVms} new VM(s) × ${vmMemMb}MB = ${totalNeededMb}MB total`);
 
-  if (requestedNewVms > maxFit) {
+  if (totalVms > maxFit) {
     const msg = [
       `Not enough RAM for ${requestedNewVms} VM(s).`,
       ``,

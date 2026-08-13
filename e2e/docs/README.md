@@ -15,7 +15,7 @@
 │                           │ SSH + SCP                            │
 │                           ▼                                     │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  QEMU VM (4GB RAM, 2 cores)                               │  │
+│  │  QEMU VM (configurable: 4GB RAM, 1 core default)              │  │  │
 │  │  ┌─────────────────────────────────────────────────────┐  │  │
 │  │  │  GNOME Shell                                         │  │  │
 │  │  │  ┌─────────────────────────────────────────────┐   │  │  │
@@ -54,8 +54,7 @@
 │  ├── Open Terminal (2.4s)                                        │
 │  ├── Start Recording (0.3s)                                      │
 │  ├── Wait for Transcription (4.6s) ← BOTTLENECK!               │
-│  │   ├── Play audio (3.9s) ← 85% of time!                       │
-│  │   ├── Capture audio (0.1s)                                    │
+│  │   ├── Simulate audio capture (3.9s) ← 85% of time!           │
 │  │   ├── HTTP to Parakeet (0.1s)                                 │
 │  │   ├── Parakeet transcribe (0.5s)                              │
 │  │   └── Type result (0.2s)                                      │

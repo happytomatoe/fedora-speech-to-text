@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 
 export interface RunConfig {
@@ -29,7 +29,8 @@ export class RunContext {
   constructor(config: RunConfig, customId?: string) {
     // In single (non-parallel) snapshot mode, use a fixed ID so overlays persist between runs.
     // Parallel workers get unique IDs to avoid socket/port conflicts.
-    this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : basename(config.projectRoot));
+    // For non-canonical worktrees, use a stable hash of the resolved path to avoid collisions.
+    this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : this.stableWorktreeId(config.projectRoot));
     
     // In update mode, use a temp directory; otherwise use persistent directory for snapshots
     if (config.updateMode) {
@@ -73,6 +74,16 @@ export class RunContext {
       }
     }
     throw new Error(`No available port in range ${min}-${max}`);
+  }
+
+  private stableWorktreeId(projectRoot: string): string {
+    // Use 'main' for the canonical worktree (matches persistent-run/main/ convention)
+    // For other worktrees, use a stable short hash of the resolved path
+    const resolved = require("node:path").resolve(projectRoot);
+    const canonical = resolved === "/var/home/l/git/fedora-speech-to-text" || 
+                      resolved.endsWith("/fedora-speech-to-text");
+    if (canonical) return "main";
+    return createHash("sha256").update(resolved).digest("hex").slice(0, 8);
   }
 
   cleanup(): void {

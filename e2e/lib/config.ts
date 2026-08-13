@@ -29,7 +29,7 @@ export function loadConfig(projectRoot: string): E2eConfig {
         smp: parsed?.vm?.smp ?? DEFAULTS.vm.smp,
       },
       test: {
-        sshUser: parsed?.test?.ssh_user ?? DEFAULTS.test.sshUser,
+        sshUser: parsed?.ssh?.user ?? DEFAULTS.test.sshUser,
         outputMethod: parsed?.test?.output_method ?? DEFAULTS.test.outputMethod,
       },
     };

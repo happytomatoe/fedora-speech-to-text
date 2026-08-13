@@ -196,6 +196,8 @@ export class ShellHelper {
         `ssh ${sshOpts} ${sshHost} "DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'" 2>/dev/null`,
         { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
       );
+      // Wait for dismiss animation to complete
+      await Bun.sleep(500);
     } catch {
       // Ignore — may already be dismissed
     }

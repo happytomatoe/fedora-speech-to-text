@@ -64,7 +64,7 @@ just qemu-e2e-setup  # Downloads golden image + SSH keys from Filen
 
 ## Documentation
 
-- **Architecture documentation**: `e2e/docs/test-architecture.md` and `e2e/docs/README.md`
+- **Architecture documentation**: `e2e/docs/README.md`
 - **Update documentation when**: Modifying test flow, adding/removing steps, changing VM setup, or updating components
 
 ## Important Notes
