@@ -33,7 +33,7 @@ from voice_to_text.postprocess import postprocess
 from voice_to_text.preroll import PrerollFrameMetadata, select_preroll_frames
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
 from voice_to_text.typer import DotoolcNotFoundError, DotoolTyper
-from voice_to_text.vad import SmoothedVAD, VADFrame
+from voice_to_text.vad import SileroVAD, SmoothedVAD, VADFrame
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ class AsyncAudioRecorder:
         self,
         device: int | None = None,
         sample_rate: int = SAMPLE_RATE,
+        vad_enabled: bool = True,
     ):
         """Initialize the audio recorder."""
         self.device = device
@@ -76,13 +77,18 @@ class AsyncAudioRecorder:
         self._wav_file = None
         self._filepath: str | None = None
         # Voice Activity Detection
-        self._vad = SmoothedVAD(
-            onset_frames=2,
-            hangover_frames=15,
-            prefill_frames=15,
-            threshold=0.01,
-            sample_rate=self.sample_rate,
-        )
+        self._vad_enabled = vad_enabled
+        self._vad: SmoothedVAD | None = None
+        if vad_enabled:
+            self._vad = SmoothedVAD(
+                inner=SileroVAD(
+                    threshold=0.5,
+                    sample_rate=self.sample_rate,
+                ),
+                onset_frames=2,
+                hangover_frames=15,
+                prefill_frames=15,
+            )
         # Preroll buffer: stores ALL frames before VAD triggers (unbounded list).
         # At 2048 samples/frame and 16kHz, each frame is ~128ms.
         # Used to select and prepend clean pre-speech audio on stop().
@@ -154,7 +160,7 @@ class AsyncAudioRecorder:
         db_normalized = max(0.0, min(1.0, (db + 50) / 50))
         self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * db_normalized
         # Feed VAD with float32 samples
-        vad_result = self._vad.push_frame(float_data)
+        vad_result = self._vad.push_frame(float_data) if self._vad is not None else None
 
         # Append to preroll buffer if enabled
         if self._preroll_enabled:
@@ -167,7 +173,7 @@ class AsyncAudioRecorder:
                 # Cap buffer to prevent unbounded memory growth
                 if len(self._preroll_buffer) < PREROLL_MAX_FRAMES:
                     self._preroll_buffer.append(raw)
-                is_speech = vad_result == VADFrame.SPEECH if hasattr(vad_result, "value") else None
+                is_speech = vad_result == VADFrame.SPEECH if vad_result is not None else None
                 self._preroll_metadata.append(
                     PrerollFrameMetadata(
                         sample_count=len(float_data),
@@ -225,6 +231,24 @@ class AsyncAudioRecorder:
                 self._preroll_skipped = 0
                 self._preroll_buffer.clear()
                 self._preroll_metadata.clear()
+
+    def enable_vad(self, enabled: bool = True) -> None:
+        """Enable or disable the Silero VAD."""
+        if enabled and self._vad is None:
+            self._vad = SmoothedVAD(
+                inner=SileroVAD(
+                    threshold=0.5,
+                    sample_rate=self.sample_rate,
+                ),
+                onset_frames=2,
+                hangover_frames=15,
+                prefill_frames=15,
+            )
+        elif not enabled:
+            if self._vad is not None:
+                self._vad.reset()
+            self._vad = None
+        self._vad_enabled = enabled
 
     def _prepend_preroll_to_wav(self, filepath: str) -> None:
         """Select preroll frames and prepend them to the WAV file.
@@ -522,17 +546,23 @@ class RecordingEngine:
 
             raw_device = config.get("device")
             device = None if raw_device in (None, "", "__system_default__") else raw_device
+            vad_enabled = config.get("vad_enabled", True)
             recorder = AsyncAudioRecorder(
                 device=device,
                 sample_rate=SAMPLE_RATE,
+                vad_enabled=vad_enabled,
             )
             self._recorder = recorder
 
             # Enable preroll buffer for batch mode only (not streaming)
-            use_preroll = not transcriber
+            # Config can override: preroll_enabled defaults to True for batch mode
+            preroll_config = config.get("preroll_enabled")
+            use_preroll = preroll_config if preroll_config is not None else not transcriber
             recorder.enable_preroll(use_preroll)
             if use_preroll:
                 logger.info("Preroll buffer enabled for batch mode")
+            if not vad_enabled:
+                logger.info("Silero VAD disabled via config")
 
             with SpeakerVolumeManager.with_decrease(decrease_pct):
                 if self._cancel_event.is_set():
