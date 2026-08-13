@@ -10,6 +10,7 @@ import { checkRamPreflight } from "./lib/ram-check.js";
 import { loadConfig, type E2eConfig } from "./lib/config.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
+import { timed, timedSleep, timing } from "./lib/utils.js";
 
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
@@ -82,26 +83,6 @@ const VM_SMP = vmSmpIdx >= 0 ? parseInt(args[vmSmpIdx + 1]) || YAML_CONFIG.vm.sm
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
-
-function timing(label: string, startMs: number): void {
-  const ms = Date.now() - startMs;
-  console.log(`  [time] ${label}: ${ms}ms`);
-}
-
-/** Time an async operation */
-async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
-  const t = Date.now();
-  const result = await fn();
-  timing(label, t);
-  return result;
-}
-
-/** Sleep with optional timing label */
-async function timedSleep(ms: number, label?: string): Promise<void> {
-  const t = Date.now();
-  await Bun.sleep(ms);
-  if (label) timing(label, t);
-}
 
 // Configuration
 const CONFIG = {
