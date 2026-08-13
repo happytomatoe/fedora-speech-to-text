@@ -217,16 +217,19 @@ export class ShellHelper {
    */
   async waitActivitiesFullyClosed(timeoutMs = 5000): Promise<void> {
     const start = Date.now();
-    let wasOpen = false;
     
+    // If already closed, return immediately
+    if (!(await this.isActivitiesOpen())) {
+      return;
+    }
+    
+    // Wait for it to close
     while (Date.now() - start < timeoutMs) {
-      const isOpen = await this.isActivitiesOpen();
-      if (wasOpen && !isOpen) {
+      if (!(await this.isActivitiesOpen())) {
         // Activities just closed — wait for animation to complete
-        await Bun.sleep(500);
+        await Bun.sleep(300);
         return;
       }
-      wasOpen = isOpen;
       await Bun.sleep(100);
     }
     // Fall through — may already be closed

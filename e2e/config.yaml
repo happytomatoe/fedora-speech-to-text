@@ -1,10 +1,23 @@
 # E2E test configuration
-# CLI flags (--vm-mem, --vm-smp) override these values.
+# CLI flags (--vm-mem, --vm-smp, --output-method, etc.) override these values.
 
 vm:
   memory_mb: 4096    # RAM per VM in MB
   smp: 1             # Virtual CPUs per VM
 
+ssh:
+  port: 2222         # Base SSH port (incremented for parallel VMs)
+  user: testuser
+
+extension:
+  uuid: voice-to-text@happytomatoe.com
+
 test:
-  ssh_user: testuser
-  output_method: type  # type, clipboard, mutter-virtual
+  output_method: type  # type (dotool), mutter-virtual, mutter-commit
+
+timeouts:
+  gdm: 60000          # Wait for GDM login (ms)
+  gnome_shell: 30000  # Wait for GNOME Shell (ms)
+  dbus: 15000         # Wait for D-Bus service (ms)
+  dotool: 10000       # Wait for dotool (ms)
+  vm_boot: 120000     # Wait for VM boot (ms)
