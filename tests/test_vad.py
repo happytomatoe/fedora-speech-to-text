@@ -123,3 +123,105 @@ class TestSmoothedVADWithSilero:
         vad = SmoothedVAD(inner=inner, onset_frames=2)
         results = [vad.push_frame(f) for f in self._make_silence(20)]
         assert all(r == VADFrame.NOISE for r in results)
+
+
+class TestRemoveSilence:
+    """Tests for remove_silence() audio utility."""
+
+    def test_empty_timestamps(self):
+        from voice_to_text.audio import remove_silence
+
+        audio = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+        result = remove_silence(audio, [])
+        assert len(result) == 0
+
+    def test_single_segment(self):
+        from voice_to_text.audio import remove_silence
+
+        audio = np.array([0, 0, 1, 2, 3, 0, 0], dtype=np.float32)
+        result = remove_silence(audio, [(2, 5)], padding_ms=0, sample_rate=16000)
+        np.testing.assert_array_equal(result, [1, 2, 3])
+
+    def test_padding_applied(self):
+        from voice_to_text.audio import remove_silence
+
+        audio = np.arange(10, dtype=np.float32)
+        result = remove_silence(audio, [(3, 6)], padding_ms=0)
+        assert len(result) == 3  # samples 3, 4, 5
+
+    def test_multiple_segments(self):
+        from voice_to_text.audio import remove_silence
+
+        audio = np.arange(20, dtype=np.float32)
+        timestamps = [(0, 3), (10, 15)]
+        result = remove_silence(audio, timestamps, padding_ms=0)
+        expected = np.array([0, 1, 2, 10, 11, 12, 13, 14], dtype=np.float32)
+        np.testing.assert_array_equal(result, expected)
+
+    def test_boundary_clamping(self):
+        from voice_to_text.audio import remove_silence
+
+        audio = np.array([1, 2, 3], dtype=np.float32)
+        result = remove_silence(audio, [(0, 10)], padding_ms=0)
+        np.testing.assert_array_equal(result, [1, 2, 3])
+
+
+class TestMergeSegments:
+    """Tests for merge_segments() audio utility."""
+
+    def test_empty_timestamps(self):
+        from voice_to_text.audio import merge_segments
+
+        result = merge_segments([])
+        assert result == []
+
+    def test_single_segment(self):
+        from voice_to_text.audio import merge_segments
+
+        result = merge_segments([(0, 100)])
+        assert result == [(0, 100)]
+
+    def test_merge_close_segments(self):
+        from voice_to_text.audio import merge_segments
+
+        timestamps = [(0, 100), (150, 300)]  # Gap of 50 samples
+        result = merge_segments(timestamps, max_gap_ms=1500)
+        assert result == [(0, 300)]
+
+    def test_keep_distant_segments(self):
+        from voice_to_text.audio import merge_segments
+
+        timestamps = [(0, 100), (5000, 6000)]  # Gap of 4900 samples
+        result = merge_segments(timestamps, max_gap_ms=100)  # 100ms = 1600 samples
+        assert result == [(0, 100), (5000, 6000)]
+
+    def test_merge_chain(self):
+        from voice_to_text.audio import merge_segments
+
+        # 16kHz: 100ms = 1600 samples
+        timestamps = [(0, 100), (150, 300), (10000, 11000)]
+        result = merge_segments(timestamps, max_gap_ms=100)
+        # First two merge (gap=50 < 1600), third stays separate (gap=9700 > 1600)
+        assert result == [(0, 300), (10000, 11000)]
+
+
+class TestGetAudioDurationMs:
+    """Tests for get_audio_duration_ms() audio utility."""
+
+    def test_empty_audio(self):
+        from voice_to_text.audio import get_audio_duration_ms
+
+        audio = np.array([], dtype=np.float32)
+        assert get_audio_duration_ms(audio) == 0.0
+
+    def test_1_second(self):
+        from voice_to_text.audio import get_audio_duration_ms
+
+        audio = np.zeros(16000, dtype=np.float32)
+        assert get_audio_duration_ms(audio) == 1000.0
+
+    def test_half_second(self):
+        from voice_to_text.audio import get_audio_duration_ms
+
+        audio = np.zeros(8000, dtype=np.float32)
+        assert get_audio_duration_ms(audio) == 500.0
