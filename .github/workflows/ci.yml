@@ -4,6 +4,79 @@ on:
   pull_request:
 
 jobs:
+  lint-and-type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gjs \
+            gir1.2-gjs-private-1.0 \
+            gir1.2-gtk-4.0 \
+            libadwaita-1-dev \
+            gir1.2-adw-1 \
+            gir1.2-gdkpixbuf-2.0 \
+            gir1.2-pango-1.0 \
+            libglib2.0-dev
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          uv sync --locked
+          npm ci
+
+      - name: ruff-lint-format
+        run: uv run ruff check . && uv run ruff format --check .
+
+      - name: eslint
+        run: npx eslint gnome-ext/**/*.js
+
+      - name: prettier-check
+        run: npx prettier@3.8.4 --check "gnome-ext/**/*.{js,css,json}"
+
+      - name: tsc-type-check
+        run: npx tsc --noEmit
+
+      - name: gjs-syntax
+        run: |
+          for f in gnome-ext/**/*.js; do
+            node --input-type=module --check < "$f" || exit 1
+          done
+
+      - name: gjs-static-analysis
+        run: gjs --module gnome-ext/tests/test-prefs-methods.js
+
+      - name: gtk4-api-check
+        run: gjs --module gnome-ext/tests/test-gtk4-api.js
+
+      - name: gschema-validate
+        run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
+
+      - name: justfile-format
+        run: sudo snap install just --classic || (curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin) && just --fmt --check
+
+      - name: check-merge-conflict
+        run: |
+          matches=$(grep -rn "^<<<<<<< \|^=======$\|^>>>>>>> " gnome-ext/ src/ tests/ || true)
+          if [ -n "$matches" ]; then echo "$matches"; exit 1; fi
+
   test:
     runs-on: ubuntu-latest
     steps:
