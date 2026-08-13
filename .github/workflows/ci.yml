@@ -45,18 +45,31 @@ jobs:
           uv sync --locked
           npm ci
 
+      - name: Get Silero model URL from source
+        run: |
+          MODEL_URL=$(python -c "
+          import ast
+          with open('src/voice_to_text/vad.py') as f:
+              tree = ast.parse(f.read())
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target, ast.Name) and target.id == 'DEFAULT_MODEL_URL':
+                          print(ast.literal_eval(node.value))
+          ")
+          echo "MODEL_URL=$MODEL_URL" >> $GITHUB_ENV
+
       - name: Cache Silero VAD model
         uses: actions/cache@v4
         with:
           path: ~/.cache/voice-to-text/silero_vad.onnx
-          key: silero-vad-v5.0
+          key: silero-vad-${{ env.MODEL_URL }}
 
       - name: Download Silero VAD model
         run: |
           mkdir -p ~/.cache/voice-to-text
           if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
-            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx \
-              https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx
+            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx "$MODEL_URL"
           fi
 
       - name: Run lefthook pre-commit checks
@@ -83,18 +96,31 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Get Silero model URL from source
+        run: |
+          MODEL_URL=$(python -c "
+          import ast
+          with open('src/voice_to_text/vad.py') as f:
+              tree = ast.parse(f.read())
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target, ast.Name) and target.id == 'DEFAULT_MODEL_URL':
+                          print(ast.literal_eval(node.value))
+          ")
+          echo "MODEL_URL=$MODEL_URL" >> $GITHUB_ENV
+
       - name: Cache Silero VAD model
         uses: actions/cache@v4
         with:
           path: ~/.cache/voice-to-text/silero_vad.onnx
-          key: silero-vad-v5.0
+          key: silero-vad-${{ env.MODEL_URL }}
 
       - name: Download Silero VAD model
         run: |
           mkdir -p ~/.cache/voice-to-text
           if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
-            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx \
-              https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx
+            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx "$MODEL_URL"
           fi
 
       - name: Run tests
