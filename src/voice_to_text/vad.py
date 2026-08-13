@@ -2,8 +2,7 @@
 
 Provides Silero neural VAD with onset/hangover smoothing for clean
 recording edges. Uses Silero's ~2MB ONNX model that understands speech
-patterns, not just volume. Falls back to energy-based VAD if Silero
-is unavailable.
+patterns, not just volume.
 """
 
 import os
@@ -180,7 +179,17 @@ class SmoothedVAD:
         threshold: float = 0.01,
         sample_rate: int = 16000,
     ) -> None:
-        """Initialize the smoothed VAD."""
+        """Initialize the smoothed VAD.
+
+        Args:
+            inner: VAD implementation (SileroVAD recommended). If None, creates energy-based VAD.
+            onset_frames: Consecutive speech frames before triggering.
+            hangover_frames: Speech frames to keep after voice drops.
+            prefill_frames: Frames to buffer before speech starts.
+            threshold: Speech threshold (only used when inner is None).
+            sample_rate: Audio sample rate (only used when inner is None).
+
+        """
         self.inner = inner or VAD(threshold=threshold, sample_rate=sample_rate)
         self.onset_frames = onset_frames
         self.hangover_frames = hangover_frames
