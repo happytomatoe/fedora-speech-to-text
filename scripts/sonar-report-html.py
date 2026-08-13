@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# noqa: E501
 """Generate an enhanced HTML report from SonarQube JSON exports.
 
 Features:
@@ -90,7 +89,7 @@ def render_code_snippet(lines: list[dict], issue_line: int, component: str) -> s
     if not lines:
         return ""
 
-    filename = component.split(":")[-1] if ":" in component else component
+    filename = component.rsplit(":", maxsplit=1)[-1] if ":" in component else component
     rows = ""
     for ln in lines:
         lnum = ln["line"]

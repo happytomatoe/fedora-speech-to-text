@@ -1,5 +1,4 @@
-"""
-Continuous dotoolc typing engine for voice-to-text.
+"""Continuous dotoolc typing engine for voice-to-text.
 
 Keeps a persistent ``dotoolc`` (client to ``dotoold`` daemon) process open
 and feeds it a stream of ``type ...\n`` and ``key backspace\n`` commands
@@ -13,6 +12,7 @@ assumed running (set up by ``dotool-quickstart.sh`` as a systemd user service).
 References:
   - dotool docs: https://git.sr.ht/~geb/dotool
   - nerd-dictation diff algorithm: https://github.com/ideasman42/nerd-dictation
+
 """
 
 import asyncio
@@ -185,7 +185,7 @@ class ContinuousTyper:
             logger.error("Failed to stream text to dotoolc: %s", e)
             self._usable = False
 
-    async def stream_backspace(self, count: int) -> None:  # noqa: S3776 - optimized backspace logic
+    async def stream_backspace(self, count: int) -> None:
         """Backspace ``count`` characters via the dotoolc pipe.
 
         Optimized to use line-deletion (shift+home) and word-deletion (ctrl+backspace)

@@ -26,7 +26,10 @@ class TestSixtyBatch:
             captured.update(kwargs)  # type: ignore[arg-type]
             return mock_response
 
-        provider._client.post = _fake_post  # type: ignore[assignment]
+        mock_client = AsyncMock()
+        mock_client.post = _fake_post
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
 
         import os
         import tempfile
@@ -36,7 +39,8 @@ class TestSixtyBatch:
             tmp_path = tmp.name
 
         try:
-            result = await provider.transcribe_file(tmp_path, language="en")
+            with patch("voice_to_text.providers.sixty.httpx.AsyncClient", return_value=mock_client):
+                result = await provider.transcribe_file(tmp_path, language="en")
 
             assert captured["url"] == "https://api.60db.ai/stt"
 
@@ -64,7 +68,10 @@ class TestSixtyBatch:
         async def _fake_post(url: str, **kwargs: object) -> Mock:
             return mock_response
 
-        provider._client.post = _fake_post  # type: ignore[assignment]
+        mock_client = AsyncMock()
+        mock_client.post = _fake_post
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
 
         import os
         import tempfile
@@ -74,7 +81,8 @@ class TestSixtyBatch:
             tmp_path = tmp.name
 
         try:
-            result = await provider.transcribe_file(tmp_path)
+            with patch("voice_to_text.providers.sixty.httpx.AsyncClient", return_value=mock_client):
+                result = await provider.transcribe_file(tmp_path)
             assert result == "unwrapped result"
         finally:
             os.unlink(tmp_path)

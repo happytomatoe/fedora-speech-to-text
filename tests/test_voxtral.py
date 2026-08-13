@@ -1,5 +1,7 @@
 """Tests for Voxtral provider."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from voice_to_text.providers import get_batch_provider
@@ -51,7 +53,6 @@ class TestVoxtralProvider:
         """Test that transcribe_file sends properly formatted request."""
         import os
         import tempfile
-        from unittest.mock import MagicMock
 
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
@@ -67,7 +68,10 @@ class TestVoxtralProvider:
             captured.update(kwargs)  # type: ignore[arg-type]
             return mock_response
 
-        provider._client.post = _fake_post  # type: ignore[assignment]
+        mock_client = AsyncMock()
+        mock_client.post = _fake_post
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
 
         # Create a temporary audio file for testing
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -75,7 +79,8 @@ class TestVoxtralProvider:
             tmp_path = tmp.name
 
         try:
-            result = await provider.transcribe_file(tmp_path)
+            with patch("voice_to_text.providers.voxtral.httpx.AsyncClient", return_value=mock_client):
+                result = await provider.transcribe_file(tmp_path)
 
             # Check URL
             assert captured["url"] == "https://api.mistral.ai/v1/audio/transcriptions"

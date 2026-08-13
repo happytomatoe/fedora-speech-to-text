@@ -94,6 +94,7 @@ def filter_transcription_output(
         lang: Language code (e.g. "en", "pt-BR").
         custom_filler_words: Override filler list. None = language defaults.
             Empty list = disable filler removal.
+
     """
     if custom_filler_words is not None:
         patterns = [re.compile(rf"(?i)\b{re.escape(w)}\b[,.]?", re.IGNORECASE) for w in custom_filler_words]
@@ -169,7 +170,7 @@ def _preserve_case_pattern(original: str, replacement: str) -> str:
     return replacement
 
 
-def _find_best_match(  # noqa: S3776 - fuzzy matching logic
+def _find_best_match(
     candidate: str,
     custom_words: list[str],
     custom_keys: list[tuple[int, str]],
@@ -216,7 +217,7 @@ def _find_best_match(  # noqa: S3776 - fuzzy matching logic
     return (best_match, best_score) if best_match is not None else None
 
 
-def apply_custom_words(  # noqa: S3776 - n-gram matching logic
+def apply_custom_words(
     text: str,
     custom_words: list[str],
     threshold: float = 0.5,
@@ -230,6 +231,7 @@ def apply_custom_words(  # noqa: S3776 - n-gram matching logic
         text: Input text to correct.
         custom_words: List of words to match against.
         threshold: Maximum score to accept (0.0 = exact, 1.0 = any).
+
     """
     if not custom_words:
         return text

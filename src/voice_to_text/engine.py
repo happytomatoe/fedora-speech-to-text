@@ -1,5 +1,4 @@
-"""
-Async recording engine — state machine for the D-Bus service.
+"""Async recording engine — state machine for the D-Bus service.
 
 States:
   idle       Waiting for StartRecording call
@@ -130,7 +129,7 @@ class AsyncAudioRecorder:
                 self._stream.start()
                 opened_device = cand
                 break
-            except Exception as e:  # noqa: BLE001 - try next candidate
+            except Exception as e:
                 last_err = e
                 self._stream = None
         else:
@@ -202,6 +201,7 @@ class RecordingEngine:
         on_audio_level: Callback invoked with a float level (0.0-1.0).
         on_error: Callback invoked with an error message string.
         on_state_change: Callback invoked with the new :class:`EngineState`.
+
     """
 
     def __init__(self):
@@ -222,7 +222,7 @@ class RecordingEngine:
         self.on_error: Callable[[str], None] | None = None
         self.on_state_change: Callable[[EngineState], None] | None = None
 
-    async def start(self, config: dict[str, Any]) -> None:  # noqa: S7503 - async interface
+    async def start(self, config: dict[str, Any]) -> None:
         """Start recording and transcription."""
         if self.state != EngineState.IDLE:
             raise RuntimeError(f"Cannot start: engine is {self.state.value}")
@@ -262,7 +262,7 @@ class RecordingEngine:
             self.state = EngineState.IDLE
             self._notify_state()
 
-    async def _run(self, config: dict[str, Any]) -> None:  # noqa: S3776 - complex pipeline, refactoring risky
+    async def _run(self, config: dict[str, Any]) -> None:
         """Full recording + transcription pipeline."""
         import time as _time
 

@@ -1,5 +1,4 @@
-"""
-D-Bus service definition for voice-to-text.
+"""D-Bus service definition for voice-to-text.
 
 Uses dbus-next (pure Python, native asyncio, zero dependencies).
 

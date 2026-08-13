@@ -95,7 +95,7 @@ class MutterVirtualTyper:
             logger.warning("MutterVirtualTyper: D-Bus call failed: %s", e)
             self._usable = False
 
-    async def stop(self) -> None:  # noqa: S7503 - async interface
+    async def stop(self) -> None:
         """Cleanup."""
         if self._bus:
             self._bus.disconnect()
