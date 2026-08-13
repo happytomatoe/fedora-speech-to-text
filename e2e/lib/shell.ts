@@ -34,7 +34,7 @@ export class ShellHelper {
     for (let attempt = 0; attempt < 3; attempt++) {
       let shell: ShellUse | null = null;
       try {
-        shell = new ShellUse("e2e-ssh");
+        shell = new ShellUse(`e2e-ssh-${opts.sshPort}`);
         await shell.open({
           cols: opts.cols ?? 120,
           rows: opts.rows ?? 40,
@@ -61,7 +61,7 @@ export class ShellHelper {
           // Kill any stale daemon session and wait before retry
           // Scope the pkill to this specific session to avoid killing unrelated sessions
           try {
-            execSync(`pkill -f 'shell-use.*e2e-ssh' 2>/dev/null || true`, { stdio: "pipe" });
+            execSync(`pkill -f 'shell-use.*e2e-ssh-${opts.sshPort}' 2>/dev/null || true`, { stdio: "pipe" });
           } catch { /* ignore */ }
           await Bun.sleep(3000);
         }

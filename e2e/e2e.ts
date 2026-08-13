@@ -6,6 +6,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio } from "./lib/deploy-steps.js";
+import { checkRamPreflight } from "./lib/ram-check.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -66,6 +67,10 @@ const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 // Parse --parallel <n> (run n VMs in parallel)
 const parallelIdx = args.indexOf("--parallel");
 const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1;
+
+// Parse --vm-mem <MB> (RAM per VM, default 4096)
+const vmMemIdx = args.indexOf("--vm-mem");
+const VM_MEM_MB = vmMemIdx >= 0 ? parseInt(args[vmMemIdx + 1]) || 4096 : 4096;
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
@@ -169,6 +174,9 @@ async function preflight(): Promise<void> {
   if (!existsSync(SSH_KEY)) {
     throw new Error(`SSH key not found: ${SSH_KEY}\nRun 'just qemu-e2e-setup' first.`);
   }
+
+  // Check RAM before starting VMs
+  checkRamPreflight(PARALLEL_VMS, VM_MEM_MB);
 
   // Ensure Parakeet is available for local transcription
   await ensureParakeet();

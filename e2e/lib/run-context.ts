@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
 
@@ -29,7 +29,7 @@ export class RunContext {
   constructor(config: RunConfig, customId?: string) {
     // In single (non-parallel) snapshot mode, use a fixed ID so overlays persist between runs.
     // Parallel workers get unique IDs to avoid socket/port conflicts.
-    this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : "main");
+    this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : basename(config.projectRoot));
     
     // In update mode, use a temp directory; otherwise use persistent directory for snapshots
     if (config.updateMode) {

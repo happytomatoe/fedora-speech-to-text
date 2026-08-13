@@ -30,6 +30,7 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  vmMemMb?: number;
 }
 
 export class VmManager {
@@ -136,7 +137,7 @@ export class VmManager {
       "qemu-system-x86_64",
       "-enable-kvm",
       "-cpu", "host",
-      "-m", "4096",
+      "-m", String(this.config.vmMemMb ?? 4096),
       "-smp", "2",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
