@@ -8,7 +8,32 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import Any
 
+import httpx
+
 logger = logging.getLogger(__name__)
+
+# Shared HTTP client — created once at import time, reused across all providers.
+# This avoids the ~300ms cost of creating a new client per recording.
+_shared_client: httpx.AsyncClient | None = None
+
+
+def get_shared_client() -> httpx.AsyncClient:
+    """Get or create the shared HTTP client (lazy initialization)."""
+    global _shared_client  # noqa: PLW0603
+    if _shared_client is None:
+        _shared_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10, read=120, write=10, pool=5),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _shared_client
+
+
+async def close_shared_client() -> None:
+    """Close the shared HTTP client on service shutdown."""
+    global _shared_client  # noqa: PLW0603
+    if _shared_client is not None:
+        await _shared_client.aclose()
+        _shared_client = None
 
 
 class BatchProvider(ABC):
@@ -61,7 +86,7 @@ class StreamingProvider(ABC):
         """Send an audio chunk for processing."""
         pass
 
-    async def get_partial_result(self) -> str | None:  # noqa: S7503 - async interface
+    async def get_partial_result(self) -> str | None:
         """Get latest partial transcript (may change)."""
         if self._partial_result:
             return (
@@ -218,7 +243,7 @@ class WebSocketStreamingProvider(StreamingProvider):
         self._ws = await websockets.connect(ws_url, additional_headers=ws_headers)
         self._partial_result = None
         self._finalized_text = ""
-        logger.info("[PROFIL] WS connect to %s: %.3fs", ws_url.split("?")[0], _time.monotonic() - _t0)
+        logger.info("[PROFIL] WS connect to %s: %.3fs", ws_url.split("?", maxsplit=1)[0], _time.monotonic() - _t0)
 
     async def send_audio(self, audio_chunk: bytes) -> None:
         if self._ws is None:
@@ -330,7 +355,7 @@ class WebSocketStreamingProvider(StreamingProvider):
                 while True:
                     msg = await self._ws.recv()
                     self._handle_stream_message(msg)
-        except (TimeoutError, asyncio.CancelledError):  # noqa: UP041
+        except (TimeoutError, asyncio.CancelledError):
             pass
         except Exception as e:
             logger.warning("Error processing %s messages: %s", self.name, e)

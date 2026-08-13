@@ -69,5 +69,10 @@
       <summary>Custom words matching threshold</summary>
       <description>How strict the fuzzy matching is (0.0=any match, 1.0=exact)</description>
     </key>
+    <key name="profiling" type="b">
+      <default>false</default>
+      <summary>Enable profiling logs</summary>
+      <description>Log detailed timing information for recording state changes</description>
+    </key>
   </schema>
 </schemalist>
