@@ -1,4 +1,6 @@
 // Supplemental type augmentations for GNOME Shell APIs.
+// Import ambient type declarations for GNOME Shell resource:// modules
+import '@girs/gnome-shell/ambient';
 // These supplement the @girs/gnome-shell types with properties that exist at runtime
 // but are not yet declared in the type definitions.
 
@@ -12,6 +14,8 @@ declare module 'resource:///org/gnome/shell/ui/popupMenu.js' {
 }
 
 // Augment ImportMeta for GJS
-interface ImportMeta {
-    url: string;
+declare global {
+    interface ImportMeta {
+        url: string;
+    }
 }
