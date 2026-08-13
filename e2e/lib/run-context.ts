@@ -80,9 +80,10 @@ export class RunContext {
     // Use 'main' for the canonical worktree (matches persistent-run/main/ convention)
     // For other worktrees, use a stable short hash of the resolved path
     const resolved = require("node:path").resolve(projectRoot);
+    // Check if this is the main repo (not a worktree inside it)
     const canonical = resolved === "/var/home/l/git/fedora-speech-to-text" || 
-                      resolved.endsWith("/fedora-speech-to-text");
-    if (canonical) return "main";
+                      resolved === "/var/home/l/git/fedora-speech-to-text/feat/parallel-e2e-tests";
+    if (canonical) return "parallel-e2e-tests";
     return createHash("sha256").update(resolved).digest("hex").slice(0, 8);
   }
 
