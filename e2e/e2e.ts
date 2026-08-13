@@ -190,6 +190,17 @@ async function preflight(): Promise<void> {
   await ensureParakeet();
 }
 
+/**
+ * Wait for transcription to appear in the voice service log.
+ * Uses tail -f to watch for new lines, with a 20s timeout.
+ */
+async function waitForTranscriptionFromLog(shell: any): Promise<string> {
+  return shell.exec(
+    `timeout 20 tail -f -n +1 /tmp/voice-service.log 2>/dev/null | grep --line-buffered -oP 'Transcription result: \\K.*' | head -1`,
+    25000 // slightly more than the 20s timeout in the command
+  );
+}
+
 async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
 
@@ -293,24 +304,13 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Waiting for transcription...");
   let transcription = "";
   try {
-    // Poll the voice service log for the transcription result (most reliable source)
-    await timed("poll:transcription-log", () => vm.pollUntil(
-      "transcription",
-      async () => {
-        const logOutput = await shell.exec(
-          `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
-        );
-        const trimmed = logOutput.trim();
-        if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
-          transcription = trimmed;
-          console.log(`  Got from log: ${transcription}`);
-          return true;
-        }
-        return false;
-      },
-      20000,
-      500
-    ));
+    // Wait for transcription line to appear in log (tail -f + grep, with timeout)
+    const logOutput = await timed("wait:transcription-log", () => waitForTranscriptionFromLog(shell));
+    const trimmed = logOutput.trim();
+    if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
+      transcription = trimmed;
+      console.log(`  Got from log: ${transcription}`);
+    }
     // If log didn't have it, try tmux capture as fallback
     if (!transcription) {
       console.log("  Log poll timed out, trying tmux capture...");
