@@ -3,6 +3,7 @@
 import numpy as np
 
 from voice_to_text.audio import get_audio_duration_ms, merge_segments, remove_silence
+from voice_to_text.engine import AsyncAudioRecorder
 from voice_to_text.vad import VAD, SileroVAD, SmoothedVAD, VADFrame
 
 
@@ -250,3 +251,31 @@ class TestGetAudioDurationMs:
     def test_half_second(self):
         audio = np.zeros(8000, dtype=np.float32)
         assert get_audio_duration_ms(audio) == 500.0
+
+
+class TestAsyncAudioRecorderVAD:
+    """Tests for VAD feature flags in AsyncAudioRecorder."""
+
+    def test_vad_enabled_by_default(self):
+        recorder = AsyncAudioRecorder(vad_enabled=True)
+        assert recorder._vad is not None
+        assert recorder._vad_enabled is True
+
+    def test_vad_disabled(self):
+        recorder = AsyncAudioRecorder(vad_enabled=False)
+        assert recorder._vad is None
+        assert recorder._vad_enabled is False
+
+    def test_enable_vad(self):
+        recorder = AsyncAudioRecorder(vad_enabled=False)
+        assert recorder._vad is None
+        recorder.enable_vad(True)
+        assert recorder._vad is not None
+        assert recorder._vad_enabled is True
+
+    def test_disable_vad(self):
+        recorder = AsyncAudioRecorder(vad_enabled=True)
+        assert recorder._vad is not None
+        recorder.enable_vad(False)
+        assert recorder._vad is None
+        assert recorder._vad_enabled is False
