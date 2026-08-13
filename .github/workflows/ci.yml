@@ -45,6 +45,20 @@ jobs:
           uv sync --locked
           npm ci
 
+      - name: Cache Silero VAD model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/voice-to-text/silero_vad.onnx
+          key: silero-vad-v5.0
+
+      - name: Download Silero VAD model
+        run: |
+          mkdir -p ~/.cache/voice-to-text
+          if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
+            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx \
+              https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx
+          fi
+
       - name: Run lefthook pre-commit checks
         run: npx lefthook run pre-commit --all-files --no-tty
 
@@ -79,7 +93,7 @@ jobs:
         run: |
           mkdir -p ~/.cache/voice-to-text
           if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
-            wget -q -O ~/.cache/voice-to-text/silero_vad.onnx \
+            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx \
               https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx
           fi
 
