@@ -314,6 +314,11 @@ export class VmManager {
         });
         
         // 4. Verify voice service is accessible
+        // Reconnect deployer (stale after snapshot restore)
+        await this.deployer.disconnect();
+        await this.deployer.connect();
+        
+        // 4. Verify voice service is accessible
         await this.pollForCommandOutput(
           "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
           "com.happytomatoe.VoiceToText",

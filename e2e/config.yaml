@@ -13,7 +13,7 @@ extension:
   uuid: voice-to-text@happytomatoe.com
 
 test:
-  output_method: type  # type (dotool), mutter-virtual, mutter-commit
+  output_method: mutter-commit  # type (dotool), mutter-virtual, mutter-commit
 
 timeouts:
   gdm: 60000          # Wait for GDM login (ms)

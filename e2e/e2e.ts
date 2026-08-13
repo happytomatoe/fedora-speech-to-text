@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
-import { deployTestAudio } from "./lib/deploy-steps.js";
+import { deployTestAudio, startVoiceService } from "./lib/deploy-steps.js";
+import { pollUntil, pollForCommandOutput } from "./lib/poll.js";
 import { checkRamPreflight } from "./lib/ram-check.js";
 import { loadConfig, type E2eConfig } from "./lib/config.js";
 import * as tmux from "./lib/tmux.js";
@@ -294,7 +295,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   let transcription = "";
   try {
     // Wait for transcription line to appear in log (tail -f + grep, with timeout)
-    const logOutput = await transcriptionHelper.waitForTranscriptionFromLog(shell);
+    const logOutput = await transcriptionHelper.waitForTranscriptionFromLog(vm.deployer);
     const trimmed = logOutput.trim();
     if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
       transcription = trimmed;
@@ -321,19 +322,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     console.log("  Transcription polling timed out");
   }
 
-  // Wait for transcription text to appear on screen (log entry appears before typing completes)
-  if (transcription) {
-    console.log("Waiting for text to appear on screen...");
-    await vm.pollUntil(
-      "text-on-screen",
-      async () => {
-        const paneContent = await tmux.capturePane(tmuxCfg);
-        return paneContent.includes(transcription);
-      },
-      2000, // 2s max - text should appear quickly after log entry
-      100   // Poll every 100ms for fast detection
-    );
-  }
+  // Text is already captured from log - no need to wait for it to appear on screen
+  // (dotool types into the focused window, which may not be the terminal)
 
   await vm.captureFrame("05-transcription-received");
 
@@ -807,8 +797,16 @@ async function main(): Promise<void> {
         t = Date.now();
         await vm.resetToCleanState("ready");
         timing("restore-snapshot", t);
+        
         // Deploy test audio for this specific test case (snapshot has old audio)
         deployTestAudio(vm.deployCfg);
+        
+        // Restart voice service to ensure it's in a clean state after snapshot restore
+        console.log("Restarting voice service...");
+        await startVoiceService(vm.shell, vm.deployCfg, pollUntil, pollForCommandOutput, true);
+        
+        // Clear voice service log to avoid finding old transcriptions
+        await vm.shell.exec("truncate -s 0 /tmp/voice-service.log 2>/dev/null || true");
       } else {
         console.log("\n--- No snapshot found, deploying fresh ---");
         t = Date.now();
@@ -864,6 +862,18 @@ async function main(): Promise<void> {
     console.error("\nFATAL:", err);
     testsFailed++;
   } finally {
+    // Save voice service log from VM before shutdown (even if test fails)
+    try {
+      const logsDir = join(LOG_DIR, "vm-logs");
+      mkdirSync(logsDir, { recursive: true });
+      const logFile = join(logsDir, `voice-service-${run.id}.log`);
+      const logContent = await vm.deployer.exec("cat /tmp/voice-service.log 2>/dev/null || echo 'Log file not found'");
+      writeFileSync(logFile, logContent.stdout || "No log content");
+      console.log(`  VM log saved: ${logFile}`);
+    } catch (err) {
+      console.error("  Failed to save VM log:", err);
+    }
+
     if (SHUTDOWN) {
       await vm.shutdown();
       run.cleanup();
