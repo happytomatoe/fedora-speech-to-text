@@ -91,6 +91,7 @@ export const VoiceIndicator = GObject.registerClass(
 
         _buildMenu() {
             // Clear any existing menu items
+            // @ts-expect-error - removeAll exists on PopupMenu at runtime
             this.menu.removeAll();
 
             // Add Preferences menu item
@@ -101,6 +102,7 @@ export const VoiceIndicator = GObject.registerClass(
             prefsItem.connect('activate', () => {
                 this.onConfigure?.();
             });
+            // @ts-expect-error - addMenuItem exists on PopupMenu at runtime
             this.menu.addMenuItem(prefsItem);
         }
 
