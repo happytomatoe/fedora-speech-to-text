@@ -48,7 +48,7 @@ export function createDeviceRow(settings) {
                 if (error) {
                     console.error(
                         'VoiceToText: failed to create device list proxy:',
-                        error.message
+                        /** @type {Error} */ (error).message
                     );
                     deviceProxy = null;
                 }
@@ -59,7 +59,7 @@ export function createDeviceRow(settings) {
     } catch (e) {
         console.error(
             'VoiceToText: failed to create device list proxy:',
-            e.message
+            /** @type {Error} */ (e).message
         );
         deviceProxy = null;
     }

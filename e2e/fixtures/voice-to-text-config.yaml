@@ -2,3 +2,7 @@ transcription:
   provider: parakeet
 parakeet:
   http_endpoint: http://10.0.2.2:5092
+custom_words:
+  - herdr
+  - command
+  - PR

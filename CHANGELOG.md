@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- **`mutter-commit` output method** — Commits text directly via GNOME Shell's `Main.inputMethod.commit()`. Bypasses clipboard and keystroke simulation entirely. Should work universally with any focused input.
 - **Command substitution (`!command`) for API keys** — If an `api_key` value starts with `!`, the rest is executed as a shell command and stdout is used as the key. This enables integration with secret managers like 1Password, pass, or custom scripts.
   ```yaml
   # 1Password
@@ -32,16 +33,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 - Resolution order: environment variable → config file → command substitution
 - Updated documentation with command substitution examples
+- **Output method renamed**: `mutter-virtual` is now `Mutter Type` in preferences (no config change needed)
+- **`clipboard` output method removed** — was dead code using `wl-copy`/`xclip`/`xsel` + `xdotool` and never worked
 
 ### Deprecated
 - None
 
 ### Removed
-- None
+- **`clipboard` output method** — unused dead code (`wl-copy`/`xclip`/`xsel` + `xdotool` Ctrl+V) that was never functional
 
 ### Fixed
+- **Stale D-Bus processes accumulating** — Multiple `voice-to-text-dbus` processes would accumulate when systemd D-Bus activation spawned new instances before old ones finished shutting down. Fixed by using systemd `Conflicts=` directive in the user service file, which ensures systemd stops the old instance before starting a new one.
 - **E2E preferences screenshots now capture actual content** — GNOME 47 renders extension preferences in-process via Clutter, so `xwd` couldn't capture them. Fixed by using `org.gnome.Shell.Eval` → `Shell.Screenshot` from inside gnome-shell, which reads `global.stage` directly. Requires `--unsafe-mode` enabled via systemd drop-in on `org.gnome.Shell@x11.service`.
-- **QEMU E2E prefs dialog close** — GNOME Shell modal prefs dialog doesn't respond to Alt+F4. Fixed by using `xdotool windowclose` on the specific window ID with retry loop and Escape fallback. Removed Super keypress that incorrectly toggled Activities overview.
 
 ### Security
 - None

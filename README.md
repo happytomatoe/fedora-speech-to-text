@@ -1,6 +1,6 @@
 # Fedora speech to text
 
-Convert speech to text for free by using free APIs or local Parakeet on Fedora.  
+Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.
 
 # Providers
 
@@ -14,6 +14,7 @@ Cloud:
 
 Local:
 - Parakeet
+- Moonshine (streaming + batch, CPU-only)
 
 This repo contains gnome extension and python application
 
@@ -94,6 +95,21 @@ The command runs fresh each time the key is needed (no caching). Raises `ValueEr
 
 **Script requirements:** Output ONLY the key to stdout; all logs/errors to stderr.
 
+#### 4. Async Command Substitution (For Fast Recording Start)
+
+If an API key starts with `!!`, the command runs in the background while recording starts immediately. Use this when key resolution is slow (e.g., network calls to secret managers):
+
+```yaml
+# Recording starts immediately, key resolves in background
+voxtral:
+  api_key: "!!bash /path/to/get-key.sh"
+```
+
+**Benefits:**
+- Recording starts in parallel with key resolution
+- Reduces latency for slow key commands (e.g., 1Password, network secret managers)
+- Falls back to synchronous behavior if key is already cached
+
 #### Reload keys
 
 ```bash
@@ -107,8 +123,21 @@ Edit [`config.yaml`](./config.yaml) to customize if you are using python app or 
 
 ## Output Methods
 
-- **clipboard**: Copies text to system clipboard using `xclip`/`xsel`
-- **output** - used by gnome extension
+Configure via `output-method` in preferences or `config.yaml`:
+
+| Method | How it works | Requirements |
+|--------|--------------|--------------|
+| `type` | Types via dotool (keystroke simulation) | dotoolc running |
+| `mutter-virtual` | Char-by-char typing via GNOME Shell virtual keyboard | GNOME extension |
+| `mutter-commit` | Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation | GNOME extension |
+
+### How each method works
+
+**`type`** — Uses [dotool](https://github.com/fcambus/dotool) to simulate keystrokes. Requires `dotoolc` daemon running. Works on both X11 and Wayland.
+
+**`mutter-virtual`** — Uses GNOME Shell's `Clutter.VirtualDevice` to send key events character by character. Bypasses X11/Wayland clipboard entirely. Slow for long text.
+
+**`mutter-commit`** — Calls `Main.inputMethod.commit(text)` directly via GNOME Shell's internal input method. Bypasses clipboard and keystroke simulation entirely. Should work universally with any focused input.
 
 ## Attribution
 

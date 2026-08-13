@@ -7,7 +7,7 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 
 // Spinner using St.SpinnerContent (available in GNOME 50+)
 function createSpinner(params) {
-    const widget = new St.Widget({ ...params, reactive: false });
+    const widget = new St.Widget({...params, reactive: false});
     widget.set_content(new St.SpinnerContent());
     return widget;
 }
@@ -22,6 +22,9 @@ export const VoiceIndicator = GObject.registerClass(
             this.onStart = null;
             this.onStop = null;
             this.onConfigure = null;
+
+            // Set accessible name for AT-SPI
+            this.set_accessible_name(_('Voice to Text'));
         }
 
         _buildUI() {
@@ -88,13 +91,18 @@ export const VoiceIndicator = GObject.registerClass(
 
         _buildMenu() {
             // Clear any existing menu items
+            // @ts-expect-error - removeAll exists on PopupMenu at runtime
             this.menu.removeAll();
 
             // Add Preferences menu item
             const prefsItem = new PopupMenu.PopupMenuItem(_('Preferences'));
+            // @ts-expect-error - set_accessible_name and connect exist at runtime via St.Widget inheritance
+            prefsItem.set_accessible_name('Preferences');
+            // @ts-expect-error - connect exists at runtime via GObject
             prefsItem.connect('activate', () => {
                 this.onConfigure?.();
             });
+            // @ts-expect-error - addMenuItem exists on PopupMenu at runtime
             this.menu.addMenuItem(prefsItem);
         }
 

@@ -16,6 +16,7 @@ const VoiceToTextIface = `
       <arg type="s" name="config" direction="in"/>
     </method>
     <method name="StopRecording"/>
+    <method name="CancelRecording"/>
     <method name="GetStatus">
       <arg type="s" direction="out"/>
     </method>
@@ -32,7 +33,6 @@ const VoiceToTextIface = `
 </node>`;
 
 const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
-
 
 const SessionManagerIface =
     '<node>\
@@ -61,23 +61,32 @@ export default class VoiceToTextExtension extends Extension {
         this._proxy = null;
         this._recording = false;
         this._hotkeySignalId = null;
+        this._profilingSignalId = null;
         this._signalIds = [];
+        this._profiling = this._settings.get_boolean('profiling');
+        console.log(`VoiceToText: profiling = ${this._profiling}`);
         // Log audio level widget setting on startup
         let showAudioLevel = false;
         try {
-            showAudioLevel = this._settings.get_boolean('show-audio-level-widget');
+            showAudioLevel = this._settings.get_boolean(
+                'show-audio-level-widget'
+            );
         } catch {
             // Key may not exist in older schema versions
             showAudioLevel = true; // default to showing
         }
         console.log(`VoiceToText: show-audio-level-widget = ${showAudioLevel}`);
         this._audioLevelWidget = showAudioLevel ? new AudioLevelWidget() : null;
+        if (this._audioLevelWidget) {
+            this._audioLevelWidget.onCancel = () => this._cancel();
+        }
         this._typeTextService = new TypeTextService();
         this._typeTextService.enable();
         this._indicator.onStart = () => this._start();
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
 
+        // @ts-expect-error - uuid is on ExtensionBase but types don't reflect inheritance correctly
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
         this._registerHotkey();
 
@@ -89,10 +98,15 @@ export default class VoiceToTextExtension extends Extension {
         this._audioLevelWidgetSignalId = this._settings.connect(
             'changed::show-audio-level-widget',
             () => {
-                const enabled = this._settings.get_boolean('show-audio-level-widget');
-                console.log(`VoiceToText: show-audio-level-widget changed to ${enabled}`);
+                const enabled = this._settings.get_boolean(
+                    'show-audio-level-widget'
+                );
+                console.log(
+                    `VoiceToText: show-audio-level-widget changed to ${enabled}`
+                );
                 if (enabled && !this._audioLevelWidget) {
                     this._audioLevelWidget = new AudioLevelWidget();
+                    this._audioLevelWidget.onCancel = () => this._cancel();
                     if (this._recording) this._audioLevelWidget.show();
                     console.log('VoiceToText: AudioLevelWidget created');
                 } else if (!enabled && this._audioLevelWidget) {
@@ -102,8 +116,20 @@ export default class VoiceToTextExtension extends Extension {
                 }
             }
         );
+        // Listen for profiling changes
+        this._profilingSignalId = this._settings.connect(
+            'changed::profiling',
+            () => {
+                this._profiling = this._settings.get_boolean('profiling');
+                console.log(
+                    `VoiceToText: profiling changed to ${this._profiling}`
+                );
+            }
+        );
+        this._signalIds.push(this._profilingSignalId);
 
         this._inhibitCookie = 0;
+        // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
         this._sessionManager = new SessionManagerProxy(
             Gio.DBus.session,
             'org.gnome.SessionManager',
@@ -123,6 +149,10 @@ export default class VoiceToTextExtension extends Extension {
         if (this._audioLevelWidgetSignalId) {
             this._settings.disconnect(this._audioLevelWidgetSignalId);
             this._audioLevelWidgetSignalId = null;
+        }
+        if (this._profilingSignalId) {
+            this._settings.disconnect(this._profilingSignalId);
+            this._profilingSignalId = null;
         }
 
         this._disconnectDBusSignals();
@@ -179,6 +209,7 @@ export default class VoiceToTextExtension extends Extension {
 
     _connectDBus() {
         try {
+            // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
             this._proxy = new VoiceToTextProxy(
                 Gio.DBus.session,
                 'com.happytomatoe.VoiceToText',
@@ -191,10 +222,22 @@ export default class VoiceToTextExtension extends Extension {
             const stateId = this._proxy.connectSignal(
                 'StateChanged',
                 (proxy, name, [state]) => {
-                    console.log('VoiceToText: state changed to', state);
+                    const elapsed = this._startTime
+                        ? Date.now() - this._startTime
+                        : 0;
+                    if (this._profiling) {
+                        console.log(
+                            `VoiceToText: [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`
+                        );
+                    }
                     if (state === 'recording') {
                         this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
+                        if (this._profiling) {
+                            console.log(
+                                `VoiceToText: [PROFIL] USER CAN SPEAK NOW, total elapsed: ${elapsed}ms`
+                            );
+                        }
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
                     } else if (state === 'idle') {
@@ -268,6 +311,11 @@ export default class VoiceToTextExtension extends Extension {
     }
 
     _start() {
+        this._startTime = Date.now();
+        if (this._profiling)
+            console.log(
+                `VoiceToText: [PROFIL] _start called at ${this._startTime}`
+            );
         console.log('VoiceToText: _start called');
         if (this._recording) return;
 
@@ -298,11 +346,18 @@ export default class VoiceToTextExtension extends Extension {
             output_method: this._settings.get_string('output-method'),
             stop_timeout: this._settings.get_int('stop-timeout-seconds'),
             custom_words: this._settings.get_strv('custom-words'),
-            custom_words_threshold: this._settings.get_double('custom-words-threshold'),
         };
 
         this._proxy.StartRecordingAsync(JSON.stringify(config)).then(
-            () => console.log('VoiceToText: StartRecording called via D-Bus'),
+            () => {
+                if (this._profiling) {
+                    console.log(
+                        `VoiceToText: [PROFIL] StartRecording sent via D-Bus, elapsed: ${
+                            Date.now() - this._startTime
+                        }ms`
+                    );
+                }
+            },
             e => {
                 console.error(
                     'VoiceToText: D-Bus StartRecording failed:',
@@ -338,6 +393,30 @@ export default class VoiceToTextExtension extends Extension {
             e => {
                 console.error(
                     'VoiceToText: D-Bus StopRecording failed:',
+                    e.message
+                );
+                this._setIdle();
+            }
+        );
+    }
+
+    _cancel() {
+        console.log('VoiceToText: _cancel called');
+        if (!this._recording) return;
+
+        if (!this._proxy) {
+            console.log('VoiceToText: D-Bus proxy not available');
+            this._setIdle();
+            return;
+        }
+
+        this._audioLevelWidget?.hide();
+
+        this._proxy.CancelRecordingAsync().then(
+            () => console.log('VoiceToText: CancelRecording called via D-Bus'),
+            e => {
+                console.error(
+                    'VoiceToText: D-Bus CancelRecording failed:',
                     e.message
                 );
                 this._setIdle();
@@ -413,6 +492,7 @@ export default class VoiceToTextExtension extends Extension {
         console.log('VoiceToText: opening preferences dialog');
         try {
             const launcher = new Gio.SubprocessLauncher();
+            // @ts-expect-error - uuid is on ExtensionBase but types don't reflect inheritance correctly
             launcher.spawnv(['gnome-extensions', 'prefs', this.uuid]);
         } catch (e) {
             console.error('VoiceToText: failed to open preferences:', e);

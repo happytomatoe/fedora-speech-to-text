@@ -38,7 +38,7 @@ class TestVoxtralProvider:
         old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
         old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="API key"):
                 VoxtralProvider({"api_key_source": "env"})
         finally:
             if old_voxtral_key is not None:
@@ -51,58 +51,53 @@ class TestVoxtralProvider:
         """Test that transcribe_file sends properly formatted request."""
         import os
         import tempfile
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import MagicMock
 
-        # Mock the httpx.AsyncClient context manager and post method
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"text": "test transcription"}
 
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
+        config = {"api_key": "test_key"}
+        provider = VoxtralProvider(config)
 
-        with (
-            patch("voice_to_text.providers.voxtral.httpx.AsyncClient", return_value=mock_client),
-            patch.dict(os.environ, {}, clear=True),
-        ):
-            config = {"api_key": "test_key"}
-            provider = VoxtralProvider(config)
+        captured: dict = {}
 
-            # Create a temporary audio file for testing
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                tmp.write(b"RIFF....WAVEfmt ")  # Minimal WAV header
-                tmp_path = tmp.name
+        async def _fake_post(url: str, **kwargs: object) -> MagicMock:
+            captured["url"] = url
+            captured.update(kwargs)  # type: ignore[arg-type]
+            return mock_response
 
-            try:
-                result = await provider.transcribe_file(tmp_path)
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-                # Verify the request was made correctly
-                assert mock_client.post.called
-                call_args = mock_client.post.call_args
+        # Create a temporary audio file for testing
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(b"RIFF....WAVEfmt ")  # Minimal WAV header
+            tmp_path = tmp.name
 
-                # Check URL
-                assert call_args[0][0] == "https://api.mistral.ai/v1/audio/transcriptions"
+        try:
+            result = await provider.transcribe_file(tmp_path)
 
-                # Check headers
-                headers = call_args[1]["headers"]
-                assert headers["Authorization"] == "Bearer test_key"
+            # Check URL
+            assert captured["url"] == "https://api.mistral.ai/v1/audio/transcriptions"
 
-                # Check files parameter
-                files = call_args[1]["files"]
-                assert "file" in files
-                file_tuple = files["file"]
-                assert len(file_tuple) == 2  # Should be (filename, file_object)
-                assert file_tuple[0] == os.path.basename(tmp_path)
+            # Check headers
+            headers = captured["headers"]
+            assert headers["Authorization"] == "Bearer test_key"
 
-                # Check data parameter
-                data = call_args[1]["data"]
-                assert data["model"] == "voxtral-mini-latest"
-                assert data["language"] == "en"
+            # Check files parameter
+            files = captured["files"]
+            assert "file" in files
+            file_tuple = files["file"]
+            assert len(file_tuple) == 2  # Should be (filename, file_object)
+            assert file_tuple[0] == os.path.basename(tmp_path)
 
-                # Check result
-                assert result == "test transcription"
+            # Check data parameter
+            data = captured["data"]
+            assert data["model"] == "voxtral-mini-latest"
+            assert data["language"] == "en"
 
-            finally:
-                os.unlink(tmp_path)
+            # Check result
+            assert result == "test transcription"
+
+        finally:
+            os.unlink(tmp_path)

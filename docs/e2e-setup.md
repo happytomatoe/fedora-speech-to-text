@@ -139,12 +139,10 @@ just qemu-e2e-update-ts
 ### Run Tests
 
 ```bash
-# Run tests against reference screenshots
-cd e2e && bun run e2e.ts
-
-# Or via just
 just e2e
 ```
+
+Uses `--snapshot` by default. First run saves snapshot (~85s), subsequent runs restore it (~40s).
 
 ### Test Specific Output Methods
 
@@ -246,6 +244,8 @@ journalctl --user -f | grep voice
 gnome-extensions list | grep voice-to-text
 
 # Manually enable extension
+# Note: In GNOME 50, gnome-extensions enable only works for already-loaded extensions.
+# To load new extension code, restart GDM: sudo systemctl restart gdm
 gnome-extensions enable voice-to-text@happytomatoe.com
 ```
 

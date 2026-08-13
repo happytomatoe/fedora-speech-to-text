@@ -1,5 +1,6 @@
 """Hybrid transcriber combining streaming and batch providers."""
 
+import contextlib
 import logging
 
 from .providers.base import BatchProvider, StreamingProvider
@@ -15,6 +16,7 @@ class HybridTranscriber:
     """
 
     def __init__(self, streaming: StreamingProvider, batch: BatchProvider):
+        """Initialize the hybrid transcriber."""
         self.streaming = streaming
         self.batch = batch
         self.partial_text = ""
@@ -25,7 +27,7 @@ class HybridTranscriber:
         self.partial_text = ""
 
     async def on_audio_chunk(self, chunk: bytes) -> str:
-        """Called during recording. Returns live text for display."""
+        """Process an audio chunk during recording and return live text."""
         logger.debug("Hybrid.on_audio_chunk: %d bytes", len(chunk))
         try:
             await self.streaming.send_audio(chunk)
@@ -40,7 +42,7 @@ class HybridTranscriber:
         return self.partial_text
 
     async def on_recording_stop(self, audio_path: str, language: str, custom_words: list[str] | None = None) -> str:
-        """Called when recording stops. Returns accurate batch text."""
+        """Transcribe the recorded audio and return the final text."""
         try:
             finalized = await self.streaming.finalize_stream()
             if finalized:
@@ -55,11 +57,7 @@ class HybridTranscriber:
 
     async def close(self) -> None:
         """Close both streaming and batch providers."""
-        try:
+        with contextlib.suppress(Exception):
             await self.streaming.close()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await self.batch.close()
-        except Exception:
-            pass

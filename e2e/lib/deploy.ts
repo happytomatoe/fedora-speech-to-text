@@ -24,16 +24,32 @@ export class Deployer {
     this.config = config;
   }
 
-  async connect(): Promise<void> {
+  async connect(maxRetries = 5, retryDelayMs = 3000): Promise<void> {
     if (this.connected) return;
     if (this._connectPromise) return this._connectPromise;
 
-    this._connectPromise = this._doConnect();
+    this._connectPromise = this._doConnectWithRetry(maxRetries, retryDelayMs);
     try {
       await this._connectPromise;
     } finally {
       this._connectPromise = null;
     }
+  }
+  private async _doConnectWithRetry(maxRetries: number, retryDelayMs: number): Promise<void> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this._doConnect();
+        return; // Success
+      } catch (err) {
+        lastError = err as Error;
+        console.log(`  SSH connect attempt ${attempt + 1}/${maxRetries} failed: ${lastError.message}`);
+        if (attempt < maxRetries - 1) {
+          await new Promise(r => setTimeout(r, retryDelayMs));
+        }
+      }
+    }
+    throw lastError;
   }
 
   private async _doConnect(): Promise<void> {
@@ -95,7 +111,7 @@ export class Deployer {
             reject(new Error("Connection closed before ready"));
           }
         })
-        .connect(this.config);
+        .connect({ ...this.config, readyTimeout: 30000 });
     });
   }
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Voice-to-Text D-Bus Service
+
+[Service]
+Type=dbus
+BusName=com.happytomatoe.VoiceToText
+ExecStart=/bin/sh -c 'exec $HOME/.local/bin/voice-to-text-dbus'
+Restart=on-failure
+RestartSec=1
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

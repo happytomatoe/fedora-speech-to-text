@@ -14,13 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 class Profiler:
-    """Configurable profiler with three granularity levels:
-    - off: disabled, zero overhead
-    - basic: logs total processing time only
-    - detailed: logs each phase with deltas
+    """Configurable profiler with three granularity levels.
+
+    Levels:
+    - off: disabled, zero overhead.
+    - basic: logs total processing time only.
+    - detailed: logs each phase with deltas.
     """
 
     def __init__(self, config: dict[str, Any] | None = None):
+        """Initialize the profiler."""
         self._config = config if config is not None else ConfigManager().config
         self._profiling_level = self._config.get("profiling", "off")
         self._enabled = self._profiling_level != "off"
@@ -93,5 +96,5 @@ class Profiler:
 
 
 def create_profiler(config: dict[str, Any] | None = None) -> Profiler:
-    """Factory function to create a Profiler instance."""
+    """Create a Profiler instance."""
     return Profiler(config)

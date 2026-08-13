@@ -37,9 +37,8 @@ class TestResolveApiKey:
 
     def test_raises_when_missing(self):
         """Raise ValueError when no key found anywhere."""
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="No API key found"):
-                resolve_api_key({}, "NONEXISTENT_KEY")
+        with patch.dict(os.environ, {}, clear=True), pytest.raises(ValueError, match="No API key found"):
+            resolve_api_key({}, "NONEXISTENT_KEY")
 
     def test_env_var_takes_precedence_over_config(self):
         """Env var takes precedence over config file."""

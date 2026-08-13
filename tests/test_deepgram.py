@@ -35,7 +35,7 @@ class TestDeepgramProvider:
 
         old_key = os.environ.pop("DEEPGRAM_API_KEY", None)
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="API key"):
                 DeepgramProvider({"api_key_source": "env"})
         finally:
             if old_key is not None:

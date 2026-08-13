@@ -1,6 +1,7 @@
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const NUM_SEGMENTS = 10;
 const MARGIN_BOTTOM = 60;
@@ -14,8 +15,8 @@ export class AudioLevelWidget {
         this._smoothedLevel = 0;
         this._visible = false;
         this._showTimeoutId = 0;
+        this.onCancel = null; // callback when cancel button clicked
     }
-
     show() {
         if (this._widget) return;
 
@@ -54,6 +55,27 @@ export class AudioLevelWidget {
             this._segments.push(seg);
         }
 
+        // Cancel button (X icon, ghost circle → red on hover)
+        this._cancelButton = new St.Button({
+            style_class: 'osd-stop-button',
+            accessible_name: _('Cancel recording'),
+            reactive: true,
+            track_hover: true,
+            can_focus: true,
+            x_align: 2, // CENTER
+            y_align: 2, // CENTER
+        });
+        this._cancelButton.set_size(36, 36);
+        const stopIcon = new St.Icon({
+            icon_name: 'window-close-symbolic',
+            style_class: 'osd-stop-icon',
+        });
+        this._cancelButton.add_child(stopIcon);
+        this._cancelButton.connect('clicked', () => {
+            if (this.onCancel) this.onCancel();
+        });
+        this._widget.add_child(this._cancelButton);
+
         Main.layoutManager.addTopChrome(this._widget);
         this._positionWidget();
         this._visible = true;
@@ -79,7 +101,8 @@ export class AudioLevelWidget {
     updateLevel(level) {
         if (!this._widget || !this._visible) return;
 
-        this._smoothedLevel = SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
+        this._smoothedLevel =
+            SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
 
         const activeCount = Math.round(this._smoothedLevel * NUM_SEGMENTS);
         for (let i = 0; i < NUM_SEGMENTS; i++) {
@@ -100,10 +123,11 @@ export class AudioLevelWidget {
             }
 
             // Only update if class changed
-            const currentClass = seg.has_style_class_name('green')
-                ? 'green' : seg.has_style_class_name('yellow')
-                ? 'yellow' : seg.has_style_class_name('red')
-                ? 'red' : 'idle';
+            let currentClass = 'idle';
+            if (seg.has_style_class_name('green')) currentClass = 'green';
+            else if (seg.has_style_class_name('yellow'))
+                currentClass = 'yellow';
+            else if (seg.has_style_class_name('red')) currentClass = 'red';
 
             if (targetClass !== currentClass) {
                 seg.remove_style_class_name(currentClass);

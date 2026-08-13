@@ -70,6 +70,7 @@ src/voice_to_text/_build_info.py
 .pi-*/
 docs/
 !e2e/docs/
+!docs/providers/
 thoughts/
 # Visual regression test output
 tests/gnome-snapshots/
@@ -83,7 +84,6 @@ tests/gnome-references/*.zip
 
 node_modules/
 qemu.pid
-opensrc/
 logs/
 gnome-ext/schemas/gschemas.compiled
 .auto-handoff-resuming
@@ -97,3 +97,8 @@ scripts/wait-for-*.sh
 .scannerwork/
 sonar-reports/
 sonar-metrics.json
+# Open source references
+opensrc/*
+!opensrc/README.md
+.env*
+

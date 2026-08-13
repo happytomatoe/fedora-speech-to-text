@@ -13,8 +13,8 @@ dependencies = [
   "websockets~=14.0",
   "dbus-next~=0.2.3",
   "mistralai[realtime]~=2.4,!=2.4.6",
-  "rapidfuzz~=3.14",
-  "jellyfish~=1.2",
+  "moonshine-voice~=0.1.1",
+  "onnxruntime>=1.17.0",
 ]
 
 [project.scripts]
@@ -38,9 +38,10 @@ target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "PT", "PERF", "PL", "D", "SIM", "C90", "TID", "RUF", "FA", "LOG", "ICN"]
 
 [tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "PLC0415", "PLR2004"]
 "scripts/sonar-report-html.py" = ["E501"]
 
 [tool.mypy]

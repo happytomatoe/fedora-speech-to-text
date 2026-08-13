@@ -25,6 +25,7 @@ class GroqProvider(BatchProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize the Groq provider."""
         self.api_key = resolve_api_key(config, "GROQ_API_KEY", provider_name="groq")
         self.model = config.get("model", "whisper-large-v3-turbo")
         self.client = AsyncGroq(api_key=self.api_key)  # pyright: ignore[reportCallIssue]
@@ -32,11 +33,18 @@ class GroqProvider(BatchProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
+        """Transcribe an audio file using Groq."""
         logger.info("Transcribing %s with Groq model %s", audio_path, self.model)
         try:
-            transcription = await self.client.audio.transcriptions.create(
-                model=self.model, file=Path(audio_path), language=language, response_format="text"
-            )
+            kwargs: dict[str, Any] = {
+                "model": self.model,
+                "file": Path(audio_path),
+                "language": language,
+                "response_format": "text",
+            }
+            if custom_words:
+                kwargs["prompt"] = ", ".join(custom_words)
+            transcription = await self.client.audio.transcriptions.create(**kwargs)
             result = str(transcription).strip()
             logger.info("Transcription result: %s", result[:100])
             return result
@@ -45,6 +53,7 @@ class GroqProvider(BatchProvider):
             raise
 
     def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
+        """Raise NotImplementedError (Groq does not support streaming)."""
         raise NotImplementedError(
             "Groq does not support WebSocket streaming for audio transcription. "
             "Use batch transcription or choose a different provider for streaming."
@@ -52,6 +61,7 @@ class GroqProvider(BatchProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return "groq"
 
     async def close(self) -> None:

@@ -33,6 +33,7 @@ Batch (`POST /v1/audio/transcriptions`) — OpenAI-compatible:
 | `language` | ISO-639-1 language hint | auto-detect | e.g. `en` |
 | `diarize` | Speaker diarization | `false` | boolean |
 | `prompt` | Guidance text | none | OpenAI-compatible |
+| `context_bias` | Terms to bias recognition | none | repeatable form field; max 100 terms |
 | `response_format` | Output format | `json` | OpenAI-compatible |
 | `timestamp_granularities` | Word/segment timestamps | `segment` | OpenAI-compatible |
 

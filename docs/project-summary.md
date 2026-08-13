@@ -9,17 +9,18 @@ text using free cloud or local APIs. It ships as two cooperating parts:
 - **GNOME Shell extension** (`gnome-ext/`): the JS UI (indicator, hotkey,
   preferences, and an auto-typer) that drives the D-Bus service.
 
-API keys are resolved from environment variables, `config.yaml`, or command substitution (`!command`).
+API keys are resolved from environment variables, `config.yaml`, or command substitution (`!command` or `!!command`).
 
 Lint/format via ruff, types via pyright.
 
 ## Transcription providers
 
-| Provider   | Type  |
-|------------|-------|
-| Voxtral    | cloud |
-| Groq       | cloud |
-| Deepgram   | cloud |
-| 60db       | cloud |
-| ElevenLabs | cloud |
-| Parakeet   | local |
+| Provider   | Type  | Streaming |
+|------------|-------|-----------|
+| Moonshine  | local | ✅        |
+| Parakeet   | local | ❌        |
+| Voxtral    | cloud | ✅        |
+| Deepgram   | cloud | ✅        |
+| 60db       | cloud | ✅        |
+| Groq       | cloud | ❌        |
+| ElevenLabs | cloud | ❌        |

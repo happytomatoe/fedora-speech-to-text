@@ -35,14 +35,11 @@ const CONFIG_SYNC_MAP = {
     },
     'stop-timeout-seconds': {path: ['engine', 'stop_timeout'], type: 'int'},
     'custom-words': {path: ['postprocess', 'custom_words'], type: 'strv'},
-    'custom-words-threshold': {
-        path: ['postprocess', 'custom_words_threshold'],
-        type: 'double',
-    },
     'output-method': {
         path: ['engine', 'output_method'],
         type: 'string',
     },
+    profiling: {path: ['profiling'], type: 'boolean'},
 };
 
 function readConfigYaml() {

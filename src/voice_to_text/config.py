@@ -15,6 +15,7 @@ class ConfigManager:
     """Manage application configuration with provider support."""
 
     def __init__(self, config_path: str | None = None):
+        """Initialize the configuration manager."""
         self._explicit_config_path = bool(config_path)
         # User config path (persistent)
         self.user_config_path = str(Path.home() / ".config" / "voice-to-text" / CONFIG_FILENAME)
@@ -53,10 +54,13 @@ class ConfigManager:
             return {}
 
     def save(self) -> bool:
-        """Save config to a persistent location. If the path was auto-discovered
-        (i.e. not explicitly provided) and is not the user config dir, redirect
-        writes to the user config path so we never overwrite a bundled/dev
-        config. An explicitly provided path is always respected."""
+        """Save config to a persistent location.
+
+        If the path was auto-discovered (i.e. not explicitly provided) and is
+        not the user config dir, redirect writes to the user config path so we
+        never overwrite a bundled/dev config. An explicitly provided path is
+        always respected.
+        """
         target = self.config_path
         if not self._explicit_config_path and target != self.user_config_path:
             target = self.user_config_path
