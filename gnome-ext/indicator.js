@@ -7,7 +7,7 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 
 // Spinner using St.SpinnerContent (available in GNOME 50+)
 function createSpinner(params) {
-    const widget = new St.Widget({ ...params, reactive: false });
+    const widget = new St.Widget({...params, reactive: false});
     widget.set_content(new St.SpinnerContent());
     return widget;
 }
@@ -22,7 +22,7 @@ export const VoiceIndicator = GObject.registerClass(
             this.onStart = null;
             this.onStop = null;
             this.onConfigure = null;
-            
+
             // Set accessible name for AT-SPI
             this.set_accessible_name(_('Voice to Text'));
         }

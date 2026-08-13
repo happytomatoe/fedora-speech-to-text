@@ -15,7 +15,7 @@ export class AudioLevelWidget {
         this._smoothedLevel = 0;
         this._visible = false;
         this._showTimeoutId = 0;
-        this.onCancel = null;  // callback when cancel button clicked
+        this.onCancel = null; // callback when cancel button clicked
     }
     show() {
         if (this._widget) return;
@@ -62,8 +62,8 @@ export class AudioLevelWidget {
             reactive: true,
             track_hover: true,
             can_focus: true,
-            x_align: 2,  // CENTER
-            y_align: 2,  // CENTER
+            x_align: 2, // CENTER
+            y_align: 2, // CENTER
         });
         this._cancelButton.set_size(36, 36);
         const stopIcon = new St.Icon({
@@ -101,7 +101,8 @@ export class AudioLevelWidget {
     updateLevel(level) {
         if (!this._widget || !this._visible) return;
 
-        this._smoothedLevel = SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
+        this._smoothedLevel =
+            SMOOTH * this._smoothedLevel + (1 - SMOOTH) * level;
 
         const activeCount = Math.round(this._smoothedLevel * NUM_SEGMENTS);
         for (let i = 0; i < NUM_SEGMENTS; i++) {
@@ -124,7 +125,8 @@ export class AudioLevelWidget {
             // Only update if class changed
             let currentClass = 'idle';
             if (seg.has_style_class_name('green')) currentClass = 'green';
-            else if (seg.has_style_class_name('yellow')) currentClass = 'yellow';
+            else if (seg.has_style_class_name('yellow'))
+                currentClass = 'yellow';
             else if (seg.has_style_class_name('red')) currentClass = 'red';
 
             if (targetClass !== currentClass) {
