@@ -238,15 +238,17 @@ def remove_silence(
         return np.array([], dtype=np.float32)
 
     padding_samples = int(padding_ms * sample_rate / 1000)
-    segments = []
+    ranges: list[tuple[int, int]] = []
 
     for start, end in speech_timestamps:
-        # Add padding
         padded_start = max(0, start - padding_samples)
         padded_end = min(len(audio), end + padding_samples)
-        segments.append(audio[padded_start:padded_end])
+        if ranges and padded_start <= ranges[-1][1]:
+            ranges[-1] = (ranges[-1][0], max(ranges[-1][1], padded_end))
+        else:
+            ranges.append((padded_start, padded_end))
 
-    return np.concatenate(segments)
+    return np.concatenate([audio[start:end] for start, end in ranges])
 
 
 def merge_segments(
@@ -271,10 +273,9 @@ def merge_segments(
     max_gap_samples = int(max_gap_ms * sample_rate / 1000)
     merged: list[tuple[int, int]] = []
 
-    for start, end in timestamps:
+    for start, end in sorted(timestamps):
         if merged and (start - merged[-1][1]) < max_gap_samples:
-            # Merge with previous
-            merged[-1] = (merged[-1][0], end)
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
         else:
             merged.append((start, end))
 

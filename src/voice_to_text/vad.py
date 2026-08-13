@@ -113,6 +113,11 @@ class SileroVAD:
         self._context = np.zeros(CONTEXT_SAMPLES, dtype=np.float32)
         self._state = np.zeros(STATE_SHAPE, dtype=np.float32)
 
+    def reset(self) -> None:
+        """Reset internal state for a new recording."""
+        self._context = np.zeros(CONTEXT_SAMPLES, dtype=np.float32)
+        self._state = np.zeros(STATE_SHAPE, dtype=np.float32)
+
     def _preprocess(self, audio: np.ndarray) -> np.ndarray:
         """Add context samples and ensure correct shape."""
         audio_with_context = np.concatenate([self._context, audio]).astype(np.float32)
@@ -123,36 +128,38 @@ class SileroVAD:
         """Check if a frame contains voice activity.
 
         Args:
-            frame: float32 samples (must be 512 samples for optimal performance).
+            frame: float32 samples (any length, will be split into 512-sample chunks).
 
         Returns:
-            True if Silero model predicts speech probability > threshold.
+            True if Silero model predicts speech probability > threshold for any chunk.
 
         """
         if len(frame) == 0:
             return False
 
-        # Resample to FRAME_SAMPLES if needed (e.g., 2048 samples from engine)
-        if len(frame) != FRAME_SAMPLES:
-            if len(frame) > FRAME_SAMPLES:
-                frame = frame[:FRAME_SAMPLES]
-            else:
-                frame = np.pad(frame, (0, FRAME_SAMPLES - len(frame)))
+        # Split into FRAME_SAMPLES-sized chunks and process each
+        for i in range(0, len(frame), FRAME_SAMPLES):
+            chunk = frame[i : i + FRAME_SAMPLES]
+            if len(chunk) < FRAME_SAMPLES:
+                chunk = np.pad(chunk, (0, FRAME_SAMPLES - len(chunk)))
 
-        audio_input = self._preprocess(frame)
+            audio_input = self._preprocess(chunk)
 
-        outputs = self._model.run(
-            None,
-            {
-                "input": audio_input,
-                "state": self._state,
-                "sr": np.array(SAMPLE_RATE, dtype=np.int64),
-            },
-        )
-        probability = float(outputs[0].reshape(-1)[0])
-        self._state = outputs[1]  # Update state for next call
+            outputs = self._model.run(
+                None,
+                {
+                    "input": audio_input,
+                    "state": self._state,
+                    "sr": np.array(SAMPLE_RATE, dtype=np.int64),
+                },
+            )
+            probability = float(outputs[0].reshape(-1)[0])
+            self._state = outputs[1]  # Update state for next call
 
-        return probability > self.threshold
+            if probability > self.threshold:
+                return True
+
+        return False
 
 
 class SmoothedVAD:
@@ -247,3 +254,5 @@ class SmoothedVAD:
         self._hangover_counter = 0
         self._onset_counter = 0
         self._in_speech = False
+        if isinstance(self.inner, SileroVAD):
+            self.inner.reset()
