@@ -62,11 +62,6 @@ just qemu-e2e-setup  # Downloads golden image + SSH keys from Filen
 - **Services**: D-Bus service for voice-to-text transcription (started inside VM)
 - **Framework**: TypeScript + bun (`e2e.ts`), uses `@microsoft/shell-use` for SSH/PTY interaction and `ssh2` for deployment
 
-## Documentation
-
-- **Architecture documentation**: `e2e/docs/README.md`
-- **Update documentation when**: Modifying test flow, adding/removing steps, changing VM setup, or updating components
-
 ## Important Notes
 
 - **Do NOT play audio through the VM** — it will come out of your speakers
