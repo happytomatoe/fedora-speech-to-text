@@ -174,7 +174,8 @@ def generate_html(reports_dir: Path) -> str:
 
     # Build issue cards
     issue_cards = ""
-    for idx, sev in enumerate(severity_order):
+    issue_counter = 0
+    for _idx, sev in enumerate(severity_order):
         for issue in by_severity.get(sev, []):
             comp = issue.get("component", "")
             short_comp = comp.split(":")[-1] if ":" in comp else comp
@@ -195,7 +196,7 @@ def generate_html(reports_dir: Path) -> str:
             rule = rules_by_key.get(rule_key, {})
             rule_desc = render_rule_description(rule)
 
-            card_id = f"issue-{idx}"
+            card_id = f"issue-{issue_counter}"
             issue_cards += f"""
             <div class="issue-card" data-severity="{sev}" data-type="{itype}" data-file="{html.escape(short_comp)}">
               <div class="issue-header" onclick="toggleCard('{card_id}')">
@@ -216,6 +217,7 @@ def generate_html(reports_dir: Path) -> str:
                 {rule_desc}
               </div>
             </div>"""
+            issue_counter += 1
 
     # File breakdown
     file_rows = ""

@@ -164,9 +164,9 @@ def _resolve_key_from_env(
 
 def _key_fingerprint(key: str) -> str:
     """Return a masked fingerprint of the API key for logging."""
-    if len(key) > 10:
-        return f"{key[:6]}...{key[-4:]}"
-    return f"{key[:3]}...{key[-2:]}"
+    if len(key) > 3:
+        return f"{key[:3]}..."
+    return key
 
 
 def resolve_api_key(
