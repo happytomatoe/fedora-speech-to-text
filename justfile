@@ -999,7 +999,6 @@ qemu-e2e-setup:
     echo "  Run tests:  just e2e"
     echo "═══════════════════════════════════════════════════"
 
-
 # @category e2e-qemu
 # Run E2E tests via TypeScript (bun)
 qemu-e2e-test-ts:

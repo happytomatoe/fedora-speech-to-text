@@ -4,12 +4,18 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 import Gdk from 'gi://Gdk';
-import {gettext as _, ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {
+    gettext as _,
+    ExtensionPreferences,
+} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
 import {createHotkeyRow} from './prefs/hotkey-row.js';
 import {createDeviceRow} from './prefs/device-row.js';
-import {createProviderRows, createOutputMethodRow} from './prefs/provider-row.js';
+import {
+    createProviderRows,
+    createOutputMethodRow,
+} from './prefs/provider-row.js';
 import {createCustomWordsGroup} from './prefs/custom-words-row.js';
 
 export default class VoiceToTextPrefs extends ExtensionPreferences {
@@ -19,14 +25,20 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         // Add Ctrl+W to close the preferences window via key controller
         // (window.add_action is unavailable on Adw.PreferencesWindow in GNOME 50+)
         const keyController = new Gtk.EventControllerKey();
-        keyController.connect('key-pressed', (_controller, keyval, _keycode, state) => {
-            const mask = state & Gtk.accelerator_get_default_mod_mask();
-            if (keyval === Gdk.KEY_w && mask === Gdk.ModifierType.CONTROL_MASK) {
-                window.close();
-                return true;
+        keyController.connect(
+            'key-pressed',
+            (_controller, keyval, _keycode, state) => {
+                const mask = state & Gtk.accelerator_get_default_mod_mask();
+                if (
+                    keyval === Gdk.KEY_w &&
+                    mask === Gdk.ModifierType.CONTROL_MASK
+                ) {
+                    window.close();
+                    return true;
+                }
+                return false;
             }
-            return false;
-        });
+        );
         window.add_controller(keyController);
         const settings = this.getSettings();
 
@@ -60,12 +72,16 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         recordingGroup.add(createHotkeyRow(settings, window));
 
         // Microphone device selector
-        const { row: deviceRow, populate: populateDevices } = createDeviceRow(settings);
+        const {row: deviceRow, populate: populateDevices} =
+            createDeviceRow(settings);
         recordingGroup.add(deviceRow);
         populateDevices();
 
         // Provider/mode settings
-        const { rows: providerRows } = createProviderRows(settings, _syncAllToConfig);
+        const {rows: providerRows} = createProviderRows(
+            settings,
+            _syncAllToConfig
+        );
         for (const row of providerRows) {
             recordingGroup.add(row);
         }
@@ -76,7 +92,9 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         // Show floating audio level widget toggle
         const showAudioLevelRow = new Adw.SwitchRow({
             title: _('Show Audio Level Widget'),
-            subtitle: _('Display a floating audio level bar at the bottom of the screen during recording'),
+            subtitle: _(
+                'Display a floating audio level bar at the bottom of the screen during recording'
+            ),
         });
         settings.bind(
             'show-audio-level-widget',
@@ -107,7 +125,9 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         );
         recordingGroup.add(stopTimeoutRow);
         stopTimeoutRow.connect('notify::value', () => {
-            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
+            _syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
         });
 
         // Inhibit sleep during recording
@@ -144,7 +164,9 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         );
         recordingGroup.add(decreaseVolumeRow);
         decreaseVolumeRow.connect('notify::value', () => {
-            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
+            _syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
         });
 
         // Language setting
@@ -159,7 +181,9 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         });
         languageEntry.connect('changed', () => {
             settings.set_string('language', languageEntry.get_text());
-            _syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
+            _syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
         });
         languageRow.add_suffix(languageEntry);
         recordingGroup.add(languageRow);
@@ -167,17 +191,16 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         // Sync warning row (shown when config.yaml drift detected)
         const syncWarningRow = new Adw.ActionRow({
             title: _('⚠️ Configuration Drift'),
-            subtitle: _('config.yaml has been modified externally. Click Edit Configuration to review.'),
+            subtitle: _(
+                'config.yaml has been modified externally. Click Edit Configuration to review.'
+            ),
             visible: false,
         });
         recordingGroup.add(syncWarningRow);
 
         // Custom Words Group
-        const { group: customWordsGroup, populate: populateCustomWords } = createCustomWordsGroup(
-            settings,
-            window,
-            _syncAllToConfig
-        );
+        const {group: customWordsGroup, populate: populateCustomWords} =
+            createCustomWordsGroup(settings, window, _syncAllToConfig);
         page.add(customWordsGroup);
 
         // Configuration Group
@@ -213,13 +236,15 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
         // Seed GSettings from config.yaml on load
         const _initSync = async () => {
-            const { config, drifted } = await syncFromConfig(settings);
+            const {config, drifted} = await syncFromConfig(settings);
             if (config && drifted.length > 0) {
                 syncWarningRow.visible = true;
                 _configSyncFailed.v = true;
             }
             populateCustomWords();
         };
-        _initSync().catch(e => console.error('VoiceToText: initSync failed:', e));
+        _initSync().catch(e =>
+            console.error('VoiceToText: initSync failed:', e)
+        );
     }
 }
