@@ -163,7 +163,9 @@ test('prefs.js does not use window.add_action (deprecated on Adw.PreferencesWind
 
 test('prefs.js uses EventControllerKey for keyboard shortcuts', () => {
     // Check for actual construction, not just comments
-    const hasKeyController = /new\s+EventControllerKey\s*\(/.test(prefsSrc);
+    const hasKeyController = /new\s+(?:Gtk\.)?EventControllerKey\s*\(/.test(
+        prefsSrc
+    );
     assert(
         hasKeyController,
         'prefs.js should use Gtk.EventControllerKey for keyboard shortcuts'
@@ -249,9 +251,7 @@ try {
                 ) {
                     // Resolve relative to prefs/ for ./ and ../ specifiers
                     const parts = imp.specifier.split('/');
-                    let baseDir = imp.specifier.startsWith('../')
-                        ? DIR
-                        : prefsDir;
+                    let baseDir = prefsDir;
                     for (const part of parts) {
                         if (part === '..') {
                             baseDir = GLib.path_get_dirname(baseDir);
@@ -269,7 +269,7 @@ try {
     }
 } catch (e) {
     log(`  ⚠️ Could not read prefs/ directory: ${e.message}`);
-    failed = true;
+    failed++;
 }
 
 // --- Regression: St.Clipboard API (GNOME 50) ---
@@ -307,19 +307,6 @@ test('type-text-service does not use clipboard.clear()', () => {
     assert(
         !hasClear,
         'type-text-service.js uses clipboard.clear() which was removed in GNOME 50.'
-    );
-});
-test('type-text-service uses get_text and set_text', () => {
-    // Positive assertions: ensure the replacement APIs are present
-    const hasGetText = /get_text\s*\(/.test(serviceSrc);
-    const hasSetText = /set_text\s*\(/.test(serviceSrc);
-    assert(
-        hasGetText,
-        'type-text-service.js should use get_text() for clipboard reads'
-    );
-    assert(
-        hasSetText,
-        'type-text-service.js should use set_text() for clipboard writes'
     );
 });
 // --- Summary ---

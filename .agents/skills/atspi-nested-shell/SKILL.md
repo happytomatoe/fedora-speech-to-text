@@ -181,7 +181,8 @@ for i in range(desktop.get_child_count()):
 
 ```python
 import gi
-gi.require_version('Atspi', '2.0')
+
+gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
 
 # Get the desktop (root of the tree)
@@ -242,9 +243,9 @@ if action:
 comp = node.get_component_iface()
 if comp:
     rect = comp.get_extents(Atspi.CoordType.SCREEN)
-    print(f'Position: ({rect.x}, {rect.y})')
-    print(f'Size: {rect.width}x{rect.height}')
-    
+    print(f"Position: ({rect.x}, {rect.y})")
+    print(f"Size: {rect.width}x{rect.height}")
+
     # Center point for clicking
     cx = rect.x + rect.width // 2
     cy = rect.y + rect.height // 2
@@ -257,7 +258,7 @@ if comp:
 try:
     for s in [Atspi.StateType.FOCUSED, Atspi.StateType.CHECKED]:
         if node.get_state(s):
-            print(f'State: {s}')
+            print(f"State: {s}")
 except AttributeError:
     pass  # Not all AT-SPI versions support get_state
 ```

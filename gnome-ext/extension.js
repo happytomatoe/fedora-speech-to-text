@@ -34,7 +34,6 @@ const VoiceToTextIface = `
 
 const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
 
-
 const SessionManagerIface =
     '<node>\
   <interface name="org.gnome.SessionManager">\
@@ -69,7 +68,9 @@ export default class VoiceToTextExtension extends Extension {
         // Log audio level widget setting on startup
         let showAudioLevel = false;
         try {
-            showAudioLevel = this._settings.get_boolean('show-audio-level-widget');
+            showAudioLevel = this._settings.get_boolean(
+                'show-audio-level-widget'
+            );
         } catch {
             // Key may not exist in older schema versions
             showAudioLevel = true; // default to showing
@@ -85,6 +86,7 @@ export default class VoiceToTextExtension extends Extension {
         this._indicator.onStop = () => this._stop();
         this._indicator.onConfigure = () => this._openPreferences();
 
+        // @ts-expect-error - uuid is on ExtensionBase but types don't reflect inheritance correctly
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
         this._registerHotkey();
 
@@ -96,8 +98,12 @@ export default class VoiceToTextExtension extends Extension {
         this._audioLevelWidgetSignalId = this._settings.connect(
             'changed::show-audio-level-widget',
             () => {
-                const enabled = this._settings.get_boolean('show-audio-level-widget');
-                console.log(`VoiceToText: show-audio-level-widget changed to ${enabled}`);
+                const enabled = this._settings.get_boolean(
+                    'show-audio-level-widget'
+                );
+                console.log(
+                    `VoiceToText: show-audio-level-widget changed to ${enabled}`
+                );
                 if (enabled && !this._audioLevelWidget) {
                     this._audioLevelWidget = new AudioLevelWidget();
                     this._audioLevelWidget.onCancel = () => this._cancel();
@@ -115,12 +121,15 @@ export default class VoiceToTextExtension extends Extension {
             'changed::profiling',
             () => {
                 this._profiling = this._settings.get_boolean('profiling');
-                console.log(`VoiceToText: profiling changed to ${this._profiling}`);
+                console.log(
+                    `VoiceToText: profiling changed to ${this._profiling}`
+                );
             }
         );
         this._signalIds.push(this._profilingSignalId);
 
         this._inhibitCookie = 0;
+        // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
         this._sessionManager = new SessionManagerProxy(
             Gio.DBus.session,
             'org.gnome.SessionManager',
@@ -200,6 +209,7 @@ export default class VoiceToTextExtension extends Extension {
 
     _connectDBus() {
         try {
+            // @ts-expect-error - makeProxyWrapper returns a constructor but types don't reflect this
             this._proxy = new VoiceToTextProxy(
                 Gio.DBus.session,
                 'com.happytomatoe.VoiceToText',
@@ -212,7 +222,9 @@ export default class VoiceToTextExtension extends Extension {
             const stateId = this._proxy.connectSignal(
                 'StateChanged',
                 (proxy, name, [state]) => {
-                    const elapsed = this._startTime ? Date.now() - this._startTime : 0;
+                    const elapsed = this._startTime
+                        ? Date.now() - this._startTime
+                        : 0;
                     if (this._profiling) {
                         console.log(
                             `VoiceToText: [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`
@@ -300,7 +312,10 @@ export default class VoiceToTextExtension extends Extension {
 
     _start() {
         this._startTime = Date.now();
-        if (this._profiling) console.log(`VoiceToText: [PROFIL] _start called at ${this._startTime}`);
+        if (this._profiling)
+            console.log(
+                `VoiceToText: [PROFIL] _start called at ${this._startTime}`
+            );
         console.log('VoiceToText: _start called');
         if (this._recording) return;
 
@@ -338,7 +353,8 @@ export default class VoiceToTextExtension extends Extension {
                 if (this._profiling) {
                     console.log(
                         `VoiceToText: [PROFIL] StartRecording sent via D-Bus, elapsed: ${
-                            Date.now() - this._startTime}ms`
+                            Date.now() - this._startTime
+                        }ms`
                     );
                 }
             },
@@ -476,6 +492,7 @@ export default class VoiceToTextExtension extends Extension {
         console.log('VoiceToText: opening preferences dialog');
         try {
             const launcher = new Gio.SubprocessLauncher();
+            // @ts-expect-error - uuid is on ExtensionBase but types don't reflect inheritance correctly
             launcher.spawnv(['gnome-extensions', 'prefs', this.uuid]);
         } catch (e) {
             console.error('VoiceToText: failed to open preferences:', e);
