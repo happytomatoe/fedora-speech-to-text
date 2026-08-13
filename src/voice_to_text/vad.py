@@ -5,6 +5,7 @@ recording edges. Uses Silero's ~2MB ONNX model that understands speech
 patterns, not just volume.
 """
 
+import hashlib
 import os
 import subprocess
 from enum import Enum
@@ -16,6 +17,19 @@ SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
 CONTEXT_SAMPLES = 64
 STATE_SHAPE = (2, 1, 128)
+
+# Default Silero VAD model URL and expected SHA256 hash
+DEFAULT_MODEL_URL = "https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx"
+DEFAULT_MODEL_HASH = "6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396"
+
+
+def _sha256_file(path: str) -> str:
+    """Compute SHA256 hash of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 class VADFrame(Enum):
@@ -96,11 +110,19 @@ class SileroVAD:
         model_path = os.path.join(target_dir, "silero_vad.onnx")
 
         if not os.path.exists(model_path):
-            model_url = "https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx"
             try:
-                subprocess.run(["wget", "-q", "-O", model_path, model_url], check=True)
+                subprocess.run(["wget", "-q", "-O", model_path, DEFAULT_MODEL_URL], check=True)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 raise RuntimeError(f"Failed to download Silero model: {e}") from e
+
+        # Verify model integrity
+        actual_hash = _sha256_file(model_path)
+        if actual_hash != DEFAULT_MODEL_HASH:
+            os.unlink(model_path)
+            raise RuntimeError(
+                f"Silero model hash mismatch: expected {DEFAULT_MODEL_HASH}, got {actual_hash}. "
+                "Model may be corrupted or tampered. Download manually or check URL."
+            )
 
         # Load model
         opts = SessionOptions()
