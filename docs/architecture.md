@@ -180,7 +180,7 @@ All streaming providers extend `WebSocketStreamingProvider` which handles the De
 - `config.yaml` (repo copy) documents all options; the live config lives at
   `~/.config/voice-to-text/config.yaml`.
 - API keys come from env vars, `config.yaml`, or command substitution
-  (`!command`), as described below.
+  (`!command` or `!!command`), as described below.
 - **Command substitution (`!command`)**: If an `api_key` value starts with `!`,
   the rest of the string is executed as a shell command. The command's stdout
   is used as the API key. This enables integration with secret managers like
@@ -206,6 +206,19 @@ All streaming providers extend `WebSocketStreamingProvider` which handles the De
   - Supports shell pipes and quotes (`shell=True`)
   - 10-second timeout
   - Raises `ValueError` on failure, timeout, or empty output
+- **Async command substitution (`!!command`)**: If an `api_key` value starts
+  with `!!`, the command runs in the background while recording starts
+  immediately. The API key is resolved when the provider needs it (before
+  transcription). This reduces recording start latency.
+  ```yaml
+  # Async: recording starts immediately, key resolves in background
+  voxtral:
+    api_key: "!!bash /path/to/get-key.sh"
+  ```
+  - Use when key resolution is slow (e.g., network calls to secret managers)
+  - Recording starts in parallel with key resolution
+  - Key is awaited only when transcription begins
+  - Falls back to synchronous behavior if key is already cached
 - Changing keys: stop the service (`just service-stop`) so it restarts with
   fresh secrets on next use.
 

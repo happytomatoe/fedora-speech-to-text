@@ -214,3 +214,74 @@ class SpeakerVolumeManager:
             mgr.save()
             mgr.decrease(pct)
         return mgr
+
+
+def remove_silence(
+    audio: np.ndarray,
+    speech_timestamps: list[tuple[int, int]],
+    sample_rate: int = 16000,
+    padding_ms: int = 200,
+) -> np.ndarray:
+    """Remove silence from audio using speech timestamps.
+
+    Args:
+        audio: float32 audio samples
+        speech_timestamps: List of (start_sample, end_sample) from VAD
+        sample_rate: Audio sample rate
+        padding_ms: Padding around speech segments (prevents clipping)
+
+    Returns:
+        Audio with silence removed
+
+    """
+    if not speech_timestamps:
+        return np.array([], dtype=np.float32)
+
+    padding_samples = int(padding_ms * sample_rate / 1000)
+    ranges: list[tuple[int, int]] = []
+
+    for start, end in speech_timestamps:
+        padded_start = max(0, start - padding_samples)
+        padded_end = min(len(audio), end + padding_samples)
+        if ranges and padded_start <= ranges[-1][1]:
+            ranges[-1] = (ranges[-1][0], max(ranges[-1][1], padded_end))
+        else:
+            ranges.append((padded_start, padded_end))
+
+    return np.concatenate([audio[start:end] for start, end in ranges])
+
+
+def merge_segments(
+    timestamps: list[tuple[int, int]],
+    max_gap_ms: int = 1500,
+    sample_rate: int = 16000,
+) -> list[tuple[int, int]]:
+    """Merge speech segments with short gaps.
+
+    Args:
+        timestamps: List of (start_sample, end_sample)
+        max_gap_ms: Maximum gap to merge (shorter pauses preserved)
+        sample_rate: Audio sample rate
+
+    Returns:
+        Merged list of (start_sample, end_sample)
+
+    """
+    if not timestamps:
+        return []
+
+    max_gap_samples = int(max_gap_ms * sample_rate / 1000)
+    merged: list[tuple[int, int]] = []
+
+    for start, end in sorted(timestamps):
+        if merged and (start - merged[-1][1]) < max_gap_samples:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    return merged
+
+
+def get_audio_duration_ms(audio: np.ndarray, sample_rate: int = 16000) -> float:
+    """Get audio duration in milliseconds."""
+    return len(audio) / sample_rate * 1000

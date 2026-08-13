@@ -35,7 +35,7 @@ from typing import Any
 
 import httpx
 
-from .base import BatchProvider, WebSocketStreamingProvider, resolve_api_key
+from .base import BatchProvider, WebSocketStreamingProvider, get_shared_client, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         # Merge with config options
         self.batch_options.update(config.get("batch_options", {}))
 
-        self._client = httpx.AsyncClient(timeout=120)
+        self._client = get_shared_client()
         self._init_ws_state()
 
     async def transcribe_file(
@@ -124,11 +124,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
                     logger.error("Deepgram response text: %s", e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
                     key_len = len(self.api_key)
-                    fp = (
-                        self.api_key[:6] + "..." + self.api_key[-4:]
-                        if key_len > _API_KEY_MIN_LEN
-                        else self.api_key
-                    )
+                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
                     logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fp, len(self.api_key))
             raise RuntimeError(f"Deepgram API request failed (HTTP {status}): {e}") from e
         except Exception as e:
@@ -162,8 +158,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         return "deepgram"
 
     async def close(self) -> None:
-        """Close the persistent HTTP client and WebSocket."""
+        """Close the WebSocket."""
         if self._ws is not None:
             with contextlib.suppress(Exception):
                 await self._ws.close()
-        await self._client.aclose()

@@ -9,7 +9,33 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import Any
 
+import httpx
+
 logger = logging.getLogger(__name__)
+
+# Shared HTTP client — created once at import time, reused across all providers.
+# This avoids the ~300ms cost of creating a new client per recording.
+_shared_client: httpx.AsyncClient | None = None
+
+
+def get_shared_client() -> httpx.AsyncClient:
+    """Get or create the shared HTTP client (lazy initialization)."""
+    global _shared_client  # noqa: PLW0603
+    if _shared_client is None:
+        _shared_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10, read=120, write=10, pool=5),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _shared_client
+
+
+async def close_shared_client() -> None:
+    """Close the shared HTTP client on service shutdown."""
+    global _shared_client  # noqa: PLW0603
+    if _shared_client is not None:
+        await _shared_client.aclose()
+        _shared_client = None
+
 
 # API key fingerprint threshold
 _API_KEY_MIN_LEN = 10

@@ -17,36 +17,41 @@ class TestSixtyBatch:
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"data": {"text": "hello world"}}
 
-        with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
-            provider = get_batch_provider("60db", {"api_key": "test_key", "api_key_source": "env"})
+        provider = get_batch_provider("60db", {"api_key": "test_key", "api_key_source": "env"})
 
-            import os
-            import tempfile
+        captured: dict = {}
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                tmp.write(b"RIFF....WAVEfmt ")
-                tmp_path = tmp.name
+        async def _fake_post(url: str, **kwargs: object) -> Mock:
+            captured["url"] = url
+            captured.update(kwargs)  # type: ignore[arg-type]
+            return mock_response
 
-            try:
-                result = await provider.transcribe_file(tmp_path, language="en")
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-                assert mock_post.called
-                call_args = mock_post.call_args
-                url = call_args[0][0]
-                assert url == "https://api.60db.ai/stt"
+        import os
+        import tempfile
 
-                headers = call_args[1]["headers"]
-                assert headers["Authorization"] == "Bearer test_key"
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(b"RIFF....WAVEfmt ")
+            tmp_path = tmp.name
 
-                data = call_args[1]["data"]
-                assert data["language"] == "en"
+        try:
+            result = await provider.transcribe_file(tmp_path, language="en")
 
-                files = call_args[1]["files"]
-                assert "file" in files
+            assert captured["url"] == "https://api.60db.ai/stt"
 
-                assert result == "hello world"
-            finally:
-                os.unlink(tmp_path)
+            headers = captured["headers"]
+            assert headers["Authorization"] == "Bearer test_key"
+
+            data = captured["data"]
+            assert data["language"] == "en"
+
+            files = captured["files"]
+            assert "file" in files
+
+            assert result == "hello world"
+        finally:
+            os.unlink(tmp_path)
 
     @pytest.mark.asyncio
     async def test_transcribe_file_unwrapped_response(self):
@@ -54,21 +59,25 @@ class TestSixtyBatch:
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"text": "unwrapped result"}
 
-        with patch("httpx.AsyncClient.post", return_value=mock_response):
-            provider = get_batch_provider("60db", {"api_key": "test_key", "api_key_source": "env"})
+        provider = get_batch_provider("60db", {"api_key": "test_key", "api_key_source": "env"})
 
-            import os
-            import tempfile
+        async def _fake_post(url: str, **kwargs: object) -> Mock:
+            return mock_response
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                tmp.write(b"RIFF....WAVEfmt ")
-                tmp_path = tmp.name
+        provider._client.post = _fake_post  # type: ignore[assignment]
 
-            try:
-                result = await provider.transcribe_file(tmp_path)
-                assert result == "unwrapped result"
-            finally:
-                os.unlink(tmp_path)
+        import os
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(b"RIFF....WAVEfmt ")
+            tmp_path = tmp.name
+
+        try:
+            result = await provider.transcribe_file(tmp_path)
+            assert result == "unwrapped result"
+        finally:
+            os.unlink(tmp_path)
 
 
 class FakeSixtyWebSocket:
@@ -102,7 +111,7 @@ class FakeSixtyWebSocket:
                     )
                 )
             elif self._audio_count == 2:
-                # speech_final with empty text → must be skipped.
+                # speech_final with empty text -> must be skipped.
                 self._incoming.put_nowait(
                     json.dumps(
                         {
@@ -154,19 +163,19 @@ class TestSixtyStreaming:
             # start message was sent after connection_established
             assert any(json.loads(m).get("type") == "start" for m in fake.sent_messages)
 
-            # Frame 1 → interim partial result.
+            # Frame 1 -> interim partial result.
             await provider.send_audio(b"PCMDATA1")
             for _ in range(5):
                 await asyncio.sleep(0)
             partial = await provider.get_partial_result()
             assert partial == "hello world"
 
-            # Frame 2 → empty speech_final signal (skipped).
+            # Frame 2 -> empty speech_final signal (skipped).
             await provider.send_audio(b"PCMDATA2")
             for _ in range(5):
                 await asyncio.sleep(0)
 
-            # Frame 3 → canonical final.
+            # Frame 3 -> canonical final.
             await provider.send_audio(b"PCMDATA3")
             for _ in range(5):
                 await asyncio.sleep(0)
