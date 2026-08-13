@@ -39,6 +39,7 @@ const CONFIG_SYNC_MAP = {
         path: ['engine', 'output_method'],
         type: 'string',
     },
+    profiling: {path: ['profiling'], type: 'boolean'},
 };
 
 function readConfigYaml() {

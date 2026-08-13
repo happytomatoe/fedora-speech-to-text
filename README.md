@@ -95,6 +95,21 @@ The command runs fresh each time the key is needed (no caching). Raises `ValueEr
 
 **Script requirements:** Output ONLY the key to stdout; all logs/errors to stderr.
 
+#### 4. Async Command Substitution (For Fast Recording Start)
+
+If an API key starts with `!!`, the command runs in the background while recording starts immediately. Use this when key resolution is slow (e.g., network calls to secret managers):
+
+```yaml
+# Recording starts immediately, key resolves in background
+voxtral:
+  api_key: "!!bash /path/to/get-key.sh"
+```
+
+**Benefits:**
+- Recording starts in parallel with key resolution
+- Reduces latency for slow key commands (e.g., 1Password, network secret managers)
+- Falls back to synchronous behavior if key is already cached
+
 #### Reload keys
 
 ```bash

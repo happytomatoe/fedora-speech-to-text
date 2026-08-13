@@ -63,5 +63,10 @@
       <summary>Custom words for fuzzy correction</summary>
       <description>List of words to correct in transcription output using fuzzy matching</description>
     </key>
+    <key name="profiling" type="b">
+      <default>false</default>
+      <summary>Enable profiling logs</summary>
+      <description>Show timing information in GNOME Shell logs for debugging performance</description>
+    </key>
   </schema>
 </schemalist>

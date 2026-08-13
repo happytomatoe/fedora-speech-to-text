@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from .base import BatchProvider, StreamingProvider, resolve_api_key
+from .base import AsyncKeyMixin, BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ _HTTP_UNAUTHORIZED = 401
 _API_KEY_MIN_LEN = 10
 
 
-class VoxtralProvider(BatchProvider, StreamingProvider):
+class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
     """Voxtral transcription provider (batch and streaming).
 
     Uses Mistral's Voxtral models for both file transcription (batch)
@@ -34,16 +34,26 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
-        """Initialize the Voxtral provider."""
-        self.api_key = resolve_api_key(
+        """Initialize the Voxtral provider.
+
+        Args:
+            config: Provider configuration.
+
+        """
+        self._config = config
+        key_or_future = resolve_api_key(
             config, "VOXTRAL_API_KEY", extra_envs=("MISTRAL_API_KEY",), provider_name="voxtral"
         )
+        self._init_async_key(key_or_future)  # from AsyncKeyMixin
         self._api_url = config.get("api_url", "https://api.mistral.ai")
         # Batch model
         self.model = config.get("model", "voxtral-mini-latest")
         # Streaming model
         self._realtime_model = config.get("realtime_model", "voxtral-mini-transcribe-realtime-2602")
         self._target_delay_ms = config.get("target_delay_ms", 400)
+
+        # Use shared HTTP client (created once at service startup)
+        self._client = get_shared_client()
 
         # Streaming state
         self._audio_queue: asyncio.Queue[bytes | None] | None = None
@@ -63,26 +73,26 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
         """Transcribe audio file using Voxtral batch transcription API."""
+        await self._ensure_api_key()  # Resolve async key if needed
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
         try:
-            async with httpx.AsyncClient() as client:
-                with open(audio_path, "rb") as audio_file:
-                    files = {"file": (os.path.basename(audio_path), audio_file)}
-                    data: dict[str, str | list[str]] = {"model": self.model, "language": language}
-                    if custom_words:
-                        data["context_bias"] = custom_words
-                    response = await client.post(
-                        f"{self._api_url}/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {self.api_key}"},
-                        files=files,
-                        data=data,
-                        timeout=120,
-                    )
-                response.raise_for_status()
-                result = response.json()
-                text = result.get("text", "").strip()
-                logger.info("Transcription result: %s", text[:100])
-                return text
+            with open(audio_path, "rb") as audio_file:
+                files = {"file": (os.path.basename(audio_path), audio_file)}
+                data: dict[str, str | list[str]] = {"model": self.model, "language": language}
+                if custom_words:
+                    data["context_bias"] = custom_words
+                response = await self._client.post(
+                    f"{self._api_url}/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    files=files,
+                    data=data,
+                    timeout=120,
+                )
+            response.raise_for_status()
+            result = response.json()
+            text = result.get("text", "").strip()
+            logger.info("Transcription result: %s", text[:100])
+            return text
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
             logger.error("Voxtral API error: HTTP %s", status)
@@ -94,11 +104,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
                     logger.error("Voxtral response text: %s", e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
                     key_len = len(self.api_key)
-                    fp = (
-                        self.api_key[:6] + "..." + self.api_key[-4:]
-                        if key_len > _API_KEY_MIN_LEN
-                        else self.api_key
-                    )
+                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
                     logger.error(
                         "401 Unauthorized - key fingerprint=%s (len=%d)",
                         fp,
@@ -120,6 +126,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Initialize a streaming session via Voxtral SDK."""
+        await self._ensure_api_key()  # Resolve async key if needed
         import time as _time  # noqa: PLC0415
 
         _t0 = _time.monotonic()
@@ -271,7 +278,7 @@ class VoxtralProvider(BatchProvider, StreamingProvider):
         return "voxtral"
 
     async def close(self) -> None:
-        """Clean up the event loop thread and streaming resources."""
+        """Clean up event loop thread and streaming resources."""
         self._closed = True
         if self._audio_queue is not None and self._loop is not None:
             self._loop.call_soon_threadsafe(self._audio_queue.put_nowait, None)

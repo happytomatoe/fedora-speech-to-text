@@ -128,6 +128,15 @@ Keys are resolved at runtime by `resolve_api_key` (step 1). Options:
    The command runs fresh each time; output goes to stdout, errors to stderr.
    Raises `ValueError` on timeout, non-zero exit, or empty output.
 
+4. **Async command substitution** (for slow key resolution):
+   ```yaml
+   myprovider:
+     api_key: "!!bash /path/to/get-key.sh"
+   ```
+   The `!!` prefix runs the command in the background while recording starts
+   immediately. Use when key resolution involves network calls (e.g., secret
+   managers). The key is awaited only when transcription begins.
+
 > Resolution order: environment variable → config file → command substitution.
 > Command substitution supports shell pipes and quotes (`shell=True`).
 > 10-second timeout; raises `ValueError` on failure.
