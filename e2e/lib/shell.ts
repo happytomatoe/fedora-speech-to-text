@@ -1,5 +1,22 @@
 import { ShellUse } from "@microsoft/shell-use";
 import { execSync } from "node:child_process";
+import { timing } from "./utils.js";
+
+/**
+ * Decorator that times async method calls.
+ */
+function timed(label: string) {
+  return function (target: any, context: ClassMethodDecoratorContext) {
+    return async function (this: any, ...args: any[]) {
+      const start = Date.now();
+      try {
+        return await target.call(this, ...args);
+      } finally {
+        timing(label, start);
+      }
+    };
+  };
+}
 
 export interface ShellSession {
   shell: ShellUse;
@@ -165,6 +182,7 @@ export class ShellHelper {
     }
   }
 
+  @timed("ssh:dismiss-activities")
   async dismissActivities(): Promise<void> {
     if (!this.session) return;
     try {
@@ -200,6 +218,7 @@ export class ShellHelper {
    * Focus the terminal window by clicking on it.
    * Does NOT use gio launch (that opens a new window).
    */
+  @timed("ssh:focus-terminal")
   async focusTerminal(): Promise<void> {
     // Click on the terminal area to ensure it has focus
     await this.dotoolCommand("mousemove 640 400");
@@ -239,6 +258,7 @@ export class ShellHelper {
    * Verify terminal has focus by typing a test character.
    * Returns true if tmux content changed (terminal was focused).
    */
+  @timed("ssh:verify-terminal-focus")
   async verifyTerminalFocus(tmuxSession: string, sshKey: string, sshPort: number): Promise<boolean> {
     try {
       // Get tmux content before
@@ -266,6 +286,7 @@ export class ShellHelper {
   /**
    * Click to focus a window at given coordinates.
    */
+  @timed("ssh:click-to-focus")
   async clickToFocus(x: number, y: number): Promise<void> {
     await this.dotoolCommand(`mousemove ${x} ${y}`);
     await this.dotoolCommand('buttondown 1');
@@ -306,6 +327,24 @@ export class ShellHelper {
       await Bun.sleep(100);
     }
     // Fall through - recording may have started but log check didn't catch it
+  }
+
+  /** Poll D-Bus GetStatus until state becomes 'idle' */
+  async waitForRecordingStop(timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const dbusAddr = await this.getShellDbusAddr();
+      const output = await this.exec(
+        `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.GetStatus`
+      );
+
+      if (output.includes('idle')) {
+        return;
+      }
+
+      await Bun.sleep(100);
+    }
+    // Fall through - state may have changed but check didn't catch it
   }
 
   async waitForTranscription(timeoutMs = 30000): Promise<string> {

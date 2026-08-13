@@ -11,6 +11,7 @@ import { loadConfig, type E2eConfig } from "./lib/config.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 import { timed, timedSleep, timing } from "./lib/utils.js";
+import { TranscriptionHelper } from "./lib/transcription.js";
 
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
@@ -190,19 +191,9 @@ async function preflight(): Promise<void> {
   await ensureParakeet();
 }
 
-/**
- * Wait for transcription to appear in the voice service log.
- * Uses tail -f to watch for new lines, with a 20s timeout.
- */
-async function waitForTranscriptionFromLog(shell: any): Promise<string> {
-  return shell.exec(
-    `timeout 20 tail -f -n +1 /tmp/voice-service.log 2>/dev/null | grep --line-buffered -oP 'Transcription result: \\K.*' | head -1`,
-    25000 // slightly more than the 20s timeout in the command
-  );
-}
-
 async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
+  const transcriptionHelper = new TranscriptionHelper();
 
   // Set deployer on shell for fast D-Bus address resolution
   shell.setDeployer(vm.deployer);
@@ -215,77 +206,77 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     deployer: vm.deployer,
   };
 
-  await timed("capture-frame", () => vm.captureFrame("01-desktop"));
+  await vm.captureFrame("01-desktop");
 
   // Step 1: Dismiss Activities overview (D-Bus Set is idempotent)
   console.log("Dismissing Activities...");
-  await timed("ssh:dismiss-activities", () => shell.dismissActivities());
-  const activitiesOpen = await timed("ssh:is-activities-open", () => shell.isActivitiesOpen());
+  await shell.dismissActivities();
+  const activitiesOpen = await shell.isActivitiesOpen();
   console.log(`  Activities after dismiss: ${activitiesOpen ? 'STILL OPEN' : 'closed'}`);
-  await timed("ssh:wait-activities-dismissed", () => shell.waitActivitiesDismissed());
+  await shell.waitActivitiesDismissed();
 
   // Step 2: Open terminal with tmux inside (dotool needs a focused window)
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
-  await timed("ssh:kill-tmux", () => tmux.killSession(tmuxCfg));
-  await timed("ssh:launch-ghostty", () => shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`));
+  await tmux.killSession(tmuxCfg);
+  await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
   // Poll until tmux session appears
-  await timed("poll:tmux-session", () => vm.pollUntil(
+  await vm.pollUntil(
     "tmux session",
     async () => {
       const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
       return output.trim().length > 0;
     },
     15000
-  ));
+  );
   // Click on the terminal to ensure it has focus
-  await timed("ssh:mousemove", () => shell.dotoolCommand("mousemove 640 400"));
-  await timed("ssh:buttondown", () => shell.dotoolCommand("buttondown 1"));
-  await timed("ssh:buttonup", () => shell.dotoolCommand("buttonup 1"));
+  await shell.dotoolCommand("mousemove 640 400");
+  await shell.dotoolCommand("buttondown 1");
+  await shell.dotoolCommand("buttonup 1");
   // Brief wait for window manager to settle after click
   await timedSleep(500, "sleep:settle-after-click");
 
   // Verify terminal is focused by typing a test character and checking tmux
-  const paneBefore = await timed("ssh:capture-pane-before", () => tmux.capturePane(tmuxCfg));
-  await timed("ssh:typing-space", () => shell.dotoolCommand("key shift+space"));
+  const paneBefore = await tmux.capturePane(tmuxCfg);
+  await shell.dotoolCommand("key shift+space");
   await timedSleep(200, "sleep:after-typing");
-  const paneAfter = await timed("ssh:capture-pane-after", () => tmux.capturePane(tmuxCfg));
+  const paneAfter = await tmux.capturePane(tmuxCfg);
   if (paneBefore === paneAfter) {
     // Terminal might not be focused, try clicking again
     console.log("  Retrying terminal focus...");
-    await timed("ssh:mousemove-retry", () => shell.dotoolCommand("mousemove 640 400"));
-    await timed("ssh:buttondown-retry", () => shell.dotoolCommand("buttondown 1"));
-    await timed("ssh:buttonup-retry", () => shell.dotoolCommand("buttonup 1"));
+    await shell.dotoolCommand("mousemove 640 400");
+    await shell.dotoolCommand("buttondown 1");
+    await shell.dotoolCommand("buttonup 1");
     await timedSleep(500, "sleep:focus-retry");
   }
 
-  await timed("capture-frame", () => vm.captureFrame("02-tmux-started"));
+  await vm.captureFrame("02-tmux-started");
 
   // Step 3: Snapshot pane content before recording (for transcription detection)
-  const preRecordingPane = await timed("ssh:capture-pane-pre", () => tmux.capturePane(tmuxCfg));
+  const preRecordingPane = await tmux.capturePane(tmuxCfg);
   console.log("Pre-recording pane captured.");
 
-  await timed("capture-frame", () => vm.captureFrame("03-pre-recording"));
+  await vm.captureFrame("03-pre-recording");
 
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
-  await timed("ssh:dismiss-activities-2", () => shell.dismissActivities());
-  const activitiesOpen2 = await timed("ssh:is-activities-open-2", () => shell.isActivitiesOpen());
+  await shell.dismissActivities();
+  const activitiesOpen2 = await shell.isActivitiesOpen();
   console.log(`  Activities after second dismiss: ${activitiesOpen2 ? 'STILL OPEN' : 'closed'}`);
-  await timed("ssh:wait-activities-closed-2", () => shell.waitActivitiesFullyClosed());
+  await shell.waitActivitiesFullyClosed();
   
   // Force-focus terminal again after Activities dismiss
-  await timed("ssh:focus-terminal", () => shell.focusTerminal());
+  await shell.focusTerminal();
   
   // Verify terminal has focus by typing test character
   console.log("Verifying terminal focus...");
-  let isFocused = await timed("ssh:verify-focus", () => shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort));
+  let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
   if (!isFocused) {
     console.log("  Terminal not focused, trying click + gio launch...");
-    await timed("ssh:click-to-focus", () => shell.clickToFocus(640, 400));
+    await shell.clickToFocus(640, 400);
     await Bun.sleep(500);
-    await timed("ssh:focus-terminal-retry", () => shell.focusTerminal());
-    isFocused = await timed("ssh:verify-focus-retry", () => shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort));
+    await shell.focusTerminal();
+    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
     console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {
@@ -293,19 +284,17 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   }
   // Step 4: Start recording via hotkey (D-Bus call to GNOME extension)
   console.log("Starting recording via hotkey...");
-  await timed("start-recording", async () => {
-    await shell.sendHotkey();
-    await shell.waitForRecordingStart();
-  });
+  await shell.sendHotkey();
+  await shell.waitForRecordingStart();
 
-  await timed("capture-frame", () => vm.captureFrame("04-recording-started"));
+  await vm.captureFrame("04-recording-started");
 
   // Step 5: Wait for transcription (voice service types via dotool into tmux)
   console.log("Waiting for transcription...");
   let transcription = "";
   try {
     // Wait for transcription line to appear in log (tail -f + grep, with timeout)
-    const logOutput = await timed("wait:transcription-log", () => waitForTranscriptionFromLog(shell));
+    const logOutput = await transcriptionHelper.waitForTranscriptionFromLog(shell);
     const trimmed = logOutput.trim();
     if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
       transcription = trimmed;
@@ -314,7 +303,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     // If log didn't have it, try tmux capture as fallback
     if (!transcription) {
       console.log("  Log poll timed out, trying tmux capture...");
-      const paneContent = await timed("ssh:capture-pane-fallback", () => tmux.capturePane(tmuxCfg));
+      const paneContent = await tmux.capturePane(tmuxCfg);
       // Strip prompt prefix from lines that contain it
       const promptPrefixRe = /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+\s+\S*\s*[#$]\s*/;
       const newLines = paneContent.split("\n")
@@ -335,7 +324,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Wait for transcription text to appear on screen (log entry appears before typing completes)
   if (transcription) {
     console.log("Waiting for text to appear on screen...");
-    await timed("poll:text-on-screen", () => vm.pollUntil(
+    await vm.pollUntil(
       "text-on-screen",
       async () => {
         const paneContent = await tmux.capturePane(tmuxCfg);
@@ -343,24 +332,21 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       },
       2000, // 2s max - text should appear quickly after log entry
       100   // Poll every 100ms for fast detection
-    ));
+    );
   }
 
-  await timed("capture-frame", () => vm.captureFrame("05-transcription-received"));
+  await vm.captureFrame("05-transcription-received");
 
   // Step 6: Stop recording
   console.log("Stopping recording via hotkey...");
-  await timed("stop-recording", async () => {
-    await shell.sendHotkey();
-    // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
-    await timedSleep(200, "sleep:dbus-settle");
-  });
+  await shell.sendHotkey();
+  // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
+  await timedSleep(200, "sleep:dbus-settle");
 
-  await timed("capture-frame", () => vm.captureFrame("06-recording-stopped"));
+  await vm.captureFrame("06-recording-stopped");
 
   // Step 7: Write result to file
   console.log("Writing result to file...");
-  await timed("write-result", async () => {
     if (transcription) {
       const encoded = Buffer.from(transcription).toString('base64');
       await shell.exec(`echo '${encoded}' | base64 -d > /tmp/file.txt`);
@@ -375,10 +361,9 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       5000,
       300
     );
-  });
 
   // Cleanup: kill tmux session
-  await timed("cleanup:kill-tmux", () => tmux.killSession(tmuxCfg));
+  await tmux.killSession(tmuxCfg);
 }
 
 /**
