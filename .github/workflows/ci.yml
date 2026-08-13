@@ -69,5 +69,19 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Cache Silero VAD model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/voice-to-text/silero_vad.onnx
+          key: silero-vad-v5.0
+
+      - name: Download Silero VAD model
+        run: |
+          mkdir -p ~/.cache/voice-to-text
+          if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
+            wget -q -O ~/.cache/voice-to-text/silero_vad.onnx \
+              https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx
+          fi
+
       - name: Run tests
         run: uv run python -m pytest
