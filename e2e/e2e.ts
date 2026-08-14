@@ -583,7 +583,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
   );
-  await Bun.sleep(1000);
+  await Bun.sleep(500);
 
   // Helper: capture screenshot and convert to PNG
   async function capturePng(name: string): Promise<string> {
@@ -609,7 +609,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     await vm.deployer.exec(
       `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel ${clicks}" | dotool`
     );
-    await Bun.sleep(1000);
+    await Bun.sleep(500);
   }
 
   // Helper: compare screenshot against reference
@@ -764,16 +764,7 @@ async function runBugReproductionTest(vm: VmManager, run: RunContext): Promise<v
   );
   await Bun.sleep(5000);
 
-  // Step 4: Screenshot the broken state
-  const bugPpm = join(prefsDir, "prefs-bug-missing-vendor.ppm");
-  const bugPng = join(prefsDir, "prefs-bug-missing-vendor.png");
-  await vm.qemu.screendump(bugPpm);
-  await Bun.sleep(500);
-  execSync(`convert "${bugPpm}" "${bugPng}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${bugPpm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-bug-missing-vendor.png (bug state — no prefs window)");
-
-  // Step 5: Capture journal error
+  // Step 4: Capture journal error — must contain ImportError for vendor/js-yaml
   const j = await vm.deployer.exec(
     `journalctl --user -n 200 --no-pager 2>/dev/null | grep -i 'import.*error\\|js-yaml' | tail -5`
   );
@@ -795,10 +786,8 @@ async function runBugReproductionTest(vm: VmManager, run: RunContext): Promise<v
   // in the same session after the error. A fresh session (via --test-prefs) proves it works.
 
   console.log("  ✅ Bug reproduction test completed");
-  console.log("  Screenshots:");
-  console.log("    prefs-bug-missing-vendor.png    — desktop with NO prefs window (bug)");
-  console.log("    prefs-bug-fixed-with-vendor.png  — prefs window open (fixed)");
-  console.log(`  Journal error: ${journalError}`);
+  console.log("  Journal error:");
+  console.log(`    ${journalError}`);
 }
 
 async function main(): Promise<void> {
