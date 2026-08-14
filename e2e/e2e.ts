@@ -588,6 +588,24 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-main.png");
   
+  // Check for errors in GNOME Shell journal
+  console.log("  Checking GNOME Shell journal for errors...");
+  const journalOutput = await vm.deployer.exec(
+    `journalctl --user -g 'voice-to-text\|VoiceToText' --since '1 minute ago' 2>/dev/null || echo 'No journal access'`
+  );
+  const hasErrors = journalOutput.includes('error') || journalOutput.includes('Error') || journalOutput.includes('CRITICAL');
+  if (hasErrors) {
+    console.log(`  ⚠️ Errors found in GNOME Shell journal:\n${journalOutput}`);
+  } else {
+    console.log("  ✅ No errors in GNOME Shell journal");
+  }
+  
+  // Check if preferences window actually opened
+  const windowCheck = await vm.deployer.exec(
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); busctl --user list 2>/dev/null | grep -i 'preferences\|prefs' || echo 'No preferences service found'`
+  );
+  console.log(`  Window check: ${windowCheck}`);
+  
   // Scroll down to see more settings using dotool (works on Wayland)
   console.log("  Scrolling down to see more settings...");
   // First click on the preferences window to focus it
@@ -676,6 +694,61 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   }
   console.log("  📷 Captured: prefs-after-add.png (should show E2E at top of list)");
   console.log(`  ✅ Screenshot verified: ${stats.size} bytes`);
+  
+  // Verify all required screenshots were captured
+  console.log("  Verifying all required screenshots...");
+  const requiredScreenshots = [
+    "prefs-main.png",
+    "prefs-scrolled-1.png",
+    "prefs-scrolled-2.png",
+    "prefs-scrolled-3.png",
+    "prefs-after-add.png"
+  ];
+  
+  for (const screenshot of requiredScreenshots) {
+    const screenshotPath = join(prefsDir, screenshot);
+    if (!existsSync(screenshotPath)) {
+      throw new Error(`Required screenshot not found: ${screenshot}`);
+    }
+    const ssStats = Bun.file(screenshotPath);
+    if (ssStats.size < 1000) {
+      throw new Error(`${screenshot} is too small (${ssStats.size} bytes), screenshot likely failed`);
+    }
+    console.log(`  ✅ ${screenshot}: ${ssStats.size} bytes`);
+  }
+  
+  // Visual regression check against reference images if they exist
+  const prefsRefDir = join(CONFIG.paths.referencesDir, "preferences");
+  if (existsSync(prefsRefDir)) {
+    console.log("  Running visual regression check against reference images...");
+    for (const screenshot of requiredScreenshots) {
+      const currentPath = join(prefsDir, screenshot);
+      const refPath = join(prefsRefDir, screenshot);
+      if (existsSync(refPath)) {
+        try {
+          const diffPath = join(prefsDir, `diff-${screenshot}`);
+          const result = execSync(
+            `compare -metric MSE "${refPath}" "${currentPath}" "${diffPath}" 2>&1`,
+            { encoding: "utf-8", timeout: 10000 }
+          ).trim();
+          const mse = parseFloat(result);
+          if (mse >= 100) {
+            throw new Error(`Visual regression: ${screenshot} MSE=${mse} (threshold=100)`);
+          }
+          console.log(`  ✅ ${screenshot}: MSE=${mse} (pass)`);
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('Visual regression')) {
+            throw err;
+          }
+          console.log(`  ⚠️ Visual regression check failed for ${screenshot}: ${err}`);
+        }
+      } else {
+        console.log(`  ⏭️ No reference image for ${screenshot}, skipping visual regression`);
+      }
+    }
+  } else {
+    console.log("  ⏭️ No reference directory found, skipping visual regression");
+  }
   
   // Close preferences window using dotool
   console.log("  Closing preferences window...");

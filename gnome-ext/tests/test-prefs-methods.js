@@ -272,6 +272,19 @@ try {
     failed++;
 }
 
+// --- Vendor directory check ---
+
+log('\n── Vendor directory ──');
+const vendorDir = GLib.build_filenamev([DIR, 'vendor']);
+
+test('vendor/js-yaml.mjs exists (required by prefs/config-sync.js)', () => {
+    const jsYamlPath = GLib.build_filenamev([vendorDir, 'js-yaml.mjs']);
+    assert(
+        fileExists(jsYamlPath),
+        'vendor/js-yaml.mjs not found - install script must copy vendor/ directory'
+    );
+});
+
 // --- Regression: St.Clipboard API (GNOME 50) ---
 
 log('\n── St.Clipboard API (GNOME 50) ──');

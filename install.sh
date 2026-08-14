@@ -281,6 +281,11 @@ if [ -z "$LATEST_TAG" ]; then
     exit 1
   fi
   cp "$TMPDIR/repo/gnome-ext"/*.css "$INSTALL_DIR/" 2>/dev/null || true
+  # Copy vendor directory (js-yaml.mjs etc.) needed by prefs/config-sync.js
+  if [ -d "$TMPDIR/repo/gnome-ext/vendor" ]; then
+    mkdir -p "$INSTALL_DIR/vendor"
+    cp "$TMPDIR/repo/gnome-ext/vendor/"* "$INSTALL_DIR/vendor/"
+  fi
   cp "$TMPDIR/repo/gnome-ext"/schemas/*.xml "$INSTALL_DIR/schemas/"
   glib-compile-schemas "$INSTALL_DIR/schemas/"
   rm -rf "$TMPDIR"
