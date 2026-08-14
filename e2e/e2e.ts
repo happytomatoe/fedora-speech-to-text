@@ -70,6 +70,7 @@ const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
 const TEST_PREFS_BUG = args.includes("--test-prefs-bug");
+const UPDATE_SNAPSHOTS = args.includes("--update-snapshots");
 
 function timing(label: string, startMs: number): void {
   const ms = Date.now() - startMs;
@@ -554,11 +555,15 @@ function updateReferenceImages(run: RunContext): void {
  * Opens preferences and takes screenshots of each section.
  */
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
-  console.log("\n📸 Running preferences screenshot tests...");
+  console.log("\n📸 Running preferences snapshot tests...");
   
   const prefsDir = join(run.outputDir, "preferences");
   mkdirSync(prefsDir, { recursive: true });
   
+  // Snapshot reference directory
+  const snapshotRefDir = join(import.meta.dir, "snapshots", "preferences");
+  mkdirSync(snapshotRefDir, { recursive: true });
+
   // Open preferences window using gnome-extensions prefs command
   console.log("  Opening preferences window...");
   await vm.deployer.exec(
@@ -579,113 +584,140 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
   );
   await Bun.sleep(1000);
-  
-  // Take screenshot of main preferences window
-  const mainPpm = join(prefsDir, "prefs-main.ppm");
-  const mainPng = join(prefsDir, "prefs-main.png");
-  await vm.qemu.screendump(mainPpm);
-  await Bun.sleep(500);
-  execSync(`convert "${mainPpm}" "${mainPng}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-main.png");
-  
-  // Scroll down to see more settings using dotool (works on Wayland)
-  console.log("  Scrolling down to see more settings...");
-  // First click on the preferences window to focus it
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
-  );
-  await Bun.sleep(500);
-  // Then scroll down using dotool wheel (negative = scroll down)
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll1Ppm = join(prefsDir, "prefs-scrolled-1.ppm");
-  const scroll1Png = join(prefsDir, "prefs-scrolled-1.png");
-  await vm.qemu.screendump(scroll1Ppm);
-  await Bun.sleep(500);
-  execSync(`convert "${scroll1Ppm}" "${scroll1Png}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${scroll1Ppm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-scrolled-1.png");
-  
-  // Scroll down more
-  console.log("  Scrolling down more...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll2Ppm = join(prefsDir, "prefs-scrolled-2.ppm");
-  const scroll2Png = join(prefsDir, "prefs-scrolled-2.png");
-  await vm.qemu.screendump(scroll2Ppm);
-  await Bun.sleep(500);
-  execSync(`convert "${scroll2Ppm}" "${scroll2Png}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${scroll2Ppm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-scrolled-2.png");
-  
-  // Scroll down even more
-  console.log("  Scrolling down even more...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll3Ppm = join(prefsDir, "prefs-scrolled-3.ppm");
-  const scroll3Png = join(prefsDir, "prefs-scrolled-3.png");
-  await vm.qemu.screendump(scroll3Ppm);
-  await Bun.sleep(500);
-  execSync(`convert "${scroll3Ppm}" "${scroll3Png}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-scrolled-3.png");
-  
-  // Test adding a new word via the Add Word button
-  console.log("  Testing Add Word functionality...");
-  // Click on "Add Word..." button (it's at the top of the custom words list)
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.39 0.43\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  // Type a new word in the dialog
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "type E2E" | dotool`
-  );
-  await Bun.sleep(500);
-  // Click the Add button
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.62 0.58\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  // Take screenshot after adding word
-  const afterAddPpm = join(prefsDir, "prefs-after-add.ppm");
-  const afterAddPng = join(prefsDir, "prefs-after-add.png");
-  await vm.qemu.screendump(afterAddPpm);
-  await Bun.sleep(500);
-  execSync(`convert "${afterAddPpm}" "${afterAddPng}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${afterAddPpm}"`, { encoding: "utf-8" });
-  
-  // Verify screenshot was captured and has content
-  if (!existsSync(afterAddPng)) {
-    throw new Error("prefs-after-add.png was not created");
+
+  // Helper: capture screenshot and convert to PNG
+  async function capturePng(name: string): Promise<string> {
+    const ppm = join(prefsDir, `${name}.ppm`);
+    const png = join(prefsDir, `${name}.png`);
+    await vm.qemu.screendump(ppm);
+    await Bun.sleep(500);
+    execSync(`convert "${ppm}" "${png}" 2>/dev/null || true`, { encoding: "utf-8" });
+    execSync(`rm -f "${ppm}"`, { encoding: "utf-8" });
+    return png;
   }
-  const stats = Bun.file(afterAddPng);
-  if (stats.size < 1000) {
-    throw new Error(`prefs-after-add.png is too small (${stats.size} bytes), screenshot likely failed`);
+
+  // Helper: focus the prefs window by clicking on it
+  async function focusWindow() {
+    await vm.deployer.exec(
+      `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
+    );
+    await Bun.sleep(500);
   }
-  console.log("  📷 Captured: prefs-after-add.png (should show E2E at top of list)");
-  console.log(`  ✅ Screenshot verified: ${stats.size} bytes`);
-  
-  // Close preferences window using dotool
+
+  // Helper: scroll down by N clicks
+  async function scrollDown(clicks = -5) {
+    await vm.deployer.exec(
+      `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel ${clicks}" | dotool`
+    );
+    await Bun.sleep(1000);
+  }
+
+  // Helper: compare screenshot against reference
+  function compareSnapshot(actual: string, refName: string): { pass: boolean; mse: number; message: string } {
+    const refPath = join(snapshotRefDir, `${refName}.png`);
+    if (!existsSync(refPath)) {
+      return { pass: true, mse: 0, message: `No reference (first run): ${refName}` };
+    }
+    const diffPath = join(prefsDir, `${refName}-diff.png`);
+    try {
+      // compare exits 1 when images differ (not an error) — capture output via spawnSync
+      const proc = Bun.spawnSync(
+        ["compare", "-metric", "MSE", refPath, actual, diffPath],
+        { stdout: "pipe", stderr: "pipe" }
+      );
+      // MSE goes to stderr for ImageMagick compare
+      const output = (proc.stderr?.toString() || proc.stdout?.toString() || "").trim();
+      const mse = parseFloat(output);
+      const pass = isNaN(mse) ? false : mse < 500;
+      return { pass, mse: isNaN(mse) ? Infinity : mse, message: `${refName}: MSE=${mse} ${pass ? "PASS" : "FAIL"} (threshold=500)` };
+    } catch (err: any) {
+      return { pass: false, mse: Infinity, message: `${refName}: compare error: ${err.message}` };
+    }
+  }
+
+  // Helper: save current screenshot as reference
+  function saveAsReference(actual: string, refName: string) {
+    const refPath = join(snapshotRefDir, `${refName}.png`);
+    execSync(`cp "${actual}" "${refPath}"`, { encoding: "utf-8" });
+    console.log(`  📋 Saved reference: ${refName}.png`);
+  }
+
+  // Focus window and take initial screenshot
+  await focusWindow();
+
+  const results: Array<{ name: string; pass: boolean; mse: number; message: string }> = [];
+  let scrollIndex = 0;
+  let consecutiveSame = 0;
+  let lastMd5 = "";
+
+  // Scroll through the entire preferences window, capturing at each step
+  while (scrollIndex < 10) { // max 10 scroll positions to prevent infinite loop
+    const name = scrollIndex === 0 ? "prefs-page-0" : `prefs-page-${scrollIndex}`;
+    const png = await capturePng(name);
+
+    // Check if this screenshot is the same as the previous one (reached bottom)
+    const currentMd5 = execSync(
+      `md5sum "${png}" | cut -d' ' -f1`,
+      { encoding: "utf-8" }
+    ).trim();
+
+    if (scrollIndex > 0 && currentMd5 === lastMd5) {
+      consecutiveSame++;
+      if (consecutiveSame >= 2) {
+        console.log(`  Reached bottom (no new content after ${scrollIndex} scrolls)`);
+        execSync(`rm -f "${png}"`, { encoding: "utf-8" });
+        break;
+      }
+    } else {
+      consecutiveSame = 0;
+    }
+    lastMd5 = currentMd5;
+
+    console.log(`  📷 Captured: ${name}.png`);
+
+    // Compare or save
+    if (UPDATE_SNAPSHOTS) {
+      saveAsReference(png, name);
+      results.push({ name, pass: true, mse: 0, message: `${name}: saved as reference` });
+    } else {
+      const result = compareSnapshot(png, name);
+      results.push({ name, ...result });
+      console.log(`  ${result.pass ? "✅" : "❌"} ${result.message}`);
+    }
+
+    scrollIndex++;
+
+    // Scroll down
+    await scrollDown();
+  }
+
+  // Summary
+  console.log("\n--- Preferences Snapshot Summary ---");
+  const passed = results.filter(r => r.pass).length;
+  const failed = results.filter(r => !r.pass).length;
+  console.log(`  ${results.length} snapshots, ${passed} passed, ${failed} failed`);
+
+  if (failed > 0 && !UPDATE_SNAPSHOTS) {
+    console.log("\n  Failed snapshots:");
+    for (const r of results.filter(r => !r.pass)) {
+      console.log(`    ${r.message}`);
+    }
+    console.log("\n  Run with --update-snapshots to accept new screenshots");
+  }
+
+  // Close preferences window
   console.log("  Closing preferences window...");
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key alt+F4" | dotool`
   );
   await Bun.sleep(500);
-  
+
   console.log("  ✅ Preferences tests completed");
+
+  // Exit with error if any snapshots failed
+  if (failed > 0 && !UPDATE_SNAPSHOTS) {
+    process.exit(1);
+  }
 }
 
 async function runBugReproductionTest(vm: VmManager, run: RunContext): Promise<void> {

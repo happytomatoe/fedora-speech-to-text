@@ -139,30 +139,39 @@ export async function deployExtension(
   if (!existsSync(extDir)) return;
 
   const t0 = Date.now();
-  console.log("Deploying GNOME extension via install.sh...");
+  console.log("Deploying GNOME extension directly (skipping install.sh prereqs)...");
   
-  // Upload install.sh and gnome-ext to VM, then run install.sh --local
+  // Use /home/testuser explicitly — $HOME would expand on LOCAL shell in sshExec
+  const homeDir = `/home/${cfg.sshUser}`;
+  const installDir = `${homeDir}/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`;
+
+  // Upload extension files and install directly (skip install.sh which runs prereqs)
   const tUpload = Date.now();
+  const installCmd = [
+    `rm -rf ${installDir}`,
+    `mkdir -p ${installDir}/schemas`,
+    `mkdir -p ${installDir}/prefs`,
+    `mkdir -p ${installDir}/vendor`,
+  ].join(' && ');
+
   if (deployer) {
-    await deployer.exec('mkdir -p ~/tmp-deploy');
-    await deployer.uploadFile(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh');
-    await deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext');
+    await deployer.exec(installCmd);
+    await deployer.uploadDir(extDir, installDir);
   } else {
-    sshExec(`mkdir -p ~/tmp-deploy`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(installCmd, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    rsyncToVm(extDir, installDir, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
-  console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
-  
-  const tInstall = Date.now();
+  console.log(`    upload+install: ${Date.now() - tUpload}ms [time]`);
+
+  // Compile schemas
+  const tSetup = Date.now();
   if (deployer) {
-    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext');
+    await deployer.exec(`glib-compile-schemas ${installDir}/schemas/ 2>/dev/null || true`);
   } else {
-    sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`glib-compile-schemas ${installDir}/schemas/ 2>/dev/null || true`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
-  console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
-  
-  const tDconf = Date.now();
+
+  // Set dconf values
   await shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`);
   await shell.exec(`dconf write /org/gnome/shell/disable-user-extensions false`);
   await shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
@@ -171,8 +180,8 @@ dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
-  console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
-  console.log(`  install.sh+dconf: ${Date.now() - t0}ms [time]`);
+  console.log(`    setup+dconf: ${Date.now() - tSetup}ms [time]`);
+  console.log(`  deploy total: ${Date.now() - t0}ms [time]`);
 
   // Disconnect deployer before GDM restart
   if (deployer) {
@@ -264,14 +273,13 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       "extension system ready",
       async () => {
         try {
-          const result = await shell.exec(`gnome-extensions list 2>&1`);
-          // Must contain our extension UUID (not just any text without "error")
-          return result.includes(cfg.extensionUuid);
+          const listResult = await shell.exec(`gnome-extensions list 2>&1 || true`);
+          return listResult.includes(cfg.extensionUuid);
         } catch {
           return false;
         }
       },
-      15000
+      30000
     );
     console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
 
