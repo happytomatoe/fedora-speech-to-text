@@ -648,7 +648,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   const results: Array<{ name: string; pass: boolean; mse: number; message: string }> = [];
   let scrollIndex = 0;
   let consecutiveSame = 0;
-  let lastMd5 = "";
+  let lastPngPath = "";
 
   // Scroll through the entire preferences window, capturing at each step
   while (scrollIndex < 10) { // max 10 scroll positions to prevent infinite loop
@@ -656,12 +656,26 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     const png = await capturePng(name);
 
     // Check if this screenshot is the same as the previous one (reached bottom)
-    const currentMd5 = execSync(
-      `md5sum "${png}" | cut -d' ' -f1`,
-      { encoding: "utf-8" }
-    ).trim();
+    // Check if this screenshot is similar to the previous one (reached bottom)
+    // Use MSE instead of md5 because cursor blink causes tiny pixel differences
+    let isDuplicate = false;
+    if (scrollIndex > 0 && lastPngPath) {
+      try {
+        const proc = Bun.spawnSync(
+          ["compare", "-metric", "MSE", lastPngPath, png, "/dev/null"],
+          { stdout: "pipe", stderr: "pipe" }
+        );
+        const output = (proc.stderr?.toString() || proc.stdout?.toString() || "").trim();
+        const mse = parseFloat(output);
+        if (!isNaN(mse) && mse < 10) {
+          isDuplicate = true;
+        }
+      } catch {
+        // If compare fails, treat as different
+      }
+    }
 
-    if (scrollIndex > 0 && currentMd5 === lastMd5) {
+    if (isDuplicate) {
       consecutiveSame++;
       if (consecutiveSame >= 2) {
         console.log(`  Reached bottom (no new content after ${scrollIndex} scrolls)`);
@@ -671,7 +685,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     } else {
       consecutiveSame = 0;
     }
-    lastMd5 = currentMd5;
+    lastPngPath = png;
 
     console.log(`  📷 Captured: ${name}.png`);
 

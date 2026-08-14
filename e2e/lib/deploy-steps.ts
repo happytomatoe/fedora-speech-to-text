@@ -148,10 +148,10 @@ export async function deployExtension(
   // Upload extension files and install directly (skip install.sh which runs prereqs)
   const tUpload = Date.now();
   const installCmd = [
-    `rm -rf ${installDir}`,
-    `mkdir -p ${installDir}/schemas`,
-    `mkdir -p ${installDir}/prefs`,
-    `mkdir -p ${installDir}/vendor`,
+    `rm -rf "${installDir}"`,
+    `mkdir -p "${installDir}/schemas"`,
+    `mkdir -p "${installDir}/prefs"`,
+    `mkdir -p "${installDir}/vendor"`,
   ].join(' && ');
 
   if (deployer) {
@@ -166,9 +166,9 @@ export async function deployExtension(
   // Compile schemas
   const tSetup = Date.now();
   if (deployer) {
-    await deployer.exec(`glib-compile-schemas ${installDir}/schemas/ 2>/dev/null || true`);
+    await deployer.exec(`glib-compile-schemas "${installDir}/schemas/"`);
   } else {
-    sshExec(`glib-compile-schemas ${installDir}/schemas/ 2>/dev/null || true`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`glib-compile-schemas "${installDir}/schemas/"`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
 
   // Set dconf values
