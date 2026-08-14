@@ -606,10 +606,13 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
 
   // Helper: scroll down by N clicks
   async function scrollDown(clicks = -5) {
+    const start = Date.now();
     await vm.deployer.exec(
       `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel ${clicks}" | dotool`
     );
-    await Bun.sleep(500);
+    await Bun.sleep(1000);
+    const elapsed = Date.now() - start;
+    if (scrollIndex > 0) console.log(`    scroll: ${elapsed}ms`);
   }
 
   // Helper: compare screenshot against reference
