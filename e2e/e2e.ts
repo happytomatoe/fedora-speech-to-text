@@ -747,7 +747,11 @@ async function runBugReproductionTest(vm: VmManager, run: RunContext): Promise<v
   const check = await vm.deployer.exec(
     `ls ~/.local/share/gnome-shell/extensions/${CONFIG.extension.uuid}/vendor/ 2>&1 || echo GONE`
   );
-  console.log(`  Vendor check: ${check.stdout.toString().trim()}`);
+  const vendorCheck = check.stdout.toString().trim();
+  console.log(`  Vendor check: ${vendorCheck}`);
+  if (!vendorCheck.includes("GONE")) {
+    throw new Error(`vendor/ was not deleted: ${vendorCheck}`);
+  }
 
   // No gnome-shell restart needed — prefs is a separate GJS process
   // that imports vendor/js-yaml.mjs when opened
@@ -777,16 +781,24 @@ async function runBugReproductionTest(vm: VmManager, run: RunContext): Promise<v
   console.log("  📋 Journal error:");
   console.log(`     ${journalError || '(none found)'}\n`);
 
+  // Assert: the expected ImportError must appear in journal
+  if (!journalError) {
+    throw new Error(
+      "Expected ImportError for vendor/js-yaml.mjs in journal but none found. " +
+      "The bug may not be reproducing."
+    );
+  }
+
   // Note: The fix is proven by the --test-prefs flow above which shows the full
   // preferences window working correctly with vendor/ present.
   // GNOME 47 caches prefs error state in-process, so we can't re-show the prefs
   // in the same session after the error. A fresh session (via --test-prefs) proves it works.
 
-  console.log("\n  ✅ Bug reproduction test completed");
+  console.log("  ✅ Bug reproduction test completed");
   console.log("  Screenshots:");
   console.log("    prefs-bug-missing-vendor.png    — desktop with NO prefs window (bug)");
   console.log("    prefs-bug-fixed-with-vendor.png  — prefs window open (fixed)");
-  if (journalError) console.log(`  Journal error: ${journalError}`);
+  console.log(`  Journal error: ${journalError}`);
 }
 
 async function main(): Promise<void> {
