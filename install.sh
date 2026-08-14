@@ -181,7 +181,7 @@ install_dotool() {
 echo "Installing prerequisites..."
 case "$PKG_MGR" in
 rpm-ostree)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
@@ -190,19 +190,19 @@ rpm-ostree)
   echo "      If this is the first time layering packages, reboot before continuing."
   ;;
 dnf)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
   ;;
 pacman)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
   ;;
 apt)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret-1-dev
@@ -280,14 +280,22 @@ if [ -n "$LOCAL_DIR" ]; then
     echo "Failed to install GNOME preference files" >&2
     exit 1
   fi
-  if [[ ! -f "$INSTALL_DIR/prefs/prefs.js" ]]; then
+  # prefs.js is in the extension root, not prefs/ subdirectory
+  if [[ ! -f "$INSTALL_DIR/prefs.js" ]]; then
     echo "Missing required preference module: prefs.js" >&2
     exit 1
   fi
   cp "$LOCAL_DIR"/*.css "$INSTALL_DIR/" 2>/dev/null || true
-  cp "$LOCAL_DIR"/schemas/*.xml "$INSTALL_DIR/schemas/"
+  echo "DEBUG: Checking schemas in $LOCAL_DIR/schemas/"
+  ls -la "$LOCAL_DIR/schemas/" 2>&1 || true
+  if ls "$LOCAL_DIR"/schemas/*.xml 1>/dev/null 2>&1; then
+    echo "DEBUG: Found schema XML files, copying..."
+    cp "$LOCAL_DIR"/schemas/*.xml "$INSTALL_DIR/schemas/"
+    glib-compile-schemas "$INSTALL_DIR/schemas/"
+  else
+    echo "WARNING: No schema XML files found in $LOCAL_DIR/schemas/"
+  fi
   cp -r "$LOCAL_DIR/vendor" "$INSTALL_DIR/" 2>/dev/null || true
-  glib-compile-schemas "$INSTALL_DIR/schemas/"
 elif [ -z "$LATEST_TAG" ]; then
   echo "Fetching latest release..."
   echo "Falling back to installing the extension from source..."
