@@ -784,7 +784,7 @@ async function main(): Promise<void> {
       { name: "preflight", fn: preflight },
       { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
       { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-      { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+      { name: "setup", fn: () => vm.setupForPrefs(), timeout: 600_000 },
     ]);
     
     await runPreferencesTests(vm, run);

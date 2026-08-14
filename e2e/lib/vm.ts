@@ -253,6 +253,27 @@ export class VmManager {
     // Note: snapshot save/restore is handled by saveCleanSnapshot/resetToCleanState
   }
 
+  /**
+   * Minimal setup for preferences tests - skip voice service and Python deployment.
+   */
+  async setupForPrefs(): Promise<void> {
+    const t0 = Date.now();
+    const shellExec = this.shell.exec.bind(this.shell);
+    if (this.freshlyBooted) {
+      await waitForGdmLogin(shellExec);
+    } else {
+      console.log("VM already booted, skipping GDM wait...");
+    }
+    console.log(`  GDM login: ${Date.now() - t0}ms`);
+
+    // Establish deployer SSH connection
+    await this.deployer.connect();
+
+    // Deploy extension via install.sh --local
+    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    console.log(`  setupForPrefs total: ${Date.now() - t0}ms`);
+  }
+
   // --- Snapshot management ---
   async hasSnapshot(tag: string): Promise<boolean> {
     try {
