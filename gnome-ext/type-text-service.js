@@ -1,8 +1,6 @@
 import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
-import St from 'gi://St';
 
 const TypeTextIface = `
 <node>
@@ -133,7 +131,6 @@ export class TypeTextService {
                         Clutter.KeyState.RELEASED
                     );
                 } else {
-                    const charCode = char.charCodeAt(0);
                     const keyval = Clutter.unicode_to_keysym(
                         char.codePointAt(0)
                     );

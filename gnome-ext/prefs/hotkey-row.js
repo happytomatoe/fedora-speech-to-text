@@ -136,7 +136,7 @@ function showHotkeyDialog(settings, parentWindow, label) {
 
 function getHotkeyDisplay(hotkeyValue) {
     try {
-        if (hotkeyValue && hotkeyValue.trim()) {
+        if (hotkeyValue?.trim()) {
             return hotkeyValue;
         }
     } catch (e) {

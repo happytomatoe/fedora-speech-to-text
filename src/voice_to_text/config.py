@@ -50,7 +50,7 @@ class ConfigManager:
             logger.warning("Config file not found: %s", self.config_path)
             return {}
         except yaml.YAMLError as e:
-            logger.error("Failed to parse config: %s", e)
+            logger.exception("Failed to parse config: %s", e)
             return {}
 
     def save(self) -> bool:

@@ -4,10 +4,8 @@ import {VoiceIndicator} from './indicator.js';
 import {registerHotkey, unregisterHotkey} from './hotkey.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
-import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
 import {TypeTextService} from './type-text-service.js';
-import Clutter from 'gi://Clutter';
 
 const VoiceToTextIface = `
 <node>

@@ -53,7 +53,7 @@ const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (Number.parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
 
 // Parse --case <name> (select specific test case instead of random)
 const caseIdx = args.indexOf("--case");
@@ -65,7 +65,7 @@ const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 
 // Parse --parallel <n> (run n VMs in parallel)
 const parallelIdx = args.indexOf("--parallel");
-const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1;
+const PARALLEL_VMS = parallelIdx >= 0 ? Number.parseInt(args[parallelIdx + 1]) || 1 : 1;
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
@@ -500,7 +500,7 @@ async function verifyWithScreenshot(
         { encoding: "utf-8", timeout: 10000 }
       ).trim();
       
-      const mse = parseFloat(result);
+      const mse = Number.parseFloat(result);
       if (mse >= 100) {
         return { passed: false, message: `Visual regression: MSE=${mse} (threshold=100)`, screenshot };
       }

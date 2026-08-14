@@ -182,7 +182,7 @@ class ContinuousTyper:
             logger.warning("dotoolc pipe broken, disabling typing: %s", e)
             self._usable = False
         except Exception as e:
-            logger.error("Failed to stream text to dotoolc: %s", e)
+            logger.exception("Failed to stream text to dotoolc: %s", e)
             self._usable = False
 
     async def stream_backspace(self, count: int) -> None:
@@ -262,7 +262,7 @@ class ContinuousTyper:
             logger.warning("dotoolc pipe broken, disabling typing: %s", e)
             self._usable = False
         except Exception as e:
-            logger.error("Failed to stream backspaces to dotoolc: %s", e)
+            logger.exception("Failed to stream backspaces to dotoolc: %s", e)
             self._usable = False
 
     async def stream_delete_word(self) -> None:
@@ -282,7 +282,7 @@ class ContinuousTyper:
                     word_start -= 1
                 self._typed_text = self._typed_text[:word_start]
         except Exception as e:
-            logger.error("Failed to stream delete_word: %s", e)
+            logger.exception("Failed to stream delete_word: %s", e)
             self._usable = False
 
     async def stream_delete_line_start(self) -> None:
@@ -298,7 +298,7 @@ class ContinuousTyper:
             else:
                 self._typed_text = ""
         except Exception as e:
-            logger.error("Failed to stream delete_line_start: %s", e)
+            logger.exception("Failed to stream delete_line_start: %s", e)
             self._usable = False
 
     async def stream_delete_line_end(self) -> None:
@@ -311,7 +311,7 @@ class ContinuousTyper:
             # We don't know exactly what was deleted after the cursor
             # unless we track cursor position. For now, we leave _typed_text.
         except Exception as e:
-            logger.error("Failed to stream delete_line_end: %s", e)
+            logger.exception("Failed to stream delete_line_end: %s", e)
             self._usable = False
 
     async def stream_diff(self, new_text: str) -> None:

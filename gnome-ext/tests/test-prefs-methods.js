@@ -43,7 +43,7 @@ function extractThisMethodCalls(source) {
 /** @param {string} source */
 function extractImports(source) {
     const result = [];
-    const pattern = /import\s+.*?from\s+['"]([^'"]+)['"]/g;
+    const pattern = /import\s+[^']*from\s+['"]([^'"]+)['"]/g;
     let m;
     while ((m = pattern.exec(source)) !== null) {
         result.push({
@@ -91,7 +91,9 @@ function fileExists(path) {
 
 log('── prefs.js ──');
 const prefsSrc = readFile(GLib.build_filenamev([DIR, 'prefs.js']));
-const hotkeyRowSrc = readFile(GLib.build_filenamev([DIR, 'prefs', 'hotkey-row.js']));
+const hotkeyRowSrc = readFile(
+    GLib.build_filenamev([DIR, 'prefs', 'hotkey-row.js'])
+);
 
 test('ExtensionPreferences is imported', () => {
     assert(
@@ -108,15 +110,15 @@ test('All this.method() calls have definitions', () => {
     const defs = extractMethodDefinitions(prefsSrc);
     const calls = extractThisMethodCalls(prefsSrc);
     const missing = [];
-    const parentMethods = [
+    const parentMethods = new Set([
         'getSettings',
         'getPath',
         'getSessionMode',
         'getMetadata',
         'getUuid',
-    ];
+    ]);
     for (const [name, line] of calls) {
-        if (!parentMethods.includes(name) && !defs.has(name)) {
+        if (!parentMethods.has(name) && !defs.has(name)) {
             missing.push(`line ${line}: this.${name}()`);
         }
     }
@@ -167,9 +169,8 @@ test('EventControllerKey is used for keyboard shortcuts', () => {
     const hasKeyController = /new\s+(?:Gtk\.)?EventControllerKey\s*\(/.test(
         prefsSrc
     );
-    const hasKeyControllerInHotkeyRow = /new\s+(?:Gtk\.)?EventControllerKey\s*\(/.test(
-        hotkeyRowSrc
-    );
+    const hasKeyControllerInHotkeyRow =
+        /new\s+(?:Gtk\.)?EventControllerKey\s*\(/.test(hotkeyRowSrc);
     assert(
         hasKeyController || hasKeyControllerInHotkeyRow,
         'prefs.js or prefs/hotkey-row.js should use Gtk.EventControllerKey for keyboard shortcuts'
@@ -192,7 +193,7 @@ test('All this.method() calls have definitions', () => {
     const defs = extractMethodDefinitions(extSrc);
     const calls = extractThisMethodCalls(extSrc);
     const missing = [];
-    const lifecycle = [
+    const lifecycle = new Set([
         'enable',
         'disable',
         'getSettings',
@@ -200,9 +201,9 @@ test('All this.method() calls have definitions', () => {
         'getSessionMode',
         'getMetadata',
         'getUuid',
-    ];
+    ]);
     for (const [name, line] of calls) {
-        if (!lifecycle.includes(name) && !defs.has(name)) {
+        if (!lifecycle.has(name) && !defs.has(name)) {
             missing.push(`line ${line}: this.${name}()`);
         }
     }
