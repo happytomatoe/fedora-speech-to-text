@@ -44,7 +44,7 @@ class PrerollSelection:
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
-def select_preroll_frames(  # noqa: PLR0913, PLR0917, PLR0911
+def select_preroll_frames(  # noqa: PLR0911
     frame_metadata: list[PrerollFrameMetadata],
     sample_rate: int,
     min_silence_ms: float = DEFAULT_MIN_SILENCE_MS,

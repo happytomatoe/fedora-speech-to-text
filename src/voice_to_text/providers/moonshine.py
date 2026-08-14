@@ -39,7 +39,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
     def _ensure_imported(self) -> None:
         """Lazily import moonshine_voice."""
         if self._moonshine is None:
-            import moonshine_voice  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+            import moonshine_voice  # pyright: ignore[reportMissingImports]
 
             self._moonshine = moonshine_voice
 

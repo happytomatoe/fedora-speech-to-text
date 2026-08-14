@@ -147,6 +147,7 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
             key = self.api_key
             fingerprint = key[:6] + "..." + key[-4:] if len(key) > 10 else key[:3] + "..." + key[-2:]
             logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fingerprint, len(key))
+
     @property
     def name(self) -> str:
         return "deepgram"

@@ -192,7 +192,7 @@ class SmoothedVAD:
     - Prefill: rolls back to include pre-speech audio
     """
 
-    def __init__(  # noqa: PLR0913, PLR0917
+    def __init__(
         self,
         inner: VAD | SileroVAD | None = None,
         onset_frames: int = 2,

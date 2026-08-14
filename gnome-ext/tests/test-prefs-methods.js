@@ -91,6 +91,7 @@ function fileExists(path) {
 
 log('── prefs.js ──');
 const prefsSrc = readFile(GLib.build_filenamev([DIR, 'prefs.js']));
+const hotkeyRowSrc = readFile(GLib.build_filenamev([DIR, 'prefs', 'hotkey-row.js']));
 
 test('ExtensionPreferences is imported', () => {
     assert(
@@ -161,14 +162,17 @@ test('prefs.js does not use window.add_action (deprecated on Adw.PreferencesWind
     );
 });
 
-test('prefs.js uses EventControllerKey for keyboard shortcuts', () => {
+test('EventControllerKey is used for keyboard shortcuts', () => {
     // Check for actual construction, not just comments
     const hasKeyController = /new\s+(?:Gtk\.)?EventControllerKey\s*\(/.test(
         prefsSrc
     );
+    const hasKeyControllerInHotkeyRow = /new\s+(?:Gtk\.)?EventControllerKey\s*\(/.test(
+        hotkeyRowSrc
+    );
     assert(
-        hasKeyController,
-        'prefs.js should use Gtk.EventControllerKey for keyboard shortcuts'
+        hasKeyController || hasKeyControllerInHotkeyRow,
+        'prefs.js or prefs/hotkey-row.js should use Gtk.EventControllerKey for keyboard shortcuts'
     );
 });
 

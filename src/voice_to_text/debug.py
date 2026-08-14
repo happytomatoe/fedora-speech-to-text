@@ -33,7 +33,7 @@ _RAMP_UP_END = 0.2
 _RAMP_DOWN_START = 0.8
 
 
-async def handle_debug_recording(  # noqa: C901, PLR0912
+async def handle_debug_recording(
     config: dict[str, Any],
     on_level: "Callable[[float], None] | None" = None,
     _cancel_event: "asyncio.Event | None" = None,

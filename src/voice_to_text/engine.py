@@ -53,7 +53,6 @@ def _copy_to_clipboard(text: str) -> bool:
     return False
 
 
-
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
 
@@ -480,15 +479,11 @@ class RecordingEngine:
                 batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
                 streaming_config = config_mgr.get_provider_config(streaming_name)
                 batch_config = config_mgr.get_provider_config(batch_name)
-                streaming_provider = await asyncio.to_thread(
-                    get_streaming_provider, streaming_name, streaming_config
-                )
+                streaming_provider = await asyncio.to_thread(get_streaming_provider, streaming_name, streaming_config)
                 batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
             else:
                 streaming_config = config_mgr.get_provider_config(streaming_name)
-                streaming_provider = await asyncio.to_thread(
-                    get_streaming_provider, streaming_name, streaming_config
-                )
+                streaming_provider = await asyncio.to_thread(get_streaming_provider, streaming_name, streaming_config)
                 batch_provider = None
             transcriber = HybridTranscriber(streaming_provider, batch_provider or streaming_provider)  # type: ignore[arg-type]
         else:
@@ -511,14 +506,10 @@ class RecordingEngine:
         config_mgr = ConfigManager()
         postprocess_cfg = config_mgr.config.get("postprocess", {})
         raw_custom_words = config.get("custom_words")
-        custom_words = (
-            raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
-        )
+        custom_words = raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
         raw_threshold = config.get("custom_words_threshold")
         custom_words_threshold = (
-            raw_threshold
-            if raw_threshold is not None
-            else postprocess_cfg.get("custom_words_threshold", 0.5)
+            raw_threshold if raw_threshold is not None else postprocess_cfg.get("custom_words_threshold", 0.5)
         )
 
         if transcriber:
@@ -545,6 +536,7 @@ class RecordingEngine:
             await asyncio.to_thread(_copy_to_clipboard, text)
 
         logger.info("Transcription completed: %d characters", len(text) if text else 0)
+
     def _cleanup(self):
         if self._recorder:
             try:

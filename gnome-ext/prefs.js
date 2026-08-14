@@ -9,11 +9,13 @@ import {syncFromConfig, syncToConfig} from './prefs/config-sync.js';
 import {createHotkeyRow} from './prefs/hotkey-row.js';
 import {createDeviceRow} from './prefs/device-row.js';
 import {createProviderRows, createOutputMethodRow} from './prefs/provider-row.js';
-import {createCustomWordsGroup, createThresholdRow} from './prefs/custom-words-row.js';
+import {createCustomWordsGroup} from './prefs/custom-words-row.js';
 
+// @ts-ignore — ExtensionPreferences is provided by GNOME Shell at runtime
 export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
+        // @ts-ignore — getSettings() is provided by ExtensionPreferences
         const settings = this.getSettings();
 
         // Sync state tracking
@@ -43,35 +45,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         page.add(group);
 
         // Hotkey setting - using a custom row with key capture
-        const hotkeyRow = new Adw.ActionRow({
-            title: _('Recording Hotkey'),
-        });
-
-        const hotkeyBox = new Gtk.Box({
-            hexpand: true,
-            spacing: 6,
-        });
-        hotkeyRow.add_suffix(hotkeyBox);
-
-        const hotkeyLabel = new Gtk.Label({
-            label: this._getHotkeyDisplay(settings.get_strv('hotkey')[0]),
-            xalign: 0,
-        });
-        hotkeyBox.append(hotkeyLabel);
-        hotkeyLabel.set_hexpand(true);
-
-        const hotkeyButton = new Gtk.Button({
-            label: _('Set Shortcut…'),
-            halign: Gtk.Align.END,
-        });
-        hotkeyBox.append(hotkeyButton);
-
-        // Create a key capture dialog
-        hotkeyButton.connect('clicked', () => {
-            this._showHotkeyDialog(settings, hotkeyLabel);
-        });
-
-        group.add(hotkeyRow);
+        group.add(createHotkeyRow(settings, window));
 
         // Recording Settings Group
         const recordingGroup = new Adw.PreferencesGroup({
@@ -204,8 +178,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         );
         page.add(customWordsGroup);
 
-        // Add threshold row to recording group
-        recordingGroup.add(createThresholdRow(settings, _syncAllToConfig));
         // Configuration Group
         const configGroup = new Adw.PreferencesGroup({
             title: _('Configuration'),

@@ -148,9 +148,7 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
         raise ValueError(f"API key command error: {e}") from e
 
 
-def _resolve_key_from_env(
-    env_var: str, extra_envs: tuple[str, ...]
-) -> tuple[str | None, str]:
+def _resolve_key_from_env(env_var: str, extra_envs: tuple[str, ...]) -> tuple[str | None, str]:
     """Try to find API key in environment variables."""
     key = os.getenv(env_var)
     if key:

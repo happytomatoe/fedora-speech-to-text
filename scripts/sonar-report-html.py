@@ -75,11 +75,13 @@ def get_source_snippet(
             for ln in block.get("lines", []):
                 lnum = ln.get("line", 0)
                 code = ln.get("code", "")
-                result.append({
-                    "line": lnum,
-                    "code": code,
-                    "isIssue": start_line <= lnum <= end_line,
-                })
+                result.append(
+                    {
+                        "line": lnum,
+                        "code": code,
+                        "isIssue": start_line <= lnum <= end_line,
+                    }
+                )
             return result
     return []
 

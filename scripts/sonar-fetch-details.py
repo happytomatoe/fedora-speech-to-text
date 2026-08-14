@@ -27,16 +27,18 @@ def fetch_rules(base_url: str, user: str, pw: str, rule_keys: list[str], out_pat
                     ctx = (sec.get("context") or {}).get("key", "default")
                     sections.setdefault(k, {})[ctx] = sec.get("content", "")
                 flat = {k: v.get("default") or next(iter(v.values()), "") for k, v in sections.items()}
-                rules_out.append({
-                    "key": rule_key,
-                    "name": rule.get("name", rule_key),
-                    "severity": rule.get("severity", ""),
-                    "htmlDesc": rule.get("htmlDesc", ""),
-                    "root_cause": flat.get("root_cause", ""),
-                    "how_to_fix": flat.get("how_to_fix", ""),
-                    "assess": flat.get("assess_the_problem", ""),
-                    "tags": rule.get("tags", []) + rule.get("sysTags", []),
-                })
+                rules_out.append(
+                    {
+                        "key": rule_key,
+                        "name": rule.get("name", rule_key),
+                        "severity": rule.get("severity", ""),
+                        "htmlDesc": rule.get("htmlDesc", ""),
+                        "root_cause": flat.get("root_cause", ""),
+                        "how_to_fix": flat.get("how_to_fix", ""),
+                        "assess": flat.get("assess_the_problem", ""),
+                        "tags": rule.get("tags", []) + rule.get("sysTags", []),
+                    }
+                )
         except Exception as e:
             print(f"Warning: failed to fetch rule {rule_key}: {e}", file=sys.stderr)
 
@@ -44,9 +46,7 @@ def fetch_rules(base_url: str, user: str, pw: str, rule_keys: list[str], out_pat
     print(f"Fetched {len(rules_out)} rules")
 
 
-def fetch_sources(
-    base_url: str, user: str, pw: str, issues_path: Path, out_path: Path, context: int = 5
-) -> None:
+def fetch_sources(base_url: str, user: str, pw: str, issues_path: Path, out_path: Path, context: int = 5) -> None:
     """Fetch source code snippets for each issue."""
     cred = base64.b64encode(f"{user}:{pw}".encode()).decode()
     issues = json.loads(issues_path.read_text()).get("issues", [])
