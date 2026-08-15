@@ -386,7 +386,7 @@ export async function startVoiceService(
     }
     // Use uv for faster, more reliable installs (matches install.sh approach)
     const uvResult = await shell.exec(
-      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
+      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
     );
     if (!uvResult.includes("__UV_OK__")) {
       // Fallback to pip if uv not available
@@ -395,7 +395,7 @@ export async function startVoiceService(
       try {
         sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
         sshExec(
-          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq",
+          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
           cfg.sshKey, cfg.sshPort, cfg.sshUser
         );
         console.log("  pip install completed");
