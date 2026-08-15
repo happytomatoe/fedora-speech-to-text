@@ -81,6 +81,10 @@ install_pkg() {
   apt)
     sudo apt install -y "$pkg" || true
     ;;
+  *)
+    echo "  Unsupported package manager: $PKG_MGR"
+    return 1
+    ;;
   esac
 }
 
@@ -148,6 +152,7 @@ install_dotool() {
   case "$PKG_MGR" in
     apt) BUILD_DEPS="gcc make libev-dev libsystemd-dev" ;;
     pacman) BUILD_DEPS="gcc make libev systemd" ;;
+    *) BUILD_DEPS="gcc make libev-devel systemd-devel" ;;
   esac
   install_ok=false
   if [ "$PKG_MGR" = "pacman" ]; then
@@ -208,6 +213,11 @@ apt)
   install_pkg libsecret-1-dev
   install_pkg libsecret-tools
   ;;
+  ;;
+  *)
+    echo "Unsupported package manager: $PKG_MGR"
+    exit 1
+    ;;
 esac
 
 # --- Install uv if not present ---

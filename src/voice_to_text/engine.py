@@ -481,9 +481,8 @@ class RecordingEngine:
                 self._notify_state()
 
                 # handle_debug_recording is guaranteed non-None when is_debug_mode() is True
-                assert handle_debug_recording is not None, (
-                    "handle_debug_recording must be set when debug mode is active"
-                )
+                if handle_debug_recording is None:
+                    raise RuntimeError("handle_debug_recording must be set when debug mode is active")
                 text = await handle_debug_recording(
                     config, on_level=self.on_audio_level, _cancel_event=self._cancel_event
                 )
@@ -626,7 +625,8 @@ class RecordingEngine:
                     if transcriber:
                         text = await transcriber.on_recording_stop(filepath, language, custom_words)
                     else:
-                        assert batch_provider is not None
+                        if batch_provider is None:
+                            raise RuntimeError("batch_provider must be set for batch transcription")
                         text = await batch_provider.transcribe_file(filepath, language, custom_words)
                     _step("transcription_done")
                     # Apply text post-processing
