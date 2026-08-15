@@ -209,9 +209,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // Expected: GDM restart drops the SSH connection mid-command
     }
 
-    // Wait for GDM to fully restart and create a new user session
+    // Wait briefly for GDM to start restarting, then poll for readiness
     console.log("  waiting for GDM to stabilize...");
-    await Bun.sleep(5000);
+    await Bun.sleep(1000); // Reduced from 5000ms - pollUntil handles the rest
 
     // Poll for GDM to be active (new session created)
     await pollUntilFn(
@@ -408,7 +408,7 @@ export async function startVoiceService(
 
   // Kill existing voice service
   sshExec("killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await Bun.sleep(1000);
+  await Bun.sleep(500); // Reduced from 1000ms
   await pollUntilFn(
     "old voice service to die",
     async () => {
@@ -417,7 +417,7 @@ export async function startVoiceService(
     },
     5000
   );
-  await Bun.sleep(500);
+  await Bun.sleep(250); // Reduced from 500ms
 
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);

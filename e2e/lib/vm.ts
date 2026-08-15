@@ -163,7 +163,7 @@ export class VmManager {
 
     for (let i = 0; i < 30; i++) {
       if (existsSync(socketPath)) break;
-      await Bun.sleep(500);
+      await Bun.sleep(250); // Reduced from 500ms
     }
     if (!existsSync(socketPath)) {
       throw new Error("QEMU monitor socket never appeared — QEMU may have failed to start");
@@ -293,14 +293,14 @@ export class VmManager {
     // 1. Ensure Activities is closed
     await this.shell.dismissActivities();
     await this.shell.waitActivitiesFullyClosed();
-    await Bun.sleep(500);
+    await Bun.sleep(250); // Reduced from 500ms
     
     // 2. Close any open windows (show desktop)
     await this.shell.dotoolCommand("key super+d");
-    await Bun.sleep(500);
+    await Bun.sleep(250); // Reduced from 500ms
     
     // 3. Wait for GNOME Shell to settle
-    await Bun.sleep(1000);
+    await Bun.sleep(500); // Reduced from 1000ms
     
     // 4. Save the snapshot
     await this.qemu.savevm(tag);
