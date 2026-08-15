@@ -12,6 +12,10 @@ for ((i=1; i<=$#; i++)); do
     LOCAL_DIR="${!next}"
   fi
 done
+if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
+  echo "ERROR: --local directory does not exist: $LOCAL_DIR" >&2
+  exit 1
+fi
 set -euo pipefail
 REPO="happytomatoe/voice-to-text"
 EXT_UUID="voice-to-text@happytomatoe.com"
@@ -274,7 +278,7 @@ if [ -n "$LOCAL_DIR" ]; then
   echo "Installing from local directory: $LOCAL_DIR"
   rm -rf "$INSTALL_DIR"
   mkdir -p "$INSTALL_DIR/schemas"
-  cp "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$INSTALL_DIR/"
+  cp "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$INSTALL_DIR/" 2>/dev/null || true
   mkdir -p "$INSTALL_DIR/prefs"
   if ! cp "$LOCAL_DIR/prefs/"*.js "$INSTALL_DIR/prefs/"; then
     echo "Failed to install GNOME preference files" >&2
