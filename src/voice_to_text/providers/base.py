@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import subprocess
+import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -158,6 +160,14 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
 
 
 # Max retries for 401 errors
+# Max retries for 401 errors
+_MAX_API_KEY_RETRIES = 3
+
+
+# HTTP retry defaults
+_DEFAULT_RETRY_STATUS_CODES = (401,)
+_DEFAULT_MAX_RETRIES = 0  # disabled by default
+_DEFAULT_RETRY_DELAY = 1.0  # seconds between retries
 _MAX_API_KEY_RETRIES = 3
 
 
@@ -169,6 +179,7 @@ class AsyncKeyMixin:
 
     _api_key_future: asyncio.Future[str] | None = None
     _pending_key_command: str | None = None  # !!command string for deferred resolution
+    _key_raw_command: str | None = None  # raw !command or !!command for re-resolution on retry
     api_key: str
     _config: dict[str, Any]
 
@@ -184,6 +195,7 @@ class AsyncKeyMixin:
             self.api_key = ""  # placeholder
         elif isinstance(key_or_future, str) and key_or_future.startswith("!!"):
             # Deferred: store command, create Future later in async context
+            self._key_raw_command = key_or_future  # keep raw for re-resolution
             self._pending_key_command = key_or_future[2:]  # strip leading !!
             self._api_key_future = None
             self.api_key = ""  # placeholder
@@ -206,6 +218,17 @@ class AsyncKeyMixin:
             self.api_key = await await_api_key(self._api_key_future)
             self._api_key_future = None
         return self.api_key
+
+    def _re_resolve_key_sync(self) -> None:
+        """Re-resolve API key synchronously (for use in retry callbacks)."""
+        if self._key_raw_command is None:
+            return
+        try:
+            cmd = self._key_raw_command[2:] if self._key_raw_command.startswith("!!") else self._key_raw_command[1:]
+            self.api_key = _execute_command_for_key(cmd)
+            logger.info("API key re-resolved successfully")
+        except Exception as e:
+            logger.warning("API key re-resolution failed: %s", e)
 
 
 def _execute_command_for_key_async(command: str, *, timeout: float = 10) -> asyncio.Future[str]:
@@ -300,6 +323,64 @@ def resolve_api_key_with_retry(
             raise
     # This should not be reached, but pyright requires it
     raise ValueError("Failed to resolve API key after all retries")
+
+
+def get_http_retry_config(config: dict[str, Any]) -> tuple[frozenset[int], int, float]:
+    """Extract HTTP retry settings from provider config.
+
+    Returns (status_codes, max_retries, delay_seconds).
+    """
+    retry_cfg = config.get("http_retry", {})
+    if not retry_cfg:
+        return frozenset(_DEFAULT_RETRY_STATUS_CODES), _DEFAULT_MAX_RETRIES, _DEFAULT_RETRY_DELAY
+    codes = retry_cfg.get("status_codes", _DEFAULT_RETRY_STATUS_CODES)
+    max_retries = retry_cfg.get("max_retries", _DEFAULT_MAX_RETRIES)
+    delay = retry_cfg.get("delay", _DEFAULT_RETRY_DELAY)
+    return frozenset(codes), max_retries, delay
+
+
+async def http_request_with_retry(  # noqa: PLR0913
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    config: dict[str, Any],
+    headers_fn: Callable[[], dict[str, str]],
+    re_resolve_key: Callable[[], Any] | None = None,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Make an HTTP request with configurable retry on specific status codes.
+
+    ``headers_fn`` is called fresh on each attempt so that a re-resolved API key
+    is picked up automatically.  ``re_resolve_key`` (optional) refreshes the key
+    in the provider before each retry.
+    """
+    retry_codes, max_retries, delay = get_http_retry_config(config)
+
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = await getattr(client, method.lower())(url, headers=headers_fn(), **kwargs)
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code if e.response is not None else 0
+            if status not in retry_codes or attempt >= max_retries:
+                raise
+            logger.warning(
+                "HTTP %d on attempt %d/%d, retrying in %.1fs",
+                status,
+                attempt + 1,
+                max_retries + 1,
+                delay,
+            )
+            if re_resolve_key is not None:
+                re_resolve_key()
+            time.sleep(delay)
+            last_exc = e
+
+    # Should not reach here, but safety net
+    raise last_exc  # type: ignore[misc]
 
 
 class WebSocketStreamingProvider(StreamingProvider):

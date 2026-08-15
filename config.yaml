@@ -36,6 +36,10 @@ voxtral:
   model: "voxtral-mini-latest"
   realtime_model: "voxtral-mini-transcribe-realtime-2602"
   target_delay_ms: 400
+  http_retry:
+    status_codes: [401]
+    max_retries: 2
+    delay: 1
 
 sixty:
   api_key_env: "SIXTYDB_API_KEY"

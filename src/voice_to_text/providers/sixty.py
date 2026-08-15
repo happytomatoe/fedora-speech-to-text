@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
-from .base import BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
+from .base import BatchProvider, StreamingProvider, get_shared_client, http_request_with_retry, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +61,16 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         try:
             with open(audio_path, "rb") as audio_file:
                 files = {"file": (os.path.basename(audio_path), audio_file)}
-                response = await self._client.post(
+                response = await http_request_with_retry(
+                    self._client,
+                    "POST",
                     f"{self.api_url}/stt",
-                    headers=headers,
+                    config={},
+                    headers_fn=lambda: headers,
                     data=data,
                     files=files,
                     timeout=120,
                 )
-            response.raise_for_status()
             result = response.json()
             payload = result.get("data", result)
             text = (payload.get("text") or "").strip()

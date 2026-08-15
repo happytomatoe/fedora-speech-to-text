@@ -207,7 +207,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
-  await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
+  const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
+  if (hasGhostty) {
+    await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
+  } else {
+    await shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
+  }
   // Poll until tmux session appears
   await vm.pollUntil(
     "tmux session",
@@ -784,7 +789,7 @@ async function main(): Promise<void> {
       { name: "preflight", fn: preflight },
       { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
       { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-      { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+      { name: "setup", fn: () => vm.setupForPrefs(), timeout: 600_000 },
     ]);
     
     await runPreferencesTests(vm, run);

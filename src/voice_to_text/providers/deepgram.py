@@ -35,7 +35,7 @@ from typing import Any
 
 import httpx
 
-from .base import BatchProvider, WebSocketStreamingProvider, get_shared_client, resolve_api_key
+from .base import BatchProvider, WebSocketStreamingProvider, get_shared_client, http_request_with_retry, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -95,14 +95,16 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
                     content = audio_file.read()
                 json_data = None
 
-            response = await self._client.post(
+            response = await http_request_with_retry(
+                self._client,
+                "POST",
                 f"{self.api_url}/v1/listen",
+                config={},
+                headers_fn=lambda: headers,
                 params=params,
-                headers=headers,
                 content=content,
                 json=json_data,
             )
-            response.raise_for_status()
             result = response.json()
             text = (
                 result.get("results", {})
