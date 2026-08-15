@@ -65,6 +65,7 @@ just e2e
 
 E2E tests are the source of truth for whether the extension works. Unit tests and lint are not sufficient on their own.
 
+**Setup:** If E2E environment is missing, run `just qemu-e2e-setup` first. See `.agents/skills/e2e-setup/SKILL.md` for detailed setup and troubleshooting.
 ## Linting and type checking
 
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).

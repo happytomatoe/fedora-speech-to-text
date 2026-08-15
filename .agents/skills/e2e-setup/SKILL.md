@@ -237,6 +237,17 @@ Safe for local QEMU VMs with user-mode networking (no external access).
 
 ## Troubleshooting
 
+### Voice Service Fails with "No module named 'onnxruntime'"
+
+The `voice_to_text` Python service requires `onnxruntime` for VAD (Voice Activity Detection). If the golden image doesn't have it installed, the service will fail to start on D-Bus.
+
+**Fix:** The E2E deploy code installs `onnxruntime` via pip/uv. If you see this error, the dependency list in `e2e/lib/deploy-steps.ts` may be out of sync. Ensure `onnxruntime` is in the `uv pip install` and `pip install` commands.
+
+**Quick check:**
+```bash
+ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost 'pip3 list | grep onnxruntime'
+```
+
 ### SSH Authentication Failed
 
 If SSH hangs at banner exchange or "Connection timed out during banner exchange":
