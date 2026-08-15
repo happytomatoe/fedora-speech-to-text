@@ -211,7 +211,6 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
 
     // Wait briefly for GDM to start restarting, then poll for readiness
     console.log("  waiting for GDM to stabilize...");
-    // No fixed sleep needed - pollUntil below handles waiting
 
     // Poll for GDM to be active (new session created)
     await pollUntilFn(
@@ -408,7 +407,6 @@ export async function startVoiceService(
 
   // Kill existing voice service
   sshExec("killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  // No fixed sleep needed - pollUntil below handles waiting
   await pollUntilFn(
     "old voice service to die",
     async () => {
@@ -417,7 +415,6 @@ export async function startVoiceService(
     },
     5000
   );
-  // No settle sleep needed - service is confirmed dead
 
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);

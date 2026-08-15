@@ -293,14 +293,14 @@ export class VmManager {
     // 1. Ensure Activities is closed
     await this.shell.dismissActivities();
     await this.shell.waitActivitiesFullyClosed();
-    await Bun.sleep(250); // Reduced from 500ms
+    await Bun.sleep(100); // Reduced from 250ms
     
     // 2. Close any open windows (show desktop)
     await this.shell.dotoolCommand("key super+d");
-    await Bun.sleep(250); // Reduced from 500ms
+    await Bun.sleep(100); // Reduced from 250ms
     
     // 3. Wait for GNOME Shell to settle
-    await Bun.sleep(500); // Reduced from 1000ms
+    await Bun.sleep(250); // Reduced from 500ms
     
     // 4. Save the snapshot
     await this.qemu.savevm(tag);
@@ -321,8 +321,7 @@ export class VmManager {
         // 1. Restore snapshot
         await this.qemu.loadvm(tag);
         
-        // 2. Wait for guest OS to settle
-        await Bun.sleep(2000);
+        // 2. Brief wait for guest OS, then reconnect (voice service poll handles rest)
         
         // 3. Reconnect SSH session (TCP connections are stale after restore)
         await this.shell.close();
