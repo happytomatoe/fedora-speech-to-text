@@ -208,7 +208,7 @@ class AsyncKeyMixin:
         return self.api_key
 
 
-def _execute_command_for_key_async(command: str, *, timeout: float = 10) -> asyncio.Future[str]:
+def _execute_command_for_key_async(command: str) -> asyncio.Future[str]:
     """Execute shell command in background, return Future for API key.
 
     Returns a Future that resolves to the API key string.

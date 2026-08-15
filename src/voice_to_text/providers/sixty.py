@@ -143,6 +143,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                 self._handle_message(msg)
         except asyncio.CancelledError:
             logger.info("60db receive loop cancelled")
+            raise
         except Exception as e:
             logger.warning("60db receive loop error: %s", e)
 

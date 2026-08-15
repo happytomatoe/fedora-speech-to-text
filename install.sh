@@ -66,6 +66,9 @@ install_pkg() {
       return 0
     fi
     ;;
+  *)
+    return 1
+    ;;
   esac
   echo "  Installing $pkg..."
   case "$PKG_MGR" in

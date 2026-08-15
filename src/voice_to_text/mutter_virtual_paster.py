@@ -42,7 +42,7 @@ class MutterVirtualPaster:
             self._is_running = True
             logger.info("MutterVirtualPaster: TypeText D-Bus service available")
             return
-        except (ConnectionError, OSError, DBusError) as e:
+        except (OSError, DBusError) as e:
             logger.debug("MutterVirtualPaster: D-Bus check failed: %s", e)
             if bus is not None:
                 bus.disconnect()

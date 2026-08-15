@@ -87,7 +87,7 @@ def select_preroll_frames(  # noqa: PLR0913, PLR0917, PLR0911
     frames = list(frame_metadata or ())
     total_sample_count = _sum_samples(frames)
     if not frames or total_sample_count <= 0:
-        return _empty_selection(sample_rate)
+        return _empty_selection()
 
     max_gap_samples = _milliseconds_to_samples(max_gap_ms, sample_rate)
     min_silence_samples = _milliseconds_to_samples(min_silence_ms, sample_rate)
@@ -194,7 +194,7 @@ def select_preroll_frames(  # noqa: PLR0913, PLR0917, PLR0911
     )
 
 
-def _empty_selection(sample_rate: int) -> PrerollSelection:
+def _empty_selection() -> PrerollSelection:
     """Build an empty pre-roll selection result."""
     return PrerollSelection(
         start_index=0,

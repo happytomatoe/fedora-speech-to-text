@@ -151,7 +151,7 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
 
         # Schedule the streaming coroutine on the event loop
         assert self._loop is not None  # guaranteed by the thread wait above
-        self._stream_task = asyncio.run_coroutine_threadsafe(self._stream(language, sample_rate), self._loop)
+        self._stream_task = asyncio.run_coroutine_threadsafe(self._stream(sample_rate), self._loop)
         logger.info(
             "[PROFIL] Voxtral stream start: %.3fs total (event_loop %.3fs, model=%s delay=%sms)",
             _time.monotonic() - _t0,
@@ -160,7 +160,7 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
             self._target_delay_ms,
         )
 
-    async def _stream(self, language: str, sample_rate: int) -> None:
+    async def _stream(self, sample_rate: int) -> None:
         """Run the Voxtral realtime streaming in the event loop thread."""
         from mistralai.client import Mistral  # noqa: PLC0415
         from mistralai.extra.realtime import AudioFormat  # noqa: PLC0415
@@ -188,6 +188,7 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
                     break
         except asyncio.CancelledError:
             logger.info("Voxtral realtime stream cancelled")
+            raise
         except Exception as exc:
             logger.exception("Voxtral realtime stream error")
             raise RuntimeError(f"Streaming connection lost: {exc}") from exc

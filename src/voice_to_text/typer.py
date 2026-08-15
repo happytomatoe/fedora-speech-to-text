@@ -185,8 +185,8 @@ class DotoolTyper:
         except (BrokenPipeError, ConnectionResetError) as e:
             logger.warning("dotoolc pipe broken, disabling typing: %s", e)
             self._usable = False
-        except Exception as e:
-            logger.error("Failed to stream text to dotoolc: %s", e)
+        except Exception:
+            logger.exception("Failed to stream text to dotoolc")
             self._usable = False
 
     def _delete_words(self, count: int) -> int:
@@ -256,8 +256,8 @@ class DotoolTyper:
         except (BrokenPipeError, ConnectionResetError) as e:
             logger.warning("dotoolc pipe broken, disabling typing: %s", e)
             self._usable = False
-        except Exception as e:
-            logger.error("Failed to stream backspaces to dotoolc: %s", e)
+        except Exception:
+            logger.exception("Failed to stream backspaces to dotoolc")
             self._usable = False
 
     async def stream_delete_word(self) -> None:
@@ -276,8 +276,8 @@ class DotoolTyper:
                 while word_start > 0 and self._typed_text[word_start - 1] != " ":
                     word_start -= 1
                 self._typed_text = self._typed_text[:word_start]
-        except Exception as e:
-            logger.error("Failed to stream delete_word: %s", e)
+        except Exception:
+            logger.exception("Failed to stream delete_word")
             self._usable = False
 
     async def stream_delete_line_start(self) -> None:
@@ -292,8 +292,8 @@ class DotoolTyper:
                 self._typed_text = "\n".join(lines[:-1])
             else:
                 self._typed_text = ""
-        except Exception as e:
-            logger.error("Failed to stream delete_line_start: %s", e)
+        except Exception:
+            logger.exception("Failed to stream delete_line_start")
             self._usable = False
 
     async def stream_delete_line_end(self) -> None:
@@ -305,8 +305,8 @@ class DotoolTyper:
             await self._process.stdin.drain()
             # We don't know exactly what was deleted after the cursor
             # unless we track cursor position. For now, we leave _typed_text.
-        except Exception as e:
-            logger.error("Failed to stream delete_line_end: %s", e)
+        except Exception:
+            logger.exception("Failed to stream delete_line_end")
             self._usable = False
 
     async def stream_diff(self, new_text: str) -> None:

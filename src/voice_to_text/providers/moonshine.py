@@ -83,7 +83,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
 
         class _Listener(self._moonshine.TranscriptEventListener):
             def on_line_started(self, event: Any) -> None:
-                pass
+                pass  # Intentional no-op: line start events are not used in streaming transcription
 
             def on_line_text_changed(self, event: Any) -> None:
                 provider._partial_result = event.line.text
