@@ -245,8 +245,8 @@ export class VmManager {
     console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
     const t4 = Date.now();
-    const skipDeps = this.config.skipDeps || isGoldenDepsImage;
-    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps);
+    // Always install Python deps (golden image may be missing onnxruntime)
+    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, false);
     console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 
     console.log(`  setup total: ${Date.now() - t0}ms`);
