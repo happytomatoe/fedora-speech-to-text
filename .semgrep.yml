@@ -1,0 +1,64 @@
+rules:
+  # ── Project-specific custom rules ──────────────────────────────────
+
+  # Detect hardcoded API keys (common patterns)
+  - id: hardcoded-api-key
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "sk-..."
+          - pattern: $VAR = "gsk_..."
+          - pattern: $VAR = "xai-..."
+    message: >
+      Possible hardcoded API key. Use environment variables or
+      the system keyring instead.
+    severity: WARNING
+    languages: [python]
+
+  # Ensure yaml.safe_load is used (not yaml.load)
+  - id: yaml-unsafe-load
+    pattern: yaml.load(...)
+    message: >
+      Use yaml.safe_load() instead of yaml.load() to prevent
+      arbitrary code execution from untrusted YAML.
+    severity: ERROR
+    languages: [python]
+
+  # Detect subprocess with shell=True (warn, not block — sometimes intentional)
+  # Excluded for base.py where shell=True is needed for command pipelines
+  - id: subprocess-shell-true-custom
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+    message: >
+      subprocess called with shell=True. Use shell=False for
+      safer execution unless shell expansion is explicitly needed.
+    severity: WARNING
+    languages: [python]
+    paths:
+      exclude:
+        - src/voice_to_text/providers/base.py
+
+  # Catch print() in production code (should use logging)
+  - id: no-print-in-production
+    pattern: print(...)
+    message: >
+      Use logging instead of print() in production code.
+    severity: INFO
+    languages: [python]
+    paths:
+      exclude:
+        - tests/
+
+# Suppress known false positives in built-in rules
+overrides:
+  # base.py logs API key metadata (provider name, source, fingerprint), not actual keys
+  - rules:
+      - python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+    paths:
+      exclude:
+        - src/voice_to_text/providers/base.py
+
+  # deepgram.py already converts http→wss before building the URL
+  - rules:
+      - javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
+    paths:
+      exclude:
+        - src/voice_to_text/providers/deepgram.py

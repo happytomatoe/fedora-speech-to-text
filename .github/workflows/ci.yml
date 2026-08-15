@@ -4,6 +4,15 @@ on:
   pull_request:
 
 jobs:
+  semgrep:
+    name: Semgrep Security Scan
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        run: semgrep scan --config .semgrep.yml --error --quiet
   lint-and-type-check:
     runs-on: ubuntu-latest
     steps:

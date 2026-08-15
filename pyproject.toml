@@ -64,4 +64,5 @@ dev = [
     "ruff>=0.15.0",
     "types-requests",
     "types-PyYAML",
+    "semgrep>=1.79.0",
 ]

@@ -27,6 +27,7 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
     uv run pyright
+    just semgrep
     just gnome-ext-lint
     just check-output-methods-sync
     echo "All lint checks passed!"
@@ -39,6 +40,15 @@ check-output-methods-sync:
 # @category lint
 # Auto-fix lint issues
 lint-fix:
+# @category lint
+# Run Semgrep security scanner (Python)
+semgrep:
+    uv run semgrep --config .semgrep.yml --error
+
+# @category lint
+# Run Semgrep with default community rules (broader scan)
+semgrep-community:
+    uv run semgrep --config p/default --error
     uv run ruff check --fix .
     uv run ruff format .
     echo "Lint fixes applied."

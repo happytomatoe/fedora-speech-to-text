@@ -29,6 +29,9 @@ pre-commit:
     tsc-type-check:
       run: npx tsc --noEmit
       glob: "gnome-ext/**/*.js"
+    semgrep:
+      run: uv run semgrep --config .semgrep.yml --error --quiet
+      glob: "*.py"
     gtk4-api-check:
       run: gjs --module gnome-ext/tests/test-gtk4-api.js
       glob: "gnome-ext/tests/**/*.js"

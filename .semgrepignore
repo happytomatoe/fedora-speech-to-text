@@ -1,0 +1,29 @@
+# Test files — Semgrep is for production code
+tests/
+e2e/
+
+# GNOME extension (JS, not Python — use eslint instead)
+gnome-ext/
+
+# Vendored dependencies
+opensrc/
+gnome-ext/vendor/
+
+# Generated / build artifacts
+dist/
+build/
+*.egg-info/
+.venv/
+
+# CI/CD and scripts
+scripts/
+.github/
+service/
+
+# Docs
+docs/
+*.md
+
+# E2E artifacts
+*.qcow2
+*.iso
