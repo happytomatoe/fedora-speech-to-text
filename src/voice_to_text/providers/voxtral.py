@@ -80,7 +80,11 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
                 files = {"file": (os.path.basename(audio_path), audio_file)}
                 data: dict[str, str | list[str]] = {"model": self.model, "language": language}
                 if custom_words:
-                    data["context_bias"] = custom_words
+                    # Voxtral context_bias rejects items with spaces/commas — split them
+                    bias = []
+                    for w in custom_words:
+                        bias.extend(w.replace(",", " ").split())
+                    data["context_bias"] = bias
                 response = await self._client.post(
                     f"{self._api_url}/v1/audio/transcriptions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
@@ -96,10 +100,12 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
             logger.error("Voxtral API error: HTTP %s", status)
+            api_msg = None
             if e.response is not None:
                 try:
                     body = e.response.json()
                     logger.error("Voxtral response body: %s", body)
+                    api_msg = body.get("message")
                 except ValueError:
                     logger.error("Voxtral response text: %s", e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
@@ -110,7 +116,8 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
                         fp,
                         len(self.api_key),
                     )
-            raise RuntimeError(f"Voxtral API request failed (HTTP {status}): {e}") from e
+            detail = f": {api_msg}" if api_msg else ""
+            raise RuntimeError(f"Voxtral API error (HTTP {status}){detail}") from e
         except Exception as e:
             logger.exception("Voxtral transcription failed")
             raise RuntimeError(f"Voxtral transcription failed: {e}") from e

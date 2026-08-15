@@ -139,28 +139,28 @@ export async function deployExtension(
   if (!existsSync(extDir)) return;
 
   const t0 = Date.now();
-  console.log("Deploying GNOME extension...");
+  console.log("Deploying GNOME extension via install.sh...");
   
-  const extRemoteDir = `~/.local/share/gnome-shell/extensions/${cfg.extensionUuid}`;
+  // Upload install.sh and gnome-ext to VM, then run install.sh --local
   const tUpload = Date.now();
   if (deployer) {
-    // Use persistent SSH connection (avoids ~6s per-call overhead)
-    await deployer.uploadDir(extDir, extRemoteDir);
+    await deployer.exec('mkdir -p ~/tmp-deploy');
+    await deployer.uploadFile(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh');
+    await deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext');
   } else {
-    rsyncToVm(extDir, extRemoteDir, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`mkdir -p ~/tmp-deploy`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
   
-  const tSchema = Date.now();
+  const tInstall = Date.now();
   if (deployer) {
-    const schemaResult = await deployer.exec(`glib-compile-schemas ${extRemoteDir}/schemas/`);
-    if (schemaResult.code !== 0) {
-      throw new Error(`glib-compile-schemas failed (code ${schemaResult.code}): ${schemaResult.stderr}`);
-    }
+    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext');
   } else {
-    sshExec(`glib-compile-schemas ${extRemoteDir}/schemas/`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
-  console.log(`    schemas: ${Date.now() - tSchema}ms [time]`);
+  console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
   
   const tDconf = Date.now();
   await shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`);
@@ -172,9 +172,9 @@ dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'c
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
-  console.log(`  rsync+dconf: ${Date.now() - t0}ms [time]`);
+  console.log(`  install.sh+dconf: ${Date.now() - t0}ms [time]`);
 
-  // Disconnect deployer before GDM restart — SSH connection will be stale after restart
+  // Disconnect deployer before GDM restart
   if (deployer) {
     await deployer.disconnect();
   }
@@ -378,7 +378,7 @@ export async function startVoiceService(
     }
     // Use uv for faster, more reliable installs (matches install.sh approach)
     const uvResult = await shell.exec(
-      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
+      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
     );
     if (!uvResult.includes("__UV_OK__")) {
       // Fallback to pip if uv not available
@@ -387,7 +387,7 @@ export async function startVoiceService(
       try {
         sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
         sshExec(
-          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq",
+          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
           cfg.sshKey, cfg.sshPort, cfg.sshUser
         );
         console.log("  pip install completed");

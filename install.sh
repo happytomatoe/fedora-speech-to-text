@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 # Parse arguments
+LOCAL_DIR=""
 for arg in "$@"; do
   if [ "$arg" = "--debug" ]; then
     set -x
   fi
 done
+for ((i=1; i<=$#; i++)); do
+  if [ "${!i}" = "--local" ]; then
+    next=$((i+1))
+    LOCAL_DIR="${!next}"
+  fi
+done
+if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
+  echo "ERROR: --local directory does not exist: $LOCAL_DIR" >&2
+  exit 1
+fi
 set -euo pipefail
 REPO="happytomatoe/voice-to-text"
 EXT_UUID="voice-to-text@happytomatoe.com"
@@ -174,7 +185,7 @@ install_dotool() {
 echo "Installing prerequisites..."
 case "$PKG_MGR" in
 rpm-ostree)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
@@ -183,19 +194,19 @@ rpm-ostree)
   echo "      If this is the first time layering packages, reboot before continuing."
   ;;
 dnf)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
   ;;
 pacman)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
   ;;
 apt)
-  install_dotool
+  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret-1-dev
@@ -263,8 +274,34 @@ fi
 echo ""
 echo "--- Installing GNOME extension ---"
 
-echo "Fetching latest release..."
-if [ -z "$LATEST_TAG" ]; then
+if [ -n "$LOCAL_DIR" ]; then
+  echo "Installing from local directory: $LOCAL_DIR"
+  rm -rf "$INSTALL_DIR"
+  mkdir -p "$INSTALL_DIR/schemas"
+  cp "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$INSTALL_DIR/" 2>/dev/null || true
+  mkdir -p "$INSTALL_DIR/prefs"
+  if ! cp "$LOCAL_DIR/prefs/"*.js "$INSTALL_DIR/prefs/"; then
+    echo "Failed to install GNOME preference files" >&2
+    exit 1
+  fi
+  # prefs.js is in the extension root, not prefs/ subdirectory
+  if [[ ! -f "$INSTALL_DIR/prefs.js" ]]; then
+    echo "Missing required preference module: prefs.js" >&2
+    exit 1
+  fi
+  cp "$LOCAL_DIR"/*.css "$INSTALL_DIR/" 2>/dev/null || true
+  echo "DEBUG: Checking schemas in $LOCAL_DIR/schemas/"
+  ls -la "$LOCAL_DIR/schemas/" 2>&1 || true
+  if ls "$LOCAL_DIR"/schemas/*.xml 1>/dev/null 2>&1; then
+    echo "DEBUG: Found schema XML files, copying..."
+    cp "$LOCAL_DIR"/schemas/*.xml "$INSTALL_DIR/schemas/"
+    glib-compile-schemas "$INSTALL_DIR/schemas/"
+  else
+    echo "WARNING: No schema XML files found in $LOCAL_DIR/schemas/"
+  fi
+  cp -r "$LOCAL_DIR/vendor" "$INSTALL_DIR/" 2>/dev/null || true
+elif [ -z "$LATEST_TAG" ]; then
+  echo "Fetching latest release..."
   echo "Falling back to installing the extension from source..."
   rm -rf "$INSTALL_DIR"
   mkdir -p "$INSTALL_DIR/schemas"
@@ -282,6 +319,7 @@ if [ -z "$LATEST_TAG" ]; then
   fi
   cp "$TMPDIR/repo/gnome-ext"/*.css "$INSTALL_DIR/" 2>/dev/null || true
   cp "$TMPDIR/repo/gnome-ext"/schemas/*.xml "$INSTALL_DIR/schemas/"
+  cp -r "$TMPDIR/repo/gnome-ext/vendor" "$INSTALL_DIR/" 2>/dev/null || true
   glib-compile-schemas "$INSTALL_DIR/schemas/"
   rm -rf "$TMPDIR"
 else
