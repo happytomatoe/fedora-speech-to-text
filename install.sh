@@ -220,7 +220,6 @@ apt)
   install_pkg libsecret-1-dev
   install_pkg libsecret-tools
   ;;
-  ;;
   *)
     echo "Unsupported package manager: $PKG_MGR"
     exit 1
