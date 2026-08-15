@@ -55,6 +55,16 @@ When adding or removing an output method, update ALL of these files:
   - `just gnome-ext-dev` — install extension and run nested GNOME Shell
 - Python version: **3.13+** (`requires-python`).
 
+## Always Run E2E Tests
+
+**Always run end-to-end tests before committing, pushing, or claiming a change is done.** No exceptions — regardless of what was changed (Python, JS, config, install scripts, CI, docs).
+
+```sh
+just e2e
+```
+
+E2E tests are the source of truth for whether the extension works. Unit tests and lint are not sufficient on their own.
+
 ## Linting and type checking
 
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).
