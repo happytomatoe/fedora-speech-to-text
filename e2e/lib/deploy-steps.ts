@@ -102,11 +102,8 @@ export async function waitForGdmLogin(
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
-  // Wait 30s for gnome-shell to start, then fail if not ready.
-  const t1 = Date.now();
-  await Bun.sleep(30_000);
-  let ready = false;
   // Poll for gnome-shell process (up to 30s, checking every 5s)
+  const t1 = Date.now();
   let ready = false;
   for (let i = 0; i < 6; i++) {
     await Bun.sleep(5_000);
@@ -132,7 +129,6 @@ export async function waitForGdmLogin(
     } catch {
       // ignore
     }
-  }
   }
   console.log(`  gnome-shell ready: ${Date.now() - t1}ms [time]`);
   console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
