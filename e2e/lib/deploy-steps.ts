@@ -56,18 +56,20 @@ export interface DeployConfig {
 // --- Deployment steps ---
 
 export async function waitForGdmLogin(
-  shellExec: (cmd: string) => Promise<string>
+  sshKey: string,
+  sshPort: number,
+  sshUser = "testuser"
 ): Promise<void> {
   const t0 = Date.now();
   // Start GNOME Shell in headless mode on the existing session bus.
-  // The session bus is provided by systemd --user (created on SSH login).
-  // No dbus-launch or dbus-run-session needed — they create a SEPARATE bus
-  // that gdbus wait can't find from a different SSH command.
-  await shellExec(
+  // Uses sshExec (direct SSH) instead of shell-use PTY to avoid flooding
+  // the terminal with gnome-shell startup output.
+  sshExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
     "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 & " +
     "sleep 5 && " +
-    "gdbus wait --session --timeout=30 org.gnome.Shell"
+    "gdbus wait --session --timeout=30 org.gnome.Shell",
+    sshKey, sshPort, sshUser
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
   
@@ -75,8 +77,9 @@ export async function waitForGdmLogin(
   const t1 = Date.now();
   let ready = false;
   for (let i = 0; i < 20; i++) {
-    const result = await shellExec(
-      `busctl --user get-property org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager SessionIsActive 2>&1 || true`
+    const result = sshExec(
+      `busctl --user get-property org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager SessionIsActive 2>&1 || true`,
+      sshKey, sshPort, sshUser
     );
     if (result.includes("b true")) {
       ready = true;
