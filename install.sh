@@ -267,8 +267,17 @@ else
   curl -sL "https://raw.githubusercontent.com/$REPO/main/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
 fi
 
-# D-Bus service auto-activates when extension requests the name
-# No systemd daemon-reload or enable needed
+# Install systemd user service for D-Bus activation
+SYSTEMD_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_DIR"
+if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
+  cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
+elif curl -sL "https://raw.githubusercontent.com/$REPO/main/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
+  echo "Downloaded systemd user service."
+else
+  echo "WARNING: Could not install systemd user service."
+fi
+systemctl --user daemon-reload
 
 # --- Install GNOME extension ---
 echo ""
@@ -276,50 +285,24 @@ echo "--- Installing GNOME extension ---"
 
 if [ -n "$LOCAL_DIR" ]; then
   echo "Installing from local directory: $LOCAL_DIR"
-  rm -rf "$INSTALL_DIR"
-  mkdir -p "$INSTALL_DIR/schemas"
-  cp "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$INSTALL_DIR/" 2>/dev/null || true
-  mkdir -p "$INSTALL_DIR/prefs"
-  if ! cp "$LOCAL_DIR/prefs/"*.js "$INSTALL_DIR/prefs/"; then
-    echo "Failed to install GNOME preference files" >&2
-    exit 1
-  fi
-  # prefs.js is in the extension root, not prefs/ subdirectory
-  if [[ ! -f "$INSTALL_DIR/prefs.js" ]]; then
-    echo "Missing required preference module: prefs.js" >&2
-    exit 1
-  fi
-  cp "$LOCAL_DIR"/*.css "$INSTALL_DIR/" 2>/dev/null || true
-  echo "DEBUG: Checking schemas in $LOCAL_DIR/schemas/"
-  ls -la "$LOCAL_DIR/schemas/" 2>&1 || true
-  if ls "$LOCAL_DIR"/schemas/*.xml 1>/dev/null 2>&1; then
-    echo "DEBUG: Found schema XML files, copying..."
-    cp "$LOCAL_DIR"/schemas/*.xml "$INSTALL_DIR/schemas/"
-    glib-compile-schemas "$INSTALL_DIR/schemas/"
-  else
-    echo "WARNING: No schema XML files found in $LOCAL_DIR/schemas/"
-  fi
-  cp -r "$LOCAL_DIR/vendor" "$INSTALL_DIR/" 2>/dev/null || true
+  rsync -av --delete \
+      --exclude='tests/' \
+      --exclude='run-dev.sh' \
+      --exclude='gjs-env.d.ts' \
+      --exclude='bun.lock' \
+      "$LOCAL_DIR/" "$INSTALL_DIR/"
+  glib-compile-schemas "$INSTALL_DIR/schemas/"
 elif [ -z "$LATEST_TAG" ]; then
   echo "Fetching latest release..."
   echo "Falling back to installing the extension from source..."
-  rm -rf "$INSTALL_DIR"
-  mkdir -p "$INSTALL_DIR/schemas"
   TMPDIR=$(mktemp -d)
   git clone --depth 1 "https://github.com/$REPO.git" "$TMPDIR/repo"
-  cp "$TMPDIR/repo/gnome-ext"/*.js "$TMPDIR/repo/gnome-ext"/*.json "$INSTALL_DIR/"
-  mkdir -p "$INSTALL_DIR/prefs"
-  if ! cp "$TMPDIR/repo/gnome-ext/prefs/"*.js "$INSTALL_DIR/prefs/"; then
-    echo "Failed to install GNOME preference files" >&2
-    exit 1
-  fi
-  if [[ ! -f "$INSTALL_DIR/prefs/prefs.js" ]]; then
-    echo "Missing required preference module: prefs.js" >&2
-    exit 1
-  fi
-  cp "$TMPDIR/repo/gnome-ext"/*.css "$INSTALL_DIR/" 2>/dev/null || true
-  cp "$TMPDIR/repo/gnome-ext"/schemas/*.xml "$INSTALL_DIR/schemas/"
-  cp -r "$TMPDIR/repo/gnome-ext/vendor" "$INSTALL_DIR/" 2>/dev/null || true
+  rsync -av --delete \
+      --exclude='tests/' \
+      --exclude='run-dev.sh' \
+      --exclude='gjs-env.d.ts' \
+      --exclude='bun.lock' \
+      "$TMPDIR/repo/gnome-ext/" "$INSTALL_DIR/"
   glib-compile-schemas "$INSTALL_DIR/schemas/"
   rm -rf "$TMPDIR"
 else
@@ -330,6 +313,28 @@ else
   filename=$(basename "$RELEASE_URL")
   gnome-extensions install --force /tmp/$filename
   rm -f /tmp/$filename
+fi
+
+# --- Enable extension ---
+echo ""
+echo "--- Enabling GNOME extension ---"
+
+# Try gnome-extensions enable first (works when GNOME Shell is running)
+if gnome-extensions enable "$EXT_UUID" 2>/dev/null; then
+  echo "Extension enabled."
+elif command_exists dconf; then
+  # Fallback: write directly to dconf (works without running GNOME Shell)
+  CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+  if ! echo "$CURRENT" | grep -q "$EXT_UUID"; then
+    if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+      dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
+    else
+      dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$EXT_UUID']"
+    fi
+  fi
+  echo "Extension added to dconf. It will be active on next GNOME Shell login."
+else
+  echo "WARNING: Could not enable extension. Enable it manually: gnome-extensions enable $EXT_UUID"
 fi
 
 # --- Configure API key ---

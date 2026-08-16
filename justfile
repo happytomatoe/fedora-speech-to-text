@@ -49,9 +49,15 @@ install:
     uv tool install -e .
 
 uninstall:
+    gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true
+    rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
+    rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
+    rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.user.service
+    rm -f ~/.local/bin/voice-to-text-dbus-wrapper
     rm -f ~/.local/bin/voice-to-text-dbus
     uv tool uninstall voice-to-text 2>/dev/null || true
-
+    systemctl --user daemon-reload
+    echo "Uninstalled extension, D-Bus service, and Python package."
 # Reinstall Python package from source
 reinstall: gnome-ext-install service-install
     #!/usr/bin/env bash
@@ -538,15 +544,12 @@ gnome-ext-pack:
     UUID="voice-to-text@happytomatoe.com"
     SRC="gnome-ext"
     rm -rf "dist/$UUID"
-    mkdir -p "dist/$UUID/schemas"
-    # No TypeScript build needed — extension is plain JS
-    # Copy JS files from gnome-ext/
-    cp "$SRC"/*.js "dist/$UUID/"
-    # Copy vendor directory (js-yaml)
-    cp -r "$SRC"/vendor "dist/$UUID/"
-    # Copy other files from gnome-ext/
-    cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
-    cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"
+    rsync -av \
+        --exclude='tests/' \
+        --exclude='run-dev.sh' \
+        --exclude='gjs-env.d.ts' \
+        --exclude='bun.lock' \
+        "$SRC/" "dist/$UUID/"
     glib-compile-schemas "dist/$UUID/schemas/"
     cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
     echo "Extension packed to dist/$UUID.shell-extension.zip"
