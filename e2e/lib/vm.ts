@@ -141,6 +141,7 @@ export class VmManager {
         return false;
       }
     })();
+    console.log(`  KVM: ${kvmAvailable ? 'available' : 'NOT available (using TCG software emulation)'}`);
     const qemuArgs = [
       "qemu-system-x86_64",
       ...(kvmAvailable ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
@@ -247,7 +248,7 @@ export class VmManager {
   async setup(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
-      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
@@ -292,7 +293,7 @@ export class VmManager {
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
-      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }

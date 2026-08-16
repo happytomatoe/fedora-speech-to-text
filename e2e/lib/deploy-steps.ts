@@ -60,7 +60,8 @@ export async function waitForGdmLogin(
   shell: ShellHelper,
   sshKey: string,
   sshPort: number,
-  sshUser = "testuser"
+  sshUser = "testuser",
+  serialLog?: string
 ): Promise<void> {
   const t0 = Date.now();
 
@@ -69,10 +70,34 @@ export async function waitForGdmLogin(
   // VM's sshd (especially on GitHub Actions runners). The shell-use PTY
   // already has an authenticated session, so we use it for all commands.
 
+  // Check for critical missing packages (friend's advice: these cause silent crashes)
+  const missingPkgs = await shell.exec(
+    "rpm -q mesa-libgbm mesa-dri-drivers polkit accountsservice gsettings-desktop-schemas 2>&1 | grep 'not installed' || echo all-present"
+  );
+  if (missingPkgs.includes("not installed")) {
+    console.log(`  WARNING: missing packages:\n${missingPkgs}`);
+  }
+
+  // Configure journald to forward to serial console (friend's advice: captures OOM kills)
+  // This writes kernel + systemd logs to serial.log on the host
+  await shell.exec(
+    "sudo sed -i 's/^#ForwardToConsole=no/ForwardToConsole=yes/' /etc/systemd/journald.conf 2>/dev/null || true"
+  );
+  await shell.exec("sudo systemctl restart systemd-journald 2>/dev/null || true");
+
+  // Disable animations to reduce llvmpipe GPU/CPU load (friend's advice)
+  await shell.exec(
+    "dconf write /org/gnome/desktop/interface/enable-animations false 2>/dev/null || true"
+  );
+
+  // Log memory state before starting gnome-shell (helps diagnose OOM kills)
+  const memInfo = await shell.exec("free -m 2>/dev/null | head -2 || true");
+  console.log(`  memory before gnome-shell:\n${memInfo}`);
   // Start GNOME Shell in headless mode on the existing session bus.
+  // Use 1280x720 instead of 1920x1080 to reduce llvmpipe memory/CPU pressure.
   await shell.exec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 &"
+    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 &"
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
@@ -126,6 +151,20 @@ export async function waitForGdmLogin(
       console.log(`  gnome-shell processes:\n${ps}`);
     } catch {
       // ignore
+    }
+    // Read serial log (on host filesystem, survives SSH death — friend's advice)
+    if (serialLog) {
+      try {
+        if (existsSync(serialLog)) {
+          const serial = readFileSync(serialLog, "utf-8");
+          const last50 = serial.split("\n").slice(-50).join("\n");
+          console.log(`  serial log (last 50 lines):\n${last50}`);
+        } else {
+          console.log("  (serial.log not found on host)");
+        }
+      } catch {
+        // ignore
+      }
     }
     throw new Error("gnome-shell did not start — cannot continue without a running shell");
   }
