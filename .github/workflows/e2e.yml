@@ -29,6 +29,9 @@ jobs:
       - name: Install just
         run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
 
+      - name: Install shell-use
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/microsoft/shell-use/main/install/install.sh | sh
+
       # Cache all E2E files
       - name: Restore E2E files from cache
         id: cache-restore
