@@ -8,7 +8,7 @@ import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 // --- SSH exec helpers (sync, for quick one-off commands) ---
 
 function sshOpts(sshKey: string, sshPort: number): string {
-  return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
+  return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -i ${sshKey} -p ${sshPort}`;
 }
 
 export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3, timeoutMs = 30000): string {
@@ -61,6 +61,24 @@ export async function waitForGdmLogin(
   sshUser = "testuser"
 ): Promise<void> {
   const t0 = Date.now();
+
+  // Preflight SSH check — ensure SSH is accepting connections
+  // (gnome-shell-system-monitor-next-applet uses similar polling)
+  console.log("  preflight SSH check...");
+  let sshReady = false;
+  for (let i = 0; i < 12; i++) {
+    try {
+      sshExec("echo ok", sshKey, sshPort, sshUser, 1, 5000);
+      sshReady = true;
+      break;
+    } catch {
+      await Bun.sleep(5000);
+    }
+  }
+  if (!sshReady) {
+    throw new Error("SSH not available after 60s preflight check");
+  }
+  console.log(`  preflight SSH: ${Date.now() - t0}ms [time]`);
 
   // Start GNOME Shell in headless mode on the existing session bus.
   // Uses sshExec (direct SSH) instead of shell-use PTY to avoid flooding
