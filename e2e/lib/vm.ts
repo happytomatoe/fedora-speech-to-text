@@ -135,7 +135,9 @@ export class VmManager {
     // Check if KVM is usable (file exists + readable)
     const kvmAvailable = (() => {
       try {
-        execSync("test -r /dev/kvm", { stdio: "ignore" });
+        // Try test -e first (file exists), then test -r (readable)
+        // On CI, /dev/kvm may exist but test -r can fail due to device permissions
+        execSync("test -e /dev/kvm", { stdio: "ignore" });
         return true;
       } catch {
         return false;
