@@ -205,7 +205,8 @@ export class VmManager {
           });
         });
       },
-      { timeoutMs: 120_000, intervalMs: 1000 }
+      120_000,
+      1000
     );
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
