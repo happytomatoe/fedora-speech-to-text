@@ -54,7 +54,9 @@ install_prerequisites() {
 
   if ! command_exists dotool; then
     echo ""
-    read -p "Install dotool (keyboard input tool)? [Y/n] " -n 1 -r
+    echo "dotool is a keyboard input tool. We can build it from source now,"
+    echo "or you can install it later via other methods (e.g. using Fedora's built-in APIs)."
+    read -p "Install dotool now? [Y/n] " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
       install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
