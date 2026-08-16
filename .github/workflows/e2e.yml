@@ -24,9 +24,9 @@ jobs:
           echo '--- KVM diagnostics ---'
           ls -la /dev/kvm 2>&1 || echo 'WARNING: /dev/kvm not found'
           cat /proc/cpuinfo | grep -c vmx || echo 'No hardware virtualization flags'
-          # Enable libvirt user session
-          sudo usermod -aG kvm $USER
-          sudo usermod -aG libvirt $USER
+          # Enable libvirt user session (ignore if group doesn't exist on Ubuntu)
+          sudo usermod -aG kvm $USER || true
+          sudo usermod -aG libvirt $USER || sudo usermod -aG libvirt-qemu $USER || true
           echo 'LIBVIRT_DEFAULT_URI=qemu:///session' >> $HOME/.bashrc
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
