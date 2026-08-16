@@ -413,7 +413,8 @@ export async function startVoiceService(
 
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  scpToVm(join(cfg.fixtureDir, "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  const configName = process.env.CI ? "voice-to-text-config.ci.yaml" : "voice-to-text-config.local.yaml";
+  scpToVm(join(cfg.fixtureDir, configName), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   
   // Set output method from config (default to 'type')
   const outputMethod = cfg.outputMethod || 'type';
