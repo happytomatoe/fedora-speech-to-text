@@ -133,16 +133,7 @@ export class VmManager {
 
     // Use setsid to run QEMU in a new session so it survives parent abort/timeout
     // Check if KVM is usable (file exists + readable)
-    const kvmAvailable = (() => {
-      try {
-        // Try test -e first (file exists), then test -r (readable)
-        // On CI, /dev/kvm may exist but test -r can fail due to device permissions
-        execSync("test -e /dev/kvm", { stdio: "ignore" });
-        return true;
-      } catch {
-        return false;
-      }
-    })();
+    const kvmAvailable = existsSync("/dev/kvm");
     console.log(`  KVM: ${kvmAvailable ? 'available' : 'NOT available (using TCG software emulation)'}`);
     const qemuArgs = [
       "qemu-system-x86_64",
