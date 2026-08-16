@@ -157,10 +157,6 @@ def _execute_command_for_key(command: str, *, timeout: float = 10) -> str:
         raise ValueError(f"API key command error: {e}") from e
 
 
-# Max retries for 401 errors
-_MAX_API_KEY_RETRIES = 3
-
-
 class AsyncKeyMixin:
     """Mixin for providers that support async API key resolution.
 
@@ -277,29 +273,6 @@ def resolve_api_key(
         return _execute_command_for_key(command)
 
     return key
-
-
-def resolve_api_key_with_retry(
-    config: dict[str, Any],
-    default_env: str,
-    extra_envs: tuple[str, ...] = (),
-    provider_name: str | None = None,
-) -> str:
-    """Resolve API key, re-running !command on failure.
-
-    Used during 401 retry - re-runs the command to get fresh key.
-    Generic for ALL providers.
-    """
-    for attempt in range(_MAX_API_KEY_RETRIES):
-        try:
-            return resolve_api_key(config, default_env, extra_envs, provider_name)
-        except ValueError as e:
-            if attempt < _MAX_API_KEY_RETRIES - 1:
-                logger.warning("API key attempt %d failed, retrying: %s", attempt + 1, e)
-                continue
-            raise
-    # This should not be reached, but pyright requires it
-    raise ValueError("Failed to resolve API key after all retries")
 
 
 class WebSocketStreamingProvider(StreamingProvider):
