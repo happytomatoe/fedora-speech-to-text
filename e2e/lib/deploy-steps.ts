@@ -75,27 +75,12 @@ export async function waitForGdmLogin(
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
-  // Debug: dump gnome-shell log after a brief delay
-  await Bun.sleep(2000);
-  try {
-    const gsLog = await shell.exec(`cat /tmp/gnome-shell.log 2>&1 || echo "(no log file)"`);
-    console.log(`  gnome-shell log:\n${gsLog}`);
-  } catch {
-    console.log("  (could not read gnome-shell log)");
-  }
-  try {
-    const psOutput = await shell.exec(`ps aux | grep gnome-shell || true`);
-    console.log(`  gnome-shell processes:\n${psOutput}`);
-  } catch {
-    // ignore
-  }
-
-  // Poll for gnome-shell process using SSH polling (like gnome-shell-system-monitor-next-applet)
-  // Retry with `sleep 5` up to 180s, checking `pgrep -x gnome-shell`
+  // Poll for gnome-shell: check every 10s, bail early if it crashed.
   const t1 = Date.now();
   let ready = false;
-  const maxAttempts = 36; // 36 * 5s = 180s
+  const maxAttempts = 18; // 18 * 10s = 180s max
   for (let i = 0; i < maxAttempts; i++) {
+    await Bun.sleep(10_000);
     try {
       const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
       if (result.includes("ready")) {
@@ -103,15 +88,41 @@ export async function waitForGdmLogin(
         break;
       }
     } catch {
-      // Shell exec may fail during startup — retry
+      // SSH may fail during startup — retry
     }
-    await Bun.sleep(5000);
+    // Check if gnome-shell crashed
+    try {
+      const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`).catch(() => "");
+      if (log && /segfault|signal|crash|error.*xwayland/i.test(log)) {
+        console.log(`  gnome-shell CRASHED (attempt ${i + 1}):\n${log}`);
+        break;
+      }
+    } catch {
+      // ignore
+    }
+    // Check if gnome-shell process disappeared after previously existing
+    if (i >= 2) {
+      const stillRunning = await shell.exec(`pgrep -x gnome-shell || echo gone`).catch(() => "gone");
+      if (stillRunning.includes("gone")) {
+        console.log(`  gnome-shell process gone at attempt ${i + 1}, not restarting`);
+        break;
+      }
+    }
   }
   console.log(`  gnome-shell ready: ${Date.now() - t1}ms [time]`);
   console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
 
   if (!ready) {
-    console.log("WARNING: gnome-shell did not start in time, continuing anyway");
+    // Dump final debug info
+    try {
+      const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null || echo '(no log)'`).catch(() => "(read failed)");
+      console.log(`  gnome-shell final log:\n${log}`);
+      const ps = await shell.exec(`ps aux | grep gnome-shell || true`).catch(() => "(ps failed)");
+      console.log(`  gnome-shell processes:\n${ps}`);
+    } catch {
+      // ignore
+    }
+    console.log("WARNING: gnome-shell did not start, continuing anyway");
   }
 }
 
