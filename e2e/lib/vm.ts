@@ -134,7 +134,7 @@ export class VmManager {
     // Use setsid to run QEMU in a new session so it survives parent abort/timeout
     const qemuArgs = [
       "qemu-system-x86_64",
-      "-enable-kvm",
+      ...(existsSync("/dev/kvm") ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
       "-cpu", "host",
       "-m", "4096",
       "-smp", "2",
