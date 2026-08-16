@@ -23,27 +23,38 @@ jobs:
       - name: Install E2E dependencies
         run: cd e2e && bun install
 
-      # Cache the 1.7GB base image
-      - name: Restore base image from cache
+      - name: Install Filen CLI
+        run: npm install -g @filen/cli
+
+      # Cache all E2E files
+      - name: Restore E2E files from cache
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: e2e/qemu-images/golden-gnome-deps.qcow2
-          key: e2e-base-image-v1
+          path: e2e/qemu-images/
+          key: e2e-files-v2
           restore-keys: |
-            e2e-base-image-
+            e2e-files-
 
-      # Run E2E tests (generates SSH keys, cloud-init, etc.)
+      # Setup E2E environment (downloads image, generates keys, etc.)
+      - name: Setup E2E environment
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: just qemu-e2e-setup
+        env:
+          FILEN_EMAIL: ${{ secrets.FILEN_EMAIL }}
+          FILEN_PASSWORD: ${{ secrets.FILEN_PASSWORD }}
+
+      # Run E2E tests
       - name: Run E2E tests
         run: cd e2e && bun run e2e.ts --shutdown --timeout 300
 
       # Save to cache on success (only if cache miss)
-      - name: Save base image to cache
+      - name: Save E2E files to cache
         if: steps.cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: e2e/qemu-images/golden-gnome-deps.qcow2
-          key: e2e-base-image-v1
+          path: e2e/qemu-images/
+          key: e2e-files-v2
 
       # Upload artifacts on failure
       - name: Upload E2E artifacts
