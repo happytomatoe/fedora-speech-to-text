@@ -75,6 +75,21 @@ export async function waitForGdmLogin(
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
+  // Debug: dump gnome-shell log after a brief delay
+  await Bun.sleep(2000);
+  try {
+    const gsLog = await shell.exec(`cat /tmp/gnome-shell.log 2>&1 || echo "(no log file)"`);
+    console.log(`  gnome-shell log:\n${gsLog}`);
+  } catch {
+    console.log("  (could not read gnome-shell log)");
+  }
+  try {
+    const psOutput = await shell.exec(`ps aux | grep gnome-shell || true`);
+    console.log(`  gnome-shell processes:\n${psOutput}`);
+  } catch {
+    // ignore
+  }
+
   // Poll for gnome-shell process using SSH polling (like gnome-shell-system-monitor-next-applet)
   // Retry with `sleep 5` up to 180s, checking `pgrep -x gnome-shell`
   const t1 = Date.now();
