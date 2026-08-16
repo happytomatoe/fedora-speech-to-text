@@ -61,6 +61,9 @@ jobs:
       # Run E2E tests
       - name: Run E2E tests
         run: cd e2e && bun run e2e.ts --shutdown --timeout 300
+        env:
+          SHELL_USE_TIMEOUT_TEXT_MS: "120000"
+          SHELL_USE_TIMEOUT_READY_MS: "120000"
 
       # Save to cache on success (only if cache miss)
       - name: Save E2E files to cache
