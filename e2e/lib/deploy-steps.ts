@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
 import { Deployer } from "./deploy.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
+import { timeoutMs } from "./config.js";
 
 // --- SSH exec helpers (sync, for quick one-off commands) ---
 
@@ -78,7 +79,7 @@ export async function waitForGdmLogin(
   // Poll for gnome-shell: check every 10s, bail early if it crashed.
   const t1 = Date.now();
   let ready = false;
-  const maxAttempts = 18; // 18 * 10s = 180s max
+  const maxAttempts = Math.ceil(timeoutMs("gnome_shell") / 10_000); // 18 * 10s = 180s max
   for (let i = 0; i < maxAttempts; i++) {
     await Bun.sleep(10_000);
     try {
@@ -196,7 +197,7 @@ export async function deployExtension(
   
   const tInstall = Date.now();
   if (deployer) {
-    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext', 180_000);
+    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext', timeoutMs("install_sh"));
   } else {
     sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }

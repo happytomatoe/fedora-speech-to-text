@@ -1,4 +1,5 @@
 import { Client, SFTPWrapper } from "ssh2";
+import { timeoutMs as configTimeoutMs } from "./config.js";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -215,7 +216,7 @@ export class Deployer {
     });
   }
 
-  async exec(command: string, timeoutMs = 120_000): Promise<{ stdout: string; stderr: string; code: number }> {
+  async exec(command: string, timeoutMs = configTimeoutMs("ssh_exec")): Promise<{ stdout: string; stderr: string; code: number }> {
     await this.connect();
 
     return new Promise((resolve, reject) => {

@@ -1,4 +1,5 @@
 import { ensureParakeet } from "./lib/parakeet.js";
+import { timeoutMs, loadTimeouts } from "./lib/config.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -53,7 +54,7 @@ const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
-const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
+const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 300) * 1000 : timeoutMs("global");
 
 // Parse --case <name> (select specific test case instead of random)
 const caseIdx = args.indexOf("--case");
@@ -787,9 +788,9 @@ async function main(): Promise<void> {
     
     await new StepRunner().run([
       { name: "preflight", fn: preflight },
-      { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-      { name: "setup", fn: () => vm.setupForPrefs(), timeout: 600_000 },
+      { name: "boot-vm", fn: () => vm.boot(), timeout: timeoutMs("boot_vm") },
+      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: timeoutMs("wait_ssh") },
+      { name: "setup", fn: () => vm.setupForPrefs(), timeout: timeoutMs("setup") },
     ]);
     
     await runPreferencesTests(vm, run);
@@ -804,8 +805,8 @@ async function main(): Promise<void> {
       let t = Date.now();
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
-        { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+        { name: "boot-vm", fn: () => vm.boot(), timeout: timeoutMs("boot_vm") },
+        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: timeoutMs("wait_ssh") },
       ]);
       timing("boot-vm", t);
       
@@ -822,7 +823,7 @@ async function main(): Promise<void> {
         console.log("\n--- No snapshot found, deploying fresh ---");
         t = Date.now();
         await new StepRunner().run([
-          { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+          { name: "setup", fn: () => vm.setup(), timeout: timeoutMs("setup") },
           { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
         ]);
         timing("deploy-and-save-snapshot", t);
@@ -845,9 +846,9 @@ async function main(): Promise<void> {
       // Fresh mode: original behavior
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
-        { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-        { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
+        { name: "boot-vm", fn: () => vm.boot(), timeout: timeoutMs("boot_vm") },
+        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: timeoutMs("wait_ssh") },
+        { name: "setup", fn: () => vm.setup(), timeout: timeoutMs("setup") },
         { name: "test-flow", fn: () => runTestFlow(vm, run) },
       ]);
       
