@@ -71,11 +71,12 @@ export async function waitForGdmLogin(
   // already has an authenticated session, so we use it for all commands.
 
   // Check for critical missing packages (friend's advice: these cause silent crashes)
-  const missingPkgs = await shell.exec(
-    "rpm -q mesa-libgbm mesa-dri-drivers polkit accountsservice gsettings-desktop-schemas 2>&1 | grep 'not installed' || echo all-present"
+  const pkgCheck = await shell.exec(
+    "rpm -q mesa-libgbm mesa-dri-drivers polkit accountsservice gsettings-desktop-schemas 2>&1"
   );
-  if (missingPkgs.includes("not installed")) {
-    console.log(`  WARNING: missing packages:\n${missingPkgs}`);
+  const missingLines = pkgCheck.split("\n").filter(l => l.includes("not installed"));
+  if (missingLines.length > 0) {
+    console.log(`  WARNING: missing packages: ${missingLines.join(", ")}`);
   }
 
   // Configure journald to forward to serial console (friend's advice: captures OOM kills)
