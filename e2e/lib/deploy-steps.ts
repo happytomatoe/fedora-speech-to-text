@@ -21,8 +21,9 @@ export function sshExec(command: string, sshKey: string, sshPort: number, sshUse
       return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: timeoutMs }).toString();
     } catch (err) {
       lastErr = err as Error;
-      // Remote command returned non-zero — still capture stdout (e.g. rpm -q, pgrep)
-      if ((err as any).stdout) return (err as any).stdout.toString();
+      // Remote command returned non-zero (not a timeout) — still capture stdout (e.g. rpm -q, pgrep)
+      // On timeout, err.killed=true and stdout may be empty Buffer — don't swallow those as success
+      if (!(err as any).killed && (err as any).stdout) return (err as any).stdout.toString();
       if (i < retries - 1) {
         execSync(`sleep 2`);
       }
@@ -105,7 +106,7 @@ export async function waitForGdmLogin(
   // Use 1280x720 instead of 1920x1080 to reduce llvmpipe memory/CPU pressure.
   shellExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 &",
+    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 < /dev/null &",
     sshKey, sshPort, sshUser
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
@@ -418,7 +419,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
   } catch {
     // Best effort — may fail if udev rule already set permissions
   }
-  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
+  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold </dev/null &>/tmp/dotoold.log &"`, { timeout: 10000 });
   await pollUntilFn(
     "dotool pipe",
     async () => {
@@ -510,7 +511,7 @@ export async function startVoiceService(
   console.log(`  Using output method: ${outputMethod}`);
   
   shellExec(
-    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`,
+    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 < /dev/null &`,
     cfg.sshKey, cfg.sshPort, cfg.sshUser
   );
 
