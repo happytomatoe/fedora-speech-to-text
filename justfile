@@ -538,15 +538,12 @@ gnome-ext-pack:
     UUID="voice-to-text@happytomatoe.com"
     SRC="gnome-ext"
     rm -rf "dist/$UUID"
-    mkdir -p "dist/$UUID/schemas"
-    # No TypeScript build needed — extension is plain JS
-    # Copy JS files from gnome-ext/
-    cp "$SRC"/*.js "dist/$UUID/"
-    # Copy vendor directory (js-yaml)
-    cp -r "$SRC"/vendor "dist/$UUID/"
-    # Copy other files from gnome-ext/
-    cp "$SRC"/metadata.json "$SRC"/stylesheet.css "dist/$UUID/"
-    cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"
+    rsync -av \
+        --exclude='tests/' \
+        --exclude='run-dev.sh' \
+        --exclude='gjs-env.d.ts' \
+        --exclude='bun.lock' \
+        "$SRC/" "dist/$UUID/"
     glib-compile-schemas "dist/$UUID/schemas/"
     cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
     echo "Extension packed to dist/$UUID.shell-extension.zip"
