@@ -108,16 +108,18 @@ export async function waitForGdmLogin(
   let ready = false;
   try {
     const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
+    console.log(`  pgrep result: ${JSON.stringify(result)}`);
     if (result.includes("ready")) {
       ready = true;
     }
-  } catch {
-    // SSH may fail during startup
+  } catch (e) {
+    console.log(`  pgrep failed: ${e}`);
   }
   if (!ready) {
     // Check if gnome-shell crashed
     try {
       const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`).catch(() => "");
+      console.log(`  gnome-shell log:\n${log}`);
       if (log && /segfault|signal|crash|error.*xwayland/i.test(log)) {
         console.log(`  gnome-shell CRASHED:\n${log}`);
       }
