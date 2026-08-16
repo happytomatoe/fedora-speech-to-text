@@ -132,10 +132,18 @@ export class VmManager {
     }
 
     // Use setsid to run QEMU in a new session so it survives parent abort/timeout
+    // Check if KVM is usable (file exists + readable)
+    const kvmAvailable = (() => {
+      try {
+        execSync("test -r /dev/kvm", { stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
     const qemuArgs = [
       "qemu-system-x86_64",
-      ...(existsSync("/dev/kvm") ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
-      "-cpu", "host",
+      ...(kvmAvailable ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
       "-m", "4096",
       "-smp", "2",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
