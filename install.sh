@@ -32,19 +32,14 @@ if command_exists rpm-ostree; then
   PKG_MGR="rpm-ostree"
 elif command_exists dnf; then
   PKG_MGR="dnf"
-elif command_exists pacman; then
-  PKG_MGR="pacman"
-elif command_exists apt; then
-  PKG_MGR="apt"
 else
-  echo "ERROR: Unsupported package manager. Supported: rpm-ostree, dnf, pacman, apt"
+  echo "ERROR: This installer requires Fedora (dnf or rpm-ostree)."
   exit 1
 fi
 
 echo "Detected package manager: $PKG_MGR"
 echo ""
 
-# --- Helper: install a package if not already present ---
 install_pkg() {
   local pkg="$1"
   if command_exists "$pkg"; then
@@ -52,20 +47,8 @@ install_pkg() {
     return 0
   fi
   case "$PKG_MGR" in
-  apt)
-    if dpkg -s "$pkg" &>/dev/null; then
-      echo "  $pkg already installed, skipping."
-      return 0
-    fi
-    ;;
   dnf | rpm-ostree)
     if rpm -q "$pkg" &>/dev/null; then
-      echo "  $pkg already installed, skipping."
-      return 0
-    fi
-    ;;
-  pacman)
-    if pacman -Qi "$pkg" &>/dev/null; then
       echo "  $pkg already installed, skipping."
       return 0
     fi
@@ -78,12 +61,6 @@ install_pkg() {
     ;;
   dnf)
     sudo dnf install -y "$pkg" || true
-    ;;
-  pacman)
-    sudo pacman -S --noconfirm "$pkg" || true
-    ;;
-  apt)
-    sudo apt install -y "$pkg" || true
     ;;
   esac
 }
@@ -149,16 +126,8 @@ install_dotool() {
   # Direct build (last resort)
   echo "  Attempting direct build..."
   local BUILD_DEPS="gcc make libev-devel systemd-devel"
-  case "$PKG_MGR" in
-    apt) BUILD_DEPS="gcc make libev-dev libsystemd-dev" ;;
-    pacman) BUILD_DEPS="gcc make libev systemd" ;;
-  esac
-  install_ok=false
-  if [ "$PKG_MGR" = "pacman" ]; then
-    sudo pacman -S --noconfirm $BUILD_DEPS git 2>/dev/null && install_ok=true
-  else
-    sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null && install_ok=true
-  fi
+  local BUILD_DEPS="gcc make libev-devel systemd-devel"
+  sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null && install_ok=true
   if [ "$install_ok" = true ]; then
     local TMPDIR
     TMPDIR=$(mktemp -d)
@@ -181,11 +150,22 @@ install_dotool() {
   return 1
 }
 
+# --- Ask about dotool ---
+if ! command_exists dotool; then
+  echo ""
+  read -p "Install dotool (keyboard input tool)? [Y/n] " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+  else
+    echo "Skipping dotool installation."
+    echo "  You can install it later: https://git.sr.ht/~geb/dotool"
+  fi
+fi
 # --- Install prerequisites ---
 echo "Installing prerequisites..."
 case "$PKG_MGR" in
 rpm-ostree)
-  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
@@ -194,23 +174,9 @@ rpm-ostree)
   echo "      If this is the first time layering packages, reboot before continuing."
   ;;
 dnf)
-  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
   install_pkg unzip
   install_pkg curl
   install_pkg libsecret
-  ;;
-pacman)
-  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
-  install_pkg unzip
-  install_pkg curl
-  install_pkg libsecret
-  ;;
-apt)
-  install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
-  install_pkg unzip
-  install_pkg curl
-  install_pkg libsecret-1-dev
-  install_pkg libsecret-tools
   ;;
 esac
 
@@ -240,13 +206,9 @@ LATEST_TAG=$(
     awk -F'/' '$NF !~ /\^\{\}$/ { print $NF; exit }' || true
 )
 if [ -z "$LATEST_TAG" ]; then
-  echo "WARNING: Could not fetch release tags for $REPO."
-  echo "  This can happen due to network issues or authentication prompts."
-  echo "  Falling back to installing from source..."
-  REPO_DIR=$(mktemp -d)
-  GIT_TERMINAL_PROMPT=0 git clone --depth 1 "https://github.com/$REPO.git" "$REPO_DIR"
-  uv tool install "$REPO_DIR" --force
-  rm -rf "$REPO_DIR"
+  echo "ERROR: Could not fetch release tags for $REPO."
+  echo "  Check your network connection and try again."
+  exit 1
 else
   echo "Installing version $LATEST_TAG..."
   uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
@@ -264,7 +226,7 @@ if [ -f "service/com.happytomatoe.VoiceToText.service" ]; then
   cp service/com.happytomatoe.VoiceToText.service "$DBUS_SERVICE_DIR/"
 else
   echo "Downloading D-Bus service file from repository..."
-  TAG="${LATEST_TAG:-main}" && curl -sL "https://raw.githubusercontent.com/$REPO/$TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
+  curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
 fi
 
 # Install systemd user service for D-Bus activation
@@ -272,7 +234,7 @@ SYSTEMD_DIR="$HOME/.config/systemd/user"
 mkdir -p "$SYSTEMD_DIR"
 if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
   cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
-elif TAG="${LATEST_TAG:-main}" && curl -sL "https://raw.githubusercontent.com/$REPO/$TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
+elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
   echo "Downloaded systemd user service."
 else
   echo "WARNING: Could not install systemd user service."
