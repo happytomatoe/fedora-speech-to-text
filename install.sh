@@ -42,31 +42,22 @@ detect_os() {
 
 install_prerequisites() {
   echo "Installing prerequisites..."
-  local RPM_CHANGED=false
-  install_pkg unzip || RPM_CHANGED=true
-  install_pkg curl || RPM_CHANGED=true
-  install_pkg libsecret || RPM_CHANGED=true
+  install_pkg unzip
+  install_pkg curl
+  install_pkg libsecret
 
-  if [ "$PKG_MGR" = "rpm-ostree" ] && [ "$RPM_CHANGED" = true ]; then
-    echo ""
-    echo "NOTE: rpm-ostree changes require a reboot to take effect."
-    echo "      If this is the first time layering packages, reboot before continuing."
-  fi
   if ! command_exists dotool; then
     if [ "$UPGRADE" = true ]; then
       echo ""
-      echo "WARNING: dotool is not installed. Install it manually: https://git.sr.ht/~geb/dotool"
+      echo "WARNING: dotool is not installed."
     else
       echo ""
-      echo "dotool is a keyboard input tool. We can build it from source now,"
-      echo "or you can install it later via other methods (e.g. using Fedora's built-in APIs)."
+      echo "dotool is a keyboard input tool. We can build it from source now"
+      echo "or you can use other output methods like the ones Fedora's internal API provides by default."
       read -p "Install dotool now? [Y/n] " -n 1 -r
       echo
       if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
-      else
-        echo "Skipping dotool installation."
-        echo "  You can install it later: https://git.sr.ht/~geb/dotool"
       fi
     fi
   fi
@@ -178,6 +169,7 @@ fetch_latest_tag() {
     exit 1
   fi
   echo "Found version $LATEST_TAG"
+  # Sets global LATEST_TAG for use by other functions
 }
 
 install_python_service() {
@@ -204,6 +196,7 @@ install_dbus_services() {
 
   local SYSTEMD_DIR="$HOME/.config/systemd/user"
   mkdir -p "$SYSTEMD_DIR"
+  # Try local copy first (for --local installs), fall back to download
   if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
     cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
     echo "Copied systemd user service."
@@ -222,21 +215,21 @@ install_gnome_extension() {
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
     rsync -av --delete \
-      --exclude='tests/' \
-      --exclude='run-dev.sh' \
-      --exclude='gjs-env.d.ts' \
-      --exclude='bun.lock' \
+      --include='prefs/' --include='prefs/**' \
+      --include='schemas/' --include='schemas/**' \
+      --include='vendor/' --include='vendor/**' \
+      --include='*.js' --include='*.json' --include='*.css' \
+      --exclude='*' \
       "$LOCAL_DIR/" "$INSTALL_DIR/"
     glib-compile-schemas "$INSTALL_DIR/schemas/"
   else
     RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
     echo "Downloading: $RELEASE_URL"
-    cd /tmp
-    curl -LO "$RELEASE_URL"
-    local filename
-    filename=$(basename "$RELEASE_URL")
-    gnome-extensions install --force /tmp/"$filename"
-    rm -f /tmp/"$filename"
+    local TMPDIR
+    TMPDIR=$(mktemp -d)
+    curl -L -o "$TMPDIR/extension.zip" "$RELEASE_URL"
+    gnome-extensions install --force "$TMPDIR/extension.zip"
+    rm -rf "$TMPDIR"
   fi
 }
 
