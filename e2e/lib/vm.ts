@@ -182,6 +182,31 @@ export class VmManager {
   }
 
   async waitForSsh(): Promise<void> {
+    // Wait for SSH port to be reachable before shell-use connection
+    const net = await import("node:net");
+    const sshPort = this.config.run.sshPort;
+    await pollUntil(
+      `SSH port ${sshPort} listening`,
+      async () => {
+        return new Promise<boolean>((resolve) => {
+          const sock = net.createConnection(sshPort, "localhost");
+          const timer = setTimeout(() => {
+            sock.destroy();
+            resolve(false);
+          }, 2000);
+          sock.on("connect", () => {
+            clearTimeout(timer);
+            sock.destroy();
+            resolve(true);
+          });
+          sock.on("error", () => {
+            clearTimeout(timer);
+            resolve(false);
+          });
+        });
+      },
+      { timeoutMs: 120_000, intervalMs: 1000 }
+    );
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
       sshPort: this.config.run.sshPort,
