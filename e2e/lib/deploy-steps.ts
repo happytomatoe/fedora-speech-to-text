@@ -59,17 +59,26 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
-  // Start GNOME Shell in headless mode using its own session bus
-  // Save the bus address so gdbus wait can connect to the right bus
+  // Start GNOME Shell in headless mode with its own session bus
+  // Save the bus address and wait for shell to register
   await shellExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
     "systemctl --user stop gnome-shell 2>/dev/null || true && " +
-    "dbus-run-session -- sh -c 'echo \"$DBUS_SESSION_BUS_ADDRESS\" > /tmp/gnome-session-bus && gnome-shell --headless --virtual-monitor 1920x1080' & " +
-    "sleep 3"
+    "nohup dbus-run-session -- sh -c 'echo \"$DBUS_SESSION_BUS_ADDRESS\" > /tmp/gnome-session-bus && exec gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080' > /tmp/gnome-shell.log 2>&1 & " +
+    "sleep 5 && " +
+    "cat /tmp/gnome-session-bus 2>/dev/null || echo 'NO_BUS_FILE'"
   );
   console.log("Waiting for GNOME Shell to register on D-Bus...");
-  // Connect to the same bus GNOME Shell is using
-  await shellExec("DBUS_SESSION_BUS_ADDRESS=$(cat /tmp/gnome-session-bus) gdbus wait --session --timeout=60 org.gnome.Shell");
+  // Wait for org.gnome.Shell on the correct bus (up to 120s)
+  await shellExec(
+    "for i in $(seq 1 60); do " +
+    "  BUS=$(cat /tmp/gnome-session-bus 2>/dev/null); " +
+    "  if [ -n \"$BUS\" ]; then " +
+    "    DBUS_SESSION_BUS_ADDRESS=$BUS gdbus wait --session --timeout=2 org.gnome.Shell 2>/dev/null && break; " +
+    "  fi; " +
+    "  sleep 2; " +
+    "done"
+  );
   console.log(`  gdbus wait: ${Date.now() - t0}ms [time]`);
   
   // Poll SessionIsActive — indicates full session is up.
