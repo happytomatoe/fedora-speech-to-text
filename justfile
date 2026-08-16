@@ -975,6 +975,8 @@ qemu-e2e-setup:
         echo "" >> "$TEMP_DIR/cloud-init/user-data"
         echo "runcmd:" >> "$TEMP_DIR/cloud-init/user-data"
         echo "  - systemctl set-default graphical.target" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - mkdir -p /etc/gdm/custom.conf" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - echo -e '[daemon]\\nAutomaticLoginEnable=True\\nAutomaticLogin=testuser' > /etc/gdm/custom.conf" >> "$TEMP_DIR/cloud-init/user-data"
         mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
         rm -rf "$TEMP_DIR"
         echo "✓ Cloud-init ISO created: $CLOUD_INIT"
