@@ -83,7 +83,9 @@ When modifying files in `gnome-ext/`:
 
 ### E2E / Snapshot tests
 
-See `e2e/AGENTS.md` for detailed instructions.
+- `e2e/AGENTS.md` — test architecture, what we test, how to run tests.
+- `.agents/skills/e2e-debugging/SKILL.md` — load when tests fail. Covers VM SSH, screenshots, service logs, common issues.
+- `.agents/skills/e2e-setup/SKILL.md` — first-time VM setup.
 
 **Key commands:**
 
