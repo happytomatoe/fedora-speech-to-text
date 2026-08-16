@@ -1,0 +1,16 @@
+#cloud-config
+users:
+  - name: testuser
+    ssh-authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIVmMd/RIGlHn9+b34LmFx2iil5LWIFLYK73WRCRSNJx l@fedora
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: wheel,input
+    shell: /bin/bash
+password: ''
+chpasswd: { expire: false }
+package_update: false
+packages: []
+runcmd:
+  - systemctl set-default graphical.target
+  - mkdir -p /etc/gdm/custom.conf
+  - echo -e '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser' > /etc/gdm/custom.conf
