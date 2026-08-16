@@ -47,7 +47,6 @@ jobs:
         with:
           path: |
             e2e/qemu-images/base.qcow2
-            e2e/qemu-images/cloud-init.iso
             e2e/qemu-images/id_ed25519
             e2e/qemu-images/id_ed25519.pub
           key: e2e-files-v3
