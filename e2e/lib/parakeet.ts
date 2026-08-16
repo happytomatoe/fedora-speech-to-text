@@ -13,7 +13,7 @@ function detectRuntime(): string {
       // Test if it can actually run containers (podman often fails with cgroup errors)
       execSync(`${rt} run --rm alpine echo ok`, { stdio: "ignore", timeout: 30_000 });
       return rt;
-    } catch { /* not installed or broken */ }
+    } catch (e) { console.warn(`  ${rt} not available: ${e instanceof Error ? e.message : e}`); }
   }
   throw new Error("No working container runtime found (need podman or docker)");
 }
