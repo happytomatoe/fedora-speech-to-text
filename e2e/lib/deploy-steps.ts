@@ -114,16 +114,20 @@ export async function waitForGdmLogin(
   console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
 
   if (!ready) {
-    // Dump final debug info
+    // Dump debug info using sshExec (fresh connections, unlike stale shell session)
     try {
-      const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null || echo '(no log)'`).catch(() => "(read failed)");
+      const log = sshExec("cat /tmp/gnome-shell.log 2>/dev/null || echo '(no log)'", sshKey, sshPort, sshUser, 1, 10_000);
       console.log(`  gnome-shell final log:\n${log}`);
-      const ps = await shell.exec(`ps aux | grep gnome-shell || true`).catch(() => "(ps failed)");
+    } catch {
+      console.log("  (could not read gnome-shell log)");
+    }
+    try {
+      const ps = sshExec("ps aux | grep gnome-shell || true", sshKey, sshPort, sshUser, 1, 10_000);
       console.log(`  gnome-shell processes:\n${ps}`);
     } catch {
       // ignore
     }
-    console.log("WARNING: gnome-shell did not start, continuing anyway");
+    throw new Error("gnome-shell did not start — cannot continue without a running shell");
   }
 }
 
