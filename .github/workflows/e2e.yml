@@ -46,7 +46,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: e2e/qemu-images/
-          key: e2e-files-v2
+          key: e2e-files-v3
           restore-keys: |
             e2e-files-
 
@@ -72,7 +72,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: e2e/qemu-images/
-          key: e2e-files-v2
+          key: e2e-files-v3
 
       # Upload artifacts on failure
       - name: Upload E2E artifacts
