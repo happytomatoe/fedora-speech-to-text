@@ -107,7 +107,8 @@ export async function waitForGdmLogin(
   await Bun.sleep(30_000);
   let ready = false;
   try {
-    const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
+    // Use sshExec (fresh connection) instead of shell.session (may be stale after 30s wait)
+    const result = sshExec(`pgrep -x gnome-shell && echo ready`, sshKey, sshPort, sshUser, 1, 10_000);
     console.log(`  pgrep result: ${JSON.stringify(result)}`);
     if (result.includes("ready")) {
       ready = true;
@@ -118,7 +119,7 @@ export async function waitForGdmLogin(
   if (!ready) {
     // Check if gnome-shell crashed
     try {
-      const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`).catch(() => "");
+      const log = sshExec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`, sshKey, sshPort, sshUser, 1, 10_000);
       console.log(`  gnome-shell log:\n${log}`);
       if (log && /segfault|signal|crash|error.*xwayland/i.test(log)) {
         console.log(`  gnome-shell CRASHED:\n${log}`);
