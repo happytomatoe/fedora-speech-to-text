@@ -1,0 +1,71 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install E2E dependencies
+        run: cd e2e && bun install
+
+      - name: Install Filen CLI
+        run: npm install -g @filen/cli
+
+      # Step 1: Try GitHub cache
+      - name: Restore base image from cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: e2e/qemu-images/golden-gnome-deps.qcow2
+          key: e2e-base-image-v1
+          restore-keys: |
+            e2e-base-image-
+
+      # Step 2: Download from Filen if cache miss
+      - name: Download base image from Filen
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p e2e/qemu-images
+          filen download "/golden-gnome-deps.qcow2" "e2e/qemu-images/golden-gnome-deps.qcow2"
+        env:
+          FILEN_EMAIL: ${{ secrets.FILEN_EMAIL }}
+          FILEN_PASSWORD: ${{ secrets.FILEN_PASSWORD }}
+
+      # Step 3: Verify image exists
+      - name: Verify base image
+        run: |
+          ls -lh e2e/qemu-images/golden-gnome-deps.qcow2
+          test -f e2e/qemu-images/golden-gnome-deps.qcow2
+
+      # Step 4: Run E2E tests
+      - name: Run E2E tests
+        run: cd e2e && bun run e2e.ts --shutdown --timeout 300
+
+      # Step 5: Save to cache (only on success, only on cache miss)
+      - name: Save base image to cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: e2e/qemu-images/golden-gnome-deps.qcow2
+          key: e2e-base-image-v1
+
+      # Step 6: Upload artifacts on failure
+      - name: Upload E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output
+          path: e2e/output/
+          retention-days: 7
