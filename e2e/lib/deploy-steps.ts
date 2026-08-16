@@ -56,37 +56,22 @@ export interface DeployConfig {
 // --- Deployment steps ---
 
 export async function waitForGdmLogin(
+  shell: ShellHelper,
   sshKey: string,
   sshPort: number,
   sshUser = "testuser"
 ): Promise<void> {
   const t0 = Date.now();
 
-  // Preflight SSH check — ensure SSH is accepting connections
-  // (gnome-shell-system-monitor-next-applet uses similar polling)
-  console.log("  preflight SSH check...");
-  let sshReady = false;
-  for (let i = 0; i < 12; i++) {
-    try {
-      sshExec("echo ok", sshKey, sshPort, sshUser, 1, 5000);
-      sshReady = true;
-      break;
-    } catch {
-      await Bun.sleep(5000);
-    }
-  }
-  if (!sshReady) {
-    throw new Error("SSH not available after 60s preflight check");
-  }
-  console.log(`  preflight SSH: ${Date.now() - t0}ms [time]`);
+  // Use the existing shell-use PTY session instead of sshExec.
+  // sshExec creates a NEW SSH connection each time which can overwhelm the
+  // VM's sshd (especially on GitHub Actions runners). The shell-use PTY
+  // already has an authenticated session, so we use it for all commands.
 
   // Start GNOME Shell in headless mode on the existing session bus.
-  // Uses sshExec (direct SSH) instead of shell-use PTY to avoid flooding
-  // the terminal with gnome-shell startup output.
-  sshExec(
+  await shell.exec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 &",
-    sshKey, sshPort, sshUser, 3, 60_000
+    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 &"
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
@@ -97,16 +82,13 @@ export async function waitForGdmLogin(
   const maxAttempts = 36; // 36 * 5s = 180s
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const result = sshExec(
-        `pgrep -x gnome-shell && echo ready`,
-        sshKey, sshPort, sshUser, 1, 10_000
-      );
+      const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
       if (result.includes("ready")) {
         ready = true;
         break;
       }
     } catch {
-      // SSH connection may fail during startup — retry
+      // Shell exec may fail during startup — retry
     }
     await Bun.sleep(5000);
   }

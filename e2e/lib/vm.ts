@@ -247,7 +247,7 @@ export class VmManager {
   async setup(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
-      await waitForGdmLogin(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
@@ -292,7 +292,7 @@ export class VmManager {
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
-      await waitForGdmLogin(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
