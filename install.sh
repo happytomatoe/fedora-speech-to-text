@@ -1,44 +1,16 @@
 #!/usr/bin/env bash
-# Parse arguments
-LOCAL_DIR=""
-for arg in "$@"; do
-  if [ "$arg" = "--debug" ]; then
-    set -x
-  fi
-done
-for ((i=1; i<=$#; i++)); do
-  if [ "${!i}" = "--local" ]; then
-    next=$((i+1))
-    LOCAL_DIR="${!next}"
-  fi
-done
-if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
-  echo "ERROR: --local directory does not exist: $LOCAL_DIR" >&2
-  exit 1
-fi
 set -euo pipefail
+
+# --- Constants ---
 REPO="happytomatoe/voice-to-text"
 EXT_UUID="voice-to-text@happytomatoe.com"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 DBUS_SERVICE_DIR="$HOME/.local/share/dbus-1/services"
 
-# --- Helper: check if a command is available ---
+# --- Helper functions ---
 command_exists() {
   command -v "$1" &>/dev/null
 }
-
-# --- Detect OS ---
-if command_exists rpm-ostree; then
-  PKG_MGR="rpm-ostree"
-elif command_exists dnf; then
-  PKG_MGR="dnf"
-else
-  echo "ERROR: This installer requires Fedora (dnf or rpm-ostree)."
-  exit 1
-fi
-
-echo "Detected package manager: $PKG_MGR"
-echo ""
 
 install_pkg() {
   local pkg="$1"
@@ -46,40 +18,64 @@ install_pkg() {
     echo "  $pkg already installed, skipping."
     return 0
   fi
-  case "$PKG_MGR" in
-  dnf | rpm-ostree)
-    if rpm -q "$pkg" &>/dev/null; then
-      echo "  $pkg already installed, skipping."
-      return 0
-    fi
-    ;;
-  esac
+  if rpm -q "$pkg" &>/dev/null; then
+    echo "  $pkg already installed, skipping."
+    return 0
+  fi
   echo "  Installing $pkg..."
-  case "$PKG_MGR" in
-  rpm-ostree)
-    sudo rpm-ostree install -y "$pkg" || true
-    ;;
-  dnf)
-    sudo dnf install -y "$pkg" || true
-    ;;
-  esac
+  sudo "$PKG_MGR" install -y "$pkg" || true
 }
 
-# --- Install dotool (build from source) ---
+# --- High-level functions ---
+detect_os() {
+  if command_exists rpm-ostree; then
+    PKG_MGR="rpm-ostree"
+  elif command_exists dnf; then
+    PKG_MGR="dnf"
+  else
+    echo "ERROR: This installer requires Fedora (dnf or rpm-ostree)."
+    exit 1
+  fi
+  echo "Detected package manager: $PKG_MGR"
+  echo ""
+}
+
+install_prerequisites() {
+  echo "Installing prerequisites..."
+  install_pkg unzip
+  install_pkg curl
+  install_pkg libsecret
+
+  if [ "$PKG_MGR" = "rpm-ostree" ]; then
+    echo ""
+    echo "NOTE: rpm-ostree changes require a reboot to take effect."
+    echo "      If this is the first time layering packages, reboot before continuing."
+  fi
+
+  if ! command_exists dotool; then
+    echo ""
+    read -p "Install dotool (keyboard input tool)? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+      install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+    else
+      echo "Skipping dotool installation."
+      echo "  You can install it later: https://git.sr.ht/~geb/dotool"
+    fi
+  fi
+}
+
 install_dotool() {
-  # Check if all required binaries already exist
   if command_exists dotool && command_exists dotoold && command_exists dotoolc; then
-    echo "  dotool already installed (dotool, dotoold, dotoolc), skipping."
+    echo "  dotool already installed, skipping."
     return 0
   fi
 
   echo "  Building dotool from source..."
-
   local BIN_DIR="$HOME/.local/bin"
   mkdir -p "$BIN_DIR"
   export PATH="$BIN_DIR:$PATH"
 
-  # Try Toolbox first (recommended for rpm-ostree/Silverblue)
   if command_exists toolbox; then
     echo "  Building dotool via Toolbox..."
     local TOOLBOX_NAME="dotool-build"
@@ -99,7 +95,6 @@ install_dotool() {
     echo "  Toolbox build failed, trying alternative..."
   fi
 
-  # Try Podman/Docker fallback
   local CONTAINER_BIN=""
   if command_exists podman; then
     CONTAINER_BIN="podman"
@@ -123,10 +118,9 @@ install_dotool() {
     echo "  $CONTAINER_BIN build failed."
   fi
 
-  # Direct build (last resort)
   echo "  Attempting direct build..."
   local BUILD_DEPS="gcc make libev-devel systemd-devel"
-  local BUILD_DEPS="gcc make libev-devel systemd-devel"
+  local install_ok=false
   sudo "$PKG_MGR" install -y $BUILD_DEPS git 2>/dev/null && install_ok=true
   if [ "$install_ok" = true ]; then
     local TMPDIR
@@ -150,38 +144,11 @@ install_dotool() {
   return 1
 }
 
-# --- Ask about dotool ---
-if ! command_exists dotool; then
-  echo ""
-  read -p "Install dotool (keyboard input tool)? [Y/n] " -n 1 -r
-  echo
-  if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
-  else
-    echo "Skipping dotool installation."
-    echo "  You can install it later: https://git.sr.ht/~geb/dotool"
+install_uv() {
+  if command_exists uv; then
+    echo "uv already installed, skipping."
+    return 0
   fi
-fi
-# --- Install prerequisites ---
-echo "Installing prerequisites..."
-case "$PKG_MGR" in
-rpm-ostree)
-  install_pkg unzip
-  install_pkg curl
-  install_pkg libsecret
-  echo ""
-  echo "NOTE: rpm-ostree changes require a reboot to take effect."
-  echo "      If this is the first time layering packages, reboot before continuing."
-  ;;
-dnf)
-  install_pkg unzip
-  install_pkg curl
-  install_pkg libsecret
-  ;;
-esac
-
-# --- Install uv if not present ---
-if ! command_exists uv; then
   echo "Installing uv..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
@@ -190,196 +157,178 @@ if ! command_exists uv; then
     exit 1
   fi
   echo "uv installed."
-else
-  echo "uv already installed, skipping."
-fi
+}
 
-# --- Install Python D-Bus service ---
-echo ""
-echo "--- Installing Python D-Bus service ---"
-echo "Fetching latest release tag..."
-LATEST_TAG=$(
-  # GIT_TERMINAL_PROMPT=0 prevents git from hanging on credential prompts
-  # timeout prevents indefinite hang if git ls-remote stalls
-  # Keep stderr separate so git errors don't get parsed by awk as tags
-  GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --sort=-v:refname "https://github.com/$REPO.git" |
-    awk -F'/' '$NF !~ /\^\{\}$/ { print $NF; exit }' || true
-)
-if [ -z "$LATEST_TAG" ]; then
-  echo "ERROR: Could not fetch release tags for $REPO."
-  echo "  Check your network connection and try again."
-  exit 1
-else
+fetch_latest_tag() {
+  echo "Fetching latest release tag..."
+  LATEST_TAG=$(
+    GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --sort=-v:refname "https://github.com/$REPO.git" |
+      awk -F'/' '$NF !~ /\^\{\}$/ { print $NF; exit }' || true
+  )
+  if [ -z "$LATEST_TAG" ]; then
+    echo "ERROR: Could not fetch release tags for $REPO."
+    echo "  Check your network connection and try again."
+    exit 1
+  fi
+  echo "Found version $LATEST_TAG"
+}
+
+install_python_service() {
+  echo ""
+  echo "--- Installing Python D-Bus service ---"
   echo "Installing version $LATEST_TAG..."
   uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
-fi
-echo "Python D-Bus service installed (voice-to-text-dbus)."
+  echo "Python D-Bus service installed (voice-to-text-dbus)."
+}
 
-# --- Install D-Bus service files ---
-echo ""
-echo "--- Installing D-Bus service files ---"
-mkdir -p "$DBUS_SERVICE_DIR"
-mkdir -p "$HOME/.local/bin"
+install_dbus_services() {
+  echo ""
+  echo "--- Installing D-Bus service files ---"
+  mkdir -p "$DBUS_SERVICE_DIR"
+  mkdir -p "$HOME/.local/bin"
 
-# Copy D-Bus service file - check local or download from repo
-if [ -f "service/com.happytomatoe.VoiceToText.service" ]; then
-  cp service/com.happytomatoe.VoiceToText.service "$DBUS_SERVICE_DIR/"
-else
-  echo "Downloading D-Bus service file from repository..."
-  curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
-fi
+  if [ -f "service/com.happytomatoe.VoiceToText.service" ]; then
+    cp service/com.happytomatoe.VoiceToText.service "$DBUS_SERVICE_DIR/"
+  else
+    echo "Downloading D-Bus service file from repository..."
+    curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
+  fi
 
-# Install systemd user service for D-Bus activation
-SYSTEMD_DIR="$HOME/.config/systemd/user"
-mkdir -p "$SYSTEMD_DIR"
-if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
-  cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
-elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
-  echo "Downloaded systemd user service."
-else
-  echo "WARNING: Could not install systemd user service."
-fi
-systemctl --user daemon-reload
+  local SYSTEMD_DIR="$HOME/.config/systemd/user"
+  mkdir -p "$SYSTEMD_DIR"
+  if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
+    cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
+  elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
+    echo "Downloaded systemd user service."
+  else
+    echo "WARNING: Could not install systemd user service."
+  fi
+  systemctl --user daemon-reload
+}
 
-# --- Install GNOME extension ---
-echo ""
-echo "--- Installing GNOME extension ---"
+install_gnome_extension() {
+  echo ""
+  echo "--- Installing GNOME extension ---"
 
-if [ -n "$LOCAL_DIR" ]; then
-  echo "Installing from local directory: $LOCAL_DIR"
-  rsync -av --delete \
+  if [ -n "${LOCAL_DIR:-}" ]; then
+    echo "Installing from local directory: $LOCAL_DIR"
+    rsync -av --delete \
       --exclude='tests/' \
       --exclude='run-dev.sh' \
       --exclude='gjs-env.d.ts' \
       --exclude='bun.lock' \
       "$LOCAL_DIR/" "$INSTALL_DIR/"
-  glib-compile-schemas "$INSTALL_DIR/schemas/"
-elif [ -z "$LATEST_TAG" ]; then
-  echo "Fetching latest release..."
-  echo "Falling back to installing the extension from source..."
-  TMPDIR=$(mktemp -d)
-  git clone --depth 1 "https://github.com/$REPO.git" "$TMPDIR/repo"
-  rsync -av --delete \
-      --exclude='tests/' \
-      --exclude='run-dev.sh' \
-      --exclude='gjs-env.d.ts' \
-      --exclude='bun.lock' \
-      "$TMPDIR/repo/gnome-ext/" "$INSTALL_DIR/"
-  glib-compile-schemas "$INSTALL_DIR/schemas/"
-  rm -rf "$TMPDIR"
-else
-  RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
-  echo "Downloading: $RELEASE_URL"
-  cd /tmp
-  curl -LO "$RELEASE_URL"
-  filename=$(basename "$RELEASE_URL")
-  gnome-extensions install --force /tmp/$filename
-  rm -f /tmp/$filename
-fi
+    glib-compile-schemas "$INSTALL_DIR/schemas/"
+  else
+    RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
+    echo "Downloading: $RELEASE_URL"
+    cd /tmp
+    curl -LO "$RELEASE_URL"
+    local filename
+    filename=$(basename "$RELEASE_URL")
+    gnome-extensions install --force /tmp/"$filename"
+    rm -f /tmp/"$filename"
+  fi
+}
 
-# --- Enable extension ---
-echo ""
-echo "--- Enabling GNOME extension ---"
+enable_extension() {
+  echo ""
+  echo "--- Enabling GNOME extension ---"
 
-# Try gnome-extensions enable first (works when GNOME Shell is running)
-if gnome-extensions enable "$EXT_UUID" 2>/dev/null; then
-  echo "Extension enabled."
-elif command_exists dconf; then
-  # Fallback: write directly to dconf (works without running GNOME Shell)
-  CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
-  if ! echo "$CURRENT" | grep -q "$EXT_UUID"; then
-    if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
-      dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
+  if gnome-extensions enable "$EXT_UUID" 2>/dev/null; then
+    echo "Extension enabled."
+  elif command_exists dconf; then
+    local CURRENT
+    CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
+    if ! echo "$CURRENT" | grep -q "$EXT_UUID"; then
+      if [ -z "$CURRENT" ] || [ "$CURRENT" = "[]" ]; then
+        dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
+      else
+        dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$EXT_UUID']"
+      fi
+    fi
+    echo "Extension added to dconf. It will be active on next GNOME Shell login."
+  else
+    echo "WARNING: Could not enable extension. Enable it manually: gnome-extensions enable $EXT_UUID"
+  fi
+}
+
+configure_api_key() {
+  echo ""
+  echo "--- API Key Configuration ---"
+  if command_exists secret-tool; then
+    echo "Run the following to configure your API key:"
+    echo "  secret-tool store --label='Voice-to-Text API Key' service mistral_api_key account $USER"
+  else
+    echo "Install libsecret-tools for secure key storage:"
+    echo "  sudo dnf install libsecret"
+    echo "Then set API keys via environment variables:"
+    echo "  export VOXTRAL_API_KEY=<your-key>"
+  fi
+}
+
+install_config() {
+  local CONFIG_DIR="$HOME/.config/voice-to-text"
+  local CONFIG_FILE="$CONFIG_DIR/config.yaml"
+  mkdir -p "$CONFIG_DIR"
+
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "Existing config found at $CONFIG_FILE; leaving it unchanged."
+  else
+    echo "Downloading default config..."
+    curl -L -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
+    if [ -f "$CONFIG_FILE" ]; then
+      echo "Default config installed at $CONFIG_FILE."
     else
-      dconf write /org/gnome/shell/enabled-extensions "${CURRENT%]}, '$EXT_UUID']"
+      echo "WARNING: Failed to download default config."
     fi
   fi
-  echo "Extension added to dconf. It will be active on next GNOME Shell login."
-else
-  echo "WARNING: Could not enable extension. Enable it manually: gnome-extensions enable $EXT_UUID"
-fi
+}
 
-# --- Configure API key ---
-echo ""
-echo "--- API Key Configuration ---"
-if command_exists secret-tool; then
-  echo "Setting up API key..."
-  echo "Run the following to configure your API key:"
-  echo "  secret-tool store --label='Voice-to-Text API Key' service mistral_api_key account $USER"
-else
-  echo "Install libsecret-tools for secure key storage:"
-  echo "  sudo dnf install libsecret  # or equivalent"
-  echo "Then set API keys via environment variables:"
-  echo "  export VOXTRAL_API_KEY=<your-key>"
-fi
-echo ""
+configure_dotool() {
+  local PIPE_PATH="/run/user/$(id -u)/dotool-pipe"
 
-# Install default config (only if user has none)
-CONFIG_DIR="$HOME/.config/voice-to-text"
-mkdir -p "$CONFIG_DIR"
-CONFIG_FILE="$CONFIG_DIR/config.yaml"
-if [ -f "$CONFIG_FILE" ]; then
-  echo "Existing config found at $CONFIG_FILE; leaving it unchanged."
-else
-  echo "Downloading default config..."
-  curl -L -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
-  if [ -f "$CONFIG_FILE" ]; then
-    echo "Default config installed at $CONFIG_FILE."
-  else
-    echo "WARNING: Failed to download default config."
+  if ! id -nG | grep -qw input; then
+    if getent group input >/dev/null 2>&1; then
+      echo ""
+      echo "WARNING: Your user is not in the 'input' group."
+      echo "  dotoold needs access to /dev/uinput."
+      echo "  Run: sudo usermod -aG input $USER"
+      echo "  Then log out and back in (or reboot) before using voice-to-text."
+    else
+      echo ""
+      echo "WARNING: The 'input' group does not exist."
+      echo "  Run as root: sudo groupadd -r input && sudo usermod -aG input $USER"
+      echo "  Then reboot before using voice-to-text."
+    fi
   fi
-fi
 
-# --- Configure dotool daemon (user service) ---
-PIPE_PATH="/run/user/$(id -u)/dotool-pipe"
-
-# Check input group membership (required for /dev/uinput access)
-if ! id -nG | grep -qw input; then
-  if getent group input >/dev/null 2>&1; then
-    echo ""
-    echo "WARNING: Your user is not in the 'input' group."
-    echo "  dotoold needs access to /dev/uinput."
-    echo "  Run: sudo usermod -aG input $USER"
-    echo "  Then log out and back in (or reboot) before using voice-to-text."
-  else
-    echo ""
-    echo "WARNING: The 'input' group does not exist."
-    echo "  Run as root: sudo groupadd -r input && sudo usermod -aG input $USER"
-    echo "  Then reboot before using voice-to-text."
-  fi
-fi
-
-# Create dotoold-wrapper
-WRAPPER_PATH="$HOME/.local/bin/dotoold-wrapper"
-mkdir -p "$HOME/.local/bin"
-cat > "$WRAPPER_PATH" << WRAPPER_EOF
+  local WRAPPER_PATH="$HOME/.local/bin/dotoold-wrapper"
+  mkdir -p "$HOME/.local/bin"
+  cat > "$WRAPPER_PATH" << 'WRAPPER_EOF'
 #!/bin/bash
-# Wrapper to ensure proper group membership and PATH for dotoold
-export PATH="$HOME/.local/bin:\$PATH"
-if id -nG "\$USER" | grep -qw input; then
-  exec dotoold "\$@"
+export PATH="$HOME/.local/bin:$PATH"
+if id -nG "$USER" | grep -qw input; then
+  exec dotoold "$@"
 else
-  # sg input -c requires a terminal; warn if running headless (e.g., via systemd)
   if [ -t 1 ]; then
-    exec sg input -c "dotoold \$@"
+    exec sg input -c "dotoold $@"
   else
     echo "WARNING: dotoold needs 'input' group access but no terminal is available."
-    echo "  Run: sudo usermod -aG input \$USER && logout"
-    exec dotoold "\$@"
+    echo "  Run: sudo usermod -aG input $USER && logout"
+    exec dotoold "$@"
   fi
 fi
 WRAPPER_EOF
-chmod +x "$WRAPPER_PATH"
-echo "dotoold-wrapper created at $WRAPPER_PATH"
+  chmod +x "$WRAPPER_PATH"
+  echo "dotoold-wrapper created at $WRAPPER_PATH"
 
-if [ -p "$PIPE_PATH" ] && systemctl --user is-active --quiet dotoold.service 2>/dev/null; then
-  echo "dotoold pipe already present at $PIPE_PATH."
-else
-  echo "dotoold pipe missing. Creating user service..."
-
-  mkdir -p ~/.config/systemd/user
-
-  cat > ~/.config/systemd/user/dotoold.service <<EOF
+  if [ -p "$PIPE_PATH" ] && systemctl --user is-active --quiet dotoold.service 2>/dev/null; then
+    echo "dotoold pipe already present at $PIPE_PATH."
+  else
+    echo "dotoold pipe missing. Creating user service..."
+    mkdir -p ~/.config/systemd/user
+    cat > ~/.config/systemd/user/dotoold.service <<EOF
 [Unit]
 Description=dotoold daemon for keyboard input
 After=graphical-session.target
@@ -398,32 +347,68 @@ StandardError=journal
 [Install]
 WantedBy=default.target
 EOF
+    systemctl --user daemon-reload
+    systemctl --user enable --now dotoold.service
+    sleep 1
 
-  systemctl --user daemon-reload
-  systemctl --user enable --now dotoold.service
-  sleep 1
-
-  if [ -p "$PIPE_PATH" ]; then
-    echo "dotoold started successfully. Pipe at $PIPE_PATH"
-    echo "type voice-to-text service installed" | DOTOOL_PIPE="$PIPE_PATH" dotoolc
-  else
-    echo "ERROR: Pipe not found at $PIPE_PATH"
-    journalctl --user -u dotoold.service --no-pager -n 20
-    exit 1
+    if [ -p "$PIPE_PATH" ]; then
+      echo "dotoold started successfully. Pipe at $PIPE_PATH"
+      echo "type voice-to-text service installed" | DOTOOL_PIPE="$PIPE_PATH" dotoolc
+    else
+      echo "ERROR: Pipe not found at $PIPE_PATH"
+      journalctl --user -u dotoold.service --no-pager -n 20
+      exit 1
+    fi
   fi
+}
+
+print_summary() {
+  echo ""
+  echo "=== Installation Complete ==="
+  echo ""
+  echo "Next steps:"
+  echo "  1. Restart GNOME Shell (Alt+F2, r, Enter on X11) or log out/in on Wayland"
+  echo "  2. Set your API keys in environment variables or via secret-tool"
+  echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
+  echo ""
+  echo "Useful commands:"
+  echo "  ps aux | grep voice-to-text-dbus    # Check if service is running"
+  echo "  journalctl --user | grep voice      # Service logs"
+  echo "  gnome-extensions prefs $EXT_UUID    # Extension settings"
+}
+
+# --- Parse arguments ---
+LOCAL_DIR=""
+for arg in "$@"; do
+  if [ "$arg" = "--debug" ]; then
+    set -x
+  fi
+done
+for ((i=1; i<=$#; i++)); do
+  if [ "${!i}" = "--local" ]; then
+    next=$((i+1))
+    LOCAL_DIR="${!next}"
+  fi
+done
+if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
+  echo "ERROR: --local directory does not exist: $LOCAL_DIR" >&2
+  exit 1
 fi
 
-echo ""
-echo "=== Installation Complete ==="
-echo ""
-echo "The voice-to-text D-Bus service is now installed."
-echo ""
-echo "Next steps:"
-echo "  1. Restart GNOME Shell (Alt+F2, r, Enter on X11) or log out/in on Wayland"
-echo "  2. Set your API keys in environment variables or via secret-tool"
-echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
-echo ""
-echo "Useful commands:"
-echo "  ps aux | grep voice-to-text-dbus    # Check if service is running"
-echo "  journalctl --user | grep voice      # Service logs"
-echo "  gnome-extensions prefs $EXT_UUID    # Extension settings"
+# --- Main ---
+main() {
+  detect_os
+  install_prerequisites
+  install_uv
+  fetch_latest_tag
+  install_python_service
+  install_dbus_services
+  install_gnome_extension
+  enable_extension
+  configure_api_key
+  install_config
+  configure_dotool
+  print_summary
+}
+
+main
