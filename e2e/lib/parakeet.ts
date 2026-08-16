@@ -84,7 +84,7 @@ export async function ensureParakeet(): Promise<void> {
       console.log(`  Parakeet container is ${state} — removing and restarting`);
       execSync(`${rt} rm -f ${containerName} 2>/dev/null || true`, { stdio: "ignore" });
     }
-  } catch {
+  } catch { console.log("  No existing Parakeet container found");
     // Container doesn't exist
   }
 
