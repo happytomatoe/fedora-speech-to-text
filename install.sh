@@ -53,16 +53,21 @@ install_prerequisites() {
   fi
 
   if ! command_exists dotool; then
-    echo ""
-    echo "dotool is a keyboard input tool. We can build it from source now,"
-    echo "or you can install it later via other methods (e.g. using Fedora's built-in APIs)."
-    read -p "Install dotool now? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-      install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+    if [ "$UPGRADE" = true ]; then
+      echo ""
+      echo "WARNING: dotool is not installed. Install it manually: https://git.sr.ht/~geb/dotool"
     else
-      echo "Skipping dotool installation."
-      echo "  You can install it later: https://git.sr.ht/~geb/dotool"
+      echo ""
+      echo "dotool is a keyboard input tool. We can build it from source now,"
+      echo "or you can install it later via other methods (e.g. using Fedora's built-in APIs)."
+      read -p "Install dotool now? [Y/n] " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+      else
+        echo "Skipping dotool installation."
+        echo "  You can install it later: https://git.sr.ht/~geb/dotool"
+      fi
     fi
   fi
 }
@@ -366,12 +371,18 @@ EOF
 
 print_summary() {
   echo ""
-  echo "=== Installation Complete ==="
+  if [ "$UPGRADE" = true ]; then
+    echo "=== Upgrade Complete ==="
+  else
+    echo "=== Installation Complete ==="
+  fi
   echo ""
   echo "Next steps:"
   echo "  1. Restart GNOME Shell (Alt+F2, r, Enter on X11) or log out/in on Wayland"
-  echo "  2. Set your API keys in environment variables or via secret-tool"
-  echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
+  if [ "$UPGRADE" = false ]; then
+    echo "  2. Set your API keys in environment variables or via secret-tool"
+    echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
+  fi
   echo ""
   echo "Useful commands:"
   echo "  ps aux | grep voice-to-text-dbus    # Check if service is running"
@@ -381,9 +392,12 @@ print_summary() {
 
 # --- Parse arguments ---
 LOCAL_DIR=""
+UPGRADE=false
 for arg in "$@"; do
   if [ "$arg" = "--debug" ]; then
     set -x
+  elif [ "$arg" = "--upgrade" ]; then
+    UPGRADE=true
   fi
 done
 for ((i=1; i<=$#; i++)); do
@@ -407,7 +421,9 @@ main() {
   install_dbus_services
   install_gnome_extension
   enable_extension
-  configure_api_key
+  if [ "$UPGRADE" = false ]; then
+    configure_api_key
+  fi
   install_config
   configure_dotool
   print_summary
