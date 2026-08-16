@@ -264,7 +264,7 @@ if [ -f "service/com.happytomatoe.VoiceToText.service" ]; then
   cp service/com.happytomatoe.VoiceToText.service "$DBUS_SERVICE_DIR/"
 else
   echo "Downloading D-Bus service file from repository..."
-  curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
+  TAG="${LATEST_TAG:-main}" && curl -sL "https://raw.githubusercontent.com/$REPO/$TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
 fi
 
 # Install systemd user service for D-Bus activation
@@ -272,7 +272,7 @@ SYSTEMD_DIR="$HOME/.config/systemd/user"
 mkdir -p "$SYSTEMD_DIR"
 if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
   cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
-elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
+elif TAG="${LATEST_TAG:-main}" && curl -sL "https://raw.githubusercontent.com/$REPO/$TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
   echo "Downloaded systemd user service."
 else
   echo "WARNING: Could not install systemd user service."
