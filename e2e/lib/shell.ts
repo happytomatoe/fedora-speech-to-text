@@ -34,7 +34,7 @@ export class ShellHelper {
     for (let attempt = 0; attempt < 3; attempt++) {
       let shell: ShellUse | null = null;
       try {
-        shell = new ShellUse("e2e-ssh");
+        shell = new ShellUse("e2e-ssh", { timeouts: { text: 120_000, ready: 120_000 } });
         await shell.open({
           cols: opts.cols ?? 120,
           rows: opts.rows ?? 40,
