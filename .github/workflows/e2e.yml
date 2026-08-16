@@ -14,8 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup QEMU
-        uses: visualdoj/setup-qemu@v1
+      - name: Install QEMU
+        run: sudo apt-get install -y qemu-system-x86 qemu-utils
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
