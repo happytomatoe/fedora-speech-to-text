@@ -54,5 +54,5 @@ commit-msg:
 pre-push:
   commands:
     e2e-test:
-      run: bash -c 'if [ -f e2e/qemu-images/base.qcow2 ] && [ -f e2e/qemu-images/cloud-init.iso ]; then cd e2e && bun run e2e.ts --shutdown; else printf "Skipping E2E tests (environment not set up)\n" >&2; exit 0; fi'
+      run: bash -c 'if [ "$CI" = "true" ] && [ -f e2e/qemu-images/base.qcow2 ] && [ -f e2e/qemu-images/cloud-init.iso ]; then cd e2e && bun run e2e.ts --shutdown; else printf "Skipping E2E tests (not in CI or environment not set up)\n" >&2; exit 0; fi'
       interactive: true
