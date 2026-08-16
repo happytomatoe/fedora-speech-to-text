@@ -59,6 +59,10 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
+  // Apply GDM auto-login config (may not be in cloud-init if overlay is cached)
+  await shellExec("mkdir -p /etc/gdm/custom.conf");
+  await shellExec("echo -e '[daemon]\\nAutomaticLoginEnable=True\\nAutomaticLogin=testuser' > /etc/gdm/custom.conf");
+  await shellExec("systemctl restart gdm");
   console.log("Waiting for GNOME Shell to register on D-Bus...");
   // Use gdbus wait to get shell on D-Bus quickly (~350ms)
   await shellExec("gdbus wait --session --timeout=60 org.gnome.Shell");
