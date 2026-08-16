@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
@@ -40,6 +40,11 @@ export function scpToVm(src: string, dest: string, sshKey: string, sshPort: numb
   execSync(`scp ${scpOpts} ${src} ${host}:${dest}`, { stdio: "pipe" });
 }
 
+// --- Shell-exec via SSH (shell-use PTY is broken on CI) ---
+function shellExec(cmd: string, sshKey: string, sshPort: number, sshUser = "testuser"): string {
+  return sshExec(cmd, sshKey, sshPort, sshUser, 1, 30_000);
+}
+
 // --- Deployment config ---
 
 export interface DeployConfig {
@@ -65,14 +70,12 @@ export async function waitForGdmLogin(
 ): Promise<void> {
   const t0 = Date.now();
 
-  // Use the existing shell-use PTY session instead of sshExec.
-  // sshExec creates a NEW SSH connection each time which can overwhelm the
-  // VM's sshd (especially on GitHub Actions runners). The shell-use PTY
-  // already has an authenticated session, so we use it for all commands.
+  // Use sshExec for all commands (shell-use PTY is broken on CI — commands return empty).
 
   // Check for critical missing packages (friend's advice: these cause silent crashes)
-  const pkgCheck = await shell.exec(
-    "rpm -q mesa-libgbm mesa-dri-drivers polkit accountsservice gsettings-desktop-schemas 2>&1"
+  const pkgCheck = shellExec(
+    "rpm -q mesa-libgbm mesa-dri-drivers polkit accountsservice gsettings-desktop-schemas 2>&1",
+    sshKey, sshPort, sshUser
   );
   const missingLines = pkgCheck.split("\n").filter(l => l.includes("not installed"));
   if (missingLines.length > 0) {
@@ -81,24 +84,27 @@ export async function waitForGdmLogin(
 
   // Configure journald to forward to serial console (friend's advice: captures OOM kills)
   // This writes kernel + systemd logs to serial.log on the host
-  await shell.exec(
-    "sudo sed -i 's/^#ForwardToConsole=no/ForwardToConsole=yes/' /etc/systemd/journald.conf 2>/dev/null || true"
+  shellExec(
+    "sudo sed -i 's/^#ForwardToConsole=no/ForwardToConsole=yes/' /etc/systemd/journald.conf 2>/dev/null || true",
+    sshKey, sshPort, sshUser
   );
-  await shell.exec("sudo systemctl restart systemd-journald 2>/dev/null || true");
+  shellExec("sudo systemctl restart systemd-journald 2>/dev/null || true", sshKey, sshPort, sshUser);
 
   // Disable animations to reduce llvmpipe GPU/CPU load (friend's advice)
-  await shell.exec(
-    "dconf write /org/gnome/desktop/interface/enable-animations false 2>/dev/null || true"
+  shellExec(
+    "dconf write /org/gnome/desktop/interface/enable-animations false 2>/dev/null || true",
+    sshKey, sshPort, sshUser
   );
 
   // Log memory state before starting gnome-shell (helps diagnose OOM kills)
-  const memInfo = await shell.exec("free -m 2>/dev/null | head -2 || true");
+  const memInfo = shellExec("free -m 2>/dev/null | head -2 || true", sshKey, sshPort, sshUser);
   console.log(`  memory before gnome-shell:\n${memInfo}`);
   // Start GNOME Shell in headless mode on the existing session bus.
   // Use 1280x720 instead of 1920x1080 to reduce llvmpipe memory/CPU pressure.
-  await shell.exec(
+  shellExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 &"
+    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 &",
+    sshKey, sshPort, sshUser
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
@@ -108,7 +114,7 @@ export async function waitForGdmLogin(
   for (let i = 0; i < 6; i++) {
     await Bun.sleep(5_000);
     try {
-      const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
+      const result = shellExec(`pgrep -x gnome-shell && echo ready`, sshKey, sshPort, sshUser);
       console.log(`  pgrep attempt ${i + 1}: ${JSON.stringify(result.slice(0, 100))}`);
       if (result.includes("ready")) {
         ready = true;
@@ -121,7 +127,7 @@ export async function waitForGdmLogin(
   if (!ready) {
     // Check if gnome-shell crashed
     try {
-      const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`).catch(() => "");
+      const log = shellExec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`, sshKey, sshPort, sshUser);
       console.log(`  gnome-shell log:\n${log.slice(0, 500)}`);
       if (log && /segfault|signal|crash|error.*xwayland/i.test(log)) {
         console.log(`  gnome-shell CRASHED:\n${log}`);
@@ -242,14 +248,14 @@ export async function deployExtension(
   console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
   
   const tDconf = Date.now();
-  await shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`);
-  await shell.exec(`dconf write /org/gnome/shell/disable-user-extensions false`);
-  await shell.exec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
+  shellExec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  shellExec(`dconf write /org/gnome/shell/disable-user-extensions false`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  shellExec(`cat > /tmp/dconf-set.sh << 'SCRIPT'
 #!/bin/bash
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
 SCRIPT
-chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
+chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
   console.log(`  install.sh+dconf: ${Date.now() - t0}ms [time]`);
 
@@ -316,8 +322,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       async () => {
         try {
           // Check if the user's D-Bus session bus socket exists
-          const result = await shell.exec(
-            `test -S /run/user/$(id -u)/bus && echo ready`
+          const result = shellExec(
+            `test -S /run/user/$(id -u)/bus && echo ready`,
+            cfg.sshKey, cfg.sshPort, cfg.sshUser
           );
           return result.includes("ready");
         } catch {
@@ -331,10 +338,10 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     // Now wait for GNOME Shell to register on D-Bus (same method as initial login)
     const t3 = Date.now();
     try {
-      await shell.exec("gdbus wait --session --timeout=60 org.gnome.Shell");
+      shellExec("gdbus wait --session --timeout=60 org.gnome.Shell", cfg.sshKey, cfg.sshPort, cfg.sshUser);
     } catch {
       // gdbus wait may fail if shell is already up — check pgrep as fallback
-      await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
+      await pollForProcess((cmd: string) => Promise.resolve(shellExec(cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser)), "gnome-shell --mode=user", 30000);
     }
     console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
 
@@ -343,7 +350,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       "extension system ready",
       async () => {
         try {
-          const result = await shell.exec(`gnome-extensions list 2>&1`);
+          const result = shellExec(`gnome-extensions list 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
           // Must contain our extension UUID (not just any text without "error")
           return result.includes(cfg.extensionUuid);
         } catch {
@@ -413,7 +420,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   await pollUntilFn(
     "dotool pipe",
     async () => {
-      const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
+      const output = shellExec("test -p /run/user/$(id -u)/dotool-pipe && echo ready", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       return output.includes("ready");
     },
     10000
@@ -456,8 +463,9 @@ export async function startVoiceService(
       // Continue — sounddevice install may fail with clear error
     }
     // Use uv for faster, more reliable installs (matches install.sh approach)
-    const uvResult = await shell.exec(
-      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
+    const uvResult = shellExec(
+      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__",
+      cfg.sshKey, cfg.sshPort, cfg.sshUser
     );
     if (!uvResult.includes("__UV_OK__")) {
       // Fallback to pip if uv not available
@@ -483,7 +491,7 @@ export async function startVoiceService(
   await pollUntilFn(
     "old voice service to die",
     async () => {
-      const output = await shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
+      const output = shellExec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       return output.trim().length === 0;
     },
     5000
@@ -499,12 +507,13 @@ export async function startVoiceService(
   const outputMethod = cfg.outputMethod || 'type';
   console.log(`  Using output method: ${outputMethod}`);
   
-  await shell.exec(
-    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
+  shellExec(
+    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`,
+    cfg.sshKey, cfg.sshPort, cfg.sshUser
   );
 
   await pollForCommandOutputFn(
-    shell.exec.bind(shell),
+    (cmd: string) => Promise.resolve(shellExec(cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser)),
     "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
     "com.happytomatoe.VoiceToText",
     15000
