@@ -42,16 +42,16 @@ detect_os() {
 
 install_prerequisites() {
   echo "Installing prerequisites..."
-  install_pkg unzip
-  install_pkg curl
-  install_pkg libsecret
+  local RPM_CHANGED=false
+  install_pkg unzip || RPM_CHANGED=true
+  install_pkg curl || RPM_CHANGED=true
+  install_pkg libsecret || RPM_CHANGED=true
 
-  if [ "$PKG_MGR" = "rpm-ostree" ]; then
+  if [ "$PKG_MGR" = "rpm-ostree" ] && [ "$RPM_CHANGED" = true ]; then
     echo ""
     echo "NOTE: rpm-ostree changes require a reboot to take effect."
     echo "      If this is the first time layering packages, reboot before continuing."
   fi
-
   if ! command_exists dotool; then
     if [ "$UPGRADE" = true ]; then
       echo ""
@@ -196,6 +196,7 @@ install_dbus_services() {
 
   if [ -f "service/com.happytomatoe.VoiceToText.service" ]; then
     cp service/com.happytomatoe.VoiceToText.service "$DBUS_SERVICE_DIR/"
+    echo "Copied D-Bus service file."
   else
     echo "Downloading D-Bus service file from repository..."
     curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
@@ -205,6 +206,7 @@ install_dbus_services() {
   mkdir -p "$SYSTEMD_DIR"
   if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
     cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
+    echo "Copied systemd user service."
   elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
     echo "Downloaded systemd user service."
   else
