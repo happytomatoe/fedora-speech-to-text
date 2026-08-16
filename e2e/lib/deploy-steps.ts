@@ -102,38 +102,27 @@ export async function waitForGdmLogin(
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
-  // Poll for gnome-shell: check every 10s, bail early if it crashed.
+  // Wait 30s for gnome-shell to start, then fail if not ready.
   const t1 = Date.now();
+  await Bun.sleep(30_000);
   let ready = false;
-  const maxAttempts = Math.ceil(timeoutMs("gnome_shell") / 10_000); // 18 * 10s = 180s max
-  for (let i = 0; i < maxAttempts; i++) {
-    await Bun.sleep(10_000);
-    try {
-      const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
-      if (result.includes("ready")) {
-        ready = true;
-        break;
-      }
-    } catch {
-      // SSH may fail during startup — retry
+  try {
+    const result = await shell.exec(`pgrep -x gnome-shell && echo ready`);
+    if (result.includes("ready")) {
+      ready = true;
     }
+  } catch {
+    // SSH may fail during startup
+  }
+  if (!ready) {
     // Check if gnome-shell crashed
     try {
       const log = await shell.exec(`cat /tmp/gnome-shell.log 2>/dev/null | tail -20`).catch(() => "");
       if (log && /segfault|signal|crash|error.*xwayland/i.test(log)) {
-        console.log(`  gnome-shell CRASHED (attempt ${i + 1}):\n${log}`);
-        break;
+        console.log(`  gnome-shell CRASHED:\n${log}`);
       }
     } catch {
       // ignore
-    }
-    // Check if gnome-shell process disappeared after previously existing
-    if (i >= 2) {
-      const stillRunning = await shell.exec(`pgrep -x gnome-shell || echo gone`).catch(() => "gone");
-      if (stillRunning.includes("gone")) {
-        console.log(`  gnome-shell process gone at attempt ${i + 1}, not restarting`);
-        break;
-      }
     }
   }
   console.log(`  gnome-shell ready: ${Date.now() - t1}ms [time]`);
