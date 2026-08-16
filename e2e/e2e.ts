@@ -730,12 +730,12 @@ async function main(): Promise<void> {
   const startTime = Date.now();
   let testsFailed = 0;
 
-  // Global timeout watchdog — sets a flag instead of process.exit so cleanup runs
-  let timedOut = false;
+  // Global timeout watchdog — exit immediately so CI sees the failure
   const timeoutTimer = setTimeout(() => {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
-    console.error(`\nTIMEOUT: Test exceeded ${GLOBAL_TIMEOUT_MS / 1000}s limit (${elapsed}s elapsed)`);
-    timedOut = true;
+    console.error(`\nFATAL: Test exceeded ${GLOBAL_TIMEOUT_MS / 1000}s limit (${elapsed}s elapsed)`);
+    console.error("Killing process — test is hung");
+    process.exit(2);
   }, GLOBAL_TIMEOUT_MS);
 
 
@@ -865,10 +865,7 @@ async function main(): Promise<void> {
       updateReferenceImages(run);
     }
 
-    // Check if watchdog timed out during execution
-    if (timedOut) {
-      testsFailed++;
-    }
+
   } catch (err) {
     console.error("\nFATAL:", err);
     testsFailed++;

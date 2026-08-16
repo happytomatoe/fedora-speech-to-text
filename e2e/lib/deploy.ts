@@ -215,13 +215,15 @@ export class Deployer {
     });
   }
 
-  async exec(command: string): Promise<{ stdout: string; stderr: string; code: number }> {
+  async exec(command: string, timeoutMs = 120_000): Promise<{ stdout: string; stderr: string; code: number }> {
     await this.connect();
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
 
       const cleanup = () => {
+        if (timer) clearTimeout(timer);
         if (this.client) {
           this.client.removeListener("close", onClientClose);
         }
@@ -236,6 +238,14 @@ export class Deployer {
       };
 
       this.client!.on("close", onClientClose);
+
+      timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          reject(new Error(`SSH exec timeout after ${timeoutMs}ms: ${command.slice(0, 80)}`));
+        }
+      }, timeoutMs);
 
       this.client!.exec(command, (err, stream) => {
         if (err) {
