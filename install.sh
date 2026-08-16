@@ -392,12 +392,9 @@ print_summary() {
 
 # --- Parse arguments ---
 LOCAL_DIR=""
-UPGRADE=false
 for arg in "$@"; do
   if [ "$arg" = "--debug" ]; then
     set -x
-  elif [ "$arg" = "--upgrade" ]; then
-    UPGRADE=true
   fi
 done
 for ((i=1; i<=$#; i++)); do
@@ -411,6 +408,11 @@ if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
   exit 1
 fi
 
+# Auto-detect: upgrade if extension or Python package already exists
+UPGRADE=false
+if [ -d "$INSTALL_DIR" ] || command_exists voice-to-text-dbus; then
+  UPGRADE=true
+fi
 # --- Main ---
 main() {
   detect_os
