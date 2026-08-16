@@ -59,12 +59,14 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
-  // Start GNOME Shell in headless mode with its own session bus
-  // Save the bus address and wait for shell to register
+  // Start GNOME Shell in headless mode using dbus-launch (non-interactive)
+  // dbus-launch properly saves the bus address for later use
   await shellExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
     "systemctl --user stop gnome-shell 2>/dev/null || true && " +
-    "nohup dbus-run-session -- sh -c 'echo \"$DBUS_SESSION_BUS_ADDRESS\" > /tmp/gnome-session-bus && exec gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080' > /tmp/gnome-shell.log 2>&1 & " +
+    "eval $(dbus-launch --sh-syntax) && " +
+    "echo \"$DBUS_SESSION_BUS_ADDRESS\" > /tmp/gnome-session-bus && " +
+    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 & " +
     "sleep 5 && " +
     "cat /tmp/gnome-session-bus 2>/dev/null || echo 'NO_BUS_FILE'"
   );
