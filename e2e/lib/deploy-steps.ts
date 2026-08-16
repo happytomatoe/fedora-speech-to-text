@@ -59,14 +59,14 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
-  // Start Xvfb, apply GDM auto-login, and restart GDM in one command
-  // (DISPLAY must persist in the same shell session)
+  // Try gnome-shell --headless mode (skips GDM entirely)
+  // Start Xvfb and gnome-shell in one command
   await shellExec(
+    "dnf install -y xorg-x11-server-Xvfb 2>/dev/null; " +
     "Xvfb :99 -screen 0 1920x1080x24 & " +
     "export DISPLAY=:99 && " +
-    "mkdir -p /etc/gdm/custom.conf && " +
-    "echo -e '[daemon]\\nAutomaticLoginEnable=True\\nAutomaticLogin=testuser' > /etc/gdm/custom.conf && " +
-    "systemctl restart gdm"
+    "gnome-shell --headless --virtual-monitor 1920x1080 & " +
+    "sleep 2"
   );
   console.log("Waiting for GNOME Shell to register on D-Bus...");
   // Use gdbus wait to get shell on D-Bus quickly (~350ms)
