@@ -26,6 +26,9 @@ jobs:
       - name: Install Filen CLI
         run: npm install -g @filen/cli
 
+      - name: Install just
+        run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+
       # Cache all E2E files
       - name: Restore E2E files from cache
         id: cache-restore
