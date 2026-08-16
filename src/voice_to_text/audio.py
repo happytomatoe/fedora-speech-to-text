@@ -1,108 +1,15 @@
 """Audio recording and level metering utilities."""
 
 import logging
-import math
-import os
 import re
 import subprocess
-import tempfile
-import wave
-from collections.abc import Callable
 
 import numpy as np
-import sounddevice as sd
 
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
-
-
-class AudioRecorder:
-    """Records audio directly to a WAV file with level smoothing."""
-
-    def __init__(
-        self,
-        device: int | None = None,
-        smooth_factor: float = 0.7,
-        sample_rate: int | None = None,
-        block_size: int = BLOCK_SIZE,
-    ):
-        """Initialize the audio recorder."""
-        self.device = device
-        self.smooth_factor = smooth_factor
-        self.sample_rate = sample_rate or SAMPLE_RATE
-        self._explicit_sample_rate = sample_rate is not None
-        self.block_size = block_size
-        self.smoothed_level: float = 0.0
-        self.frame_count: int = 0
-        self.filepath: str | None = None
-        self._stream: sd.InputStream | None = None
-        self._wav: wave.Wave_write | None = None
-        self.on_audio_data: Callable[[bytes], None] | None = None
-
-    def start(self):
-        """Start recording audio."""
-        sample_rate = self.sample_rate
-        if not self._explicit_sample_rate and self.device is not None:
-            try:
-                device_info = sd.query_devices(self.device)
-                sample_rate = int(device_info["default_samplerate"])
-            except Exception:
-                pass
-        self.sample_rate = sample_rate
-        block_size = self.block_size
-
-        fd, self.filepath = tempfile.mkstemp(suffix=".wav")
-        fh = os.fdopen(fd, "wb")
-        self._wav = wave.open(fh, "wb")  # noqa: SIM115 - file must stay open for recording duration
-        self._wav.setnchannels(1)
-        self._wav.setsampwidth(2)
-        self._wav.setframerate(sample_rate)
-        self.frame_count = 0
-
-        self._stream = sd.InputStream(
-            samplerate=sample_rate,
-            channels=1,
-            blocksize=block_size,
-            dtype="int16",
-            callback=self._callback,
-            device=self.device,
-        )
-        self._stream.start()
-
-    def stop(self, *, delete: bool = False) -> str | None:
-        """Stop recording and optionally delete the file."""
-        if self._stream:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
-        if self._wav:
-            self._wav.close()
-            self._wav = None
-        filepath = self.filepath
-        if delete and filepath:
-            try:
-                os.unlink(filepath)
-            except OSError:
-                logger.debug("Failed to delete recording %s", filepath)
-            self.filepath = None
-        return filepath
-
-    def _callback(self, indata: np.ndarray, frames: int, time_info, status):
-        """Handle audio data from the sounddevice callback thread."""
-        raw = indata.tobytes()
-        if self._wav is not None:
-            self._wav.writeframes(raw)
-        self.frame_count += 1
-        float_data = indata[:, 0].astype(np.float32) / 32768.0
-        rms = math.sqrt(np.mean(float_data**2))
-        self.smoothed_level = self.smooth_factor * self.smoothed_level + (1 - self.smooth_factor) * rms
-        if self.on_audio_data is not None:
-            try:
-                self.on_audio_data(raw)
-            except Exception:
-                logger.exception("on_audio_data callback failed")
 
 
 class SpeakerVolumeManager:

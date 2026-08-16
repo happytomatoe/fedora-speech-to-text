@@ -93,14 +93,6 @@ class ConfigManager:
         """Get audio configuration."""
         return self.config.get("audio", {})
 
-    def get_output_config(self) -> dict[str, Any]:
-        """Get output configuration."""
-        return self.config.get("output", {})
-
-    def get_logging_config(self) -> dict[str, Any]:
-        """Get logging configuration."""
-        return self.config.get("logging", {})
-
     def get_speaker_config(self) -> dict[str, Any]:
         """Get speaker volume configuration."""
         audio_cfg = self.config.get("audio") or {}
