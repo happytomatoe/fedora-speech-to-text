@@ -49,9 +49,15 @@ install:
     uv tool install -e .
 
 uninstall:
+    gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true
+    rm -rf ~/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com
+    rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
+    rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.user.service
+    rm -f ~/.local/bin/voice-to-text-dbus-wrapper
     rm -f ~/.local/bin/voice-to-text-dbus
     uv tool uninstall voice-to-text 2>/dev/null || true
-
+    systemctl --user daemon-reload
+    echo "Uninstalled extension, D-Bus service, and Python package."
 # Reinstall Python package from source
 reinstall: gnome-ext-install service-install
     #!/usr/bin/env bash
