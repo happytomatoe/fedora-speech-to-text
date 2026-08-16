@@ -169,7 +169,6 @@ fetch_latest_tag() {
     exit 1
   fi
   echo "Found version $LATEST_TAG"
-  # Sets global LATEST_TAG for use by other functions
 }
 
 install_python_service() {
