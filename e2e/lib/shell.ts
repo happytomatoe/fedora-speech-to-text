@@ -47,7 +47,7 @@ export class ShellHelper {
         );
 
         // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
-        await shell.waitText(`${opts.sshUser}@localhost`, { timeout: 60000 });
+        await shell.waitText(`${opts.sshUser}@localhost`, { timeouts: { text: 120_000 } });
 
         this.session = { shell, ...opts, host };
         return this.session;
