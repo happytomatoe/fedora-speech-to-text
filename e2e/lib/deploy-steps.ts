@@ -11,13 +11,13 @@ function sshOpts(sshKey: string, sshPort: number): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
 }
 
-export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
+export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3, timeoutMs = 30000): string {
   if (retries < 1) retries = 1;
   const host = `${sshUser}@localhost`;
   let lastErr: Error | null = null;
   for (let i = 0; i < retries; i++) {
     try {
-      return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: 30000 }).toString();
+      return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: timeoutMs }).toString();
     } catch (err) {
       lastErr = err as Error;
       if (i < retries - 1) {
@@ -69,7 +69,7 @@ export async function waitForGdmLogin(
     "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 & " +
     "sleep 5 && " +
     "gdbus wait --session --timeout=30 org.gnome.Shell",
-    sshKey, sshPort, sshUser
+    sshKey, sshPort, sshUser, 3, 60_000
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
   
