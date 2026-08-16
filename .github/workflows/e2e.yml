@@ -14,17 +14,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install QEMU
-        run: sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage
-
-      - name: Enable KVM
+      - name: Install QEMU + libvirt
         run: |
+          sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage libvirt-clients virtinst
+          # Enable KVM
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           echo '--- KVM diagnostics ---'
           ls -la /dev/kvm 2>&1 || echo 'WARNING: /dev/kvm not found'
           cat /proc/cpuinfo | grep -c vmx || echo 'No hardware virtualization flags'
+          # Enable libvirt user session
+          sudo usermod -aG kvm $USER
+          sudo usermod -aG libvirt $USER
+          echo 'LIBVIRT_DEFAULT_URI=qemu:///session' >> $HOME/.bashrc
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
