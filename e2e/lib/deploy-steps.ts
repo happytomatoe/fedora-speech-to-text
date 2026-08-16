@@ -59,13 +59,12 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
-  // Try gnome-shell --headless mode (skips GDM entirely)
-  // Start Xvfb and gnome-shell in one command
+  // Start GNOME Shell in headless mode (skips GDM entirely)
+  // Uses Mutter's native headless backend with a virtual monitor
   await shellExec(
-    "dnf install -y xorg-x11-server-Xvfb 2>/dev/null; " +
-    "Xvfb :99 -screen 0 1920x1080x24 & " +
-    "export DISPLAY=:99 && " +
-    "gnome-shell --headless --virtual-monitor 1920x1080 & " +
+    "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
+    "systemctl --user stop gnome-shell 2>/dev/null || true && " +
+    "dbus-run-session -- gnome-shell --headless --virtual-monitor 1920x1080 & " +
     "sleep 2"
   );
   console.log("Waiting for GNOME Shell to register on D-Bus...");
