@@ -144,8 +144,8 @@ export class VmManager {
     const qemuArgs = [
       "qemu-system-x86_64",
       ...(kvmAvailable ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
-      "-m", "4096",
-      "-smp", "2",
+      "-m", "8192",
+      "-smp", "4",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
       "-display", "none",
