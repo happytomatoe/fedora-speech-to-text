@@ -224,10 +224,8 @@ export class VmManager {
     await this.deployer.connect();
 
     const t1 = Date.now();
-    const isGoldenDepsImage = this.config.baseImage.includes('golden-gnome-deps');
-    if (this.config.skipDeps || isGoldenDepsImage) {
-      const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
-      console.log(`  Skipping installDependencies (${reason})`);
+    if (this.config.skipDeps) {
+      console.log(`  Skipping installDependencies (--skip-deps)`);
     } else {
       await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     }
@@ -245,7 +243,7 @@ export class VmManager {
     console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
     const t4 = Date.now();
-    const skipDeps = this.config.skipDeps || isGoldenDepsImage;
+    const skipDeps = this.config.skipDeps;
     await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps);
     console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 

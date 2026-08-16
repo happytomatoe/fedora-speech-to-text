@@ -43,7 +43,7 @@ toolbox run --container fedora-toolbox-44 virt-customize \
     --run-command "dnf copr enable -y scottames/ghostty || true" \
     --run-command "dnf copr enable -y smallcms/dotool || true" \
     --run-command "dnf install -y ghostty dotool || true" \
-    --run-command "pip3 install --break-system-packages httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq" \
+    --run-command "pip3 install --break-system-packages httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime" \
     --run-command "pip3 install --break-system-packages uv" \
     --run-command "systemctl set-default graphical.target" \
     --run-command "mkdir -p /etc/gdm" \
