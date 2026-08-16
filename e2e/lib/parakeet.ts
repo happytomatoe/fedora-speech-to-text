@@ -43,8 +43,26 @@ export async function ensureParakeet(): Promise<void> {
   const rt = detectRuntime();
   console.log(`  Using container runtime: ${rt}`);
 
-  // Ensure models directory exists
+  // Ensure models directory exists and download models if needed
   execSync(`mkdir -p '${modelsDir}'`, { stdio: "ignore" });
+  const requiredFiles = ["config.json", "vocab.txt", "nemo128.onnx", "encoder-model.int8.onnx", "decoder_joint-model.int8.onnx"];
+  const modelsExist = requiredFiles.every((f) => {
+    try {
+      execSync(`test -f '${modelsDir}/${f}'`, { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!modelsExist) {
+    console.log("  Downloading Parakeet models...");
+    const baseUrl = "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main";
+    for (const f of requiredFiles) {
+      console.log(`    Downloading ${f}...`);
+      execSync(`curl -L -f -o '${modelsDir}/${f}' '${baseUrl}/${f}'`, { stdio: "inherit", timeout: 300_000 });
+    }
+    console.log("  Models downloaded.");
+  }
 
   // Container running but still loading models — poll until ready
   try {
