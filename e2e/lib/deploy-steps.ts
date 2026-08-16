@@ -21,6 +21,8 @@ export function sshExec(command: string, sshKey: string, sshPort: number, sshUse
       return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: timeoutMs }).toString();
     } catch (err) {
       lastErr = err as Error;
+      // Remote command returned non-zero — still capture stdout (e.g. rpm -q, pgrep)
+      if ((err as any).stdout) return (err as any).stdout.toString();
       if (i < retries - 1) {
         execSync(`sleep 2`);
       }
