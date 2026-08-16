@@ -43,6 +43,9 @@ export async function ensureParakeet(): Promise<void> {
   const rt = detectRuntime();
   console.log(`  Using container runtime: ${rt}`);
 
+  // Ensure models directory exists
+  execSync(`mkdir -p '${modelsDir}'`, { stdio: "ignore" });
+
   // Container running but still loading models — poll until ready
   try {
     const state = execSync(`${rt} inspect -f '{{.State.Status}}' ${containerName} 2>/dev/null`).toString().trim();
