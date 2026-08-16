@@ -59,17 +59,17 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
-  // Start GNOME Shell in headless mode (skips GDM entirely)
-  // Uses Mutter's native headless backend with a virtual monitor
+  // Start GNOME Shell in headless mode using its own session bus
+  // Save the bus address so gdbus wait can connect to the right bus
   await shellExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
     "systemctl --user stop gnome-shell 2>/dev/null || true && " +
-    "dbus-run-session -- gnome-shell --headless --virtual-monitor 1920x1080 & " +
-    "sleep 2"
+    "dbus-run-session -- sh -c 'echo \"$DBUS_SESSION_BUS_ADDRESS\" > /tmp/gnome-session-bus && gnome-shell --headless --virtual-monitor 1920x1080' & " +
+    "sleep 3"
   );
   console.log("Waiting for GNOME Shell to register on D-Bus...");
-  // Use gdbus wait to get shell on D-Bus quickly (~350ms)
-  await shellExec("gdbus wait --session --timeout=60 org.gnome.Shell");
+  // Connect to the same bus GNOME Shell is using
+  await shellExec("DBUS_SESSION_BUS_ADDRESS=$(cat /tmp/gnome-session-bus) gdbus wait --session --timeout=60 org.gnome.Shell");
   console.log(`  gdbus wait: ${Date.now() - t0}ms [time]`);
   
   // Poll SessionIsActive — indicates full session is up.
