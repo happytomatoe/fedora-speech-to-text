@@ -10,10 +10,12 @@ function detectRuntime(): string {
   for (const rt of ["podman", "docker"]) {
     try {
       execSync(`${rt} --version`, { stdio: "ignore" });
+      // Test if it can actually run containers (podman often fails with cgroup errors)
+      execSync(`${rt} run --rm alpine echo ok`, { stdio: "ignore", timeout: 30_000 });
       return rt;
-    } catch { /* not installed */ }
+    } catch { /* not installed or broken */ }
   }
-  throw new Error("No container runtime found (need podman or docker)");
+  throw new Error("No working container runtime found (need podman or docker)");
 }
 
 function checkHealth(): Promise<boolean> {
