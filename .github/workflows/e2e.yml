@@ -30,7 +30,7 @@ jobs:
         run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
 
       - name: Install shell-use
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/microsoft/shell-use/main/install/install.sh | sh
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/microsoft/shell-use/main/install/install.sh | sh && ln -sf ~/.local/bin/tui-test ~/.local/bin/shell-use
 
       # Cache all E2E files
       - name: Restore E2E files from cache
