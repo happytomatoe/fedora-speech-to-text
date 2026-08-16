@@ -59,32 +59,19 @@ export async function waitForGdmLogin(
   shellExec: (cmd: string) => Promise<string>
 ): Promise<void> {
   const t0 = Date.now();
-  // Start GNOME Shell in headless mode using dbus-launch (non-interactive)
-  // dbus-launch properly saves the bus address for later use
+  // Start GNOME Shell in headless mode on the existing session bus.
+  // The session bus is provided by systemd --user (created on SSH login).
+  // No dbus-launch or dbus-run-session needed — they create a SEPARATE bus
+  // that gdbus wait can't find from a different SSH command.
   await shellExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "systemctl --user stop gnome-shell 2>/dev/null || true && " +
-    "eval $(dbus-launch --sh-syntax) && " +
-    "echo \"$DBUS_SESSION_BUS_ADDRESS\" > /tmp/gnome-session-bus && " +
     "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 & " +
     "sleep 5 && " +
-    "cat /tmp/gnome-session-bus 2>/dev/null || echo 'NO_BUS_FILE'"
+    "gdbus wait --session --timeout=30 org.gnome.Shell"
   );
-  console.log("Waiting for GNOME Shell to register on D-Bus...");
-  // Wait for org.gnome.Shell on the correct bus (up to 120s)
-  await shellExec(
-    "for i in $(seq 1 60); do " +
-    "  BUS=$(cat /tmp/gnome-session-bus 2>/dev/null); " +
-    "  if [ -n \"$BUS\" ]; then " +
-    "    DBUS_SESSION_BUS_ADDRESS=$BUS gdbus wait --session --timeout=2 org.gnome.Shell 2>/dev/null && break; " +
-    "  fi; " +
-    "  sleep 2; " +
-    "done"
-  );
-  console.log(`  gdbus wait: ${Date.now() - t0}ms [time]`);
+  console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
   
   // Poll SessionIsActive — indicates full session is up.
-  // The PTY shell is functional after gdbus wait returns.
   const t1 = Date.now();
   let ready = false;
   for (let i = 0; i < 20; i++) {
@@ -99,7 +86,7 @@ export async function waitForGdmLogin(
   }
   console.log(`  session ready: ${Date.now() - t1}ms [time]`);
   console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
-  
+
   if (!ready) {
     console.log("WARNING: Session did not become ready in time, continuing anyway");
   }
