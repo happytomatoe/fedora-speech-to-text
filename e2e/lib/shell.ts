@@ -38,6 +38,7 @@ export class ShellHelper {
         await shell.open({
           cols: opts.cols ?? 120,
           rows: opts.rows ?? 40,
+          timeouts: { ready: 120_000 },
         });
 
         const host = opts.host ?? "localhost";
