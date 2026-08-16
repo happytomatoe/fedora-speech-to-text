@@ -61,37 +61,42 @@ export async function waitForGdmLogin(
   sshUser = "testuser"
 ): Promise<void> {
   const t0 = Date.now();
+
   // Start GNOME Shell in headless mode on the existing session bus.
   // Uses sshExec (direct SSH) instead of shell-use PTY to avoid flooding
   // the terminal with gnome-shell startup output.
   sshExec(
     "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 & " +
-    "sleep 5 && " +
-    "gdbus wait --session --timeout=30 org.gnome.Shell",
+    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1920x1080 > /tmp/gnome-shell.log 2>&1 &",
     sshKey, sshPort, sshUser, 3, 60_000
   );
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
-  
-  // Poll SessionIsActive — indicates full session is up.
+
+  // Poll for gnome-shell process using SSH polling (like gnome-shell-system-monitor-next-applet)
+  // Retry with `sleep 5` up to 180s, checking `pgrep -x gnome-shell`
   const t1 = Date.now();
   let ready = false;
-  for (let i = 0; i < 20; i++) {
-    const result = sshExec(
-      `busctl --user get-property org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager SessionIsActive 2>&1 || true`,
-      sshKey, sshPort, sshUser
-    );
-    if (result.includes("b true")) {
-      ready = true;
-      break;
+  const maxAttempts = 36; // 36 * 5s = 180s
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const result = sshExec(
+        `pgrep -x gnome-shell && echo ready`,
+        sshKey, sshPort, sshUser, 1, 10_000
+      );
+      if (result.includes("ready")) {
+        ready = true;
+        break;
+      }
+    } catch {
+      // SSH connection may fail during startup — retry
     }
-    await Bun.sleep(100);
+    await Bun.sleep(5000);
   }
-  console.log(`  session ready: ${Date.now() - t1}ms [time]`);
+  console.log(`  gnome-shell ready: ${Date.now() - t1}ms [time]`);
   console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
 
   if (!ready) {
-    console.log("WARNING: Session did not become ready in time, continuing anyway");
+    console.log("WARNING: gnome-shell did not start in time, continuing anyway");
   }
 }
 
