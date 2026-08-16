@@ -328,8 +328,14 @@ else
   cd /tmp
   curl -LO "$RELEASE_URL"
   filename=$(basename "$RELEASE_URL")
-  gnome-extensions install --force /tmp/$filename
-  rm -f /tmp/$filename
+  # Extract to temp dir and rsync to avoid stale files lingering
+  TMPDIR=$(mktemp -d)
+  unzip -qo /tmp/$filename -d "$TMPDIR"
+  rm -rf "$INSTALL_DIR"
+  mkdir -p "$INSTALL_DIR/schemas"
+  rsync -a "$TMPDIR/" "$INSTALL_DIR/"
+  glib-compile-schemas "$INSTALL_DIR/schemas/"
+  rm -rf "$TMPDIR" /tmp/$filename
 fi
 
 # --- Configure API key ---
