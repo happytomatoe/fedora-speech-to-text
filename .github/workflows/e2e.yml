@@ -45,7 +45,11 @@ jobs:
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: e2e/qemu-images/
+          path: |
+            e2e/qemu-images/base.qcow2
+            e2e/qemu-images/cloud-init.iso
+            e2e/qemu-images/id_ed25519
+            e2e/qemu-images/id_ed25519.pub
           key: e2e-files-v3
           restore-keys: |
             e2e-files-
@@ -71,7 +75,11 @@ jobs:
         if: steps.cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: e2e/qemu-images/
+          path: |
+            e2e/qemu-images/base.qcow2
+            e2e/qemu-images/cloud-init.iso
+            e2e/qemu-images/id_ed25519
+            e2e/qemu-images/id_ed25519.pub
           key: e2e-files-v3
 
       # Upload artifacts on failure
