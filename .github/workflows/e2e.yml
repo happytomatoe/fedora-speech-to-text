@@ -114,6 +114,36 @@ jobs:
           FILEN_EMAIL: ${{ secrets.FILEN_EMAIL }}
           FILEN_PASSWORD: ${{ secrets.FILEN_PASSWORD }}
 
+      # Start Parakeet container (runs on host, not in VM)
+      - name: Start Parakeet
+        run: |
+          # Check if already running
+          if curl -sf http://localhost:5092/health >/dev/null 2>&1; then
+            echo "Parakeet already running"
+            exit 0
+          fi
+          # Detect runtime
+          RT=""
+          for rt in podman docker; do
+            if command -v $rt &>/dev/null; then RT=$rt; break; fi
+          done
+          if [ -z "$RT" ]; then echo "No container runtime found"; exit 1; fi
+          echo "Using $RT"
+          # Start container
+          MODELS_DIR="$HOME/parakeet/models"
+          mkdir -p "$MODELS_DIR"
+          $RT run -d --name parakeet-v2 -p 5092:5092 -v "$MODELS_DIR:/models:Z" ghcr.io/achetronic/parakeet:latest
+          # Wait for healthy
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:5092/health >/dev/null 2>&1; then
+              echo "Parakeet ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Parakeet not ready after 90s"
+          exit 1
+
       # Run E2E tests
       - name: Run E2E tests
         run: cd e2e && bun run e2e.ts --shutdown --timeout 300
