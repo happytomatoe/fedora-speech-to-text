@@ -27,13 +27,7 @@ sync
 echo "--- Memory before gnome-shell ---"
 free -m | head -2
 
-echo "--- Starting gnome-shell (headless) ---"
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-setsid nohup gnome-shell --headless --unsafe-mode --mode=user --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 </dev/null &
-GSHELL_PID=$!
-echo "  gnome-shell PID: $GSHELL_PID"
-
-echo "--- Waiting for gnome-shell ready ---"
+echo "--- Waiting for GDM auto-login to start gnome-shell ---"
 for i in $(seq 1 30); do
   sleep 1
   if pgrep -x gnome-shell >/dev/null 2>&1; then
@@ -42,7 +36,6 @@ for i in $(seq 1 30); do
   fi
   if [ "$i" = "30" ]; then
     echo "  FATAL: gnome-shell did not start"
-    cat /tmp/gnome-shell.log | tail -20
     exit 1
   fi
 done
