@@ -15,6 +15,15 @@ sudo systemctl restart systemd-journald 2>/dev/null || true
 echo "--- Disabling animations ---"
 dconf write /org/gnome/desktop/interface/enable-animations false 2>/dev/null || true
 
+echo "--- Configuring GDM auto-login ---"
+sudo mkdir -p /etc/gdm
+cat << 'EOF' | sudo tee /etc/gdm/custom.conf > /dev/null
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin=testuser
+EOF
+sync
+
 echo "--- Memory before gnome-shell ---"
 free -m | head -2
 
