@@ -9,7 +9,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install just
-        uses: extractions/setup-just@v2
+        run: |
+          if [ ! -f /usr/local/bin/just ]; then
+            curl -sSfL https://github.com/casey/just/releases/latest/download/just-1.58.0-x86_64-unknown-linux-musl.tar.gz | sudo tar xz -C /usr/local/bin
+          fi
 
       - name: Install system dependencies
         run: |
