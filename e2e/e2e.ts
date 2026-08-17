@@ -903,6 +903,12 @@ async function main(): Promise<void> {
   } finally {
     // Ensure recording is stopped even on failure
     await vm.stopRecording();
+    // Fetch VM logs before shutdown (for artifact upload)
+    try {
+      await vm.fetchLogs(OUTPUT_DIR);
+    } catch {
+      // Best effort — SSH may be down
+    }
     if (SHUTDOWN) {
       await vm.shutdown();
       run.cleanup();

@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
@@ -485,6 +485,41 @@ export class VmManager {
       await this.shell.close();
       await this.deployer.disconnect();
     }
+  }
+
+  // --- Log collection ---
+
+  /** Fetch logs from VM to local output directory for artifact upload. */
+  async fetchLogs(outputDir: string): Promise<void> {
+    const vmLogsDir = join(outputDir, "vm-logs");
+    mkdirSync(vmLogsDir, { recursive: true });
+    const logs = [
+      { remote: "/tmp/voice-service.log", local: "voice-service.log" },
+      { remote: "/tmp/gnome-shell.log", local: "gnome-shell.log" },
+    ];
+    for (const { remote, local } of logs) {
+      try {
+        await this.shell.exec(`cat ${remote} 2>/dev/null > /tmp/${local}`);
+        const content = await this.shell.exec(`cat /tmp/${local} 2>/dev/null`);
+        if (content.trim()) {
+          writeFileSync(join(vmLogsDir, local), content);
+        }
+      } catch {
+        // File may not exist — skip
+      }
+    }
+    // Capture tmux pane content
+    try {
+      const paneContent = await this.shell.exec(
+        `tmux capture-pane -t e2e:0 -p 2>/dev/null`
+      );
+      if (paneContent.trim()) {
+        writeFileSync(join(vmLogsDir, "tmux-pane.txt"), paneContent);
+      }
+    } catch {
+      // tmux may not be running — skip
+    }
+    console.log(`  VM logs saved to ${vmLogsDir}`);
   }
 
   // --- Polling (thin wrappers for convenience) ---

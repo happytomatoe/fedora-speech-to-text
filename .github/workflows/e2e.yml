@@ -124,6 +124,7 @@ jobs:
       - name: Save Parakeet models to cache
         if: steps.cache-parakeet.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
+        continue-on-error: true
         with:
           path: ~/parakeet/models
           key: parakeet-models-v1
@@ -132,6 +133,7 @@ jobs:
       - name: Save tool cache
         if: steps.cache-tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
+        continue-on-error: true
         with:
           path: |
             ~/.bun/install/cache
@@ -142,6 +144,7 @@ jobs:
       - name: Save E2E files to cache
         if: steps.cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
+        continue-on-error: true
         with:
           path: |
             e2e/qemu-images/base.qcow2
@@ -154,6 +157,7 @@ jobs:
       - name: Save apt cache
         if: steps.cache-apt.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
+        continue-on-error: true
         with:
           path: |
             /var/cache/apt/archives
@@ -164,13 +168,14 @@ jobs:
       - name: Save npm cache
         if: steps.cache-npm.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
+        continue-on-error: true
         with:
           path: ~/.npm
           key: npm-global-v1
 
-      # Upload artifacts on failure
+      # Always upload artifacts (for debugging both failures and flaky passes)
       - name: Upload E2E artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-output
