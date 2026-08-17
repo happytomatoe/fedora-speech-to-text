@@ -169,14 +169,20 @@ export async function deployExtension(
   const tUpload = Date.now();
   if (deployer) {
     await deployer.exec('mkdir -p ~/tmp-deploy');
-    await deployer.uploadFile(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh');
-    await deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext');
-    await deployer.uploadDir(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service');
+    // Parallel uploads — independent, no dependencies between them
+    await Promise.all([
+      deployer.uploadFile(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh'),
+      deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext'),
+      deployer.uploadDir(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service'),
+    ]);
   } else {
     sshExec('mkdir -p ~/tmp-deploy', cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    rsyncToVm(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service', cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    // Parallel rsync — independent
+    await Promise.all([
+      Promise.resolve(rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser)),
+      Promise.resolve(rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser)),
+      Promise.resolve(rsyncToVm(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service', cfg.sshKey, cfg.sshPort, cfg.sshUser)),
+    ]);
   }
   console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
 
@@ -199,7 +205,7 @@ export async function deployExtension(
 export async function deployPythonSource(cfg: DeployConfig, deployer?: Deployer): Promise<void> {
   if (!existsSync(cfg.pythonSrc)) return;
   console.log("Deploying Python source...");
-  await dExec(deployer, "rm -rf ~/voice_to_text/src/voice_to_text && mkdir -p ~/voice_to_text/src/voice_to_text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  // rsync --delete handles removed files; delta transfer skips unchanged files
   if (deployer) {
     await deployer.uploadDir(cfg.pythonSrc, "~/voice_to_text/src/voice_to_text");
   } else {
