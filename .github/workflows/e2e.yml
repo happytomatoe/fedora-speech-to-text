@@ -30,6 +30,30 @@ jobs:
           echo 'LIBVIRT_DEFAULT_URI=qemu:///session' >> $HOME/.bashrc
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Cache Parakeet models (avoids 30s+ download from HuggingFace each run)
+      - name: Restore Parakeet models from cache
+        id: cache-parakeet
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/parakeet/models
+          key: parakeet-models-v1
+          restore-keys: |
+            parakeet-models-
+
+      # Cache tool installs (bun, filen, just, shell-use)
+      - name: Restore tool cache
+        id: cache-tools
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.local/share/.bun/install/cache
+          key: tools-v1
+          restore-keys: |
+            tools-
 
       - name: Install E2E dependencies
         run: cd e2e && bun install
@@ -38,10 +62,16 @@ jobs:
         run: npm install -g @filen/cli
 
       - name: Install just
-        run: curl -sSfL https://github.com/casey/just/releases/latest/download/just-1.58.0-x86_64-unknown-linux-musl.tar.gz | sudo tar xz -C /usr/local/bin
+        run: |
+          if [ ! -f /usr/local/bin/just ]; then
+            curl -sSfL https://github.com/casey/just/releases/latest/download/just-1.58.0-x86_64-unknown-linux-musl.tar.gz | sudo tar xz -C /usr/local/bin
+          fi
 
       - name: Install shell-use
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/microsoft/shell-use/main/install/install.sh | sh && ln -sf ~/.local/bin/tui-test ~/.local/bin/shell-use
+        run: |
+          if [ ! -f ~/.local/bin/tui-test ]; then
+            curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/microsoft/shell-use/main/install/install.sh | sh && ln -sf ~/.local/bin/tui-test ~/.local/bin/shell-use
+          fi
         env:
           TUI_TEST_VERSION: 0.1.0-beta.1
 
@@ -73,6 +103,24 @@ jobs:
           SHELL_USE_TIMEOUT_TEXT_MS: "120000"
           SHELL_USE_TIMEOUT_READY_MS: "120000"
 
+
+      # Save Parakeet models to cache (only on first run)
+      - name: Save Parakeet models to cache
+        if: steps.cache-parakeet.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/parakeet/models
+          key: parakeet-models-v1
+
+      # Save tool cache
+      - name: Save tool cache
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.local/share/.bun/install/cache
+          key: tools-v1
 
       # Save to cache on success (only if cache miss)
       - name: Save E2E files to cache
