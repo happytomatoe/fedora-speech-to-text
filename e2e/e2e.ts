@@ -12,18 +12,14 @@ import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 import type { HealthCheckResult } from "./lib/health.js";
 
-// Log to file
 const LOG_DIR = join(import.meta.dir, "output");
 mkdirSync(LOG_DIR, { recursive: true });
 const LOG_FILE = join(LOG_DIR, "e2e.log");
-// Clear log file at start of run
 writeFileSync(LOG_FILE, "");
 
 const origLog = console.log;
 const origError = console.error;
 
-// In timing mode, only show timing-related output on stdout.
-// Everything still goes to the log file.
 function isTimingOutput(msg: string): boolean {
   return msg.includes("[time]") || msg.includes("Total:") || msg.includes("=== Timing");
 }
@@ -42,12 +38,11 @@ console.error = (...args: any[]) => {
 };
 
 
-// Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
 const SHUTDOWN = args.includes("--shutdown");
 const NO_RECORD = args.includes("--no-record");
-const RECORD_MODE = !NO_RECORD; // enabled by default
+const RECORD_MODE = !NO_RECORD;
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const NO_SNAPSHOT = args.includes("--no-snapshot");
@@ -183,7 +178,6 @@ async function preflight(): Promise<void> {
     throw new Error(`SSH key not found: ${SSH_KEY}\nRun 'just qemu-e2e-setup' first.`);
   }
 
-  // Ensure Parakeet is available for local transcription
   await ensureParakeet();
 }
 
@@ -191,7 +185,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
   let t: number;
 
-  // Configure shell helper with SSH credentials and deployer
   shell.configure({ sshKey: SSH_KEY, sshPort: run.sshPort, sshUser: SSH_USER });
   shell.setDeployer(vm.deployer);
 
@@ -203,28 +196,20 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     deployer: vm.deployer,
   };
 
-  // Start continuous screen recording
-  vm.startRecording();
-
   t = Date.now();
   await vm.captureFrame("01-desktop");
   timing("capture-frame", t);
 
-  // Step 1: Dismiss Activities overview (D-Bus Set is idempotent)
   t = Date.now();
   console.log("Dismissing Activities...");
   const wasOpen = await shell.dismissAndCheck();
   console.log(`  Activities after dismiss: ${wasOpen ? 'STILL OPEN' : 'closed'}`);
   timing("dismiss-activities", t);
 
-  // Step 2: Open terminal with tmux inside (dotool needs a focused window)
   t = Date.now();
   console.log("Opening terminal with tmux...");
-  // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
-  // Create tmux session first (works without display)
   await shell.exec(`tmux new-session -d -s ${tmuxCfg.session} -x 120 -y 40`);
-  // Then attach via ghostty (needs WAYLAND_DISPLAY)
   const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
   if (hasGhostty) {
     await shell.exec(`WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup ghostty -e tmux attach-session -t ${tmuxCfg.session} &>/dev/null &`);
@@ -247,13 +232,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Brief wait for window manager to settle after click
   await Bun.sleep(500);
 
-  // Verify terminal is focused by typing a test character and checking tmux
   const paneBefore = await tmux.capturePane(tmuxCfg);
-  await shell.dotoolCommand("key shift+space"); // type space to confirm dotool works
+  await shell.dotoolCommand("key shift+space");
   await Bun.sleep(200);
   const paneAfter = await tmux.capturePane(tmuxCfg);
   if (paneBefore === paneAfter) {
-    // Terminal might not be focused, try clicking again
     console.log("  Retrying terminal focus...");
     await shell.dotoolCommand("mousemove 640 400");
     await shell.dotoolCommand("buttondown 1");
@@ -266,7 +249,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("02-tmux-started");
   timing("capture-frame", t);
 
-  // Step 3: Snapshot pane content before recording (for transcription detection)
   t = Date.now();
   const preRecordingPane = await tmux.capturePane(tmuxCfg);
   console.log("Pre-recording pane captured.");
@@ -276,15 +258,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("03-pre-recording");
   timing("capture-frame", t);
 
-  // Ensure Activities is dismissed right before recording
-  // (may re-open after initial dismiss or from gnome-shell restart)
   const wasOpen2 = await shell.dismissAndCheck();
   console.log(`  Activities after second dismiss: ${wasOpen2 ? 'STILL OPEN' : 'closed'}`);
   
-  // Force-focus terminal again after Activities dismiss
   await shell.focusTerminal();
-  
-  // Verify terminal has focus by typing test character
+
   console.log("Verifying terminal focus...");
   let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session);
   if (!isFocused) {
@@ -299,6 +277,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     console.log("  WARNING: Terminal may not be focused");
   }
   // Step 4: Start recording via hotkey (D-Bus call to GNOME extension)
+  vm.startRecording();
   t = Date.now();
   console.log("Starting recording via hotkey...");
   await shell.sendHotkey();
@@ -309,12 +288,10 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("04-recording-started");
   timing("capture-frame", t);
 
-  // Step 5: Wait for transcription (voice service types via dotool into tmux)
   t = Date.now();
   console.log("Waiting for transcription...");
   let transcription = "";
   try {
-    // Poll the voice service log for the transcription result (most reliable source)
     await vm.pollUntil(
       "transcription",
       async () => {
@@ -332,7 +309,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       20000,
       500
     );
-    // If log didn't have it, try tmux capture as fallback
     if (!transcription) {
       console.log("  Log poll timed out, trying tmux capture...");
       const paneContent = await tmux.capturePane(tmuxCfg);
@@ -358,26 +334,22 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("05-transcription-received");
   timing("capture-frame", t);
 
-  // Step 6: Stop recording
   t = Date.now();
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
-  // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
-  await Bun.sleep(200); // Brief settle for D-Bus round-trip
+  await Bun.sleep(200);
   timing("stop-recording", t);
 
   t = Date.now();
   await vm.captureFrame("06-recording-stopped");
   timing("capture-frame", t);
 
-  // Step 7: Write result to file
   t = Date.now();
   console.log("Writing result to file...");
   if (transcription) {
     const encoded = Buffer.from(transcription).toString('base64');
     await shell.exec(`echo '${encoded}' | base64 -d > /tmp/file.txt`);
   }
-  // Poll until file exists and has content
   await vm.pollUntil(
     "result file written",
     async () => {
@@ -389,10 +361,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   );
   timing("write-result", t);
 
-  // Cleanup: kill tmux session
   await tmux.killSession(tmuxCfg);
 
-  // Stop recording and convert to video
   await vm.stopRecording();
 }
 
@@ -424,24 +394,19 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
   const pngPath = getScreenshotPath(label, testCase, run.outputDir);
   const ppmPath = pngPath.replace(/\.png$/, ".ppm");
   
-  // Ensure directory exists
   const dir = require("node:path").dirname(pngPath);
   require("node:fs").mkdirSync(dir, { recursive: true });
   
   try {
-    // Use QEMU monitor to capture screenshot
     execSync(
       `echo "screendump ${ppmPath}" | nc -U ${run.socketPath} -w 2`,
       { encoding: "utf-8", timeout: 5000 }
     );
-    // Wait for file to be written
     await Bun.sleep(500);
-    // Convert PPM to PNG
     execSync(`convert ${ppmPath} ${pngPath} 2>/dev/null || true`, {
       encoding: "utf-8",
       timeout: 5000
     });
-    // Clean up PPM
     execSync(`rm -f ${ppmPath}`, { encoding: "utf-8" });
     console.log(`  Screenshot saved: ${pngPath}`);
     return pngPath;
@@ -461,17 +426,13 @@ function createVideoFromScreenshots(run: RunContext): void {
   const screenshotPattern = join(recordingDir, "frame-*.ppm");
   
   try {
-    // Check if ffmpeg is available
     execSync("which ffmpeg", { stdio: "ignore" });
     
-    // Check if there are any screenshots
     const files = require("node:fs").readdirSync(recordingDir).filter((f: string) => f.startsWith("frame-") && f.endsWith(".ppm"));
     if (files.length === 0) {
       return;
     }
     
-    // Create video from screenshots
-    // Each screenshot shows for 2 seconds (6 screenshots = 12 seconds total)
     execSync(
       `ffmpeg -y -framerate 0.5 -pattern_type glob -i '${screenshotPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
       { stdio: "ignore" }
@@ -482,7 +443,6 @@ function createVideoFromScreenshots(run: RunContext): void {
       console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
     }
   } catch {
-    // ffmpeg not available or failed - skip video creation
   }
 }
 
@@ -506,12 +466,10 @@ async function verifyWithScreenshot(
   const actualNorm = normalize(actual);
   const expectedNorm = normalize(expected);
   
-  // Check text match
   if (actualNorm !== expectedNorm) {
     return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
   }
   
-  // Check visual regression (if reference exists)
   const referencePath = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
   if (existsSync(referencePath) && screenshot) {
     try {
@@ -564,7 +522,6 @@ function updateReferenceImages(run: RunContext): void {
     }
   }
   
-  // Copy test-case-specific screenshot
   const transcriptionSrc = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
   const transcriptionDst = join(testCaseRefDir, "screenshot-05-transcription-received.png");
   if (existsSync(transcriptionSrc)) {
@@ -582,22 +539,18 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   const prefsDir = join(run.outputDir, "preferences");
   mkdirSync(prefsDir, { recursive: true });
   
-  // Open preferences window using gnome-extensions prefs command
   console.log("  Opening preferences window...");
   await vm.deployer.exec(
     `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); gnome-extensions prefs voice-to-text@happytomatoe.com &`
   );
   
-  // Wait for window to appear
   await Bun.sleep(3000);
-  
-  // Dismiss any welcome/tour dialogs that may appear
+
   console.log("  Dismissing welcome dialogs...");
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key Escape" | dotool`
   );
   await Bun.sleep(500);
-  // Click Skip button if tour dialog appears
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
   );
@@ -612,14 +565,11 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-main.png");
   
-  // Scroll down to see more settings using dotool (works on Wayland)
   console.log("  Scrolling down to see more settings...");
-  // First click on the preferences window to focus it
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
   );
   await Bun.sleep(500);
-  // Then scroll down using dotool wheel (negative = scroll down)
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
   );
@@ -633,7 +583,6 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${scroll1Ppm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-scrolled-1.png");
   
-  // Scroll down more
   console.log("  Scrolling down more...");
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
@@ -648,7 +597,6 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`rm -f "${scroll2Ppm}"`, { encoding: "utf-8" });
   console.log("  📷 Captured: prefs-scrolled-2.png");
   
-  // Scroll down even more
   console.log("  Scrolling down even more...");
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
@@ -665,24 +613,20 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   
   // Test adding a new word via the Add Word button
   console.log("  Testing Add Word functionality...");
-  // Click on "Add Word..." button (it's at the top of the custom words list)
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.39 0.43\nclick left" | dotool`
   );
   await Bun.sleep(1000);
   
-  // Type a new word in the dialog
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "type E2E" | dotool`
   );
   await Bun.sleep(500);
-  // Click the Add button
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.62 0.58\nclick left" | dotool`
   );
   await Bun.sleep(1000);
   
-  // Take screenshot after adding word
   const afterAddPpm = join(prefsDir, "prefs-after-add.ppm");
   const afterAddPng = join(prefsDir, "prefs-after-add.png");
   await vm.qemu.screendump(afterAddPpm);
@@ -690,7 +634,6 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   execSync(`convert "${afterAddPpm}" "${afterAddPng}" 2>/dev/null || true`, { encoding: "utf-8" });
   execSync(`rm -f "${afterAddPpm}"`, { encoding: "utf-8" });
   
-  // Verify screenshot was captured and has content
   if (!existsSync(afterAddPng)) {
     throw new Error("prefs-after-add.png was not created");
   }
@@ -855,7 +798,6 @@ async function main(): Promise<void> {
       timing("deploy" + (SAVE_SNAPSHOT ? "+save-snapshot" : ""), t);
     }
     
-    // Run health checks after deploy
     const healthAfterDeploy = await vm.healthCheck(preDeployPid);
     logHealthCheck(healthAfterDeploy);
     if (!healthAfterDeploy.gnomeShell) {
@@ -865,16 +807,13 @@ async function main(): Promise<void> {
       console.log("  WARNING: Extension state UNKNOWN (headless gnome-shell may not report it)");
     }
     
-    // Run test
     await runTestFlow(vm, run);
-    
-    // Health check after test (detect crashes during recording/transcription)
+
     const healthAfterTest = await vm.healthCheck();
     logHealthCheck(healthAfterTest);
     
     const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
     
-    // Combine health check with test result
     if (!healthAfterTest.gnomeShell) {
       console.log(`  FAIL: GNOME Shell crashed during test`);
       testsFailed++;
@@ -888,10 +827,10 @@ async function main(): Promise<void> {
       testsFailed++;
     }
 
-    // Create video from screenshots
+    await vm.stopRecording();
+
     createVideoFromScreenshots(run);
 
-    // Update reference images if in update mode
     if (UPDATE_MODE) {
       updateReferenceImages(run);
     }

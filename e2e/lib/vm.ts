@@ -118,7 +118,7 @@ export class VmManager {
     const videoPath = join(dir, "recording.mp4");
     // ffmpeg captures from VNC display :0 (port 5900)
     this.recordingFfmpeg = Bun.spawn(
-      ["ffmpeg", "-y", "-f", "vnc", "-i", "localhost:5900", "-r", "2", videoPath],
+      ["ffmpeg", "-y", "-f", "vnc", "-i", "localhost:5900", "-r", "30", videoPath],
       { stdout: "ignore", stderr: "ignore", stdin: "pipe" }
     );
     console.log("  [rec] started ffmpeg VNC capture");
