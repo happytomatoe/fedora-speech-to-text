@@ -216,7 +216,7 @@ export class Deployer {
     });
   }
 
-  async exec(command: string, timeoutMs = configTimeoutMs("ssh_exec")): Promise<{ stdout: string; stderr: string; code: number }> {
+  async exec(command: string, timeoutMs = configTimeoutMs("ssh_exec"), verbose = false): Promise<{ stdout: string; stderr: string; code: number }> {
     await this.connect();
 
     return new Promise((resolve, reject) => {
@@ -262,11 +262,15 @@ export class Deployer {
         let stderr = "";
 
         stream.on("data", (data: Buffer) => {
-          stdout += data.toString();
+          const s = data.toString();
+          stdout += s;
+          if (verbose) process.stdout.write(s);
         });
 
         stream.stderr.on("data", (data: Buffer) => {
-          stderr += data.toString();
+          const s = data.toString();
+          stderr += s;
+          if (verbose) process.stderr.write(s);
         });
 
         stream.on("error", (err: Error) => {
