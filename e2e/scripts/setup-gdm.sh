@@ -54,7 +54,11 @@ dconf write /org/gnome/desktop/screensaver/idle-activation-enabled false 2>/dev/
 
 # Pre-grant screenshot permission for portal screenshots
 echo "--- Pre-granting screenshot permission ---"
-# Allow all screenshot requests (portal permission store)
-flatpak permission-set screenshot screenshot yes --app-id '*' 2>/dev/null || true
+# Allow all screenshot requests via portal permission store (flatpak permission-set doesn't work for portal perms)
+gdbus call --session \
+  --dest org.freedesktop.impl.portal.PermissionStore \
+  --object-path /org/freedesktop/impl/portal/PermissionStore \
+  --method org.freedesktop.impl.portal.PermissionStore.Set \
+  'screenshot' true 'screenshot' '{"": ["yes"]}' '<byte 0x00>' 2>/dev/null || true
 
 echo "--- GDM setup complete ---"
