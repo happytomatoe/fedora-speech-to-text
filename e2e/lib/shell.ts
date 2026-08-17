@@ -41,8 +41,9 @@ export class ShellHelper {
   private async getShellDbusAddr(): Promise<string> {
     if (this.dbusAddr) return this.dbusAddr;
     try {
+      // Prefer the headless gnome-shell (has DBUS_SESSION_BUS_ADDRESS)
       const raw = await this.exec(
-        `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+        `cat /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
       );
       if (raw) {
         this.dbusAddr = raw;
