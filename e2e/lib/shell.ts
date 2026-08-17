@@ -34,7 +34,7 @@ export class ShellHelper {
   async dotoolCommand(command: string): Promise<void> {
     const escapedCommand = command.replace(/'/g, "'\\''");
     await this.exec(
-      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | /home/testuser/.local/bin/dotoolc`
+      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | dotoolc`
     );
   }
 
