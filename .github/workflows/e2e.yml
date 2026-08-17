@@ -174,10 +174,57 @@ jobs:
           key: npm-global-v1
 
       # Always upload artifacts (for debugging both failures and flaky passes)
-      - name: Upload E2E artifacts
+      # Each file as separate artifact so they can be downloaded individually
+      - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-output
-          path: e2e/output/
+          name: 01-test-log
+          path: e2e/output/e2e.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload voice service log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 02-voice-service-log
+          path: e2e/output/vm-logs/voice-service.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload GNOME Shell log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 03-gnome-shell-log
+          path: e2e/output/vm-logs/gnome-shell.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload serial console log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 04-serial-log
+          path: e2e/output/*/serial.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 05-screenshots
+          path: e2e/output/common/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload recording
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 06-recording
+          path: e2e/output/*/recording/
+          if-no-files-found: warn
           retention-days: 7
