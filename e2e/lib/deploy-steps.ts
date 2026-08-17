@@ -281,23 +281,23 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
   // Just enable the extension in the running session.
   console.log("Enabling extension in running headless session...");
   
-  // Wait for GNOME Shell to be ready on D-Bus
+  // Wait for gnome-shell process to be running (Eval is unreliable in headless mode)
   await pollUntilFn(
     "gnome-shell ready",
     async () => {
       try {
         const result = await dExec(deployer,
-          `gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval 'true' 2>&1`,
+          `pgrep -x gnome-shell | head -1`,
           cfg.sshKey, cfg.sshPort, cfg.sshUser
         );
-        return result.includes("(true,") || result.includes("(b true");
+        return result.trim().length > 0 && /\d+/.test(result.trim());
       } catch {
         return false;
       }
     },
     30000
   );
-  console.log("  gnome-shell ready on D-Bus");
+  console.log("  gnome-shell process running");
 
   // Enable extension via gnome-extensions enable
   // Extract DBUS_SESSION_BUS_ADDRESS from gnome-shell's /proc/*/environ
