@@ -5,6 +5,7 @@ import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
+import { checkHealth, recordPreDeployPid, type HealthCheckResult } from "./health.js";
 import {
   DeployConfig,
   waitForGdmLogin,
@@ -359,6 +360,22 @@ export class VmManager {
     console.log(`  setupForPrefs total: ${Date.now() - t0}ms`);
   }
 
+  // --- Health checks ---
+
+  /** Record gnome-shell PID before deployment (for crash detection). */
+  async recordPreDeployPid(): Promise<string> {
+    return recordPreDeployPid(this.shell.exec.bind(this.shell));
+  }
+
+  /** Run all health checks (gnome-shell alive, extension active, no JS errors, no crash). */
+  async healthCheck(preDeployPid?: string): Promise<HealthCheckResult> {
+    return checkHealth(
+      this.shell.exec.bind(this.shell),
+      this.config.extensionUuid,
+      preDeployPid
+    );
+  }
+
   // --- Snapshot management ---
   async hasSnapshot(tag: string): Promise<boolean> {
     try {
@@ -404,6 +421,14 @@ export class VmManager {
     if (!info.includes(tag)) {
       throw new Error(`Snapshot save failed — not found in info snapshots`);
     }
+    
+    // 6. Re-enable extension (saveCleanSnapshot kills voice service)
+    try {
+      await this.shell.exec("dconf write /org/gnome/shell/enabled-extensions \"['voice-to-text@happytomatoe']\"");
+      await Bun.sleep(1000);
+    } catch {
+      // Ignore — extension may already be enabled
+    }
   }
 
   async resetToCleanState(tag = "clean", retries = 2): Promise<void> {
@@ -437,15 +462,6 @@ export class VmManager {
         if (attempt === retries) throw err;
         await Bun.sleep(1000);
       }
-    }
-  }
-
-  async hasSnapshot(name: string): Promise<boolean> {
-    try {
-      const info = await this.qemu.infoSnapshots();
-      return info.includes(name);
-    } catch {
-      return false;
     }
   }
 

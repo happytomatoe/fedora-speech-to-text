@@ -416,8 +416,16 @@ main() {
   detect_os
   install_prerequisites
   install_uv
-  fetch_latest_tag
-  install_python_service
+  # Skip fetch_latest_tag when using local directory (no git needed)
+  if [ -z "$LOCAL_DIR" ]; then
+    fetch_latest_tag
+  else
+    LATEST_TAG="local"
+  fi
+  # Skip Python service install when using local dir (deployed separately)
+  if [ -z "$LOCAL_DIR" ]; then
+    install_python_service
+  fi
   install_dbus_services
   install_gnome_extension
   enable_extension

@@ -11,6 +11,8 @@ export class QemuMonitor extends EventEmitter {
   private buffer = "";
   private waitingForPrompt = false;
   private promptCallback: ((output: string) => void) | null = null;
+  private commandSent = false;
+  private _lastCommand = "";
   private commandQueue: Array<() => void> = [];
   private executing = false;
 
@@ -76,24 +78,38 @@ export class QemuMonitor extends EventEmitter {
     const text = data.toString();
     this.buffer += text;
 
-    // Wait for prompt (qemu)  — but the first one is the echo of the prompt
-    // before our command. The real response comes after a second (qemu) 
-    // once QEMU has finished processing. Count occurrences to skip the echo.
+    // Check for (qemu)  prompt
     const prompt = "(qemu) ";
-    let idx = -1;
-    let count = 0;
-    while ((idx = this.buffer.indexOf(prompt, idx + 1)) !== -1) {
-      count++;
-    }
-    // After sending a command, we expect: echo prompt + command + response + response prompt
-    // So we need at least 2 prompts in the buffer
-    if (count >= 2 && this.waitingForPrompt && this.promptCallback) {
-      const output = this.buffer;
-      this.buffer = "";
-      this.waitingForPrompt = false;
-      const cb = this.promptCallback;
-      this.promptCallback = null;
-      cb(output);
+    if (!this.waitingForPrompt || !this.promptCallback) return;
+
+    if (!this.commandSent) {
+      // During connect: resolve on first prompt
+      if (this.buffer.includes(prompt)) {
+        const output = this.buffer;
+        this.buffer = "";
+        this.waitingForPrompt = false;
+        const cb = this.promptCallback;
+        this.promptCallback = null;
+        cb(output);
+      }
+    } else {
+      // After command: QEMU echoes each keystroke, creating many prompts.
+      // Wait until we see the command text in the buffer (echo complete),
+      // then resolve on the next prompt after that.
+      const cmdIdx = this.buffer.indexOf(this._lastCommand);
+      if (cmdIdx >= 0) {
+        // Find prompt AFTER the command text
+        const afterCmd = this.buffer.indexOf(prompt, cmdIdx + this._lastCommand.length);
+        if (afterCmd >= 0) {
+          const output = this.buffer;
+          this.buffer = "";
+          this.waitingForPrompt = false;
+          this.commandSent = false;
+          const cb = this.promptCallback;
+          this.promptCallback = null;
+          cb(output);
+        }
+      }
     }
   }
 
@@ -203,6 +219,8 @@ export class QemuMonitor extends EventEmitter {
 
       this.sock!.once("error", onError);
       this.sock!.once("close", onClose);
+      this._lastCommand = command;
+      this.commandSent = true;
       this.sock!.write(command + "\n");
     });
   }
