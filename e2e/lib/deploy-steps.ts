@@ -265,18 +265,20 @@ export async function deployExtension(
     await deployer.exec('mkdir -p ~/tmp-deploy');
     await deployer.uploadFile(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh');
     await deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext');
+    await deployer.uploadDir(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service');
   } else {
     sshExec(`mkdir -p ~/tmp-deploy`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    rsyncToVm(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service', cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
   
   const tInstall = Date.now();
   if (deployer) {
-    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && yes | bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext', timeoutMs("install_sh"), true);
+    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && cd ~/tmp-deploy && yes | bash install.sh --local gnome-ext', timeoutMs("install_sh"), true);
   } else {
-    sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local --upgrade ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`chmod +x ~/tmp-deploy/install.sh && cd ~/tmp-deploy && bash install.sh --local --upgrade gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
   
