@@ -70,7 +70,24 @@ export class ShellHelper {
     }
   }
 
+  /** Dismiss Activities and return whether it was open (single SSH call). */
+  async dismissAndCheck(): Promise<boolean> {
+    try {
+      const addr = await this.getShellDbusAddr();
+      if (!addr) return false;
+      // Single SSH call: dismiss + check state
+      const result = await this.exec(
+        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>' 2>/dev/null; DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive`
+      );
+      return result.includes('(<true>,)');
+    } catch {
+      return false;
+    }
+  }
+
   async waitActivitiesDismissed(timeoutMs = 5000): Promise<void> {
+    // Fast path: already closed
+    if (!(await this.isActivitiesOpen())) return;
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       if (!(await this.isActivitiesOpen())) return;
@@ -88,8 +105,10 @@ export class ShellHelper {
   }
 
   async waitActivitiesFullyClosed(timeoutMs = 5000): Promise<void> {
+    // Fast path: already closed — no transition needed
+    if (!(await this.isActivitiesOpen())) return;
     const start = Date.now();
-    let wasOpen = false;
+    let wasOpen = true;
     
     while (Date.now() - start < timeoutMs) {
       const isOpen = await this.isActivitiesOpen();
@@ -98,7 +117,7 @@ export class ShellHelper {
         return;
       }
       wasOpen = isOpen;
-      await Bun.sleep(100);
+      await Bun.sleep(200);
     }
   }
 

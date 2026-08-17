@@ -213,10 +213,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Step 1: Dismiss Activities overview (D-Bus Set is idempotent)
   t = Date.now();
   console.log("Dismissing Activities...");
-  await shell.dismissActivities();
-  const activitiesOpen = await shell.isActivitiesOpen();
-  console.log(`  Activities after dismiss: ${activitiesOpen ? 'STILL OPEN' : 'closed'}`);
-  await shell.waitActivitiesDismissed();
+  const wasOpen = await shell.dismissAndCheck();
+  console.log(`  Activities after dismiss: ${wasOpen ? 'STILL OPEN' : 'closed'}`);
   timing("dismiss-activities", t);
 
   // Step 2: Open terminal with tmux inside (dotool needs a focused window)
@@ -280,10 +278,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
-  await shell.dismissActivities();
-  const activitiesOpen2 = await shell.isActivitiesOpen();
-  console.log(`  Activities after second dismiss: ${activitiesOpen2 ? 'STILL OPEN' : 'closed'}`);
-  await shell.waitActivitiesFullyClosed();
+  const wasOpen2 = await shell.dismissAndCheck();
+  console.log(`  Activities after second dismiss: ${wasOpen2 ? 'STILL OPEN' : 'closed'}`);
   
   // Force-focus terminal again after Activities dismiss
   await shell.focusTerminal();
