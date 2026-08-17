@@ -361,25 +361,6 @@ export class VmManager {
     return false;
   }
 
-    // Start i3 window manager if available (needed for QEMU SDL window)
-    try {
-      const i3Check = Bun.spawnSync(["which", "i3"], { stdout: "pipe", stderr: "pipe" });
-      if (i3Check.exitCode === 0) {
-        const i3Config = "/tmp/i3config";
-        writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
-        this.i3Process = Bun.spawn(
-          ["i3", "-c", i3Config],
-          { stdout: "pipe", stderr: "pipe" }
-        );
-        console.log("  [i3] started");
-      } else {
-        console.log("  [i3] not found, skipping (QEMU SDL may still work)");
-      }
-    } catch {
-      console.log("  [i3] not found, skipping");
-    }
-  }
-
   /** Verify display is accessible (X11 if Xvfb, VNC otherwise) */
   async verifyDisplayReady(): Promise<void> {
     if (process.env.DISPLAY === ":99") {
