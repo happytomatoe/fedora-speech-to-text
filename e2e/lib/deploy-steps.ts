@@ -235,6 +235,13 @@ export async function installDependencies(
     // Ignore — file may already exist
   }
 
+  // Disable GNOME animations for faster E2E tests (software rendering is slow)
+  try {
+    await dExec(deployer, "dconf write /org/gnome/desktop/interface/enable-animations false", _sshKey, _sshPort, _sshUser);
+  } catch {
+    // Ignore — may fail if dconf not available
+  }
+
   console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
