@@ -44,7 +44,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.0
 
       # Cache Parakeet models (avoids 30s+ download from HuggingFace each run)
       - name: Restore Parakeet models from cache
