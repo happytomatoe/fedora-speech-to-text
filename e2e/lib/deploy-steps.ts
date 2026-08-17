@@ -191,7 +191,7 @@ export async function deployExtension(
   try {
     const output = await dExec(deployer,
       `bash ~/tmp-deploy/scripts/deploy-extension.sh '${cfg.extensionUuid}' 2>&1`,
-      cfg.sshKey, cfg.sshPort, cfg.sshUser, 60
+      cfg.sshKey, cfg.sshPort, cfg.sshUser, 180
     );
     console.log(output.trim());
   } catch (e) {
