@@ -113,10 +113,11 @@ export async function waitForGdmLogin(
   // Use 1280x720 instead of 1920x1080 to reduce llvmpipe memory/CPU pressure.
   // ssh2 keeps channel open for 'nohup ... &' because background process inherits FDs.
   // Use 'setsid' to detach into new session, and redirect ALL fds to /dev/null so ssh2 can close.
+  // Short timeout (5s) since this is fire-and-forget — the process runs in background.
   try {
     await dExec(deployer,
       "export XDG_RUNTIME_DIR=/run/user/$(id -u) && setsid nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 </dev/null &",
-      sshKey, sshPort, sshUser
+      sshKey, sshPort, sshUser, 5
     );
   } catch {
     // Timeout expected — setsid detaches the process, ssh2 channel closes after timeout
