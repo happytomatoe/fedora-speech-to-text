@@ -365,13 +365,14 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
     console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
 
     // Poll for GNOME Shell extension system to be ready
-    // Use 'bash -lc' to get a login shell with full environment (DBUS_SESSION_BUS_ADDRESS, etc.)
+    // Extract DBUS_SESSION_BUS_ADDRESS from gnome-shell's /proc/*/environ
+    // (bash -lc doesn't have it because GDM sets it, not the shell profile)
     await pollUntilFn(
       "extension system ready",
       async () => {
         try {
           const result = await dExec(deployer,
-            `bash -lc 'gnome-extensions list 2>&1'`,
+            `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions list 2>&1`,
             cfg.sshKey, cfg.sshPort, cfg.sshUser
           );
           return result.includes(cfg.extensionUuid);
@@ -390,7 +391,10 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
         "extension available",
         async () => {
           try {
-            const result = await dExec(deployer, `bash -lc 'gnome-extensions show ${cfg.extensionUuid} 2>&1'`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+            const result = await dExec(deployer,
+              `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
+              cfg.sshKey, cfg.sshPort, cfg.sshUser
+            );
             return result.includes("State: ACTIVE");
           } catch {
             return false;
@@ -407,8 +411,14 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
 
   if (!extensionFound) throw new Error("Extension failed to load after two GDM restarts");
 
-  await dExec(deployer, `bash -lc 'gnome-extensions enable ${cfg.extensionUuid} 2>/dev/null || true'`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  const extState = await dExec(deployer, `bash -lc 'gnome-extensions show ${cfg.extensionUuid} 2>&1'`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  await dExec(deployer,
+    `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions enable ${cfg.extensionUuid} 2>/dev/null || true`,
+    cfg.sshKey, cfg.sshPort, cfg.sshUser
+  );
+  const extState = await dExec(deployer,
+    `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
+    cfg.sshKey, cfg.sshPort, cfg.sshUser
+  );
   if (extState.includes("State: ACTIVE")) {
     console.log("Extension loaded and active");
   } else {
