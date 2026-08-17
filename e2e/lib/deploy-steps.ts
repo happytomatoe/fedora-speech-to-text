@@ -403,6 +403,12 @@ export async function startVoiceService(
     } catch {
       // Continue — sounddevice install may fail with clear error
     }
+    // Ensure wget is available for SileroVAD model download (Fedora 42 ships wget2)
+    try {
+      await dExec(deployer, "command -v wget >/dev/null 2>&1 || { sudo dnf install -y wget2 && [ -e /usr/bin/wget ] || sudo ln -sf /usr/bin/wget2 /usr/bin/wget; }", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    } catch {
+      // Non-fatal — voice service may already have cached model
+    }
     // Use uv for faster, more reliable installs (matches install.sh approach)
     const uvResult = await dExec(deployer,
       "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__",
@@ -445,6 +451,13 @@ export async function startVoiceService(
   const outputMethod = cfg.outputMethod || 'type';
   console.log(`  Using output method: ${outputMethod}`);
   
+  // Pre-download SileroVAD model (avoids 10s+ delay on first recording)
+  try {
+    await dExec(deployer, "test -f ~/.cache/voice-to-text/silero_vad.onnx || { mkdir -p ~/.cache/voice-to-text/ && wget -q -O ~/.cache/voice-to-text/silero_vad.onnx 'https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx'; }", cfg.sshKey, cfg.sshPort, cfg.sshUser, 15);
+  } catch {
+    // Non-fatal — will download on first use
+  }
+
   try {
     await dExec(deployer,
       `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; setsid nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 </dev/null &`,
