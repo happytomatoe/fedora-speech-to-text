@@ -14,6 +14,8 @@ import {
   deployPythonSource,
   deployTestAudio,
   startVoiceService,
+  scpToVm,
+  scpFromVm,
 } from "./deploy-steps.js";
 
 export interface VmConfig {
@@ -76,16 +78,26 @@ export class VmManager {
   async captureFrame(label: string): Promise<void> {
     if (!this.config.recordMode) return;
     const dir = join(this.config.run.outputDir, "recording");
-    const path = join(dir, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.ppm`);
+    const localPath = join(dir, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.png`);
+    const remotePath = "/tmp/e2e-screenshot.png";
     try {
-      await this.qemu.screendump(path);
+      // Use portal screenshot for Wayland compositor capture
+      await this.shell.exec(`python3 /usr/local/bin/portal-screenshot.py ${remotePath}`);
+      scpFromVm(remotePath, localPath, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
       console.log(`  [rec] ${label}`);
     } catch {
-      // Ignore screendump errors
+      // Fallback to QEMU screendump
+      try {
+        const ppmPath = localPath.replace(".png", ".ppm");
+        await this.qemu.screendump(ppmPath);
+        console.log(`  [rec] ${label} (fallback)`);
+      } catch {
+        // Ignore all errors
+      }
     }
   }
 
-  /** Start continuous recording at given fps via QEMU monitor screendump */
+  /** Start continuous recording at given fps via portal screenshot */
   startRecording(fps = 2): void {
     if (this.recordInterval) return;
     const dir = join(this.config.run.outputDir, "recording");
@@ -93,11 +105,19 @@ export class VmManager {
     this.recordFrameCount = 0;
     const intervalMs = Math.round(1000 / fps);
     this.recordInterval = setInterval(async () => {
-      const path = join(dir, `rec-${String(this.recordFrameCount++).padStart(5, "0")}.ppm`);
+      const localPath = join(dir, `rec-${String(this.recordFrameCount++).padStart(5, "0")}.png`);
+      const remotePath = "/tmp/e2e-screenshot.png";
       try {
-        await this.qemu.screendump(path);
+        await this.shell.exec(`python3 /usr/local/bin/portal-screenshot.py ${remotePath}`);
+        scpFromVm(remotePath, localPath, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
       } catch {
-        // Ignore — VM may be rebooting
+        // Fallback to QEMU screendump
+        try {
+          const ppmPath = localPath.replace(".png", ".ppm");
+          await this.qemu.screendump(ppmPath);
+        } catch {
+          // Ignore — VM may be rebooting
+        }
       }
     }, intervalMs);
     console.log(`  [rec] started at ${fps} fps`);
@@ -119,12 +139,12 @@ export class VmManager {
 
     console.log(`  [rec] stopped — ${this.recordFrameCount} frames, converting to video...`);
 
-    // Convert ppm frames to mp4 using ffmpeg
+    // Convert PNG frames to mp4 using ffmpeg
     try {
       const proc = Bun.spawn([
         "ffmpeg", "-y",
         "-framerate", "2",
-        "-i", join(dir, "rec-%05d.ppm"),
+        "-i", join(dir, "rec-%05d.png"),
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
         videoPath,
@@ -298,6 +318,35 @@ export class VmManager {
     );
   }
 
+  /** Deploy portal screenshot script for Wayland capture */
+  private async deployPortalScreenshot(): Promise<void> {
+    const scriptPath = join(this.config.projectRoot, "e2e/scripts/portal-screenshot.py");
+    if (!existsSync(scriptPath)) {
+      console.log("  [portal] script not found, skipping");
+      return;
+    }
+    try {
+      // Copy script to VM
+      scpToVm(scriptPath, "/usr/local/bin/portal-screenshot.py", this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await this.shell.exec("chmod +x /usr/local/bin/portal-screenshot.py");
+      
+      // Create desktop file for portal registration
+      await this.shell.exec(`cat > ~/.local/share/applications/io.github.voice-to-text-e2e.desktop << 'EOF'
+[Desktop Entry]
+Name=VoiceToText E2E
+Exec=python3 /usr/local/bin/portal-screenshot.py
+Type=Application
+EOF`);
+      
+      // Pre-authorize in permission store
+      await this.shell.exec(`flatpak permission-set screenshot screenshot io.github.voice-to-text-e2e yes 2>/dev/null || true`);
+      
+      console.log("  [portal] screenshot script deployed");
+    } catch (e) {
+      console.log(`  [portal] deploy failed: ${e}`);
+    }
+  }
+
   async setup(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
@@ -320,6 +369,9 @@ export class VmManager {
     }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
+
+    // Deploy portal screenshot script for Wayland capture
+    await this.deployPortalScreenshot();
 
     const t2 = Date.now();
     await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);

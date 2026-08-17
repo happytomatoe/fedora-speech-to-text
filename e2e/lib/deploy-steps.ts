@@ -39,6 +39,12 @@ export function scpToVm(src: string, dest: string, sshKey: string, sshPort: numb
   execSync(`scp ${scpOpts} ${src} ${host}:${dest}`, { stdio: "pipe" });
 }
 
+export function scpFromVm(remote: string, local: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
+  const host = `${sshUser}@localhost`;
+  const scpOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${sshKey} -P ${sshPort}`;
+  execSync(`scp ${scpOpts} ${host}:${remote} ${local}`, { stdio: "pipe" });
+}
+
 function shellExec(cmd: string, sshKey: string, sshPort: number, sshUser = "testuser"): string {
   return sshExec(cmd, sshKey, sshPort, sshUser, 1, 30_000);
 }
