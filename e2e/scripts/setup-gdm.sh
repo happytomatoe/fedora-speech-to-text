@@ -34,13 +34,13 @@ GSHELL_PID=$!
 echo "  gnome-shell PID: $GSHELL_PID"
 
 echo "--- Waiting for gnome-shell ready ---"
-for i in $(seq 1 12); do
-  sleep 5
+for i in $(seq 1 30); do
+  sleep 1
   if pgrep -x gnome-shell >/dev/null 2>&1; then
-    echo "  gnome-shell ready after $((i*5))s"
+    echo "  gnome-shell ready after ${i}s"
     break
   fi
-  if [ "$i" = "12" ]; then
+  if [ "$i" = "30" ]; then
     echo "  FATAL: gnome-shell did not start"
     cat /tmp/gnome-shell.log | tail -20
     exit 1
