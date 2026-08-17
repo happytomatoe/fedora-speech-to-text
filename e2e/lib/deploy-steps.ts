@@ -49,9 +49,9 @@ function shellExec(cmd: string, sshKey: string, sshPort: number, sshUser = "test
 }
 
 /** Execute command via deployer (persistent SSH connection) or fallback to shellExec */
-async function dExec(deployer: Deployer | undefined, cmd: string, sshKey: string, sshPort: number, sshUser = "testuser"): Promise<string> {
+async function dExec(deployer: Deployer | undefined, cmd: string, sshKey: string, sshPort: number, sshUser = "testuser", timeoutSec = 120): Promise<string> {
   if (deployer) {
-    const { stdout } = await deployer.exec(cmd);
+    const { stdout } = await deployer.exec(cmd, timeoutSec * 1000);
     return stdout;
   }
   return shellExec(cmd, sshKey, sshPort, sshUser);
@@ -111,11 +111,16 @@ export async function waitForGdmLogin(
   console.log(`  memory before gnome-shell:\n${memInfo}`);
   // Start GNOME Shell in headless mode on the existing session bus.
   // Use 1280x720 instead of 1920x1080 to reduce llvmpipe memory/CPU pressure.
-  await dExec(deployer,
-    "export XDG_RUNTIME_DIR=/run/user/$(id -u) && " +
-    "nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 < /dev/null &",
-    sshKey, sshPort, sshUser
-  );
+  // ssh2 keeps channel open for 'nohup ... &' because background process inherits FDs.
+  // Use 'setsid' to detach into new session, and redirect ALL fds to /dev/null so ssh2 can close.
+  try {
+    await dExec(deployer,
+      "export XDG_RUNTIME_DIR=/run/user/$(id -u) && setsid nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 </dev/null &",
+      sshKey, sshPort, sshUser
+    );
+  } catch {
+    // Timeout expected — setsid detaches the process, ssh2 channel closes after timeout
+  }
   console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
   // Poll for gnome-shell process (up to 30s, checking every 5s)
@@ -426,7 +431,11 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
   } catch {
     // Best effort — may fail if udev rule already set permissions
   }
-  await dExec(deployer, `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold </dev/null &>/tmp/dotoold.log &`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  try {
+    await dExec(deployer, `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; setsid nohup dotoold </dev/null &>/tmp/dotoold.log &`, cfg.sshKey, cfg.sshPort, cfg.sshUser, 10);
+  } catch {
+    // Timeout expected — setsid detaches the process
+  }
   await pollUntilFn(
     "dotool pipe",
     async () => {
@@ -529,10 +538,14 @@ export async function startVoiceService(
   const outputMethod = cfg.outputMethod || 'type';
   console.log(`  Using output method: ${outputMethod}`);
   
-  await dExec(deployer,
-    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 < /dev/null &`,
-    cfg.sshKey, cfg.sshPort, cfg.sshUser
-  );
+  try {
+    await dExec(deployer,
+      `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; setsid nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 </dev/null &`,
+      cfg.sshKey, cfg.sshPort, cfg.sshUser, 10
+    );
+  } catch {
+    // Timeout expected — setsid detaches the process
+  }
 
   await pollForCommandOutputFn(
     (cmd: string) => dExec(deployer, cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser),
