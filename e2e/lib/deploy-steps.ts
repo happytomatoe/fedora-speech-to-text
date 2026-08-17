@@ -418,12 +418,6 @@ export async function startVoiceService(
     } catch {
       // Continue — sounddevice install may fail with clear error
     }
-    // Ensure wget is available for SileroVAD model download (Fedora 42 ships wget2)
-    try {
-      await dExec(deployer, "command -v wget >/dev/null 2>&1 || { sudo dnf install -y wget2 && [ -e /usr/bin/wget ] || sudo ln -sf /usr/bin/wget2 /usr/bin/wget; }", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    } catch {
-      // Non-fatal — voice service may already have cached model
-    }
     // Use uv for faster, more reliable installs (matches install.sh approach)
     const uvResult = await dExec(deployer,
       "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__",
