@@ -61,9 +61,9 @@ const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 3
 const caseIdx = args.indexOf("--case");
 const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 
-// Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual)
+// Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual, mutter-commit)
 const outputMethodIdx = args.indexOf("--output-method");
-const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
+const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "mutter-commit";
 
 // Parse --parallel <n> (run n VMs in parallel)
 const parallelIdx = args.indexOf("--parallel");
