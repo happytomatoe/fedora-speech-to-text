@@ -322,7 +322,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
   );
   
   // Verify extension is active
-  const extState = await dExec(deployer,
+  let extState = await dExec(deployer,
     `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
     cfg.sshKey, cfg.sshPort, cfg.sshUser
   );
@@ -330,12 +330,41 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
     console.log("Extension loaded and active");
   } else {
     console.log("WARNING: Extension state:", extState.trim());
-    // Try enabling via dconf as fallback
+    // Shell doesn't hot-reload new extensions — restart gnome-shell to pick it up
+    console.log("  Restarting GNOME Shell to load extension...");
     await dExec(deployer,
-      `dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`,
+      `killall -HUP gnome-shell 2>/dev/null || killall gnome-shell 2>/dev/null; sleep 2`,
       cfg.sshKey, cfg.sshPort, cfg.sshUser
     );
-    console.log("  Enabled via dconf as fallback");
+    // Wait for gnome-shell to restart
+    await pollUntilFn(
+      "gnome-shell restart",
+      async () => {
+        try {
+          const result = await dExec(deployer, "pgrep -x gnome-shell | head -1", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+          return result.trim().length > 0 && /\d+/.test(result.trim());
+        } catch {
+          return false;
+        }
+      },
+      30000
+    );
+    // Verify extension after restart
+    extState = await dExec(deployer,
+      `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
+      cfg.sshKey, cfg.sshPort, cfg.sshUser
+    );
+    if (extState.includes("State: ACTIVE")) {
+      console.log("Extension loaded and active after restart");
+    } else {
+      console.log("WARNING: Extension still not active after restart:", extState.trim());
+      // Last resort: enable via dconf
+      await dExec(deployer,
+        `dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`,
+        cfg.sshKey, cfg.sshPort, cfg.sshUser
+      );
+      console.log("  Enabled via dconf as fallback");
+    }
   }
 
   // Restart dotoold
