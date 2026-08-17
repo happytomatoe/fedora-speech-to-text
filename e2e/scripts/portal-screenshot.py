@@ -1,13 +1,35 @@
 #!/usr/bin/env python3
 """Take a Wayland screenshot via xdg-desktop-portal."""
 
+import contextlib
 import sys
 
 from gi.repository import Gio, GLib
 
+APP_ID = "io.github.voice-to-text-e2e"
+
+
+def register_with_portal(conn: Gio.DBusConnection) -> None:
+    """Register app with portal Registry for permission pre-authorization."""
+    with contextlib.suppress(Exception):  # May already be registered
+        conn.call_sync(
+            "org.freedesktop.portal.Desktop",
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Registry",
+            "Register",
+            GLib.Variant("(ssa{sv})", (APP_ID, "", {})),
+            None,
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+        )
+
 
 def take_screenshot(output_path: str) -> bool:  # noqa: D103
     conn = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+
+    # Register with portal Registry
+    register_with_portal(conn)
 
     # Call portal Screenshot
     result = conn.call_sync(
