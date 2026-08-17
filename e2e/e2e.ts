@@ -233,7 +233,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(500);
 
   const paneBefore = await tmux.capturePane(tmuxCfg);
-  await shell.dotoolCommand("key shift+space");
+  await shell.dotoolCommand("type FOCUS_TEST");
   await Bun.sleep(200);
   const paneAfter = await tmux.capturePane(tmuxCfg);
   if (paneBefore === paneAfter) {
@@ -242,6 +242,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     await shell.dotoolCommand("buttondown 1");
     await shell.dotoolCommand("buttonup 1");
     await Bun.sleep(500);
+    await shell.dotoolCommand("type FOCUS_TEST");
+    await Bun.sleep(200);
   }
   timing("open-terminal", t);
 
@@ -276,7 +278,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   if (!isFocused) {
     console.log("  WARNING: Terminal may not be focused");
   }
-  // Step 4: Start recording via hotkey (D-Bus call to GNOME extension)
+  await shell.exec(`tmux send-keys -t ${tmuxCfg.session} C-u`);
+  await Bun.sleep(200);
   vm.startRecording();
   t = Date.now();
   console.log("Starting recording via hotkey...");
