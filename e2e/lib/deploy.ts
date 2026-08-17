@@ -66,7 +66,12 @@ export class Deployer {
       let settled = false;
 
       const cleanup = () => {
-        client.removeAllListeners();
+        // Keep error handler to prevent unhandled error events from ssh2
+        client.removeAllListeners("ready");
+        client.removeAllListeners("close");
+        // Suppress late ssh2 errors after close (prevents unhandled error crash)
+        client.removeAllListeners("error");
+        client.on("error", () => {});
         if (this.client === client) {
           this.client = null;
           this.connected = false;
