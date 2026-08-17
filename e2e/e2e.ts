@@ -929,6 +929,10 @@ async function main(): Promise<void> {
     process.exit(0);
   } else {
     console.log(`${testsFailed} test(s) failed.`);
+    console.log("\n--- E2E Test Failure Help ---");
+    console.log("For E2E debugging, read the skills:");
+    console.log("  .agents/skills/e2e-debugging/SKILL.md  — VM lifecycle, screenshots, deployment");
+    console.log("  .agents/skills/e2e-setup/SKILL.md      — First-time VM setup");
     process.exit(1);
   }
 }
