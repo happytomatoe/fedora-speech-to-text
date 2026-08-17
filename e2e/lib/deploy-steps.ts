@@ -364,17 +364,21 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
     console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
 
     // Poll for GNOME Shell extension system to be ready
+    // Need to export DBUS_SESSION_BUS_ADDRESS for gnome-extensions to work via SSH
     await pollUntilFn(
       "extension system ready",
       async () => {
         try {
-          const result = await dExec(deployer, `gnome-extensions list 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+          const result = await dExec(deployer,
+            `export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus && gnome-extensions list 2>&1`,
+            cfg.sshKey, cfg.sshPort, cfg.sshUser
+          );
           return result.includes(cfg.extensionUuid);
         } catch {
           return false;
         }
       },
-      15000
+      30000
     );
     console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
 
@@ -385,7 +389,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
         "extension available",
         async () => {
           try {
-            const result = await dExec(deployer, `gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+            const result = await dExec(deployer, `export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus && gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
             return result.includes("State: ACTIVE");
           } catch {
             return false;
