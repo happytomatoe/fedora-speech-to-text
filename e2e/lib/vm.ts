@@ -499,13 +499,15 @@ export class VmManager {
     ];
     for (const { remote, local } of logs) {
       try {
-        await this.shell.exec(`cat ${remote} 2>/dev/null > /tmp/${local}`);
-        const content = await this.shell.exec(`cat /tmp/${local} 2>/dev/null`);
+        const content = await this.shell.exec(`cat ${remote} 2>/dev/null`);
         if (content.trim()) {
           writeFileSync(join(vmLogsDir, local), content);
+          console.log(`    Fetched ${remote} (${content.length} bytes)`);
+        } else {
+          console.log(`    ${remote} empty or missing`);
         }
-      } catch {
-        // File may not exist — skip
+      } catch (e) {
+        console.log(`    Failed to fetch ${remote}: ${e}`);
       }
     }
     // Capture tmux pane content
@@ -515,9 +517,10 @@ export class VmManager {
       );
       if (paneContent.trim()) {
         writeFileSync(join(vmLogsDir, "tmux-pane.txt"), paneContent);
+        console.log(`    Fetched tmux pane (${paneContent.length} bytes)`);
       }
-    } catch {
-      // tmux may not be running — skip
+    } catch (e) {
+      console.log(`    Failed to fetch tmux pane: ${e}`);
     }
     console.log(`  VM logs saved to ${vmLogsDir}`);
   }
