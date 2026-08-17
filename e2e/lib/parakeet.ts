@@ -11,7 +11,7 @@ function detectRuntime(): string {
     try {
       execSync(`${rt} --version`, { stdio: "ignore" });
       // Test with volume mount + port (like real parakeet container)
-      execSync(`${rt} run --rm -p 5099:5092 -v /tmp:/models:Z alpine echo ok`, { stdio: "ignore", timeout: 30_000 });
+      execSync(`${rt} run --rm alpine echo ok`, { stdio: "ignore", timeout: 30_000 });
       return rt;
     } catch (e) { console.warn(`  ${rt} not available: ${e instanceof Error ? e.message : e}`); }
   }

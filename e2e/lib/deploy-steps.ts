@@ -277,144 +277,36 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
   console.log(`  install.sh+dconf: ${Date.now() - t0}ms [time]`);
 
-  // Disconnect deployer before GDM restart
-  if (deployer) {
-    await deployer.disconnect();
-  }
-
-  // Restart GDM to load the extension.
-  // Note: org.gnome.Shell.Eval is disabled in GNOME 50, so D-Bus loading
-  // and global.reexec_self() are not available. GDM restart is the only way.
-  console.log("Restarting GDM to load extension...");
-  // Ensure GDM auto-login is configured (base image may not have it)
-  const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${cfg.sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
-  try {
-    sshExec(`echo '${gdmConf}' | sudo tee /etc/gdm/custom.conf > /dev/null`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  } catch {
-    // May fail if already configured — continue
-  }
+  // No GDM restart needed — waitForGdmLogin already started gnome-shell --headless.
+  // Just enable the extension in the running session.
+  console.log("Enabling extension in running headless session...");
   
-  let extensionFound = false;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    console.log(`  attempt ${attempt + 1}...`);
-    try {
-      sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    } catch {
-      // Expected: GDM restart drops the SSH connection mid-command
-    }
+  // Wait for GNOME Shell to be ready on D-Bus
+  await pollUntilFn(
+    "gnome-shell ready",
+    async () => {
+      try {
+        const result = await dExec(deployer,
+          `gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval 'true' 2>&1`,
+          cfg.sshKey, cfg.sshPort, cfg.sshUser
+        );
+        return result.includes("(true,") || result.includes("(b true");
+      } catch {
+        return false;
+      }
+    },
+    30000
+  );
+  console.log("  gnome-shell ready on D-Bus");
 
-    // Wait for GDM to fully restart and create a new user session
-    console.log("  waiting for GDM to stabilize...");
-    await Bun.sleep(5000);
-
-    // Poll for GDM to be active (new session created)
-    // After GDM restart, deployer is disconnected — use sshExec with retries
-    await pollUntilFn(
-      "GDM active after restart",
-      async () => {
-        try {
-          const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser, 3, 10_000);
-          return result.trim() === "active";
-        } catch {
-          return false;
-        }
-      },
-      60000
-    );
-
-    // Invalidate D-Bus cache and re-configure SSH credentials
-    console.log("  re-establishing SSH session...");
-    await shell.close();
-    shell.configure({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
-    // Re-establish deployer SSH connection (stale after GDM restart)
-    if (deployer) {
-      await deployer.disconnect();
-      await deployer.connect();
-    }
-
-    // Wait for user session to be ready (GDM auto-login creates the session)
-    const t2 = Date.now();
-    await pollUntilFn(
-      "user session ready",
-      async () => {
-        try {
-          const result = await dExec(deployer,
-            `test -S /run/user/$(id -u)/bus && echo ready`,
-            cfg.sshKey, cfg.sshPort, cfg.sshUser
-          );
-          return result.includes("ready");
-        } catch {
-          return false;
-        }
-      },
-      30000
-    );
-    console.log(`  user session ready: ${Date.now() - t2}ms [time]`);
-
-    // Now wait for GNOME Shell to register on D-Bus
-    const t3 = Date.now();
-    try {
-      await dExec(deployer, "gdbus wait --session --timeout=60 org.gnome.Shell", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    } catch {
-      // gdbus wait may fail if shell is already up — check pgrep as fallback
-      await pollForProcess(
-        (cmd: string) => dExec(deployer, cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser),
-        "gnome-shell --mode=user", 30000
-      );
-    }
-    console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
-
-    // Poll for GNOME Shell extension system to be ready
-    // Extract DBUS_SESSION_BUS_ADDRESS from gnome-shell's /proc/*/environ
-    // (bash -lc doesn't have it because GDM sets it, not the shell profile)
-    await pollUntilFn(
-      "extension system ready",
-      async () => {
-        try {
-          const result = await dExec(deployer,
-            `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions list 2>&1`,
-            cfg.sshKey, cfg.sshPort, cfg.sshUser
-          );
-          return result.includes(cfg.extensionUuid);
-        } catch {
-          return false;
-        }
-      },
-      30000
-    );
-    console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
-
-    // Wait for extension to be available
-    console.log("  waiting for extension...");
-    try {
-      await pollUntilFn(
-        "extension available",
-        async () => {
-          try {
-            const result = await dExec(deployer,
-              `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
-              cfg.sshKey, cfg.sshPort, cfg.sshUser
-            );
-            return result.includes("State: ACTIVE");
-          } catch {
-            return false;
-          }
-        },
-        30000
-      );
-      extensionFound = true;
-      break;
-    } catch {
-      console.log("  extension not found, retrying...");
-    }
-  }
-
-  if (!extensionFound) throw new Error("Extension failed to load after two GDM restarts");
-
+  // Enable extension via gnome-extensions enable
+  // Extract DBUS_SESSION_BUS_ADDRESS from gnome-shell's /proc/*/environ
   await dExec(deployer,
-    `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions enable ${cfg.extensionUuid} 2>/dev/null || true`,
+    `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions enable ${cfg.extensionUuid} 2>&1`,
     cfg.sshKey, cfg.sshPort, cfg.sshUser
   );
+  
+  // Verify extension is active
   const extState = await dExec(deployer,
     `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
     cfg.sshKey, cfg.sshPort, cfg.sshUser
@@ -423,6 +315,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
     console.log("Extension loaded and active");
   } else {
     console.log("WARNING: Extension state:", extState.trim());
+    // Try enabling via dconf as fallback
+    await dExec(deployer,
+      `dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`,
+      cfg.sshKey, cfg.sshPort, cfg.sshUser
+    );
+    console.log("  Enabled via dconf as fallback");
   }
 
   // Restart dotoold
