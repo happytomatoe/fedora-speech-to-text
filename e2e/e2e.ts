@@ -210,16 +210,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
   const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
-  // Get Wayland display from gnome-shell process (headless doesn't set WAYLAND_DISPLAY)
-  const waylandDisplay = (await shell.exec(
-    `cat /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep WAYLAND_DISPLAY | cut -d= -f2- || echo wayland-0`
-  )).trim() || 'wayland-0';
-  const envPrefix = `WAYLAND_DISPLAY=${waylandDisplay} XDG_RUNTIME_DIR=/run/user/$(id -u)`;
-  if (hasGhostty) {
-    await shell.exec(`nohup env ${envPrefix} ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
-  } else {
-    await shell.exec(`nohup env ${envPrefix} gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
-  }
+  // headless gnome-shell uses wayland-0 but doesn't export WAYLAND_DISPLAY
+  const launchCmd = hasGhostty
+    ? `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`
+    : `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`;
+  await shell.exec(launchCmd);
   // Poll until tmux session appears
   await vm.pollUntil(
     "tmux session",
