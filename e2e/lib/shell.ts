@@ -40,22 +40,9 @@ export class ShellHelper {
 
   private async getShellDbusAddr(): Promise<string> {
     if (this.dbusAddr) return this.dbusAddr;
-    try {
-      // Use sshExec (fresh connection) instead of deployer (persistent, keeps closing)
-      console.log(`  [getShellDbusAddr] calling sshExec, sshPort=${this._sshPort}`);
-      const raw = sshExec(
-        `grep DBUS_SESSION_BUS_ADDRESS /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | cut -d= -f2-`,
-        this._sshKey, this._sshPort, this._sshUser
-      );
-      console.log(`  [getShellDbusAddr] raw=${JSON.stringify(raw)}`);
-      if (raw) {
-        this.dbusAddr = raw;
-      }
-      return raw;
-    } catch(e) {
-      console.log(`  [getShellDbusAddr] error=${e}`);
-      return "";
-    }
+    // D-Bus session bus is always at /run/user/<uid>/bus for the test user
+    this.dbusAddr = "unix:path=/run/user/1000/bus";
+    return this.dbusAddr;
   }
 
   async isActivitiesOpen(): Promise<boolean> {
