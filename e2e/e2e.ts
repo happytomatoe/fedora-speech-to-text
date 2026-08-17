@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
-import { deployTestAudio } from "./lib/deploy-steps.js";
+import { deployTestAudio, deployPythonSource, startVoiceService } from "./lib/deploy-steps.js";
+import { pollUntil, pollForCommandOutput } from "./lib/poll.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -821,8 +822,11 @@ async function main(): Promise<void> {
         t = Date.now();
         await vm.resetToCleanState("ready");
         timing("restore-snapshot", t);
-        // Deploy test audio for this specific test case (snapshot has old audio)
+        // Re-deploy Python source + voice service (snapshot may have stale binaries)
+        await deployPythonSource(vm.deployCfg, vm.deployer);
         await deployTestAudio(vm.deployCfg, vm.deployer);
+        const skipDeps = vm.config.skipDeps || vm.config.baseImage.includes('golden-gnome-deps');
+        await startVoiceService(vm.shell, vm.deployCfg, pollUntil, pollForCommandOutput, skipDeps, vm.deployer);
       } else {
         console.log("\n--- No snapshot found, deploying fresh ---");
         t = Date.now();
