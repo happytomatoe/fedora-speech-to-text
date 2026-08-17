@@ -47,4 +47,14 @@ for i in $(seq 1 30); do
   fi
 done
 
+echo "--- Disabling DPMS/screen blank ---"
+dconf write /org/gnome/desktop/session/idle-delay 0 2>/dev/null || true
+dconf write /org/gnome/desktop/screensaver/lock-enabled false 2>/dev/null || true
+dconf write /org/gnome/desktop/screensaver/idle-activation-enabled false 2>/dev/null || true
+
+# Pre-grant screenshot permission for portal screenshots
+echo "--- Pre-granting screenshot permission ---"
+# Allow all screenshot requests (portal permission store)
+flatpak permission-set screenshot screenshot yes --app-id '*' 2>/dev/null || true
+
 echo "--- GDM setup complete ---"

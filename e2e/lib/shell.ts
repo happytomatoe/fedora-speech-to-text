@@ -70,12 +70,11 @@ export class ShellHelper {
     }
   }
 
-  /** Dismiss Activities via keyboard Escape (always safe, no-op if already closed). */
+  /** Dismiss Activities overview via D-Bus Set (always works, ~39ms). */
   async dismissAndCheck(): Promise<boolean> {
-    // Press Escape — dismisses Activities if open, no-op if closed
-    // No D-Bus calls needed (they block when gnome-shell is busy)
-    await this.dotoolCommand('key Escape');
-    return false; // caller doesn't need the actual state
+    const wasOpen = await this.isActivitiesOpen();
+    await this.dismissActivities();
+    return wasOpen;
   }
 
   async waitActivitiesDismissed(timeoutMs = 5000): Promise<void> {
