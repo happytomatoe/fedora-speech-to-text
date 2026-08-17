@@ -43,8 +43,7 @@ export class VmManager {
   deployer: Deployer;
   shell: ShellHelper;
   frameCount = 0;
-  private recordInterval: ReturnType<typeof setInterval> | null = null;
-  private recordFrameCount = 0;
+  private recordingFfmpeg: ReturnType<typeof Bun.spawn> | null = null;
 
   private deployCfg: DeployConfig;
 
@@ -111,67 +110,43 @@ export class VmManager {
     }
   }
 
-  /** Start continuous recording at given fps via portal screenshot */
-  startRecording(fps = 2): void {
-    if (this.recordInterval) return;
+  /** Start continuous recording via VNC + ffmpeg */
+  startRecording(): void {
+    if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
-    this.recordFrameCount = 0;
-    const intervalMs = Math.round(1000 / fps);
-    this.recordInterval = setInterval(async () => {
-      const localPath = join(dir, `rec-${String(this.recordFrameCount++).padStart(5, "0")}.png`);
-      const remotePath = "/tmp/e2e-screenshot.png";
-      try {
-        await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath}`);
-        await this.fetchScreenshot(remotePath, localPath);
-      } catch {
-        // Fallback to QEMU screendump
-        try {
-          const ppmPath = localPath.replace(".png", ".ppm");
-          await this.qemu.screendump(ppmPath);
-        } catch {
-          // Ignore — VM may be rebooting
-        }
-      }
-    }, intervalMs);
-    console.log(`  [rec] started at ${fps} fps`);
+    const videoPath = join(dir, "recording.mp4");
+    // ffmpeg captures from VNC display :0 (port 5900)
+    this.recordingFfmpeg = Bun.spawn(
+      ["ffmpeg", "-y", "-f", "vnc", "-i", "localhost:5900", "-r", "2", videoPath],
+      { stdout: "ignore", stderr: "ignore", stdin: "pipe" }
+    );
+    console.log("  [rec] started ffmpeg VNC capture");
   }
 
-  /** Stop recording and convert frames to mp4 */
+  /** Stop recording and return video path */
   async stopRecording(): Promise<string | null> {
-    if (!this.recordInterval) return null;
-    clearInterval(this.recordInterval);
-    this.recordInterval = null;
+    if (!this.recordingFfmpeg) return null;
+    const proc = this.recordingFfmpeg;
+    this.recordingFfmpeg = null;
+    const videoPath = join(this.config.run.outputDir, "recording", "recording.mp4");
 
-    const dir = join(this.config.run.outputDir, "recording");
-    const videoPath = join(dir, "recording.mp4");
-
-    if (this.recordFrameCount === 0) {
-      console.log("  [rec] no frames captured");
-      return null;
+    // Send 'q' to ffmpeg to stop gracefully
+    if (proc.stdin) {
+      proc.stdin.write("q");
+      proc.stdin.end();
     }
-
-    console.log(`  [rec] stopped — ${this.recordFrameCount} frames, converting to video...`);
-
-    // Convert PNG frames to mp4 using ffmpeg
     try {
-      const proc = Bun.spawn([
-        "ffmpeg", "-y",
-        "-framerate", "2",
-        "-i", join(dir, "rec-%05d.png"),
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        videoPath,
-      ], { stdout: "pipe", stderr: "pipe" });
-      const exitCode = await proc.exited;
-      if (exitCode === 0 && existsSync(videoPath)) {
-        console.log(`  [rec] video: ${videoPath}`);
-        return videoPath;
-      }
-      console.log(`  [rec] ffmpeg failed (exit ${exitCode})`);
-    } catch (e) {
-      console.log(`  [rec] ffmpeg error: ${e}`);
+      await proc.exited;
+    } catch {
+      // ffmpeg may exit with non-zero when killed
     }
+
+    if (existsSync(videoPath)) {
+      console.log(`  [rec] saved: ${videoPath}`);
+      return videoPath;
+    }
+    console.log("  [rec] no video produced");
     return null;
   }
 
@@ -235,8 +210,7 @@ export class VmManager {
       "-smp", "4",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
-      "-display", "none",
-      "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
+      "-vnc", ":0",
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
@@ -265,7 +239,7 @@ export class VmManager {
     }
 
     await this.qemu.connect();
-    await this.verifySpice();
+    await this.verifyDisplayReady();
   }
 
   async waitForSsh(): Promise<void> {
@@ -303,16 +277,16 @@ export class VmManager {
     });
   }
 
-  /** Verify Spice display is accessible */
-  async verifySpice(): Promise<void> {
-    const spicePort = this.config.run.spicePort;
+  /** Verify VNC display is accessible */
+  async verifyDisplayReady(): Promise<void> {
     const net = await import("node:net");
+    const vncPort = 5900; // display :0 = port 5900
     
     await pollUntil(
-      `Spice port ${spicePort} listening`,
+      `VNC port ${vncPort} listening`,
       async () => {
         return new Promise<boolean>((resolve) => {
-          const sock = net.createConnection(spicePort, "localhost");
+          const sock = net.createConnection(vncPort, "localhost");
           const timer = setTimeout(() => {
             sock.destroy();
             resolve(false);

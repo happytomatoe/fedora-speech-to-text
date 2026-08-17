@@ -204,7 +204,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   };
 
   // Start continuous screen recording
-  vm.startRecording(2);
+  vm.startRecording();
 
   t = Date.now();
   await vm.captureFrame("01-desktop");
