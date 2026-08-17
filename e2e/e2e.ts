@@ -831,7 +831,7 @@ async function main(): Promise<void> {
     }
 
     await vm.stopRecording();
-
+    vm.createVideoFromScreenshots();
     createVideoFromScreenshots(run);
 
     if (UPDATE_MODE) {

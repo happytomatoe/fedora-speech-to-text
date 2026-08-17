@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
@@ -116,10 +117,9 @@ export class VmManager {
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
     const videoPath = join(dir, "recording.mp4");
-    // ffmpeg captures from VNC display :0 (port 5900)
     this.recordingFfmpeg = Bun.spawn(
       ["ffmpeg", "-y", "-f", "vnc", "-i", "localhost:5900", "-r", "30", videoPath],
-      { stdout: "ignore", stderr: "ignore", stdin: "pipe" }
+      { stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
     console.log("  [rec] started ffmpeg VNC capture");
   }
@@ -148,6 +148,29 @@ export class VmManager {
     }
     console.log("  [rec] no video produced");
     return null;
+  }
+
+  /** Create video from PPM screenshots as fallback */
+  createVideoFromScreenshots(): void {
+    const dir = join(this.config.run.outputDir, "recording");
+    const videoPath = join(dir, "recording.mp4");
+    const ppmPattern = join(dir, "frame-*.ppm");
+    try {
+      execSync(`ls ${ppmPattern} 2>/dev/null | head -1`, { encoding: "utf-8" });
+    } catch {
+      return; // No PPM files
+    }
+    try {
+      execSync(
+        `ffmpeg -y -framerate 1 -pattern_type glob -i '${ppmPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
+        { stdio: "ignore" }
+      );
+      if (existsSync(videoPath)) {
+        console.log(`  [rec] created from screenshots: ${videoPath}`);
+      }
+    } catch {
+      // ffmpeg not available
+    }
   }
 
   async boot(): Promise<void> {
