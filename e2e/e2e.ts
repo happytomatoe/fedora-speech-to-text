@@ -868,29 +868,29 @@ async function main(): Promise<void> {
     
     // Run test
     await runTestFlow(vm, run);
-      
-      // Health check after test (detect crashes during recording/transcription)
-      const healthAfterTest = await vm.healthCheck();
-      logHealthCheck(healthAfterTest);
-      
-      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
-      
-      // Combine health check with test result
-      if (!healthAfterTest.gnomeShell) {
-        console.log(`  FAIL: GNOME Shell crashed during test`);
-        testsFailed++;
-      } else if (!healthAfterTest.noJsErrors) {
-        console.log(`  FAIL: JS errors detected during test`);
-        testsFailed++;
-      } else if (result.passed) {
-        console.log(`  PASS: ${result.message}`);
-      } else {
-        console.log(`  FAIL: ${result.message}`);
-        testsFailed++;
-      }
+    
+    // Health check after test (detect crashes during recording/transcription)
+    const healthAfterTest = await vm.healthCheck();
+    logHealthCheck(healthAfterTest);
+    
+    const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
+    
+    // Combine health check with test result
+    if (!healthAfterTest.gnomeShell) {
+      console.log(`  FAIL: GNOME Shell crashed during test`);
+      testsFailed++;
+    } else if (!healthAfterTest.noJsErrors) {
+      console.log(`  FAIL: JS errors detected during test`);
+      testsFailed++;
+    } else if (result.passed) {
+      console.log(`  PASS: ${result.message}`);
+    } else {
+      console.log(`  FAIL: ${result.message}`);
+      testsFailed++;
+    }
 
-      // Create video from screenshots
-      createVideoFromScreenshots(run);
+    // Create video from screenshots
+    createVideoFromScreenshots(run);
 
     // Update reference images if in update mode
     if (UPDATE_MODE) {
