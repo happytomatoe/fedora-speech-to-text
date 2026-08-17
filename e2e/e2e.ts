@@ -209,12 +209,15 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
+  // Create tmux session first (works without display)
+  await shell.exec(`tmux new-session -d -s ${tmuxCfg.session} -x 120 -y 40`);
+  // Then attach via ghostty (needs WAYLAND_DISPLAY)
   const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
-  // headless gnome-shell uses wayland-0 but doesn't export WAYLAND_DISPLAY
-  const launchCmd = hasGhostty
-    ? `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`
-    : `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`;
-  await shell.exec(launchCmd);
+  if (hasGhostty) {
+    await shell.exec(`WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup ghostty -e tmux attach-session -t ${tmuxCfg.session} &>/dev/null &`);
+  } else {
+    await shell.exec(`WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/\$(id -u) nohup gnome-terminal -- tmux attach-session -t ${tmuxCfg.session} &>/dev/null &`);
+  }
   // Poll until tmux session appears
   await vm.pollUntil(
     "tmux session",
