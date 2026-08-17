@@ -75,6 +75,19 @@ export class VmManager {
 
   // --- VM lifecycle ---
 
+  /** Fetch screenshot from VM via SSH cat + base64 (avoids SCP overhead) */
+  private async fetchScreenshot(remotePath: string, localPath: string): Promise<boolean> {
+    try {
+      const b64 = await this.shell.exec(`base64 < ${remotePath}`);
+      const buf = Buffer.from(b64, "base64");
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(localPath, buf);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async captureFrame(label: string): Promise<void> {
     if (!this.config.recordMode) return;
     const dir = join(this.config.run.outputDir, "recording");
@@ -83,7 +96,8 @@ export class VmManager {
     try {
       // Use portal screenshot for Wayland compositor capture
       await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath}`);
-      scpFromVm(remotePath, localPath, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      const ok = await this.fetchScreenshot(remotePath, localPath);
+      if (!ok) throw new Error("fetch failed");
       console.log(`  [rec] ${label}`);
     } catch {
       // Fallback to QEMU screendump
@@ -109,7 +123,7 @@ export class VmManager {
       const remotePath = "/tmp/e2e-screenshot.png";
       try {
         await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath}`);
-        scpFromVm(remotePath, localPath, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+        await this.fetchScreenshot(remotePath, localPath);
       } catch {
         // Fallback to QEMU screendump
         try {
