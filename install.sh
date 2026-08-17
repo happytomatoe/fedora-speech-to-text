@@ -44,6 +44,7 @@ install_prerequisites() {
   echo "Installing prerequisites..."
   install_pkg unzip
   install_pkg curl
+  install_pkg wget2
   install_pkg libsecret
 
   if ! command_exists dotool; then
