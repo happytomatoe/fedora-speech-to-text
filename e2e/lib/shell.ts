@@ -128,10 +128,10 @@ export class ShellHelper {
     const dbusBase = `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method`;
 
     if (this.isRecording) {
-      sshExec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`, this._sshKey, this._sshPort, this._sshUser);
+      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);
       this.isRecording = false;
     } else {
-      sshExec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"type"}'`, this._sshKey, this._sshPort, this._sshUser);
+      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"type"}'`);
       this.isRecording = true;
     }
   }
