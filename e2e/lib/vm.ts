@@ -82,7 +82,7 @@ export class VmManager {
     const remotePath = "/tmp/e2e-screenshot.png";
     try {
       // Use portal screenshot for Wayland compositor capture
-      await this.shell.exec(`python3 /usr/local/bin/portal-screenshot.py ${remotePath}`);
+      await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath}`);
       scpFromVm(remotePath, localPath, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
       console.log(`  [rec] ${label}`);
     } catch {
@@ -108,7 +108,7 @@ export class VmManager {
       const localPath = join(dir, `rec-${String(this.recordFrameCount++).padStart(5, "0")}.png`);
       const remotePath = "/tmp/e2e-screenshot.png";
       try {
-        await this.shell.exec(`python3 /usr/local/bin/portal-screenshot.py ${remotePath}`);
+        await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath}`);
         scpFromVm(remotePath, localPath, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
       } catch {
         // Fallback to QEMU screendump
@@ -326,15 +326,16 @@ export class VmManager {
       return;
     }
     try {
-      // Copy script to VM
-      scpToVm(scriptPath, "/usr/local/bin/portal-screenshot.py", this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
-      await this.shell.exec("chmod +x /usr/local/bin/portal-screenshot.py");
+      // Copy script to VM user home
+      const remoteScript = "~/portal-screenshot.py";
+      scpToVm(scriptPath, remoteScript, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await this.shell.exec("chmod +x ~/portal-screenshot.py");
       
       // Create desktop file for portal registration
-      await this.shell.exec(`cat > ~/.local/share/applications/io.github.voice-to-text-e2e.desktop << 'EOF'
+      await this.shell.exec(`mkdir -p ~/.local/share/applications && cat > ~/.local/share/applications/io.github.voice-to-text-e2e.desktop << 'EOF'
 [Desktop Entry]
 Name=VoiceToText E2E
-Exec=python3 /usr/local/bin/portal-screenshot.py
+Exec=python3 ~/portal-screenshot.py
 Type=Application
 EOF`);
       
