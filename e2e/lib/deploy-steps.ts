@@ -259,7 +259,10 @@ export async function deployExtension(
   
   const tInstall = Date.now();
   if (deployer) {
-    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local --upgrade ~/tmp-deploy/gnome-ext', timeoutMs("install_sh"));
+    const installResult = await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local --upgrade ~/tmp-deploy/gnome-ext', timeoutMs("install_sh"));
+    if (installResult.stdout) console.log(`    install.sh stdout: ${installResult.stdout.trim()}`);
+    if (installResult.stderr) console.log(`    install.sh stderr: ${installResult.stderr.trim()}`);
+    if (installResult.code !== 0) console.log(`    install.sh exit code: ${installResult.code}`);
   } else {
     sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local --upgrade ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
