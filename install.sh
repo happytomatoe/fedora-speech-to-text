@@ -213,6 +213,7 @@ install_gnome_extension() {
 
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
+    mkdir -p "$INSTALL_DIR"
     rsync -av --delete \
       --include='prefs/' --include='prefs/**' \
       --include='schemas/' --include='schemas/**' \
