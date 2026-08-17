@@ -116,7 +116,7 @@ export async function waitForGdmLogin(
   // Short timeout (5s) since this is fire-and-forget — the process runs in background.
   try {
     await dExec(deployer,
-      "export XDG_RUNTIME_DIR=/run/user/$(id -u) && setsid nohup gnome-shell --headless --unsafe-mode --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 </dev/null &",
+      "export XDG_RUNTIME_DIR=/run/user/$(id -u) && setsid nohup gnome-shell --headless --unsafe-mode --mode=user --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 </dev/null &",
       sshKey, sshPort, sshUser, 5
     );
   } catch {
