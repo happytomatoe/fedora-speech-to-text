@@ -241,7 +241,7 @@ export class VmManager {
   async setup(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
-      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog, this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
@@ -256,7 +256,7 @@ export class VmManager {
       const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
       console.log(`  Skipping installDependencies (${reason})`);
     } else {
-      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.deployer);
     }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
@@ -267,13 +267,13 @@ export class VmManager {
 
     // Deploy Python source and test audio (sequential, sync operations)
     const t3 = Date.now();
-    deployPythonSource(this.deployCfg);
-    deployTestAudio(this.deployCfg);
+    await deployPythonSource(this.deployCfg, this.deployer);
+    await deployTestAudio(this.deployCfg, this.deployer);
     console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
     const t4 = Date.now();
     const skipDeps = this.config.skipDeps || isGoldenDepsImage;
-    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps);
+    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps, this.deployer);
     console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 
     console.log(`  setup total: ${Date.now() - t0}ms`);
@@ -286,7 +286,7 @@ export class VmManager {
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
     if (this.freshlyBooted) {
-      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog, this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }

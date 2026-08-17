@@ -818,7 +818,7 @@ async function main(): Promise<void> {
         await vm.resetToCleanState("ready");
         timing("restore-snapshot", t);
         // Deploy test audio for this specific test case (snapshot has old audio)
-        deployTestAudio(vm.deployCfg);
+        await deployTestAudio(vm.deployCfg, vm.deployer);
       } else {
         console.log("\n--- No snapshot found, deploying fresh ---");
         t = Date.now();
