@@ -41,9 +41,10 @@ export class ShellHelper {
   private async getShellDbusAddr(): Promise<string> {
     if (this.dbusAddr) return this.dbusAddr;
     try {
-      // Prefer the headless gnome-shell (has DBUS_SESSION_BUS_ADDRESS)
-      const raw = await this.exec(
-        `cat /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
+      // Use sshExec (fresh connection) instead of deployer (persistent, keeps closing)
+      const raw = sshExec(
+        `cat /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`,
+        this._sshKey, this._sshPort, this._sshUser
       );
       if (raw) {
         this.dbusAddr = raw;
@@ -134,13 +135,13 @@ export class ShellHelper {
 
   async sendHotkey(): Promise<void> {
     const dbusAddr = await this.getShellDbusAddr();
-    const dbusBase = `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe.VoiceToText --method`;
+    const dbusBase = `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method`;
 
     if (this.isRecording) {
-      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);
+      sshExec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`, this._sshKey, this._sshPort, this._sshUser);
       this.isRecording = false;
     } else {
-      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"type"}'`);
+      sshExec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"type"}'`, this._sshKey, this._sshPort, this._sshUser);
       this.isRecording = true;
     }
   }
@@ -152,8 +153,9 @@ export class ShellHelper {
   async waitForRecordingStart(timeoutMs = 10000): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      const output = await this.exec(
-        `grep -q 'DEBUG MODE: Simulating audio capture' /tmp/voice-service.log 2>/dev/null && echo started`
+      const output = sshExec(
+        `grep -q 'DEBUG MODE: Simulating audio capture' /tmp/voice-service.log 2>/dev/null && echo started`,
+        this._sshKey, this._sshPort, this._sshUser, 1, 5000
       );
       if (output.includes("started")) return;
       await Bun.sleep(100);
@@ -163,8 +165,9 @@ export class ShellHelper {
   async waitForTranscription(timeoutMs = 30000): Promise<string> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      const output = await this.exec(
-        `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
+      const output = sshExec(
+        `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`,
+        this._sshKey, this._sshPort, this._sshUser, 1, 5000
       );
       const trimmed = output.trim();
       if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
