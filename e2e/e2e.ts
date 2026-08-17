@@ -3,13 +3,14 @@ import { timeoutMs, loadTimeouts } from "./lib/config.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { StepRunner } from "./lib/step-runner.js";
+import { Step, StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployPythonSource, startVoiceService } from "./lib/deploy-steps.js";
 import { pollUntil, pollForCommandOutput } from "./lib/poll.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
+import type { HealthCheckResult } from "./lib/health.js";
 
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
@@ -50,7 +51,7 @@ const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const NO_SNAPSHOT = args.includes("--no-snapshot");
-const SNAPSHOT_MODE = !NO_SNAPSHOT;
+const SAVE_SNAPSHOT = args.includes("--save-snapshot");
 const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
@@ -161,6 +162,16 @@ function pickRandomTestCase(): TestCase {
 }
 
 const CURRENT_TEST = pickRandomTestCase();
+
+/** Log health check results. */
+function logHealthCheck(result: HealthCheckResult): void {
+  console.log("\n--- Health Check ---");
+  for (const line of result.details) {
+    console.log(`  ${line}`);
+  }
+  const healthy = result.gnomeShell && result.extensionActive && result.noJsErrors && result.noCrash;
+  console.log(`  Overall: ${healthy ? "HEALTHY" : "UNHEALTHY"}`);
+}
 const EXPECTED_TEXT = CURRENT_TEST.expected;
 
 async function preflight(): Promise<void> {
@@ -810,44 +821,68 @@ async function main(): Promise<void> {
     process.exit(0);
   }
   try {
-    if (SNAPSHOT_MODE) {
-      // Snapshot mode: restore if exists, otherwise deploy and save
-      // Always boot first (needed for both paths)
-      let t = Date.now();
-      await new StepRunner().run([
-        { name: "preflight", fn: preflight },
-        { name: "boot-vm", fn: () => vm.boot(), timeout: timeoutMs("boot_vm") },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: timeoutMs("wait_ssh") },
-      ]);
-      timing("boot-vm", t);
-      
-      const hasSnap = await vm.hasSnapshot("ready");
-      
-      if (hasSnap) {
-        console.log("\n--- Snapshot 'ready' found, restoring ---");
-        t = Date.now();
-        await vm.resetToCleanState("ready");
-        timing("restore-snapshot", t);
-        // Re-deploy Python source + voice service (snapshot may have stale binaries)
-        await deployPythonSource(vm.deployCfg, vm.deployer);
-        await deployTestAudio(vm.deployCfg, vm.deployer);
-        const skipDeps = vm.config.skipDeps || vm.config.baseImage.includes('golden-gnome-deps');
-        await startVoiceService(vm.shell, vm.deployCfg, pollUntil, pollForCommandOutput, skipDeps, vm.deployer);
-      } else {
-        console.log("\n--- No snapshot found, deploying fresh ---");
-        t = Date.now();
-        await new StepRunner().run([
-          { name: "setup", fn: () => vm.setup(), timeout: timeoutMs("setup") },
-          { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
-        ]);
-        timing("deploy-and-save-snapshot", t);
+    // Boot VM (needed for all paths)
+    let t = Date.now();
+    await new StepRunner().run([
+      { name: "preflight", fn: preflight },
+      { name: "boot-vm", fn: () => vm.boot(), timeout: timeoutMs("boot_vm") },
+      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: timeoutMs("wait_ssh") },
+    ]);
+    timing("boot-vm", t);
+    
+    // Record pre-deploy PID for crash detection
+    const preDeployPid = await vm.recordPreDeployPid();
+    
+    // Try to restore from snapshot (unless --no-snapshot)
+    const hasSnap = !NO_SNAPSHOT && await vm.hasSnapshot("ready");
+    
+    if (hasSnap) {
+      console.log("\n--- Snapshot 'ready' found, restoring ---");
+      t = Date.now();
+      await vm.resetToCleanState("ready");
+      timing("restore-snapshot", t);
+      // Re-deploy Python source + voice service (snapshot may have stale binaries)
+      await deployPythonSource(vm.deployCfg, vm.deployer);
+      await deployTestAudio(vm.deployCfg, vm.deployer);
+      const skipDeps = vm.config.skipDeps || vm.config.baseImage.includes('golden-gnome-deps');
+      await startVoiceService(vm.shell, vm.deployCfg, pollUntil, pollForCommandOutput, skipDeps, vm.deployer);
+    } else {
+      console.log(NO_SNAPSHOT ? "\n--- --no-snapshot: deploying fresh ---" : "\n--- No snapshot found, deploying fresh ---");
+      t = Date.now();
+      const steps: Step[] = [
+        { name: "setup", fn: () => vm.setup(), timeout: timeoutMs("setup") },
+      ];
+      if (SAVE_SNAPSHOT) {
+        steps.push({ name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") });
       }
+      await new StepRunner().run(steps);
+      timing("deploy" + (SAVE_SNAPSHOT ? "+save-snapshot" : ""), t);
+    }
+    
+    // Run health checks after deploy
+    const healthAfterDeploy = await vm.healthCheck(preDeployPid);
+    logHealthCheck(healthAfterDeploy);
+    if (!healthAfterDeploy.gnomeShell || !healthAfterDeploy.extensionActive) {
+      throw new Error(`Health check failed after deploy: ${healthAfterDeploy.details.join('; ')}`);
+    }
+    
+    // Run test
+    await runTestFlow(vm, run);
       
-      // Run test
-      await runTestFlow(vm, run);
+      // Health check after test (detect crashes during recording/transcription)
+      const healthAfterTest = await vm.healthCheck();
+      logHealthCheck(healthAfterTest);
+      
       const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
       
-      if (result.passed) {
+      // Combine health check with test result
+      if (!healthAfterTest.gnomeShell) {
+        console.log(`  FAIL: GNOME Shell crashed during test`);
+        testsFailed++;
+      } else if (!healthAfterTest.noJsErrors) {
+        console.log(`  FAIL: JS errors detected during test`);
+        testsFailed++;
+      } else if (result.passed) {
         console.log(`  PASS: ${result.message}`);
       } else {
         console.log(`  FAIL: ${result.message}`);
@@ -856,24 +891,6 @@ async function main(): Promise<void> {
 
       // Create video from screenshots
       createVideoFromScreenshots(run);
-    } else {
-      // Fresh mode: original behavior
-      await new StepRunner().run([
-        { name: "preflight", fn: preflight },
-        { name: "boot-vm", fn: () => vm.boot(), timeout: timeoutMs("boot_vm") },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: timeoutMs("wait_ssh") },
-        { name: "setup", fn: () => vm.setup(), timeout: timeoutMs("setup") },
-        { name: "test-flow", fn: () => runTestFlow(vm, run) },
-      ]);
-      
-      const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
-      if (result.passed) {
-        console.log(`  PASS: ${result.message}`);
-      } else {
-        console.log(`  FAIL: ${result.message}`);
-        testsFailed++;
-      }
-    }
 
     // Update reference images if in update mode
     if (UPDATE_MODE) {
