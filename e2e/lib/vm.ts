@@ -205,7 +205,7 @@ export class VmManager {
       "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
-      "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22,hostfwd=tcp::5092-:5092`,
+      "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-device", "virtio-rng-pci",
       "-cdrom", join(vmDir, "cloud-init.iso"),
