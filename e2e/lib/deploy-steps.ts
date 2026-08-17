@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
@@ -21,12 +21,8 @@ export function sshExec(command: string, sshKey: string, sshPort: number, sshUse
       return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: timeoutMs }).toString();
     } catch (err) {
       lastErr = err as Error;
-      // Remote command returned non-zero (not a timeout) — still capture stdout (e.g. rpm -q, pgrep)
-      // On timeout, err.killed=true and stdout may be empty Buffer — don't swallow those as success
       if (!(err as any).killed && (err as any).stdout) return (err as any).stdout.toString();
-      if (i < retries - 1) {
-        execSync(`sleep 2`);
-      }
+      if (i < retries - 1) execSync(`sleep 2`);
     }
   }
   throw lastErr!;
@@ -43,18 +39,41 @@ export function scpToVm(src: string, dest: string, sshKey: string, sshPort: numb
   execSync(`scp ${scpOpts} ${src} ${host}:${dest}`, { stdio: "pipe" });
 }
 
-// --- Shell-exec via SSH (shell-use PTY is broken on CI) ---
 function shellExec(cmd: string, sshKey: string, sshPort: number, sshUser = "testuser"): string {
   return sshExec(cmd, sshKey, sshPort, sshUser, 1, 30_000);
 }
 
-/** Execute command via deployer (persistent SSH connection) or fallback to shellExec */
 async function dExec(deployer: Deployer | undefined, cmd: string, sshKey: string, sshPort: number, sshUser = "testuser", timeoutSec = 120): Promise<string> {
   if (deployer) {
     const { stdout } = await deployer.exec(cmd, timeoutSec * 1000);
     return stdout;
   }
   return shellExec(cmd, sshKey, sshPort, sshUser);
+}
+
+// --- Upload scripts to VM ---
+
+const SCRIPTS_DIR = join(import.meta.dir, "..", "scripts");
+
+export async function uploadScripts(
+  deployer: Deployer | undefined,
+  cfg: { sshKey: string; sshPort: number; sshUser: string }
+): Promise<void> {
+  console.log("Uploading E2E scripts...");
+  const scripts = ["setup-gdm.sh", "deploy-extension.sh", "start-voice-service.sh"];
+  if (deployer) {
+    await deployer.exec("mkdir -p ~/tmp-deploy/scripts");
+    for (const s of scripts) {
+      const src = join(SCRIPTS_DIR, s);
+      if (existsSync(src)) await deployer.uploadFile(src, `~/tmp-deploy/scripts/${s}`);
+    }
+  } else {
+    sshExec("mkdir -p ~/tmp-deploy/scripts", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    for (const s of scripts) {
+      const src = join(SCRIPTS_DIR, s);
+      if (existsSync(src)) scpToVm(src, `~/tmp-deploy/scripts/${s}`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    }
+  }
 }
 
 // --- Deployment config ---
@@ -68,10 +87,10 @@ export interface DeployConfig {
   sshUser: string;
   extensionUuid: string;
   testAudioFile: string;
-  outputMethod?: string; // Output method to test: type, clipboard, mutter-virtual
+  outputMethod?: string;
 }
 
-// --- Deployment steps ---
+// --- Deployment steps (script-based) ---
 
 export async function waitForGdmLogin(
   shell: ShellHelper,
@@ -83,183 +102,64 @@ export async function waitForGdmLogin(
 ): Promise<void> {
   const t0 = Date.now();
 
-  // Check for critical missing packages (friend's advice: these cause silent crashes)
-  const pkgCheck = await dExec(deployer,
-    "rpm -q mesa-libgbm mesa-dri-drivers polkit accountsservice gsettings-desktop-schemas 2>&1",
-    sshKey, sshPort, sshUser
-  );
-  const missingLines = pkgCheck.split("\n").filter(l => l.includes("not installed"));
-  if (missingLines.length > 0) {
-    console.log(`  WARNING: missing packages: ${missingLines.join(", ")}`);
-  }
+  // Upload scripts first
+  await uploadScripts(deployer, { sshKey, sshPort, sshUser });
 
-  // Configure journald to forward to serial console (friend's advice: captures OOM kills)
-  await dExec(deployer,
-    "sudo sed -i 's/^#ForwardToConsole=no/ForwardToConsole=yes/' /etc/systemd/journald.conf 2>/dev/null || true",
-    sshKey, sshPort, sshUser
-  );
-  await dExec(deployer, "sudo systemctl restart systemd-journald 2>/dev/null || true", sshKey, sshPort, sshUser);
-
-  // Disable animations to reduce llvmpipe GPU/CPU load (friend's advice)
-  await dExec(deployer,
-    "dconf write /org/gnome/desktop/interface/enable-animations false 2>/dev/null || true",
-    sshKey, sshPort, sshUser
-  );
-
-  // Log memory state before starting gnome-shell (helps diagnose OOM kills)
-  const memInfo = await dExec(deployer, "free -m 2>/dev/null | head -2 || true", sshKey, sshPort, sshUser);
-  console.log(`  memory before gnome-shell:\n${memInfo}`);
-  // Start GNOME Shell in headless mode on the existing session bus.
-  // Use 1280x720 instead of 1920x1080 to reduce llvmpipe memory/CPU pressure.
-  // ssh2 keeps channel open for 'nohup ... &' because background process inherits FDs.
-  // Use 'setsid' to detach into new session, and redirect ALL fds to /dev/null so ssh2 can close.
-  // Short timeout (5s) since this is fire-and-forget — the process runs in background.
+  // Run setup-gdm.sh (single SSH call)
+  console.log("Running setup-gdm.sh...");
   try {
-    await dExec(deployer,
-      "export XDG_RUNTIME_DIR=/run/user/$(id -u) && setsid nohup gnome-shell --headless --unsafe-mode --mode=user --virtual-monitor 1280x720 > /tmp/gnome-shell.log 2>&1 </dev/null &",
-      sshKey, sshPort, sshUser, 5
+    const output = await dExec(deployer,
+      "bash ~/tmp-deploy/scripts/setup-gdm.sh 2>&1",
+      sshKey, sshPort, sshUser, 90
     );
-  } catch {
-    // Timeout expected — setsid detaches the process, ssh2 channel closes after timeout
+    console.log(output.trim());
+  } catch (e) {
+    console.log("setup-gdm.sh failed:", (e as Error).message?.slice(0, 500));
+    throw e;
   }
-  console.log(`  gnome-shell start: ${Date.now() - t0}ms [time]`);
 
-  // Poll for gnome-shell process (up to 30s, checking every 5s)
-  const t1 = Date.now();
-  let ready = false;
-  for (let i = 0; i < 6; i++) {
-    await Bun.sleep(5_000);
-    try {
-      const result = await dExec(deployer, `pgrep -x gnome-shell && echo ready`, sshKey, sshPort, sshUser);
-      console.log(`  pgrep attempt ${i + 1}: ${JSON.stringify(result.slice(0, 100))}`);
-      if (result.includes("ready")) {
-        ready = true;
-        break;
-      }
-    } catch (e) {
-      console.log(`  pgrep attempt ${i + 1} failed: ${String(e).slice(0, 100)}`);
-    }
-  }
-  if (!ready) {
-    // Check if gnome-shell crashed
-    try {
-      const log = await dExec(deployer, `cat /tmp/gnome-shell.log 2>/dev/null | tail -20`, sshKey, sshPort, sshUser);
-      console.log(`  gnome-shell log:\n${log.slice(0, 500)}`);
-      if (log && /segfault|signal|crash|error.*xwayland/i.test(log)) {
-        console.log(`  gnome-shell CRASHED:\n${log}`);
-      }
-    } catch {
-      // ignore
-    }
-  }
-  console.log(`  gnome-shell ready: ${Date.now() - t1}ms [time]`);
-  console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
-
-  if (!ready) {
+  const ready = await dExec(deployer, "pgrep -x gnome-shell >/dev/null && echo ready || echo not-ready", sshKey, sshPort, sshUser);
+  if (!ready.includes("ready")) {
     // Dump debug info
     try {
       const log = await dExec(deployer, "cat /tmp/gnome-shell.log 2>/dev/null || echo '(no log)'", sshKey, sshPort, sshUser);
-      console.log(`  gnome-shell final log:\n${log}`);
-    } catch {
-      console.log("  (could not read gnome-shell log)");
-    }
-    try {
-      const ps = await dExec(deployer, "ps aux | grep gnome-shell || true", sshKey, sshPort, sshUser);
-      console.log(`  gnome-shell processes:\n${ps}`);
-    } catch {
-      // ignore
-    }
-    // Read serial log (on host filesystem, survives SSH death — friend's advice)
-    if (serialLog) {
+      console.log(`  gnome-shell log:\n${log.slice(0, 500)}`);
+    } catch { /* ignore */ }
+    if (serialLog && existsSync(serialLog)) {
       try {
-        if (existsSync(serialLog)) {
-          const serial = readFileSync(serialLog, "utf-8");
-          const last50 = serial.split("\n").slice(-50).join("\n");
-          console.log(`  serial log (last 50 lines):\n${last50}`);
-        } else {
-          console.log("  (serial.log not found on host)");
-        }
-      } catch {
-        // ignore
-      }
+        const serial = readFileSync(serialLog, "utf-8");
+        console.log(`  serial log (last 50):\n${serial.split("\n").slice(-50).join("\n")}`);
+      } catch { /* ignore */ }
     }
-    throw new Error("gnome-shell did not start — cannot continue without a running shell");
+    throw new Error("gnome-shell did not start");
   }
+
+  console.log(`  GDM setup: ${Date.now() - t0}ms [time]`);
 }
 
 export async function installDependencies(
   _sshKey: string,
   _sshPort: number,
   _sshUser: string,
-  deployer?: Deployer
+  _deployer?: Deployer
 ): Promise<void> {
-  const t0 = Date.now();
-
-  // Install GDM + GNOME Shell if not present (base cloud image is headless)
-  try {
-    const gdmCheck = await dExec(deployer, "rpm -q gdm 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
-    if (gdmCheck.includes("missing")) {
-      console.log("  Installing GDM + GNOME Shell...");
-      await dExec(deployer, "sudo dnf install -y gdm gnome-shell 2>/dev/null", _sshKey, _sshPort, _sshUser);
-    }
-  } catch {
-    // Continue — GDM install may fail on some images
-  }
-
-  // Install gnome-terminal if not present (needed for tmux in E2E tests)
-  try {
-    const termCheck = await dExec(deployer, "which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
-    if (termCheck.includes("missing")) {
-      console.log("  Installing gnome-terminal...");
-      await dExec(deployer, "sudo dnf install -y gnome-terminal 2>/dev/null", _sshKey, _sshPort, _sshUser);
-    }
-  } catch {
-    // Continue — tmux may work without it depending on test flow
-  }
-
-  // Install Ghostty via COPR (for testing mutter-paste clipboard behavior)
-  try {
-    const ghosttyCheck = await dExec(deployer, "which ghostty 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
-    if (ghosttyCheck.includes("missing")) {
-      console.log("  Installing Ghostty via COPR...");
-      await dExec(deployer, "sudo dnf copr enable -y scottames/ghostty 2>/dev/null && sudo dnf install -y ghostty 2>/dev/null", _sshKey, _sshPort, _sshUser);
-    }
-  } catch {
-    // Continue — Ghostty install may fail, fall back to gnome-terminal
-  }
-
-  // Skip GNOME Initial Setup and Tour on first login
-  try {
-    await dExec(deployer, "mkdir -p ~/.config && echo yes > ~/.config/gnome-initial-setup-done && touch ~/.config/gnome-tour-done", _sshKey, _sshPort, _sshUser);
-  } catch {
-    // Ignore — file may already exist
-  }
-
-  // Disable GNOME animations for faster E2E tests (software rendering is slow)
-  try {
-    await dExec(deployer, "dconf write /org/gnome/desktop/interface/enable-animations false", _sshKey, _sshPort, _sshUser);
-  } catch {
-    // Ignore — may fail if dconf not available
-  }
-
-  console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
+  // Dependencies are pre-installed in golden image or installed by setup-gdm.sh
+  console.log("  Skipping installDependencies (handled by scripts)");
 }
-
-// extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
 
 export async function deployExtension(
   shell: ShellHelper,
   cfg: DeployConfig,
-  pollUntilFn: typeof pollUntil,
+  _pollUntilFn: typeof pollUntil,
   deployer?: Deployer
 ): Promise<void> {
   const extDir = join(cfg.projectRoot, "gnome-ext");
   if (!existsSync(extDir)) return;
 
   const t0 = Date.now();
-  console.log("Deploying GNOME extension via install.sh...");
-  
-  // Upload install.sh and gnome-ext to VM, then run install.sh --local
+  console.log("Deploying GNOME extension...");
+
+  // Upload install.sh, gnome-ext, service files
   const tUpload = Date.now();
   if (deployer) {
     await deployer.exec('mkdir -p ~/tmp-deploy');
@@ -267,142 +167,27 @@ export async function deployExtension(
     await deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext');
     await deployer.uploadDir(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service');
   } else {
-    sshExec(`mkdir -p ~/tmp-deploy`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec('mkdir -p ~/tmp-deploy', cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service', cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
-  
-  const tInstall = Date.now();
-  if (deployer) {
-    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && cd ~/tmp-deploy && yes | bash install.sh --local gnome-ext', timeoutMs("install_sh"), true);
-  } else {
-    sshExec(`chmod +x ~/tmp-deploy/install.sh && cd ~/tmp-deploy && bash install.sh --local --upgrade gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  }
-  console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
-  
-  const tDconf = Date.now();
-  await dExec(deployer, `dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await dExec(deployer, `dconf write /org/gnome/shell/disable-user-extensions false`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await dExec(deployer, `cat > /tmp/dconf-set.sh << 'SCRIPT'
-#!/bin/bash
-dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
-dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
-SCRIPT
-chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
-  console.log(`  install.sh+dconf: ${Date.now() - t0}ms [time]`);
 
-  // No GDM restart needed — waitForGdmLogin already started gnome-shell --headless.
-  // Just enable the extension in the running session.
-  console.log("Enabling extension in running headless session...");
-  
-  // Wait for gnome-shell process to be running (Eval is unreliable in headless mode)
-  await pollUntilFn(
-    "gnome-shell ready",
-    async () => {
-      try {
-        const result = await dExec(deployer,
-          `pgrep -x gnome-shell | head -1`,
-          cfg.sshKey, cfg.sshPort, cfg.sshUser
-        );
-        return result.trim().length > 0 && /\d+/.test(result.trim());
-      } catch {
-        return false;
-      }
-    },
-    30000
-  );
-  console.log("  gnome-shell process running");
-
-  // Enable extension via gnome-extensions enable
-  // Extract DBUS_SESSION_BUS_ADDRESS from gnome-shell's /proc/*/environ
-  await dExec(deployer,
-    `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions enable ${cfg.extensionUuid} 2>&1`,
-    cfg.sshKey, cfg.sshPort, cfg.sshUser
-  );
-  
-  // Verify extension is active
-  let extState = await dExec(deployer,
-    `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
-    cfg.sshKey, cfg.sshPort, cfg.sshUser
-  );
-  if (extState.includes("State: ACTIVE")) {
-    console.log("Extension loaded and active");
-  } else {
-    console.log("WARNING: Extension state:", extState.trim());
-    // Shell doesn't hot-reload new extensions — restart gnome-shell to pick it up
-    console.log("  Restarting GNOME Shell to load extension...");
-    await dExec(deployer,
-      `killall -HUP gnome-shell 2>/dev/null || killall gnome-shell 2>/dev/null; sleep 2`,
-      cfg.sshKey, cfg.sshPort, cfg.sshUser
-    );
-    // Wait for gnome-shell to restart
-    await pollUntilFn(
-      "gnome-shell restart",
-      async () => {
-        try {
-          const result = await dExec(deployer, "pgrep -x gnome-shell | head -1", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-          return result.trim().length > 0 && /\d+/.test(result.trim());
-        } catch {
-          return false;
-        }
-      },
-      30000
-    );
-    // Verify extension after restart
-    extState = await dExec(deployer,
-      `DBUS=\$(cat /proc/\$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-) && DBUS_SESSION_BUS_ADDRESS=\$DBUS gnome-extensions show ${cfg.extensionUuid} 2>&1`,
-      cfg.sshKey, cfg.sshPort, cfg.sshUser
-    );
-    if (extState.includes("State: ACTIVE")) {
-      console.log("Extension loaded and active after restart");
-    } else {
-      console.log("WARNING: Extension still not active after restart:", extState.trim());
-      // Last resort: enable via dconf
-      await dExec(deployer,
-        `dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`,
-        cfg.sshKey, cfg.sshPort, cfg.sshUser
-      );
-      console.log("  Enabled via dconf as fallback");
-    }
-  }
-
-  // Restart dotoold
-  // Install dotool if not present (not in base image)
-  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
-  if (!isGoldenDepsImage) {
-    try {
-      const dotoolCheck = await dExec(deployer, "which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      if (dotoolCheck.includes("missing")) {
-        console.log("  Installing dotool...");
-        await dExec(deployer, "sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      }
-    } catch {
-      // Continue — dotoold start may fail with clear error
-    }
-  }
-  console.log("Restarting dotoold...");
-  // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
+  // Run deploy-extension.sh (single SSH call)
+  const tDeploy = Date.now();
   try {
-    await dExec(deployer, "sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  } catch {
-    // Best effort — may fail if udev rule already set permissions
+    const output = await dExec(deployer,
+      `bash ~/tmp-deploy/scripts/deploy-extension.sh '${cfg.extensionUuid}' 2>&1`,
+      cfg.sshKey, cfg.sshPort, cfg.sshUser, 60
+    );
+    console.log(output.trim());
+  } catch (e) {
+    console.log("deploy-extension.sh failed:", (e as Error).message?.slice(0, 500));
+    throw e;
   }
-  try {
-    await dExec(deployer, `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; setsid nohup dotoold </dev/null &>/tmp/dotoold.log &`, cfg.sshKey, cfg.sshPort, cfg.sshUser, 10);
-  } catch {
-    // Timeout expected — setsid detaches the process
-  }
-  await pollUntilFn(
-    "dotool pipe",
-    async () => {
-      const output = await dExec(deployer, "test -p /run/user/$(id -u)/dotool-pipe && echo ready", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      return output.includes("ready");
-    },
-    10000
-  );
+
+  console.log(`  deploy extension: ${Date.now() - t0}ms [time]`);
 }
 
 export async function deployPythonSource(cfg: DeployConfig, deployer?: Deployer): Promise<void> {
@@ -430,56 +215,15 @@ export async function deployTestAudio(cfg: DeployConfig, deployer?: Deployer): P
 export async function startVoiceService(
   shell: ShellHelper,
   cfg: DeployConfig,
-  pollUntilFn: typeof pollUntil,
-  pollForCommandOutputFn: typeof pollForCommandOutput,
+  _pollUntilFn: typeof pollUntil,
+  _pollForCommandOutputFn: typeof pollForCommandOutput,
   skipDeps = false,
   deployer?: Deployer
 ): Promise<void> {
-  if (skipDeps) {
-    console.log("Skipping Python dependency installation (deps pre-installed)");
-  } else {
-    console.log("Installing Python dependencies...");
-    // Install portaudio-devel for sounddevice (not in base image)
-    try {
-      const paCheck = await dExec(deployer, "rpm -q portaudio-devel 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      if (paCheck.includes("missing")) {
-        console.log("  Installing portaudio-devel...");
-        await dExec(deployer, "sudo dnf install -y portaudio-devel 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      }
-    } catch {
-      // Continue — sounddevice install may fail with clear error
-    }
-    // Use uv for faster, more reliable installs (matches install.sh approach)
-    const uvResult = await dExec(deployer,
-      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__",
-      cfg.sshKey, cfg.sshPort, cfg.sshUser
-    );
-    if (!uvResult.includes("__UV_OK__")) {
-      // Fallback to pip if uv not available
-      console.log("  uv install failed, falling back to pip...");
-      try {
-        await dExec(deployer, "python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-        await dExec(deployer,
-          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
-          cfg.sshKey, cfg.sshPort, cfg.sshUser
-        );
-        console.log("  pip install completed");
-      } catch (e) {
-        console.log("  FATAL: pip install failed:", (e as Error).message);
-        throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
-      }
-    }
-  }
+  const outputMethod = cfg.outputMethod || 'mutter-commit';
+  console.log(`Starting voice service (output: ${outputMethod})...`);
 
-  // Kill existing voice service
-  // Disable systemd service first to prevent respawn, then kill
-  // Try both .service and .user.service names (install.sh may create either)
-  await dExec(deployer, "systemctl --user disable com.happytomatoe.VoiceToText.user.service 2>/dev/null; systemctl --user disable com.happytomatoe.VoiceToText.service 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await dExec(deployer, "systemctl --user stop com.happytomatoe.VoiceToText.user.service 2>/dev/null; systemctl --user stop com.happytomatoe.VoiceToText.service 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await dExec(deployer, "killall -9 voice-to-text-dbus python3 2>/dev/null; pkill -9 -f voice-to-text 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await Bun.sleep(2000);
-
-  // Copy config and start service
+  // Copy config
   await dExec(deployer, "mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   const configName = process.env.CI ? "voice-to-text-config.ci.yaml" : "voice-to-text-config.local.yaml";
   if (deployer) {
@@ -487,31 +231,16 @@ export async function startVoiceService(
   } else {
     scpToVm(join(cfg.fixtureDir, configName), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
-  
-  // Set output method from config (default to 'type')
-  const outputMethod = cfg.outputMethod || 'type';
-  console.log(`  Using output method: ${outputMethod}`);
-  
-  // Pre-download SileroVAD model (avoids 10s+ delay on first recording)
-  try {
-    await dExec(deployer, "test -f ~/.cache/voice-to-text/silero_vad.onnx || { mkdir -p ~/.cache/voice-to-text/ && wget -q -O ~/.cache/voice-to-text/silero_vad.onnx 'https://github.com/snakers4/silero-vad/raw/v5.0/files/silero_vad.onnx'; }", cfg.sshKey, cfg.sshPort, cfg.sshUser, 15);
-  } catch {
-    // Non-fatal — will download on first use
-  }
 
+  // Run start-voice-service.sh (single SSH call)
   try {
-    await dExec(deployer,
-      `rm -f /tmp/voice-service.log; export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; setsid nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 </dev/null &`,
-      cfg.sshKey, cfg.sshPort, cfg.sshUser, 10
+    const output = await dExec(deployer,
+      `bash ~/tmp-deploy/scripts/start-voice-service.sh '${outputMethod}' 2>&1`,
+      cfg.sshKey, cfg.sshPort, cfg.sshUser, 30
     );
-  } catch {
-    // Timeout expected — setsid detaches the process
+    console.log(output.trim());
+  } catch (e) {
+    console.log("start-voice-service.sh failed:", (e as Error).message?.slice(0, 500));
+    throw e;
   }
-
-  await pollForCommandOutputFn(
-    (cmd: string) => dExec(deployer, cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser),
-    "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
-    "com.happytomatoe.VoiceToText",
-    15000
-  );
 }
