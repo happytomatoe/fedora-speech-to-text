@@ -8,11 +8,12 @@ export class ShellHelper {
   private _sshPort = 0;
   private _sshUser = "testuser";
 
-  /** Configure SSH credentials for direct commands */
+  /** Configure SSH credentials for direct commands. Resets cached D-Bus address. */
   configure(opts: { sshKey: string; sshPort: number; sshUser: string }): void {
     this._sshKey = opts.sshKey;
     this._sshPort = opts.sshPort;
     this._sshUser = opts.sshUser;
+    this.dbusAddr = null; // Reset so next call re-reads from new gnome-shell
   }
 
   /** Set deployer for fast SSH commands (avoids per-call connection overhead) */
