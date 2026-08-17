@@ -322,10 +322,10 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`, cfg.sshKey, cfg.sshPort, 
       60000
     );
 
-    // Re-establish SSH session
+    // Invalidate D-Bus cache and re-configure SSH credentials
     console.log("  re-establishing SSH session...");
     await shell.close();
-    await shell.openSshSession({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
+    shell.configure({ sshKey: cfg.sshKey, sshPort: cfg.sshPort, sshUser: cfg.sshUser });
     // Re-establish deployer SSH connection (stale after GDM restart)
     if (deployer) {
       await deployer.disconnect();

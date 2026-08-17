@@ -179,7 +179,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
   let t: number;
 
-  // Set deployer on shell for fast D-Bus address resolution
+  // Configure shell helper with SSH credentials and deployer
+  shell.configure({ sshKey: SSH_KEY, sshPort: run.sshPort, sshUser: SSH_USER });
   shell.setDeployer(vm.deployer);
 
   const tmuxCfg: tmux.TmuxHelper = {
@@ -271,13 +272,13 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   
   // Verify terminal has focus by typing test character
   console.log("Verifying terminal focus...");
-  let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+  let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session);
   if (!isFocused) {
     console.log("  Terminal not focused, trying click + gio launch...");
     await shell.clickToFocus(640, 400);
     await Bun.sleep(500);
     await shell.focusTerminal();
-    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session);
     console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {

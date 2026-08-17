@@ -5,7 +5,6 @@
     "": {
       "name": "voice-to-text-e2e",
       "dependencies": {
-        "@microsoft/shell-use": "0.0.1-beta.6",
         "ssh2": "^1.17.0",
         "yaml": "^2.9.0",
       },
@@ -17,24 +16,6 @@
     },
   },
   "packages": {
-    "@microsoft/shell-use": ["@microsoft/shell-use@0.0.1-beta.6", "", { "optionalDependencies": { "@microsoft/shell-use-darwin-arm64": "0.0.1-beta.6", "@microsoft/shell-use-darwin-x64": "0.0.1-beta.6", "@microsoft/shell-use-linux-arm64-gnu": "0.0.1-beta.6", "@microsoft/shell-use-linux-arm64-musl": "0.0.1-beta.6", "@microsoft/shell-use-linux-x64-gnu": "0.0.1-beta.6", "@microsoft/shell-use-linux-x64-musl": "0.0.1-beta.6", "@microsoft/shell-use-win32-arm64-msvc": "0.0.1-beta.6", "@microsoft/shell-use-win32-x64-msvc": "0.0.1-beta.6" } }, "sha512-3aVyFiTJgLUEv1qkBSX77+7BUTl5mpURVOZovntBCzTPaLUbFrehp1ti5069t87K+6S3AJnPni0Vh48K3Z0TEQ=="],
-
-    "@microsoft/shell-use-darwin-arm64": ["@microsoft/shell-use-darwin-arm64@0.0.1-beta.6", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Lp9akC1J8yfglkiMJNPtxHCGBCYBAPomnc/etgqhDLrB2vYEw+Lo23kcK6CIKlXGrix29jxwr12Kln7s7Re9ow=="],
-
-    "@microsoft/shell-use-darwin-x64": ["@microsoft/shell-use-darwin-x64@0.0.1-beta.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-ZdlTI4DjSJqjbh9b809cIuuM+5+Uts+qlfzr3lcgNgtMOr1KQBnMq5gm6cm9We1gVvGZQwn+LTabfIx880ew3w=="],
-
-    "@microsoft/shell-use-linux-arm64-gnu": ["@microsoft/shell-use-linux-arm64-gnu@0.0.1-beta.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-ymVFNdCLQff2jkG0aaRbzfkGhNyjanB3lahXKvz/Zb0vLO6Cb+d5/GIsK7MUTCfgvj3Yks/wZCy/wxCiHPn/Gg=="],
-
-    "@microsoft/shell-use-linux-arm64-musl": ["@microsoft/shell-use-linux-arm64-musl@0.0.1-beta.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-HG7/7vweEsPiH9DipE8Oz3ub76zXz6YVpO9JDUlWy5D6tz9kyxvnac1JRZ9Zj7KNrou5PBpxA+IL6xvt3fJeDw=="],
-
-    "@microsoft/shell-use-linux-x64-gnu": ["@microsoft/shell-use-linux-x64-gnu@0.0.1-beta.6", "", { "os": "linux", "cpu": "x64" }, "sha512-ss3L6vNTOnrEnT3O+S6qliCiad8+wYTzkxMohfOBTkYi46nGOIeKhWBequsbzb8XjSYzhxfqmBxqsaNLg9b80g=="],
-
-    "@microsoft/shell-use-linux-x64-musl": ["@microsoft/shell-use-linux-x64-musl@0.0.1-beta.6", "", { "os": "linux", "cpu": "x64" }, "sha512-KC3FPPOHYEzdGG0WYY1p2zByWLsWcR/eM77pBf2gg8A5RWI5Lmm0CvCU9Djqu+GFVW7xoNSem/jr1+D93sAo3Q=="],
-
-    "@microsoft/shell-use-win32-arm64-msvc": ["@microsoft/shell-use-win32-arm64-msvc@0.0.1-beta.6", "", { "os": "win32", "cpu": "arm64" }, "sha512-a47ViMm1MVtK6VJ3cC5qiE8U1ntne69gPTIs9LpRflacFlQ+yQcUr/0R/fgpV2QzhEkLKXtTHyY77jz36NMevw=="],
-
-    "@microsoft/shell-use-win32-x64-msvc": ["@microsoft/shell-use-win32-x64-msvc@0.0.1-beta.6", "", { "os": "win32", "cpu": "x64" }, "sha512-sB8nA+v3c7pqhA71v+I9ckIWUwqeNbZqktMYmKe5p86DJ6ZDHz+nkmrnH0PBnTqVlbfstJeoBijXWMwePbJwaQ=="],
-
     "@types/node": ["@types/node@18.19.130", "", { "dependencies": { "undici-types": "~5.26.4" } }, "sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg=="],
 
     "@types/ssh2": ["@types/ssh2@1.15.5", "", { "dependencies": { "@types/node": "^18.11.18" } }, "sha512-N1ASjp/nXH3ovBHddRJpli4ozpk6UdDYIX4RJWFa9L1YKnzdhTlVmiGHm4DZnj/jLbqZpes4aeR30EFGQtvhQQ=="],

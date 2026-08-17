@@ -202,7 +202,8 @@ export class VmManager {
       120_000,
       1000
     );
-    await this.shell.openSshSession({
+    // Configure shell helper with SSH credentials (no PTY session needed)
+    this.shell.configure({
       sshKey: this.config.sshKey,
       sshPort: this.config.run.sshPort,
       sshUser: this.config.sshUser,
@@ -350,13 +351,8 @@ export class VmManager {
         // 2. Wait for guest OS to settle
         await Bun.sleep(2000);
         
-        // 3. Reconnect SSH session (TCP connections are stale after restore)
+        // 3. Invalidate D-Bus cache (session bus changes after restore)
         await this.shell.close();
-        await this.shell.openSshSession({
-          sshKey: this.config.sshKey,
-          sshPort: this.config.run.sshPort,
-          sshUser: this.config.sshUser,
-        });
         
         // 4. Verify voice service is accessible
         await this.pollForCommandOutput(
