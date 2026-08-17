@@ -192,6 +192,9 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     deployer: vm.deployer,
   };
 
+  // Start continuous screen recording
+  vm.startRecording(2);
+
   t = Date.now();
   await vm.captureFrame("01-desktop");
   timing("capture-frame", t);
@@ -381,6 +384,9 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Cleanup: kill tmux session
   await tmux.killSession(tmuxCfg);
+
+  // Stop recording and convert to video
+  await vm.stopRecording();
 }
 
 /**
@@ -879,6 +885,8 @@ async function main(): Promise<void> {
     console.error("\nFATAL:", err);
     testsFailed++;
   } finally {
+    // Ensure recording is stopped even on failure
+    await vm.stopRecording();
     if (SHUTDOWN) {
       await vm.shutdown();
       run.cleanup();

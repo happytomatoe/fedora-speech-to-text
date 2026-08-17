@@ -40,6 +40,8 @@ export class VmManager {
   deployer: Deployer;
   shell: ShellHelper;
   frameCount = 0;
+  private recordInterval: ReturnType<typeof setInterval> | null = null;
+  private recordFrameCount = 0;
 
   private deployCfg: DeployConfig;
 
@@ -80,6 +82,62 @@ export class VmManager {
     } catch {
       // Ignore screendump errors
     }
+  }
+
+  /** Start continuous recording at given fps via QEMU monitor screendump */
+  startRecording(fps = 2): void {
+    if (this.recordInterval) return;
+    const dir = join(this.config.run.outputDir, "recording");
+    mkdirSync(dir, { recursive: true });
+    this.recordFrameCount = 0;
+    const intervalMs = Math.round(1000 / fps);
+    this.recordInterval = setInterval(async () => {
+      const path = join(dir, `rec-${String(this.recordFrameCount++).padStart(5, "0")}.ppm`);
+      try {
+        await this.qemu.screendump(path);
+      } catch {
+        // Ignore — VM may be rebooting
+      }
+    }, intervalMs);
+    console.log(`  [rec] started at ${fps} fps`);
+  }
+
+  /** Stop recording and convert frames to mp4 */
+  async stopRecording(): Promise<string | null> {
+    if (!this.recordInterval) return null;
+    clearInterval(this.recordInterval);
+    this.recordInterval = null;
+
+    const dir = join(this.config.run.outputDir, "recording");
+    const videoPath = join(dir, "recording.mp4");
+
+    if (this.recordFrameCount === 0) {
+      console.log("  [rec] no frames captured");
+      return null;
+    }
+
+    console.log(`  [rec] stopped — ${this.recordFrameCount} frames, converting to video...`);
+
+    // Convert ppm frames to mp4 using ffmpeg
+    try {
+      const proc = Bun.spawn([
+        "ffmpeg", "-y",
+        "-framerate", "2",
+        "-i", join(dir, "rec-%05d.ppm"),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        videoPath,
+      ], { stdout: "pipe", stderr: "pipe" });
+      const exitCode = await proc.exited;
+      if (exitCode === 0 && existsSync(videoPath)) {
+        console.log(`  [rec] video: ${videoPath}`);
+        return videoPath;
+      }
+      console.log(`  [rec] ffmpeg failed (exit ${exitCode})`);
+    } catch (e) {
+      console.log(`  [rec] ffmpeg error: ${e}`);
+    }
+    return null;
   }
 
   async boot(): Promise<void> {
