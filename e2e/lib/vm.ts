@@ -154,10 +154,11 @@ export class VmManager {
   createVideoFromScreenshots(): void {
     const dir = join(this.config.run.outputDir, "recording");
     const videoPath = join(dir, "recording.mp4");
-    const ppmPattern = join(dir, "frame-*.ppm");
+    const ppmPattern = join(dir, "*.ppm");
     try {
       execSync(`ls ${ppmPattern} 2>/dev/null | head -1`, { encoding: "utf-8" });
     } catch {
+      console.log("  [rec] no PPM files for fallback");
       return; // No PPM files
     }
     try {
