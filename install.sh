@@ -44,9 +44,6 @@ install_prerequisites() {
   echo "Installing prerequisites..."
   install_pkg unzip
   install_pkg curl
-  install_pkg wget2
-  # Fedora 42 names the binary wget2, but SileroVAD calls wget
-  [ -e /usr/bin/wget ] || ln -sf /usr/bin/wget2 /usr/bin/wget
   install_pkg libsecret
 
   if ! command_exists dotool; then

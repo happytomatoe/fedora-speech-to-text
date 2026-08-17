@@ -111,7 +111,7 @@ class SileroVAD:
 
         if not os.path.exists(model_path):
             try:
-                subprocess.run(["wget", "-q", "-O", model_path, DEFAULT_MODEL_URL], check=True)
+                subprocess.run(["curl", "-sL", "-o", model_path, DEFAULT_MODEL_URL], check=True)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 raise RuntimeError(f"Failed to download Silero model: {e}") from e
 
