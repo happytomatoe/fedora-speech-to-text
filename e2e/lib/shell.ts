@@ -75,11 +75,16 @@ export class ShellHelper {
     try {
       const addr = await this.getShellDbusAddr();
       if (!addr) return false;
-      // Single SSH call: dismiss + check state
-      const result = await this.exec(
-        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>' 2>/dev/null; DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive`
+      // Check if open first (fast D-Bus get)
+      const checkResult = await this.exec(
+        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive`
       );
-      return result.includes('(<true>,)');
+      const wasOpen = checkResult.includes('(<true>,)');
+      if (wasOpen) {
+        // Dismiss via keyboard (faster than D-Bus set when gnome-shell is busy)
+        await this.dotoolCommand('key Escape');
+      }
+      return wasOpen;
     } catch {
       return false;
     }
