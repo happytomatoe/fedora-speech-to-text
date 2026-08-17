@@ -227,6 +227,14 @@ export async function installDependencies(
   } catch {
     // Continue — Ghostty install may fail, fall back to gnome-terminal
   }
+
+  // Skip GNOME Initial Setup and Tour on first login
+  try {
+    await dExec(deployer, "mkdir -p ~/.config && echo yes > ~/.config/gnome-initial-setup-done && touch ~/.config/gnome-tour-done", _sshKey, _sshPort, _sshUser);
+  } catch {
+    // Ignore — file may already exist
+  }
+
   console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
 
