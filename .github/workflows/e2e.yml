@@ -175,6 +175,7 @@ jobs:
 
       # Always upload artifacts (for debugging both failures and flaky passes)
       # Each file as separate artifact so they can be downloaded individually
+      # Output lives in e2e/qemu-images/persistent-run/main/output/ (not e2e/output/)
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4
@@ -189,7 +190,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 02-voice-service-log
-          path: e2e/output/vm-logs/voice-service.log
+          path: e2e/qemu-images/persistent-run/*/output/vm-logs/voice-service.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -198,7 +199,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 03-gnome-shell-log
-          path: e2e/output/vm-logs/gnome-shell.log
+          path: e2e/qemu-images/persistent-run/*/output/vm-logs/gnome-shell.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -207,7 +208,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 04-serial-log
-          path: e2e/output/*/serial.log
+          path: e2e/qemu-images/persistent-run/*/serial.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -216,7 +217,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 05-screenshots
-          path: e2e/output/common/
+          path: e2e/qemu-images/persistent-run/*/output/common/
           if-no-files-found: warn
           retention-days: 7
 
@@ -225,6 +226,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 06-recording
-          path: e2e/output/*/recording/
+          path: e2e/qemu-images/persistent-run/*/output/recording/
           if-no-files-found: warn
           retention-days: 7
