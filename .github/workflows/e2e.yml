@@ -93,14 +93,6 @@ jobs:
             curl -sSfL https://github.com/casey/just/releases/latest/download/just-1.58.0-x86_64-unknown-linux-musl.tar.gz | sudo tar xz -C /usr/local/bin
           fi
 
-      - name: Install shell-use
-        run: |
-          if [ ! -f ~/.local/bin/tui-test ]; then
-            curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/microsoft/shell-use/main/install/install.sh | sh && ln -sf ~/.local/bin/tui-test ~/.local/bin/shell-use
-          fi
-        env:
-          TUI_TEST_VERSION: 0.1.0-beta.1
-
       # Cache all E2E files
       - name: Restore E2E files from cache
         id: cache-restore
@@ -125,9 +117,7 @@ jobs:
       # Run E2E tests
       - name: Run E2E tests
         run: cd e2e && bun run e2e.ts --shutdown --timeout 300
-        env:
-          SHELL_USE_TIMEOUT_TEXT_MS: "120000"
-          SHELL_USE_TIMEOUT_READY_MS: "120000"
+
 
 
       # Save Parakeet models to cache (only on first run)
