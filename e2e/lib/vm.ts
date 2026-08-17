@@ -45,6 +45,8 @@ export class VmManager {
   shell: ShellHelper;
   frameCount = 0;
   private recordingFfmpeg: ReturnType<typeof Bun.spawn> | null = null;
+  private xvfbProcess: ReturnType<typeof Bun.spawn> | null = null;
+  private i3Process: ReturnType<typeof Bun.spawn> | null = null;
 
   private deployCfg: DeployConfig;
 
@@ -111,17 +113,17 @@ export class VmManager {
     }
   }
 
-  /** Start continuous recording via VNC + ffmpeg */
+  /** Start continuous recording via x11grab + ffmpeg */
   startRecording(): void {
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
     const videoPath = join(dir, "recording.mp4");
     this.recordingFfmpeg = Bun.spawn(
-      ["ffmpeg", "-y", "-f", "vnc", "-i", "localhost:5900", "-r", "30", videoPath],
+      ["ffmpeg", "-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath],
       { stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
-    console.log("  [rec] started ffmpeg VNC capture");
+    console.log("  [rec] started ffmpeg x11grab capture");
   }
 
   /** Stop recording and return video path */
@@ -155,22 +157,28 @@ export class VmManager {
     const dir = join(this.config.run.outputDir, "recording");
     const videoPath = join(dir, "recording.mp4");
     const pngPattern = join(dir, "frame-*.png");
+    let files: string;
     try {
-      execSync(`ls ${pngPattern} 2>/dev/null | head -1`, { encoding: "utf-8" });
+      files = execSync(`ls ${pngPattern} 2>/dev/null | head -1`, { encoding: "utf-8" }).trim();
     } catch {
+      files = "";
+    }
+    if (!files) {
       console.log("  [rec] no PNG files for fallback");
       return;
     }
     try {
-      execSync(
-        `ffmpeg -y -framerate 1 -pattern_type glob -i '${pngPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
-        { stdio: "ignore" }
+      const result = execSync(
+        `ffmpeg -y -framerate 1 -pattern_type glob -i '${pngPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>&1`,
+        { encoding: "utf-8" }
       );
       if (existsSync(videoPath)) {
         console.log(`  [rec] created from screenshots: ${videoPath}`);
+      } else {
+        console.log("  [rec] ffmpeg ran but no video produced");
       }
-    } catch {
-      // ffmpeg not available
+    } catch (e: any) {
+      console.log(`  [rec] ffmpeg failed: ${e.stderr || e.message}`);
     }
   }
 
@@ -227,6 +235,9 @@ export class VmManager {
     // Check if KVM is usable (file exists + readable)
     const kvmAvailable = existsSync("/dev/kvm");
     console.log(`  KVM: ${kvmAvailable ? 'available' : 'NOT available (using TCG software emulation)'}`);
+    // Start Xvfb + i3 before QEMU (if available)
+    const hasXvfb = await this.startXvfb();
+
     const qemuArgs = [
       "qemu-system-x86_64",
       ...(kvmAvailable ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
@@ -234,7 +245,8 @@ export class VmManager {
       "-smp", "4",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
-      "-vnc", ":0",
+      // Use SDL+Xvfb for recording (CI), fall back to VNC (local)
+      hasXvfb ? ["-display", "sdl"] : ["-vnc", ":0"],
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
@@ -242,7 +254,7 @@ export class VmManager {
       "-device", "virtio-rng-pci",
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
-    ];
+    ].flat();
     // Wrap in setsid + nohup to detach from parent process group
     const wrappedCmd = `setsid nohup ${qemuArgs.join(" ")} &>/dev/null &`;
     this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
@@ -301,33 +313,106 @@ export class VmManager {
     });
   }
 
-  /** Verify VNC display is accessible */
-  async verifyDisplayReady(): Promise<void> {
-    const net = await import("node:net");
-    const vncPort = 5900; // display :0 = port 5900
-    
-    await pollUntil(
-      `VNC port ${vncPort} listening`,
-      async () => {
-        return new Promise<boolean>((resolve) => {
-          const sock = net.createConnection(vncPort, "localhost");
-          const timer = setTimeout(() => {
-            sock.destroy();
-            resolve(false);
-          }, 2000);
-          sock.on("connect", () => {
-            clearTimeout(timer);
-            sock.destroy();
-            resolve(true);
-          });
-          sock.on("error", () => {
-            clearTimeout(timer);
-            resolve(false);
-          });
-        });
-      },
-      10000
+  /** Start Xvfb virtual display and i3 window manager. Returns true if Xvfb ready. */
+  private async startXvfb(): Promise<boolean> {
+    // Check if Xvfb is available
+    try {
+      const check = Bun.spawnSync(["which", "Xvfb"], { stdout: "pipe", stderr: "pipe" });
+      if (check.exitCode !== 0) {
+        console.log("  [xvfb] not found, using real display");
+        return false;
+      }
+    } catch {
+      console.log("  [xvfb] not found, using real display");
+      return false;
+    }
+
+    // Start Xvfb on display :99
+    this.xvfbProcess = Bun.spawn(
+      ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
+      { stdout: "pipe", stderr: "pipe" }
     );
+
+    // Wait for Xvfb to be ready
+    for (let i = 0; i < 50; i++) {
+      try {
+        const result = Bun.spawnSync(["xdpyinfo", "-display", ":99"], { stdout: "pipe", stderr: "pipe" });
+        if (result.exitCode === 0) {
+          process.env.DISPLAY = ":99";
+          console.log("  [xvfb] ready on :99");
+          // Start i3 if available
+          try {
+            const i3Check = Bun.spawnSync(["which", "i3"], { stdout: "pipe", stderr: "pipe" });
+            if (i3Check.exitCode === 0) {
+              const i3Config = "/tmp/i3config";
+              writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
+              this.i3Process = Bun.spawn(["i3", "-c", i3Config], { stdout: "pipe", stderr: "pipe" });
+              console.log("  [i3] started");
+            }
+          } catch { /* i3 optional */ }
+          return true;
+        }
+      } catch { /* ignore */ }
+      await Bun.sleep(100);
+    }
+    console.log("  [xvfb] failed to start, using real display");
+    this.xvfbProcess?.kill("SIGKILL");
+    this.xvfbProcess = null;
+    return false;
+  }
+
+    // Start i3 window manager if available (needed for QEMU SDL window)
+    try {
+      const i3Check = Bun.spawnSync(["which", "i3"], { stdout: "pipe", stderr: "pipe" });
+      if (i3Check.exitCode === 0) {
+        const i3Config = "/tmp/i3config";
+        writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
+        this.i3Process = Bun.spawn(
+          ["i3", "-c", i3Config],
+          { stdout: "pipe", stderr: "pipe" }
+        );
+        console.log("  [i3] started");
+      } else {
+        console.log("  [i3] not found, skipping (QEMU SDL may still work)");
+      }
+    } catch {
+      console.log("  [i3] not found, skipping");
+    }
+  }
+
+  /** Verify display is accessible (X11 if Xvfb, VNC otherwise) */
+  async verifyDisplayReady(): Promise<void> {
+    if (process.env.DISPLAY === ":99") {
+      // Xvfb — check X11 display
+      await pollUntil(
+        "X11 display :99 ready",
+        async () => {
+          try {
+            const result = Bun.spawnSync(["xdpyinfo", "-display", ":99"], { stdout: "pipe", stderr: "pipe" });
+            return result.exitCode === 0;
+          } catch {
+            return false;
+          }
+        },
+        10000,
+        500
+      );
+    } else {
+      // VNC fallback — check port 5900
+      const net = await import("node:net");
+      await pollUntil(
+        "VNC port 5900 listening",
+        async () => {
+          return new Promise<boolean>((resolve) => {
+            const sock = net.createConnection(5900, "localhost");
+            const timer = setTimeout(() => { sock.destroy(); resolve(false); }, 2000);
+            sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(true); });
+            sock.on("error", () => { clearTimeout(timer); resolve(false); });
+          });
+        },
+        10000
+      );
+    }
   }
 
   /** Deploy portal screenshot script for Wayland capture */
@@ -546,6 +631,8 @@ EOF`);
       await Bun.sleep(5000);
     } finally {
       this.process?.kill("SIGKILL");
+      this.xvfbProcess?.kill("SIGKILL");
+      this.i3Process?.kill("SIGKILL");
       this.qemu.close();
       await this.shell.close();
       await this.deployer.disconnect();
