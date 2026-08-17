@@ -502,27 +502,22 @@ export class VmManager {
         const content = await this.shell.exec(`cat ${remote} 2>/dev/null`);
         if (content.trim()) {
           writeFileSync(join(vmLogsDir, local), content);
-          console.log(`    Fetched ${remote} (${content.length} bytes)`);
-        } else {
-          console.log(`    ${remote} empty or missing`);
         }
-      } catch (e) {
-        console.log(`    Failed to fetch ${remote}: ${e}`);
+      } catch {
+        // File may not exist or SSH down — skip
       }
     }
-    // Capture tmux pane content
+    // Capture tmux pane content (useful for debugging terminal output)
     try {
       const paneContent = await this.shell.exec(
         `tmux capture-pane -t e2e:0 -p 2>/dev/null`
       );
       if (paneContent.trim()) {
         writeFileSync(join(vmLogsDir, "tmux-pane.txt"), paneContent);
-        console.log(`    Fetched tmux pane (${paneContent.length} bytes)`);
       }
-    } catch (e) {
-      console.log(`    Failed to fetch tmux pane: ${e}`);
+    } catch {
+      // tmux may not be running — skip
     }
-    console.log(`  VM logs saved to ${vmLogsDir}`);
   }
 
   // --- Polling (thin wrappers for convenience) ---
