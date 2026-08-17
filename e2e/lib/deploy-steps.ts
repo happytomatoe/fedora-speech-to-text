@@ -205,6 +205,8 @@ export async function deployExtension(
 export async function deployPythonSource(cfg: DeployConfig, deployer?: Deployer): Promise<void> {
   if (!existsSync(cfg.pythonSrc)) return;
   console.log("Deploying Python source...");
+  // Ensure parent directory exists (rsync can't create it)
+  await dExec(deployer, "mkdir -p ~/voice_to_text/src/voice_to_text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   // rsync --delete handles removed files; delta transfer skips unchanged files
   if (deployer) {
     await deployer.uploadDir(cfg.pythonSrc, "~/voice_to_text/src/voice_to_text");
