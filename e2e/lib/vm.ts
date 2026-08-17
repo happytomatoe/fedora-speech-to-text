@@ -317,7 +317,15 @@ export class VmManager {
   async saveCleanSnapshot(tag = "clean"): Promise<void> {
     console.log(`Preparing clean snapshot '${tag}'...`);
     
-    // 1. Ensure Activities is closed
+    // 1. Kill voice service so snapshot is clean (deploy will restart it)
+    try {
+      await this.shell.exec("killall -9 voice-to-text-dbus python3 2>/dev/null; pkill -9 -f voice-to-text 2>/dev/null; true");
+      await Bun.sleep(1000);
+    } catch {
+      // Ignore — service may not be running
+    }
+    
+    // 2. Ensure Activities is closed
     await this.shell.dismissActivities();
     await this.shell.waitActivitiesFullyClosed();
     await Bun.sleep(500);
