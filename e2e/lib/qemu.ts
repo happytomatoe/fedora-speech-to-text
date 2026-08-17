@@ -76,17 +76,24 @@ export class QemuMonitor extends EventEmitter {
     const text = data.toString();
     this.buffer += text;
 
-    // Check for prompt — indicates QEMU is ready
-    if (this.buffer.includes("(qemu) ")) {
+    // Wait for prompt (qemu)  — but the first one is the echo of the prompt
+    // before our command. The real response comes after a second (qemu) 
+    // once QEMU has finished processing. Count occurrences to skip the echo.
+    const prompt = "(qemu) ";
+    let idx = -1;
+    let count = 0;
+    while ((idx = this.buffer.indexOf(prompt, idx + 1)) !== -1) {
+      count++;
+    }
+    // After sending a command, we expect: echo prompt + command + response + response prompt
+    // So we need at least 2 prompts in the buffer
+    if (count >= 2 && this.waitingForPrompt && this.promptCallback) {
       const output = this.buffer;
       this.buffer = "";
-
-      if (this.waitingForPrompt && this.promptCallback) {
-        this.waitingForPrompt = false;
-        const cb = this.promptCallback;
-        this.promptCallback = null;
-        cb(output);
-      }
+      this.waitingForPrompt = false;
+      const cb = this.promptCallback;
+      this.promptCallback = null;
+      cb(output);
     }
   }
 
