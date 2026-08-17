@@ -24,8 +24,7 @@ fi
 
 echo "--- Starting voice service (output: $OUTPUT_METHOD) ---"
 echo "--- Installing Python dependencies ---"
-cd ~/voice_to_text
-pip install -e '.[all]' --quiet 2>&1 | tail -3
+pip install onnxruntime sounddevice numpy 2>&1 | tail -3
 
 export PATH=$HOME/.local/bin:$PATH
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
