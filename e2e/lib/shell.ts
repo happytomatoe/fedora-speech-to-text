@@ -44,7 +44,7 @@ export class ShellHelper {
       // Use sshExec (fresh connection) instead of deployer (persistent, keeps closing)
       console.log(`  [getShellDbusAddr] calling sshExec, sshPort=${this._sshPort}`);
       const raw = sshExec(
-        `cat /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`,
+        `grep DBUS_SESSION_BUS_ADDRESS /proc/$(pgrep -f 'gnome-shell.*headless' | head -1)/environ 2>/dev/null | cut -d= -f2-`,
         this._sshKey, this._sshPort, this._sshUser
       );
       console.log(`  [getShellDbusAddr] raw=${JSON.stringify(raw)}`);
