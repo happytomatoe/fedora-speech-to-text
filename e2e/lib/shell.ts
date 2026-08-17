@@ -70,24 +70,12 @@ export class ShellHelper {
     }
   }
 
-  /** Dismiss Activities and return whether it was open (single SSH call). */
+  /** Dismiss Activities via keyboard Escape (always safe, no-op if already closed). */
   async dismissAndCheck(): Promise<boolean> {
-    try {
-      const addr = await this.getShellDbusAddr();
-      if (!addr) return false;
-      // Check if open first (fast D-Bus get)
-      const checkResult = await this.exec(
-        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive`
-      );
-      const wasOpen = checkResult.includes('(<true>,)');
-      if (wasOpen) {
-        // Dismiss via keyboard (faster than D-Bus set when gnome-shell is busy)
-        await this.dotoolCommand('key Escape');
-      }
-      return wasOpen;
-    } catch {
-      return false;
-    }
+    // Press Escape — dismisses Activities if open, no-op if closed
+    // No D-Bus calls needed (they block when gnome-shell is busy)
+    await this.dotoolCommand('key Escape');
+    return false; // caller doesn't need the actual state
   }
 
   async waitActivitiesDismissed(timeoutMs = 5000): Promise<void> {
