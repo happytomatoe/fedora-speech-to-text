@@ -461,7 +461,7 @@ export async function startVoiceService(
 
   try {
     await dExec(deployer,
-      `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; setsid nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 </dev/null &`,
+      `rm -f /tmp/voice-service.log; export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; setsid nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 </dev/null &`,
       cfg.sshKey, cfg.sshPort, cfg.sshUser, 10
     );
   } catch {
