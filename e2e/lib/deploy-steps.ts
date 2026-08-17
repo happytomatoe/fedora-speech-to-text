@@ -527,7 +527,8 @@ export async function startVoiceService(
     }
   }
 
-  // Kill existing voice service
+  // Kill existing voice service (stop systemd first to prevent auto-restart)
+  await dExec(deployer, "systemctl --user stop com.happytomatoe.VoiceToText 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   await dExec(deployer, "killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   await Bun.sleep(1000);
   await pollUntilFn(
@@ -536,7 +537,7 @@ export async function startVoiceService(
       const output = await dExec(deployer, "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       return output.trim().length === 0;
     },
-    5000
+    10000
   );
   await Bun.sleep(500);
 
