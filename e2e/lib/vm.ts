@@ -422,13 +422,6 @@ export class VmManager {
       throw new Error(`Snapshot save failed — not found in info snapshots`);
     }
     
-    // 6. Re-enable extension (saveCleanSnapshot kills voice service)
-    try {
-      await this.shell.exec("dconf write /org/gnome/shell/enabled-extensions \"['voice-to-text@happytomatoe']\"");
-      await Bun.sleep(1000);
-    } catch {
-      // Ignore — extension may already be enabled
-    }
   }
 
   async resetToCleanState(tag = "clean", retries = 2): Promise<void> {
