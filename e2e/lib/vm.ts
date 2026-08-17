@@ -150,20 +150,20 @@ export class VmManager {
     return null;
   }
 
-  /** Create video from PPM screenshots as fallback */
+  /** Create video from PNG screenshots as fallback */
   createVideoFromScreenshots(): void {
     const dir = join(this.config.run.outputDir, "recording");
     const videoPath = join(dir, "recording.mp4");
-    const ppmPattern = join(dir, "*.ppm");
+    const pngPattern = join(dir, "frame-*.png");
     try {
-      execSync(`ls ${ppmPattern} 2>/dev/null | head -1`, { encoding: "utf-8" });
+      execSync(`ls ${pngPattern} 2>/dev/null | head -1`, { encoding: "utf-8" });
     } catch {
-      console.log("  [rec] no PPM files for fallback");
-      return; // No PPM files
+      console.log("  [rec] no PNG files for fallback");
+      return;
     }
     try {
       execSync(
-        `ffmpeg -y -framerate 1 -pattern_type glob -i '${ppmPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
+        `ffmpeg -y -framerate 1 -pattern_type glob -i '${pngPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
         { stdio: "ignore" }
       );
       if (existsSync(videoPath)) {
