@@ -14,9 +14,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Cache apt packages to skip re-downloading QEMU + libvirt (~40s saved)
+      - name: Restore apt cache
+        id: cache-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: apt-ubuntu-latest-v1
+          restore-keys: |
+            apt-ubuntu-latest-
+
       - name: Install QEMU + libvirt
         run: |
-          sudo apt-get install -y qemu-system-x86 qemu-utils genisoimage libvirt-clients virtinst
+          sudo apt-get update -q || true
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils genisoimage libvirt-clients virtinst
           # Enable KVM
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -58,8 +71,21 @@ jobs:
       - name: Install E2E dependencies
         run: cd e2e && bun install
 
+      # Cache npm packages (filen CLI)
+      - name: Restore npm cache
+        id: cache-npm
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.npm
+          key: npm-global-v1
+          restore-keys: |
+            npm-global-
+
       - name: Install Filen CLI
-        run: npm install -g @filen/cli
+        run: |
+          if ! command -v filen &>/dev/null; then
+            npm install -g @filen/cli
+          fi
 
       - name: Install just
         run: |
@@ -133,6 +159,24 @@ jobs:
             e2e/qemu-images/id_ed25519
             e2e/qemu-images/id_ed25519.pub
           key: e2e-files-v3
+
+      # Save apt cache
+      - name: Save apt cache
+        if: steps.cache-apt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: apt-ubuntu-latest-v1
+
+      # Save npm cache
+      - name: Save npm cache
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.npm
+          key: npm-global-v1
 
       # Upload artifacts on failure
       - name: Upload E2E artifacts
