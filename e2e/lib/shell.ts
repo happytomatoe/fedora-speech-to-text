@@ -117,7 +117,7 @@ export class ShellHelper {
     try {
       const before = await this.exec(`tmux capture-pane -t ${tmuxSession} -p`);
       
-      await this.dotoolCommand("key shift+a");
+      await this.dotoolCommand("key shift+space");
       await Bun.sleep(200);
 
       const after = await this.exec(`tmux capture-pane -t ${tmuxSession} -p`);
