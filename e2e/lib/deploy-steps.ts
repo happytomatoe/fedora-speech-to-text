@@ -527,19 +527,12 @@ export async function startVoiceService(
     }
   }
 
-  // Kill existing voice service (stop systemd first to prevent auto-restart)
+  // Kill existing voice service
+  // Disable systemd service first to prevent respawn, then kill
+  await dExec(deployer, "systemctl --user disable com.happytomatoe.VoiceToText 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   await dExec(deployer, "systemctl --user stop com.happytomatoe.VoiceToText 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   await dExec(deployer, "killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  await Bun.sleep(1000);
-  await pollUntilFn(
-    "old voice service to die",
-    async () => {
-      const output = await dExec(deployer, "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      return output.trim().length === 0;
-    },
-    10000
-  );
-  await Bun.sleep(500);
+  await Bun.sleep(2000);
 
   // Copy config and start service
   await dExec(deployer, "mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
