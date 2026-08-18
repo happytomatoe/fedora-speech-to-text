@@ -189,13 +189,14 @@ export class VmManager {
   createVideoFromScreenshots(): void {
     const dir = join(this.config.run.outputDir, "recording");
     const videoPath = join(dir, "recording.mp4");
-    // Skip if x11grab already produced a valid file
+    // Skip if x11grab already produced a valid file (must be >1KB, not just header)
     if (existsSync(videoPath)) {
       const stat = Bun.file(videoPath).size;
-      if (stat > 0) {
+      if (stat > 1024) {
         console.log(`  [rec] x11grab already produced ${videoPath} (${stat} bytes), skipping fallback`);
         return;
       }
+      console.log(`  [rec] x11produced ${videoPath} but only ${stat} bytes (<1KB), using fallback`);
     }
     const pngPattern = join(dir, "frame-*.png");
     let files: string;
