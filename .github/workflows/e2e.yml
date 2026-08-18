@@ -152,7 +152,7 @@ jobs:
       - name: Verify recording
         if: always()
         run: |
-          REC=$(ls e2e/qemu-images/persistent-run/*/output/recording/recording.mkv 2>/dev/null | head -1)
+          REC=$(ls e2e/output/recording/recording.mp4 2>/dev/null | head -1)
           if [ -z "$REC" ]; then
             echo "ERROR: No recording.mkv found"
             exit 1
@@ -242,7 +242,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 02-voice-service-log
-          path: e2e/qemu-images/persistent-run/*/output/vm-logs/voice-service.log
+          path: e2e/output/vm-logs/voice-service.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -251,7 +251,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 03-gnome-shell-log
-          path: e2e/qemu-images/persistent-run/*/output/vm-logs/gnome-shell.log
+          path: e2e/output/vm-logs/gnome-shell.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -269,7 +269,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 05-screenshots
-          path: e2e/qemu-images/persistent-run/*/output/test-cases
+          path: e2e/output/test-cases
           if-no-files-found: warn
           retention-days: 7
 
@@ -278,6 +278,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 06-recording
-          path: e2e/qemu-images/persistent-run/*/output/recording/
+          path: e2e/output/recording/
           if-no-files-found: warn
           retention-days: 7

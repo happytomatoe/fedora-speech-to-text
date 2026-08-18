@@ -128,7 +128,7 @@ export class VmManager {
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
-    const videoPath = join(dir, "recording.mkv");
+    const videoPath = join(dir, "recording.mp4");
     const ffmpegArgs = ["-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath];
     console.log(`  [rec] ffmpeg args: ${ffmpegArgs.join(" ")}`);
     this.recordingFfmpeg = Bun.spawn(
@@ -158,7 +158,7 @@ export class VmManager {
     if (!this.recordingFfmpeg) return null;
     const proc = this.recordingFfmpeg;
     this.recordingFfmpeg = null;
-    const videoPath = join(this.config.run.outputDir, "recording", "recording.mkv");
+    const videoPath = join(this.config.run.outputDir, "recording", "recording.mp4");
 
     // Send 'q' to ffmpeg to stop gracefully
     if (proc.stdin) {
@@ -188,7 +188,7 @@ export class VmManager {
   /** Create video from PNG screenshots as fallback */
   createVideoFromScreenshots(): void {
     const dir = join(this.config.run.outputDir, "recording");
-    const videoPath = join(dir, "recording.mkv");
+    const videoPath = join(dir, "recording.mp4");
     // Skip if x11grab already produced a valid file
     if (existsSync(videoPath)) {
       const stat = Bun.file(videoPath).size;
