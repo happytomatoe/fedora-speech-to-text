@@ -18,7 +18,7 @@ pre-commit:
       run: npx oxlint {staged_files}
       glob: "gnome-ext/**/*.js"
     oxlint-e2e:
-      run: npx oxlint -c .oxlintrc.json {staged_files}
+      run: npx oxlint -c .oxlintrc.json --tsconfig e2e/tsconfig.json {staged_files}
       glob: "e2e/**/*.ts"
       depends: ["npm-install"]
       
