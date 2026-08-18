@@ -133,7 +133,7 @@ export class VmManager {
     console.log(`  [rec] ffmpeg args: ${ffmpegArgs.join(" ")}`);
     this.recordingFfmpeg = Bun.spawn(
       ["ffmpeg", ...ffmpegArgs],
-      { stdout: "pipe", stderr: "pipe", stdin: "pipe" }
+      { stdout: "pipe", stderr: "pipe", stdin: "pipe", env: { ...process.env, DISPLAY: process.env.DISPLAY || ":99" } }
     );
     // Log ffmpeg stderr for debugging
     if (this.recordingFfmpeg.stderr) {
@@ -288,6 +288,7 @@ export class VmManager {
       cwd: vmDir,
       stdout: "inherit",
       stderr: "inherit",
+      env: { ...process.env, DISPLAY: process.env.DISPLAY || ":99" },
     });
 
     this.booted = true;
@@ -373,7 +374,7 @@ export class VmManager {
             if (i3Check.exitCode === 0) {
               const i3Config = "/tmp/i3config";
               writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
-              this.i3Process = Bun.spawn(["i3", "-c", i3Config], { stdout: "pipe", stderr: "pipe" });
+              this.i3Process = Bun.spawn(["i3", "-c", i3Config], { stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99" } });
               console.log("  [i3] started");
             }
           } catch { /* i3 optional */ }
