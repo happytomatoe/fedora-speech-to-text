@@ -283,15 +283,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Show service log in terminal so test activity is visible on screen
   const tmuxSession = tmuxCfg.session;
   await shell.exec(`tmux send-keys -t ${tmuxSession} 'tail -f /tmp/voice-service.log' Enter`);
-  // Open gedit so mutter-commit has a text field to type into
-  await shell.exec("dbus-launch gedit &");
-  await Bun.sleep(2000);
-  // Click center of screen to focus gedit text area
-  await shell.dotoolCommand("mousemove 960 540");
-  await shell.dotoolCommand("buttondown 1");
-  await shell.dotoolCommand("buttonup 1");
-  await Bun.sleep(500);
-  await Bun.sleep(1000);
+
   vm.startRecording();
   t = Date.now();
   console.log("Starting recording via hotkey...");

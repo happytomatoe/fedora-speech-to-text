@@ -143,7 +143,7 @@ export class ShellHelper {
       await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);
       this.isRecording = false;
     } else {
-      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"mutter-commit"}'`);
+      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"mutter-virtual"}'`);
       this.isRecording = true;
     }
   }
