@@ -1,4 +1,5 @@
 // @ts-check
+// Hotkey preferences UI
 /**
  * Hotkey row widget + capture dialog.
  */
