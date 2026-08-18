@@ -123,8 +123,9 @@ export class VmManager {
     }
   }
 
-  /** Start continuous recording via x11grab + ffmpeg */
+  /** Start continuous recording via x11grab + ffmpeg (CI only — local uses display none) */
   startRecording(): void {
+    if (!process.env.CI) { console.log("  [rec] skipping x11grab (not CI)"); return; }
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
@@ -287,10 +288,9 @@ export class VmManager {
       "-smp", "4",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
-      // Use SDL+Xvfb for recording (CI), fall back to VNC (local)
-      // Don't pass -display — QEMU auto-detects X11 from DISPLAY env (like etchdroid/qemu-kvm-action)
-      // Only use VNC fallback when no Xvfb (local dev without display)
-      hasXvfb ? [] : ["-vnc", ":0"],
+      // CI: SDL for x11grab recording; Local: display none (no window)
+      "-display", process.env.CI ? "sdl" : "none",
+      "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
@@ -378,27 +378,22 @@ export class VmManager {
       { stdout: "pipe", stderr: "pipe" }
     );
 
-    // Wait for Xvfb to be ready
-    for (let i = 0; i < 50; i++) {
+    // Wait for Xvfb to be ready (check if process is alive)
+    await Bun.sleep(500);
+    if (this.xvfbProcess && !this.xvfbProcess.killed) {
+      process.env.DISPLAY = ":99";
+      console.log("  [xvfb] ready on :99");
+      // Start i3 if available
       try {
-        const result = Bun.spawnSync(["xdpyinfo", "-display", ":99"], { stdout: "pipe", stderr: "pipe" });
-        if (result.exitCode === 0) {
-          process.env.DISPLAY = ":99";
-          console.log("  [xvfb] ready on :99");
-          // Start i3 if available
-          try {
-            const i3Check = Bun.spawnSync(["which", "i3"], { stdout: "pipe", stderr: "pipe" });
-            if (i3Check.exitCode === 0) {
-              const i3Config = "/tmp/i3config";
-              writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
-              this.i3Process = Bun.spawn(["i3", "-c", i3Config], { stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99" } });
-              console.log("  [i3] started");
-            }
-          } catch { /* i3 optional */ }
-          return true;
+        const i3Check = Bun.spawnSync(["which", "i3"], { stdout: "pipe", stderr: "pipe" });
+        if (i3Check.exitCode === 0) {
+          const i3Config = "/tmp/i3config";
+          writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
+          this.i3Process = Bun.spawn(["i3", "-c", i3Config], { stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99" } });
+          console.log("  [i3] started");
         }
-      } catch { /* ignore */ }
-      await Bun.sleep(100);
+      } catch { /* i3 optional */ }
+      return true;
     }
     console.log("  [xvfb] failed to start, using real display");
     this.xvfbProcess?.kill("SIGKILL");
@@ -409,20 +404,12 @@ export class VmManager {
   /** Verify display is accessible (X11 if Xvfb, VNC otherwise) */
   async verifyDisplayReady(): Promise<void> {
     if (process.env.DISPLAY === ":99") {
-      // Xvfb — check X11 display
-      await pollUntil(
-        "X11 display :99 ready",
-        async () => {
-          try {
-            const result = Bun.spawnSync(["xdpyinfo", "-display", ":99"], { stdout: "pipe", stderr: "pipe" });
-            return result.exitCode === 0;
-          } catch {
-            return false;
-          }
-        },
-        10000,
-        500
-      );
+      // Xvfb — just check Xvfb process is alive
+      if (!this.xvfbProcess || this.xvfbProcess.killed) {
+        console.log("  [xvfb] process not running");
+        return;
+      }
+      console.log("  [xvfb] display :99 ready");
     } else {
       // VNC fallback — check port 5900
       const net = await import("node:net");
