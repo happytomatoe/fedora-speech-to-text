@@ -1,9 +1,161 @@
 {
-  "$schema": "./node_modules/oxlint/configuration/schema.json",
-  "rules": {
-    "no-empty": "error",
-    "no-unused-vars": "warn",
-    "eqeqeq": "error",
-    "no-console": "off"
-  }
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [],
+  "categories": {
+    "correctness": "off"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "env": {
+    "builtin": true
+  },
+  "overrides": [
+    {
+      "files": [
+        "gnome-ext/**/*.js"
+      ],
+      "rules": {
+        "no-cond-assign": "off",
+        "no-irregular-whitespace": "error",
+        "no-unexpected-multiline": "error",
+        "curly": [
+          "error",
+          "multi-line"
+        ],
+        "guard-for-in": "error",
+        "no-caller": "error",
+        "no-extend-native": "error",
+        "no-extra-bind": "error",
+        "no-multi-str": "off",
+        "no-new-wrappers": "error",
+        "no-throw-literal": "error",
+        "no-with": "error",
+        "prefer-promise-reject-errors": "error",
+        "no-unused-vars": "off",
+        "new-cap": "off",
+        "no-array-constructor": "error",
+        "one-var": "off",
+        "constructor-super": "error",
+        "no-this-before-super": "error",
+        "no-var": "error",
+        "prefer-const": [
+          "error",
+          {
+            "destructuring": "all"
+          }
+        ],
+        "prefer-rest-params": "error",
+        "prefer-spread": "error",
+        "promise/always-return": "error",
+        "promise/no-return-wrap": "error",
+        "promise/param-names": "error",
+        "promise/catch-or-return": "error",
+        "promise/no-nesting": "warn",
+        "promise/no-promise-in-callback": "warn",
+        "promise/no-callback-in-promise": "warn",
+        "promise/avoid-new": "off",
+        "promise/no-new-statics": "error",
+        "promise/valid-params": "warn",
+        "no-empty": [
+          "error",
+          {
+            "allowEmptyCatch": true
+          }
+        ],
+        "no-redeclare": "error",
+        "no-use-before-define": "error",
+        "no-useless-escape": "error",
+        "no-useless-return": "error",
+        "no-void": "error",
+        "no-underscore-dangle": "off",
+        "no-prototype-builtins": "error",
+        "no-restricted-globals": "off",
+        "no-magic-numbers": "off",
+        "no-console": "off",
+        "no-alert": "off",
+        "no-debugger": "error",
+        "no-unused-expressions": "error",
+        "no-return-assign": "error",
+        "no-self-assign": "error",
+        "no-self-compare": "error",
+        "no-sequences": "error",
+        "no-unmodified-loop-condition": "error",
+        "no-unused-labels": "error",
+        "no-useless-call": "error",
+        "no-useless-concat": "error",
+        "radix": "error",
+        "require-await": "error",
+        "yoda": "error",
+        "block-scoped-var": "error",
+        "default-case": "error",
+        "eqeqeq": [
+          "error",
+          "always",
+          {
+            "null": "ignore"
+          }
+        ],
+        "no-else-return": "error",
+        "no-empty-function": "off",
+        "no-empty-pattern": "error",
+        "no-eq-null": "off",
+        "no-eval": "error",
+        "no-global-assign": "error",
+        "no-implicit-coercion": "off",
+        "no-implicit-globals": "off",
+        "no-implied-eval": "error",
+        "no-iterator": "error",
+        "no-labels": "error",
+        "no-lone-blocks": "error",
+        "no-loop-func": "error",
+        "no-new-func": "error",
+        "no-new": "off",
+        "no-param-reassign": "error",
+        "no-proto": "error",
+        "no-script-url": "error",
+        "vars-on-top": "error",
+        "prefer-arrow-callback": "error",
+        "prefer-destructuring": "off",
+        "prefer-numeric-literals": "error",
+        "prefer-template": "error",
+        "arrow-body-style": "off",
+        "no-class-assign": "error",
+        "no-dupe-class-members": "error",
+        "no-duplicate-imports": "off",
+        "no-restricted-imports": "off",
+        "no-useless-computed-key": "error",
+        "no-useless-constructor": "error",
+        "no-useless-rename": "error",
+        "object-shorthand": "error",
+        "typescript/no-floating-promises": "error",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/ban-ts-comment": "off",
+        "typescript/dot-notation": "error"
+      },
+      "globals": {
+        "imports": "readonly",
+        "Main": "readonly",
+        "MessageTray": "readonly",
+        "St": "readonly",
+        "Clutter": "readonly",
+        "Meta": "readonly",
+        "Shell": "readonly",
+        "Atk": "readonly",
+        "console": "readonly",
+        "TextDecoder": "readonly",
+        "TextEncoder": "readonly",
+        "log": "readonly"
+      },
+      "env": {
+        "es2022": true
+      },
+      "plugins": [
+        "promise",
+        "typescript"
+      ]
+    }
+  ]
 }
