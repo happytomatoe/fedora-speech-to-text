@@ -143,6 +143,26 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         );
         recordingGroup.add(inhibitSleepRow);
 
+        // Voice Activity Detection toggle
+        const vadRow = new Adw.SwitchRow({
+            title: _('Voice Activity Detection'),
+            subtitle: _(
+                'Use neural VAD to detect speech and automatically control recording'
+            ),
+        });
+        settings.bind(
+            'vad-enabled',
+            vadRow,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        recordingGroup.add(vadRow);
+        vadRow.connect('notify::active', () => {
+            _syncAllToConfig().catch(e =>
+                console.error('VoiceToText: sync failed:', e)
+            );
+        });
+
         // Decrease speaker volume during recording
         const decreaseVolumeRow = new Adw.SpinRow({
             title: _('Decrease Speaker Volume'),

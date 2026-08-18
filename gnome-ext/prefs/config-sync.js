@@ -40,7 +40,71 @@ const CONFIG_SYNC_MAP = {
         type: 'string',
     },
     profiling: {path: ['profiling'], type: 'boolean'},
+    'vad-enabled': {path: ['engine', 'vad_enabled'], type: 'boolean'},
 };
+
+// Default config values written to config.yaml when creating or updating.
+// These match the schema defaults and engine.py fallbacks.
+const DEFAULT_CONFIG = {
+    transcription: {
+        mode: 'batch',
+        provider: 'voxtral',
+        language: 'en',
+        hybrid: {
+            streaming_provider: 'voxtral',
+            batch_provider: 'voxtral',
+        },
+    },
+    audio: {
+        sample_rate: 16000,
+        channels: 1,
+        block_size: 2048,
+        smooth_factor: 0.7,
+        bluetooth_mic: true,
+        speaker: {
+            decrease_volume: 50,
+        },
+    },
+    engine: {
+        stop_timeout: 300,
+        output_method: 'mutter-virtual',
+        vad_enabled: true,
+    },
+    logging: {
+        file: '/tmp/voice-to-text.log',
+        level: 'info',
+    },
+    postprocess: {
+        enabled: true,
+        language: null,
+        custom_words: [],
+        custom_words_threshold: 0.5,
+    },
+    profiling: false,
+};
+
+/**
+ * Deep merge: write src into dest, creating nested objects as needed.
+ * Arrays are replaced, not merged.
+ * @param {object} dest
+ * @param {object} src
+ */
+function deepMerge(dest, src) {
+    for (const [key, val] of Object.entries(src)) {
+        if (val != null && typeof val === 'object' && !Array.isArray(val)) {
+            if (
+                dest[key] == null ||
+                typeof dest[key] !== 'object' ||
+                Array.isArray(dest[key])
+            ) {
+                dest[key] = {};
+            }
+            deepMerge(dest[key], val);
+        } else {
+            dest[key] = val;
+        }
+    }
+}
 
 function readConfigYaml() {
     const file = Gio.File.new_for_path(CONFIG_PATH);
@@ -181,17 +245,31 @@ export function syncFromConfig(settings) {
 }
 
 /**
+ * Deep clone an object (structuredClone not available in GJS).
+ * @param {object} obj
+ * @returns {object}
+ */
+function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
+/**
  * Write all mapped settings from GSettings to config.yaml.
+ * On first run (no config file), writes DEFAULT_CONFIG + GSettings overrides.
+ * On subsequent runs, deep-merges defaults so new keys appear.
  * @param {Gio.Settings} settings
  */
 export function syncToConfig(settings) {
-    const config = readConfigYaml();
-    if (!config) {
-        console.error(
-            'VoiceToText: syncToConfig failed - cannot read config.yaml'
-        );
-        throw new Error('Failed to read config.yaml for sync');
+    // Start with defaults so all keys are present in config.yaml
+    const config = deepClone(DEFAULT_CONFIG);
+
+    // Layer on existing config (preserves provider-specific sections, etc.)
+    const existing = readConfigYaml();
+    if (existing) {
+        deepMerge(config, existing);
     }
+
+    // Overlay GSettings values
     for (const [gkey, {path, type}] of Object.entries(CONFIG_SYNC_MAP)) {
         let value;
         if (type === 'strv') value = settings.get_strv(gkey);
