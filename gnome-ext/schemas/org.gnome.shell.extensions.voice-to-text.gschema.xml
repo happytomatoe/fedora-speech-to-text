@@ -68,5 +68,10 @@
       <summary>Enable profiling logs</summary>
       <description>Show timing information in GNOME Shell logs for debugging performance</description>
     </key>
+    <key name="vad-enabled" type="b">
+      <default>true</default>
+      <summary>Enable Voice Activity Detection</summary>
+      <description>Use Silero neural VAD to detect when speech starts/stops, enabling automatic recording control</description>
+    </key>
   </schema>
 </schemalist>

@@ -234,12 +234,16 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             }
         });
 
-        // Seed GSettings from config.yaml on load
+        // Seed GSettings from config.yaml on load; create config if missing
         const _initSync = async () => {
             const {config, drifted} = await syncFromConfig(settings);
             if (config && drifted.length > 0) {
                 syncWarningRow.visible = true;
                 _configSyncFailed.v = true;
+            }
+            // Create config.yaml with defaults if it doesn't exist
+            if (!config) {
+                await syncToConfig(settings);
             }
             populateCustomWords();
         };
