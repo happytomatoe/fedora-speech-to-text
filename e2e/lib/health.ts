@@ -102,7 +102,8 @@ async function getDbusAddr(exec: (cmd: string) => Promise<string>): Promise<stri
       `cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-`
     )).trim();
   } catch {
-    return "unix:path=/run/user/1000/bus";
+    const uid = (await exec("id -u")).trim();
+    return `unix:path=/run/user/${uid}/bus`;
   }
 }
 

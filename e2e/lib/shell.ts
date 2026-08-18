@@ -41,7 +41,8 @@ export class ShellHelper {
   private async getShellDbusAddr(): Promise<string> {
     if (this.dbusAddr) return this.dbusAddr;
     // D-Bus session bus is always at /run/user/<uid>/bus for the test user
-    this.dbusAddr = "unix:path=/run/user/1000/bus";
+    const uid = (await this.exec("id -u")).trim();
+    this.dbusAddr = `unix:path=/run/user/${uid}/bus`;
     return this.dbusAddr;
   }
 
