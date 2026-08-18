@@ -81,11 +81,20 @@ export class VmManager {
   private async fetchScreenshot(remotePath: string, localPath: string): Promise<boolean> {
     try {
       const b64 = await this.shell.exec(`base64 < ${remotePath}`);
+      if (!b64 || b64.trim().length === 0) {
+        console.log(`  [rec] fetchScreenshot: empty base64 from ${remotePath}`);
+        return false;
+      }
       const buf = Buffer.from(b64, "base64");
+      if (buf.length === 0) {
+        console.log(`  [rec] fetchScreenshot: decoded to 0 bytes`);
+        return false;
+      }
       const { writeFileSync } = await import("node:fs");
       writeFileSync(localPath, buf);
       return true;
-    } catch {
+    } catch (e) {
+      console.log(`  [rec] fetchScreenshot error: ${e}`);
       return false;
     }
   }
@@ -97,7 +106,8 @@ export class VmManager {
     const remotePath = "/tmp/e2e-screenshot.png";
     try {
       // Use portal screenshot for Wayland compositor capture
-      await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath}`);
+      const portalResult = await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath} 2>&1 || true`);
+      console.log(`  [rec] portal result: ${portalResult.substring(0, 100)}`);
       const ok = await this.fetchScreenshot(remotePath, localPath);
       if (!ok) throw new Error("fetch failed");
       console.log(`  [rec] ${label}`);
@@ -119,10 +129,27 @@ export class VmManager {
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
     const videoPath = join(dir, "recording.mp4");
+    const ffmpegArgs = ["-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath];
+    console.log(`  [rec] ffmpeg args: ${ffmpegArgs.join(" ")}`);
     this.recordingFfmpeg = Bun.spawn(
-      ["ffmpeg", "-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath],
+      ["ffmpeg", ...ffmpegArgs],
       { stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
+    // Log ffmpeg stderr for debugging
+    if (this.recordingFfmpeg.stderr) {
+      const reader = this.recordingFfmpeg.stderr.getReader();
+      const decoder = new TextDecoder();
+      (async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          if (text.includes("frame=") || text.includes("error") || text.includes("x11grab")) {
+            console.log(`  [rec] ffmpeg: ${text.trim().substring(0, 200)}`);
+          }
+        }
+      })();
+    }
     console.log("  [rec] started ffmpeg x11grab capture");
   }
 
