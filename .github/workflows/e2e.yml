@@ -148,6 +148,28 @@ jobs:
       - name: Run E2E tests
         run: cd e2e && bun run e2e.ts --shutdown --timeout 300
 
+      # Verify recording quality
+      - name: Verify recording
+        if: always()
+        run: |
+          REC=$(ls e2e/qemu-images/persistent-run/*/output/recording/recording.mkv 2>/dev/null | head -1)
+          if [ -z "$REC" ]; then
+            echo "ERROR: No recording.mkv found"
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$REC")
+          echo "Recording size: $SIZE bytes"
+          if [ "$SIZE" -lt 51200 ]; then
+            echo "ERROR: Recording too small (<50KB): $SIZE bytes"
+            exit 1
+          fi
+          # Verify it's a valid video
+          ffprobe -v error -show_entries format=duration,size -of csv=p=0 "$REC" || {
+            echo "ERROR: ffprobe failed — recording is not a valid video"
+            exit 1
+          }
+          echo "Recording OK: $(ffprobe -v error -show_entries format=duration -of csv=p=0 "$REC")s, $SIZE bytes"
+
 
 
       # Save Parakeet models to cache (only on first run)
