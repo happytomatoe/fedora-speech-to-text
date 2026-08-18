@@ -281,10 +281,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await shell.exec(`tmux send-keys -t ${tmuxCfg.session} C-u`);
   await Bun.sleep(200);
   // Show service log in terminal so test activity is visible on screen
-  await tmux.sendKeys(tmuxCfg, "tail");
-  await tmux.sendKeys(tmuxCfg, " ");
-  await tmux.sendKeys(tmuxCfg, "-f /tmp/voice-service.log");
-  await tmux.sendKeys(tmuxCfg, "Enter");
+  const tmuxSession = tmuxCfg.session;
+  await shell.exec(`tmux send-keys -t ${tmuxSession} 'tail -f /tmp/voice-service.log' Enter`);
   await Bun.sleep(1000);
   vm.startRecording();
   t = Date.now();
@@ -340,7 +338,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   timing("transcription", t);
 
   // Stop tail -f in terminal
-  await tmux.sendKeys(tmuxCfg, "C-c");
+  await shell.exec(`tmux send-keys -t ${tmuxSession} C-c`);
   await Bun.sleep(300);
 
   t = Date.now();
