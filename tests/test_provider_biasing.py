@@ -142,7 +142,7 @@ class TestGroqBiasing:
 
         captured: dict = {}
 
-        async def _fake_create(**kwargs: object) -> MagicMock:
+        async def _fake_create(**kwargs: object) -> str:
             captured.update(kwargs)
             return "hello"
 
@@ -160,7 +160,7 @@ class TestGroqBiasing:
 
         captured: dict = {}
 
-        async def _fake_create(**kwargs: object) -> MagicMock:
+        async def _fake_create(**kwargs: object) -> str:
             captured.update(kwargs)
             return "hello"
 
