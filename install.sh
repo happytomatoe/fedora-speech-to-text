@@ -47,18 +47,13 @@ install_prerequisites() {
   install_pkg libsecret
 
   if ! command_exists dotool; then
-    if [ "$UPGRADE" = true ]; then
-      echo ""
-      echo "WARNING: dotool is not installed."
-    else
-      echo ""
-      echo "dotool is a keyboard input tool. We can build it from source now"
-      echo "or you can use other output methods like the ones Fedora's internal API provides by default."
-      read -p "Install dotool now? [Y/n] " -n 1 -r
-      echo
-      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
-      fi
+    echo ""
+    echo "dotool is a keyboard input tool. We can build it from source now"
+    echo "or you can use other output methods like the ones Fedora's internal API provides by default."
+    read -p "Install dotool now? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+      install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
     fi
   fi
 }
@@ -213,13 +208,12 @@ install_gnome_extension() {
 
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
-    rsync -av --delete \
-      --include='prefs/' --include='prefs/**' \
-      --include='schemas/' --include='schemas/**' \
-      --include='vendor/' --include='vendor/**' \
-      --include='*.js' --include='*.json' --include='*.css' \
-      --exclude='*' \
-      "$LOCAL_DIR/" "$INSTALL_DIR/"
+    rm -rf "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR/prefs" "$INSTALL_DIR/schemas"
+    cp "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$LOCAL_DIR"/*.css "$INSTALL_DIR/" 2>/dev/null || true
+    cp "$LOCAL_DIR/prefs/"*.js "$INSTALL_DIR/prefs/" 2>/dev/null || true
+    cp "$LOCAL_DIR/schemas/"*.xml "$INSTALL_DIR/schemas/" 2>/dev/null || true
+    cp -r "$LOCAL_DIR/vendor" "$INSTALL_DIR/" 2>/dev/null || true
     glib-compile-schemas "$INSTALL_DIR/schemas/"
   else
     RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
@@ -365,18 +359,12 @@ EOF
 
 print_summary() {
   echo ""
-  if [ "$UPGRADE" = true ]; then
-    echo "=== Upgrade Complete ==="
-  else
-    echo "=== Installation Complete ==="
-  fi
+  echo "=== Installation Complete ==="
   echo ""
   echo "Next steps:"
   echo "  1. Restart GNOME Shell (Alt+F2, r, Enter on X11) or log out/in on Wayland"
-  if [ "$UPGRADE" = false ]; then
-    echo "  2. Set your API keys in environment variables or via secret-tool"
-    echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
-  fi
+  echo "  2. Set your API keys in environment variables or via secret-tool"
+  echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
   echo ""
   echo "Useful commands:"
   echo "  ps aux | grep voice-to-text-dbus    # Check if service is running"
@@ -402,11 +390,6 @@ if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
   exit 1
 fi
 
-# Auto-detect: upgrade if extension or Python package already exists
-UPGRADE=false
-if [ -d "$INSTALL_DIR" ] || command_exists voice-to-text-dbus; then
-  UPGRADE=true
-fi
 # --- Main ---
 main() {
   detect_os
@@ -417,11 +400,9 @@ main() {
   install_dbus_services
   install_gnome_extension
   enable_extension
-  if [ "$UPGRADE" = false ]; then
-    configure_api_key
-  fi
+  configure_api_key
   install_config
-  configure_dotool
+  command_exists dotool && configure_dotool
   print_summary
 }
 
