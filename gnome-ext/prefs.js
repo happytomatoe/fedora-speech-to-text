@@ -18,6 +18,7 @@ import {
 } from './prefs/provider-row.js';
 import {createCustomWordsGroup} from './prefs/custom-words-row.js';
 
+
 export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
