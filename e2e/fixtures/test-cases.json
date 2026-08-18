@@ -2,7 +2,7 @@
   "test-cases": [
     {
       "file": "test-01-weather.wav",
-      "expected": "the weather to nadin sunny with a high on 75 degrees"
+      "expected": "the weather to nadien sunny with a high on 75 degrees"
     },
     {
       "file": "test-02-reminder.wav",
