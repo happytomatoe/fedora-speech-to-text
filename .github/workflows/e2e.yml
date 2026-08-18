@@ -111,10 +111,7 @@ jobs:
           fi
 
       - name: Install just
-        run: |
-          if [ ! -f /usr/local/bin/just ]; then
-            curl -sSfL https://github.com/casey/just/releases/download/v1.58.0/just-1.58.0-x86_64-unknown-linux-musl.tar.gz | sudo tar xz -C /usr/local/bin
-          fi
+        run: uv tool install rust-just@1.58.0
 
       # Cache all E2E files
       - name: Restore E2E files from cache

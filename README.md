@@ -24,6 +24,7 @@ This repo contains gnome extension and python application
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- [just](https://just.systems/) — install via `uv tool install rust-just`
 - [Groq API key](https://console.groq.com/keys) OR [Voxtral API key](https://mistral.ai) OR [ElevenLabs API key](https://elevenlabs.io/app/settings/api-keys)
 - Linux with `xclip`/`xsel` (X11) if you'll use clipboard functionality
 
