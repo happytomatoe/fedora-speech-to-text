@@ -94,20 +94,20 @@ jobs:
       - name: Install E2E dependencies
         run: cd e2e && bun install
 
-      # Cache npm packages (filen CLI)
-      - name: Restore npm cache
-        id: cache-npm
+      # Cache bun global installs (filen CLI)
+      - name: Restore bun cache
+        id: cache-bun
         uses: actions/cache/restore@v4
         with:
-          path: ~/.npm
-          key: npm-global-v1
+          path: ~/.bun/install/cache
+          key: bun-global-v1
           restore-keys: |
-            npm-global-
+            bun-global-
 
       - name: Install Filen CLI
         run: |
           if ! command -v filen &>/dev/null; then
-            npm install -g @filen/cli
+            bun install -g @filen/cli
           fi
 
       - name: Install just
@@ -239,14 +239,14 @@ jobs:
             /var/lib/apt/lists
           key: apt-ubuntu-latest-v1
 
-      # Save npm cache
-      - name: Save npm cache
-        if: steps.cache-npm.outputs.cache-hit != 'true'
+      # Save bun cache
+      - name: Save bun cache
+        if: steps.cache-bun.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
-          path: ~/.npm
-          key: npm-global-v1
+          path: ~/.bun/install/cache
+          key: bun-global-v1
 
       # Always upload artifacts (for debugging both failures and flaky passes)
       # Each file as separate artifact so they can be downloaded individually
