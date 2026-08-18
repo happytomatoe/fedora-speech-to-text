@@ -110,6 +110,8 @@ jobs:
             bun install -g @filen/cli
           fi
 
+      - uses: astral-sh/setup-uv@v4
+
       - name: Install just
         run: uv tool install rust-just@1.58.0
 
