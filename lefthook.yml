@@ -20,6 +20,8 @@ pre-commit:
     oxlint-e2e:
       run: npx oxlint -c .oxlintrc.json {staged_files}
       glob: "e2e/**/*.ts"
+      depends: ["npm-install"]
+      
     npm-install:
       run: npm install --ignore-scripts 2>/dev/null || true
       glob: "package.json"
