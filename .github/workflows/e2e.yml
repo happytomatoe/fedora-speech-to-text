@@ -1,4 +1,4 @@
-name: E2E Tests
+name: CI
 
 on:
   push:
@@ -7,6 +7,27 @@ on:
     branches: [main]
 
 jobs:
+  # Mutation testing — reports hollow tests but never fails CI
+  gutcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: uv sync
+      - run: cd e2e && bun install
+      - uses: beepometer/gutcheck@v0
+        with:
+          fail-on-hollow: false
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 10
