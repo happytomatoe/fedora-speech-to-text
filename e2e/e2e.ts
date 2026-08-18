@@ -280,6 +280,10 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   }
   await shell.exec(`tmux send-keys -t ${tmuxCfg.session} C-u`);
   await Bun.sleep(200);
+  // Show service log in terminal so test activity is visible on screen
+  await tmux.sendKeys(tmuxCfg, `tail -f /tmp/voice-service.log`);
+  await tmux.sendKeys(tmuxCfg, "Enter");
+  await Bun.sleep(1000);
   vm.startRecording();
   t = Date.now();
   console.log("Starting recording via hotkey...");
@@ -332,6 +336,10 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     console.log("  Transcription polling timed out");
   }
   timing("transcription", t);
+
+  // Stop tail -f in terminal
+  await tmux.sendKeys(tmuxCfg, "C-c");
+  await Bun.sleep(300);
 
   t = Date.now();
   await vm.captureFrame("05-transcription-received");
