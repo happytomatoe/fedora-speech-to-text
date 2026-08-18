@@ -46,7 +46,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --locked
-          npm ci
+          npm install
 
       - name: Get Silero model URL from source
         run: |
