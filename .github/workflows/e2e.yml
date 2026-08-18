@@ -242,7 +242,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 02-voice-service-log
-          path: e2e/qemu-images/persistent-run/main/output/vm-logs/voice-service.log
+          path: e2e/output/vm-logs/voice-service.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -251,7 +251,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 03-gnome-shell-log
-          path: e2e/qemu-images/persistent-run/main/output/vm-logs/gnome-shell.log
+          path: e2e/output/vm-logs/gnome-shell.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -269,7 +269,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 05-screenshots
-          path: e2e/qemu-images/persistent-run/main/output/test-cases
+          path: e2e/output/test-cases
           if-no-files-found: warn
           retention-days: 7
 
