@@ -24,6 +24,11 @@ AutomaticLogin=testuser
 EOF
 sync
 
+# Restart GDM to pick up the new config (kills current session, but SSH survives)
+echo "--- Restarting GDM ---"
+sudo systemctl restart gdm 2>/dev/null || true
+sleep 2
+
 echo "--- Memory before gnome-shell ---"
 free -m | head -2
 

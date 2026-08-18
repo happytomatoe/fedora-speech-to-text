@@ -273,7 +273,9 @@ export class VmManager {
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
       // Use SDL+Xvfb for recording (CI), fall back to VNC (local)
-      hasXvfb ? ["-display", "sdl"] : ["-vnc", ":0"],
+      // Don't pass -display — QEMU auto-detects X11 from DISPLAY env (like etchdroid/qemu-kvm-action)
+      // Only use VNC fallback when no Xvfb (local dev without display)
+      hasXvfb ? [] : ["-vnc", ":0"],
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,

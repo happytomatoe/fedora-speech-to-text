@@ -44,6 +44,8 @@ echo "Using virt-customize to apply optimizations..."
 
 virt-customize -a "$BASE_IMAGE" \
     --run-command 'touch /etc/cloud/cloud-init.disabled' \
+    --run-command 'mkdir -p /etc/gdm && echo -e "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser" > /etc/gdm/custom.conf' \
+    --run-command 'systemctl set-default graphical.target' \
     --run-command 'grep -q "^#*UseDNS" /etc/ssh/sshd_config && sed -i "s/^#*UseDNS .*/UseDNS no/" /etc/ssh/sshd_config || echo "UseDNS no" >> /etc/ssh/sshd_config' \
     --run-command 'rm -f /etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service' \
     --install tmux \
