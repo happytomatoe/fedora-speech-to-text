@@ -11,6 +11,8 @@ jobs:
   gutcheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
