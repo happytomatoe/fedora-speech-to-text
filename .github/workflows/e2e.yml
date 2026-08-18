@@ -124,7 +124,7 @@ jobs:
             e2e/qemu-images/golden-gnome-deps.qcow2
             e2e/qemu-images/id_ed25519
             e2e/qemu-images/id_ed25519.pub
-          key: e2e-golden-v1
+          key: e2e-golden-v2
           restore-keys: |
             e2e-golden-
 
@@ -236,7 +236,7 @@ jobs:
             e2e/qemu-images/golden-gnome-deps.qcow2
             e2e/qemu-images/id_ed25519
             e2e/qemu-images/id_ed25519.pub
-          key: e2e-golden-v1
+          key: e2e-golden-v2
 
       # Save apt cache
       - name: Save apt cache
