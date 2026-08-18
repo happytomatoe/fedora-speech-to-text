@@ -112,6 +112,12 @@ This project uses [python-semantic-release](https://python-semantic-release.read
 
 **Configuration:** `pyproject.toml` → `[tool.semantic_release]`
 
+## Git Hooks
+
+- Never bypass git hooks (`--no-verify`, `sed` on lefthook.yml, etc.)
+- If a hook fails, report the failure and ask how to proceed
+- Hooks exist to prevent broken code from being pushed
+
 ## JavaScript/TypeScript Error Handling (gnome-ext/)
 
 - **Never leave catch blocks empty.** At minimum, log the error: `catch (e) { console.error(e); }`
