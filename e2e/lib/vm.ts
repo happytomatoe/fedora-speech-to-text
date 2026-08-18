@@ -158,7 +158,7 @@ export class VmManager {
     if (!this.recordingFfmpeg) return null;
     const proc = this.recordingFfmpeg;
     this.recordingFfmpeg = null;
-    const videoPath = join(this.config.run.outputDir, "recording", "recording.mp4");
+    const videoPath = join(this.config.run.outputDir, "recording", "recording.mkv");
 
     // Send 'q' to ffmpeg to stop gracefully
     if (proc.stdin) {
