@@ -44,6 +44,7 @@ parakeet:
   model: "nvidia/parakeet-tdt-0.6b-v3"
   http_endpoint: "http://localhost:5092"
   timeout_seconds: 30
+  # custom_words_file: "src/voice_to_text/parakeet_custom_words.txt"  # one word per line, # for comments
 
 elevenlabs:
   api_key_env: "ELEVENLABS_API_KEY"

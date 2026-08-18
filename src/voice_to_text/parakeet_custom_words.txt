@@ -1,0 +1,791 @@
+# Parakeet custom words for voice-to-text biasing
+# One word or phrase per line, # for comments
+# Used as initial_prompt to bias transcription toward tech terms
+
+# Programming languages
+JavaScript
+TypeScript
+Python
+Rust
+Go
+Golang
+Java
+Kotlin
+Swift
+C++
+C#
+Ruby
+PHP
+Scala
+Haskell
+Elixir
+Clojure
+R
+Julia
+Lua
+Perl
+Zig
+Nim
+OCaml
+F#
+Erlang
+Dart
+Assembly
+MATLAB
+SAS
+Fortran
+COBOL
+Pascal
+Ada
+Lisp
+Scheme
+Racket
+ClojureScript
+CoffeeScript
+Elm
+ReasonML
+PureScript
+Crystal
+V
+Solidity
+
+# Frameworks and libraries
+React
+Vue
+Angular
+Svelte
+Next.js
+Nuxt
+Remix
+Astro
+Gatsby
+SvelteKit
+Express
+Fastify
+Koa
+Hapi
+NestJS
+Django
+Flask
+FastAPI
+Rails
+Laravel
+Spring
+SpringBoot
+ASP.NET
+jQuery
+Redux
+MobX
+Zustand
+Jotai
+Recoil
+MobX
+Tailwind
+Bootstrap
+Material-UI
+Chakra
+Mantine
+Ant Design
+Shadcn
+Vuetify
+Quasar
+Ionic
+ReactNative
+Flutter
+Electron
+Tauri
+Capacitor
+Cordova
+Xamarin
+Maui
+
+# Cloud and infrastructure
+AWS
+Azure
+GCP
+Google Cloud
+DigitalOcean
+Linode
+Vultr
+Heroku
+Vercel
+Netlify
+Cloudflare
+Firebase
+Supabase
+Appwrite
+Railway
+Render
+Fly.io
+Deno
+Bun
+Node.js
+npm
+yarn
+pnpm
+pnpm
+Docker
+Kubernetes
+K8s
+Helm
+Terraform
+Pulumi
+Ansible
+Chef
+Puppet
+Vagrant
+Packer
+Consul
+Vault
+Nomad
+Consul
+Vagrant
+
+# DevOps and CI/CD
+GitHub
+GitLab
+Bitbucket
+Jenkins
+CircleCI
+TravisCI
+GitLab CI
+ArgoCD
+FluxCD
+Spinnaker
+Tecton
+Octopus
+Azure DevOps
+AWS CodePipeline
+CodeBuild
+CodeDeploy
+CodeCommit
+
+# Databases
+PostgreSQL
+MySQL
+MariaDB
+SQLite
+MongoDB
+Redis
+Cassandra
+DynamoDB
+CouchDB
+Neo4j
+InfluxDB
+TimescaleDB
+ClickHouse
+PlanetScale
+Supabase
+Firebase
+Firestore
+CockroachDB
+YugabyteDB
+ScyllaDB
+Memcached
+Elasticsearch
+OpenSearch
+Solr
+RabbitMQ
+Kafka
+NATS
+ActiveMQ
+ZeroMQ
+Pulsar
+
+# AI and ML
+TensorFlow
+PyTorch
+Keras
+Scikit-learn
+Pandas
+NumPy
+SciPy
+Matplotlib
+Seaborn
+Plotly
+Jupyter
+JupyterHub
+Colab
+Hugging Face
+Transformers
+LangChain
+LlamaIndex
+OpenAI
+Anthropic
+Claude
+GPT
+GPT-4
+GPT-3
+Gemini
+Llama
+Mistral
+Stable Diffusion
+Midjourney
+DALL-E
+Whisper
+BERT
+RoBERTa
+T5
+BLOOM
+Falcon
+Vicuna
+Alpaca
+NeMo
+DeepSpeed
+Ray
+MLflow
+Weights Biases
+WandB
+Kubeflow
+Seldon
+BentoML
+ONNX
+TensorRT
+TRT
+
+# Networking and protocols
+HTTP
+HTTPS
+HTTP/2
+HTTP/3
+QUIC
+TCP
+UDP
+WebSocket
+gRPC
+REST
+GraphQL
+SOAP
+MQTT
+AMQP
+STOMP
+DNS
+DHCP
+NAT
+VPN
+SSH
+TLS
+SSL
+mTLS
+OAuth
+OAuth2
+OIDC
+SAML
+LDAP
+Kerberos
+JWT
+CORS
+CSRF
+XSS
+SQL
+
+# Operating systems
+Linux
+Ubuntu
+Debian
+Fedora
+CentOS
+RHEL
+Rocky
+AlmaLinux
+Arch
+Manjaro
+NixOS
+Guix
+Alpine
+Gentoo
+FreeBSD
+OpenBSD
+NetBSD
+macOS
+Windows
+ChromeOS
+Android
+iOS
+iPadOS
+watchOS
+tvOS
+
+# GNOME and desktop
+GNOME
+GTK
+GTK3
+GTK4
+GLib
+GObject
+GJS
+DBus
+Flatpak
+Snap
+Pipewire
+PulseAudio
+ALSA
+Wayland
+X11
+Mutter
+MutterVirtual
+Clutter
+Cogl
+Graphene
+GSound
+GVDB
+Tracker
+Nautilus
+Gedit
+GNOME Terminal
+GNOME Builder
+GNOME Boxes
+GNOME Console
+GNOME Text Editor
+GNOME Files
+GNOME Contacts
+GNOME Calendar
+GNOME Weather
+GNOME Maps
+GNOME Music
+GNOME Videos
+GNOME Photos
+GNOME Disks
+GNOME Tweaks
+GNOME Extensions
+GNOME Shell
+GDM
+Mutter
+Wayland
+
+# Version control
+Git
+GitHub
+GitLab
+Bitbucket
+SVN
+Mercurial
+Perforce
+Bazaar
+Fossil
+
+# Editors and IDEs
+VS Code
+Vim
+Neovim
+Emacs
+Sublime
+Atom
+Notepad++
+IntelliJ
+PyCharm
+WebStorm
+Eclipse
+Xcode
+Visual Studio
+Android Studio
+Cursor
+Windsurf
+Zed
+Lapce
+
+# Testing
+Jest
+Mocha
+Chai
+Vitest
+Playwright
+Cypress
+Selenium
+Puppeteer
+pytest
+unittest
+nose
+RSpec
+JUnit
+TestNG
+xUnit
+NUnit
+Mocha
+Jasmine
+Karma
+Storybook
+Chromatic
+Playwright
+Cypress
+
+# API and architecture
+RESTful
+GraphQL
+gRPC
+WebSocket
+Server-Sent Events
+SSE
+Long Polling
+Pub-Sub
+Event-Driven
+Microservices
+Monolith
+Serverless
+Edge Computing
+CDN
+API Gateway
+Load Balancer
+Reverse Proxy
+Circuit Breaker
+Saga Pattern
+CQRS
+Event Sourcing
+Domain-Driven Design
+DDD
+Twelve-Factor
+
+# Security
+OWASP
+SAST
+DAST
+SCA
+SBOM
+CVE
+NVD
+Zero Trust
+RBAC
+ABAC
+IAM
+MFA
+2FA
+TOTP
+HOTP
+FIDO2
+WebAuthn
+Passkeys
+YubiKey
+GPG
+PGP
+SSH
+TLS
+mTLS
+Vault
+Keycloak
+Auth0
+Cognito
+Firebase Auth
+
+# Data formats
+JSON
+YAML
+TOML
+XML
+CSV
+TSV
+Parquet
+Avro
+Protocol Buffers
+MessagePack
+BSON
+CBOR
+Cap'n Proto
+FlatBuffers
+
+# Build tools
+Webpack
+Vite
+Rollup
+esbuild
+SWC
+Babel
+Turbopack
+Parcel
+Grunt
+Gulp
+Make
+CMake
+Bazel
+Gradle
+Maven
+Leiningen
+Mix
+Rake
+Bundler
+Cargo
+Go build
+CMake
+Meson
+Ninja
+
+# Container and orchestration
+Docker
+Podman
+LXC
+LXD
+containerd
+CRI-O
+Buildah
+Skopeo
+Kaniko
+Helm
+Kustomize
+ArgoCD
+Flux
+Rancher
+OpenShift
+EKS
+AKS
+GKE
+Docker Swarm
+Nomad
+
+# Monitoring and observability
+Prometheus
+Grafana
+Datadog
+New Relic
+Splunk
+Elastic Stack
+ELK
+EFK
+Jaeger
+Zipkin
+OpenTelemetry
+OpenTracing
+OpenMetrics
+Loki
+Tempo
+Mimir
+Thanos
+Cortex
+AlertManager
+PagerDuty
+OpsGenie
+Sentry
+Honeycomb
+Lightstep
+Dynatrace
+AppDynamics
+New Relic
+
+# Collaboration
+Slack
+Discord
+Teams
+Zoom
+Google Meet
+Notion
+Confluence
+Jira
+Linear
+Asana
+Trello
+Monday
+ClickUp
+Figma
+Sketch
+InVision
+Miro
+Mural
+Loom
+Cal.com
+Calendly
+
+# File systems and storage
+NFS
+CIFS
+SMB
+FUSE
+ext4
+XFS
+Btrfs
+ZFS
+APFS
+NTFS
+FAT32
+exFAT
+MinIO
+Ceph
+GlusterFS
+SeaweedFS
+Longhorn
+Rook
+OpenEBS
+
+# Streaming and media
+FFmpeg
+GStreamer
+PipeWire
+PulseAudio
+ALSA
+JACK
+OBS
+Streamlabs
+Twitch
+YouTube
+Spotify
+Podcast
+WebRTC
+ORTC
+HLS
+DASH
+RTMP
+RTSP
+SRT
+H.264
+H.265
+HEVC
+VP8
+VP9
+AV1
+Opus
+Vorbis
+AAC
+MP3
+FLAC
+WAV
+OGG
+
+# Misc tech
+API
+SDK
+CLI
+TUI
+GUI
+IDE
+CI/CD
+DevOps
+SRE
+MLOps
+DataOps
+FinOps
+GitOps
+Platform Engineering
+Site Reliability
+Chaos Engineering
+Observability
+Telemetry
+Profiling
+Benchmarking
+Load Testing
+Stress Testing
+A/B Testing
+Canary Deployment
+Blue-Green Deployment
+Rolling Update
+Feature Flag
+Feature Toggle
+Dark Launch
+Shadow Traffic
+Synthetic Monitoring
+Real User Monitoring
+RUM
+APM
+SLA
+SLO
+SLI
+Error Budget
+Incident Response
+Postmortem
+Runbook
+Playbook
+On-Call
+Escalation
+
+# Companies and products
+GitHub
+GitLab
+Atlassian
+HashiCorp
+Elastic
+Confluent
+MongoDB
+Redis
+Elastic
+Grafana Labs
+Palo Alto
+CrowdStrike
+Cloudflare
+Fastly
+Akamai
+Vercel
+Netlify
+Deno
+Bun
+Stripe
+Plaid
+Twilio
+SendGrid
+Auth0
+Okta
+Ping Identity
+1Password
+Dashlane
+NordVPN
+ExpressVPN
+
+# Abbreviations and acronyms
+ID
+UUID
+GUID
+URL
+URI
+URN
+API
+SDK
+CLI
+TUI
+GUI
+IDE
+CI/CD
+VCS
+DBA
+ORM
+CRUD
+ACID
+BASE
+CAP
+RPC
+MVC
+MVVM
+MVP
+VIPER
+Redux
+React
+DOM
+Virtual DOM
+VDOM
+SSR
+SSG
+ISR
+CSR
+SPA
+MPA
+JAMstack
+LAMP
+LEMP
+MEAN
+MERN
+PEAN
+JENV
+NVM
+RBENV
+PYENV
+ASDF
+MISE
+DEVENV
+DIRENV
+NIX
+GUIX
+FHS
+LSB
+POSIX
+IEEE
+IETF
+W3C
+WHATWG
+TC39
+ECMA
+ISO
+ANSI
+BSD
+GPL
+MIT
+Apache
+ISC
+MPL
+LGPL
+AGPL
+Unlicense
+CC0
