@@ -115,35 +115,18 @@ jobs:
       - name: Install just
         run: uv tool install rust-just@1.58.0
 
-      # Cache golden image (3.4GB) + SSH keys — skips Filen download on cache hit
+      # Cache golden image (3.4GB) — SSH keys downloaded from Filen by qemu-e2e-setup
       - name: Restore golden image from cache
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: |
-            e2e/qemu-images/golden-gnome-deps.qcow2
-            e2e/qemu-images/id_ed25519
-            e2e/qemu-images/id_ed25519.pub
-          key: e2e-golden-v2
+          path: e2e/qemu-images/golden-gnome-deps.qcow2
+          key: e2e-golden-v3
           restore-keys: |
             e2e-golden-
 
-      # Generate SSH key (always needed — golden image expects this key)
-      - name: Generate SSH key
-        run: |
-          mkdir -p e2e/qemu-images
-          if [ ! -f e2e/qemu-images/id_ed25519 ]; then
-            ssh-keygen -t ed25519 -f e2e/qemu-images/id_ed25519 -N "" -q
-            echo "Generated SSH key"
-          else
-            echo "SSH key exists"
-          fi
-          chmod 600 e2e/qemu-images/id_ed25519
-
-      # Setup E2E environment (generates keys, cloud-init, etc.)
-      # Skip if golden image exists (cached), run if missing (first time)
+      # Setup E2E environment (downloads golden image + SSH keys from Filen if not cached)
       - name: Setup E2E environment
-        if: steps.cache-restore.outputs.cache-hit != 'true'
         run: just qemu-e2e-setup
         env:
           FILEN_EMAIL: ${{ secrets.FILEN_EMAIL }}
@@ -227,16 +210,13 @@ jobs:
             ~/.local/share/.bun/install/cache
           key: tools-v1
 
-      # Save golden image + SSH keys to cache (only on first run)
+      # Save golden image to cache (only on first run)
       - name: Save golden image to cache
         if: steps.cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: |
-            e2e/qemu-images/golden-gnome-deps.qcow2
-            e2e/qemu-images/id_ed25519
-            e2e/qemu-images/id_ed25519.pub
-          key: e2e-golden-v2
+          path: e2e/qemu-images/golden-gnome-deps.qcow2
+          key: e2e-golden-v3
 
       # Save apt cache
       - name: Save apt cache
