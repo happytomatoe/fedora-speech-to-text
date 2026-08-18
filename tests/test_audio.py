@@ -24,6 +24,7 @@ class TestAudioRecorder:
 
             filepath = recorder.stop()
 
+        assert filepath is not None
         with wave.open(filepath, "rb") as wav:
             assert wav.getnchannels() == 1
             assert wav.getsampwidth() == 2
@@ -41,10 +42,11 @@ class TestAudioRecorder:
             for _ in range(5):
                 cb(np.zeros((BLOCK_SIZE, 1), dtype=np.int16), BLOCK_SIZE, None, None)
 
-            recorder.stop()
+            filepath = recorder.stop()
             assert recorder.frame_count == 5
 
-        os.unlink(recorder.filepath)
+        assert filepath is not None
+        os.unlink(filepath)
 
     def test_smoothed_level(self):
         with patch("voice_to_text.audio.sd.InputStream"):
@@ -57,10 +59,11 @@ class TestAudioRecorder:
             first = recorder.smoothed_level
             cb(np.ones((BLOCK_SIZE, 1), dtype=np.int16) * 30000, BLOCK_SIZE, None, None)
 
-            recorder.stop()
+            filepath = recorder.stop()
             assert first < recorder.smoothed_level
 
-        os.unlink(recorder.filepath)
+        assert filepath is not None
+        os.unlink(filepath)
 
     def test_uses_configured_sample_rate(self):
         with patch("voice_to_text.audio.sd.InputStream") as mock_stream:
@@ -73,6 +76,7 @@ class TestAudioRecorder:
 
             filepath = recorder.stop()
 
+        assert filepath is not None
         with wave.open(filepath, "rb") as wav:
             assert wav.getframerate() == 48000
 
@@ -85,6 +89,7 @@ class TestAudioRecorder:
             filepath = recorder.filepath
             recorder.stop(delete=True)
 
+        assert filepath is not None
         assert recorder.filepath is None
         assert not os.path.exists(filepath)
 
@@ -97,4 +102,5 @@ class TestAudioRecorder:
             recorder.stop()
             cb(np.zeros((BLOCK_SIZE, 1), dtype=np.int16), BLOCK_SIZE, None, None)
 
+        assert filepath is not None
         os.unlink(filepath)

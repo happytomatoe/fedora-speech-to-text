@@ -11,6 +11,7 @@ import pytest
 from voice_to_text.providers.deepgram import DeepgramProvider
 from voice_to_text.providers.elevenlabs import ElevenLabsProvider
 from voice_to_text.providers.groq import GroqProvider
+from voice_to_text.providers.parakeet import ParakeetProvider
 from voice_to_text.providers.sixty import SixtyProvider
 from voice_to_text.providers.voxtral import VoxtralProvider
 
@@ -264,3 +265,81 @@ class TestSixtyBiasing:
         await provider.transcribe_file(str(wav))
 
         assert "context" not in captured["data"]
+
+
+# -- Parakeet ------------------------------------------------------------------
+
+
+class TestParakeetBiasing:
+    """Verify that custom_words are sent as initial_prompt form field."""
+
+    @pytest.mark.asyncio
+    async def test_sends_initial_prompt(self, tmp_path: Path) -> None:
+        wav = _make_wav(tmp_path)
+        provider = ParakeetProvider({"http_endpoint": "http://localhost:5092"})
+
+        captured: dict = {}
+
+        async def _fake_post(url: str, **kwargs: object) -> MagicMock:
+            captured["data"] = kwargs.get("data", {})
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json.return_value = {"text": "hello"}
+            return resp
+
+        provider._client.post = _fake_post  # type: ignore[assignment]
+
+        result = await provider.transcribe_file(str(wav), custom_words=["Kubernetes", "Docker"])
+
+        assert result == "hello"
+        assert captured["data"]["initial_prompt"] == "Kubernetes, Docker"
+
+    @pytest.mark.asyncio
+    async def test_no_initial_prompt_when_empty(self, tmp_path: Path) -> None:
+        wav = _make_wav(tmp_path)
+        provider = ParakeetProvider({"http_endpoint": "http://localhost:5092"})
+
+        captured: dict = {}
+
+        async def _fake_post(url: str, **kwargs: object) -> MagicMock:
+            captured["data"] = kwargs.get("data", {})
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json.return_value = {"text": "hello"}
+            return resp
+
+        provider._client.post = _fake_post  # type: ignore[assignment]
+
+        await provider.transcribe_file(str(wav))
+
+        assert "initial_prompt" not in captured["data"]
+
+    @pytest.mark.asyncio
+    async def test_file_words_merge_with_inline(self, tmp_path: Path) -> None:
+        wav = _make_wav(tmp_path)
+        words_file = tmp_path / "words.txt"
+        words_file.write_text("Prometheus\nGrafana\n")
+
+        provider = ParakeetProvider(
+            {
+                "http_endpoint": "http://localhost:5092",
+                "custom_words_file": str(words_file),
+            }
+        )
+
+        captured: dict = {}
+
+        async def _fake_post(url: str, **kwargs: object) -> MagicMock:
+            captured["data"] = kwargs.get("data", {})
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json.return_value = {"text": "hello"}
+            return resp
+
+        provider._client.post = _fake_post  # type: ignore[assignment]
+
+        result = await provider.transcribe_file(str(wav), custom_words=["Argus"])
+
+        assert result == "hello"
+        # File words come first, then inline words
+        assert captured["data"]["initial_prompt"] == "Prometheus, Grafana, Argus"
