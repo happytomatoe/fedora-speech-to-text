@@ -70,8 +70,8 @@ module.exports = [
       "new-cap": "off",
       "one-var": "off",
       "no-multi-str": "off",
-      // Allow empty catch blocks only with justification comment
-      "no-empty": ["error", { allowEmptyCatch: true }],
+      // Ban empty catch blocks — log the error or rethrow
+      "no-empty": "error",
       // Keep these Google rules that don't conflict with Prettier
       "no-var": "error",
       "prefer-const": ["error", { destructuring: "all" }],

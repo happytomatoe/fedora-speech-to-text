@@ -453,7 +453,8 @@ function createVideoFromScreenshots(run: RunContext): void {
       const stats = require("node:fs").statSync(videoPath);
       console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
     }
-  } catch {
+  } catch (e) {
+    console.log(`  ffmpeg video creation skipped: ${e}`);
   }
 }
 

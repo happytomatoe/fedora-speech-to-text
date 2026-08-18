@@ -22,12 +22,13 @@ test:
     uv run pytest -n auto
 
 # @category lint
-# Run all linters (Python + GNOME extension)
+# Run all linters (Python + GNOME extension + E2E)
 lint:
     uv run ruff check .
     uv run ruff format --check .
     uv run pyright
     just gnome-ext-lint
+    just e2e-lint
     just check-output-methods-sync
     echo "All lint checks passed!"
 
@@ -35,6 +36,11 @@ lint:
 # Check output methods are in sync across engine, prefs, and schema
 check-output-methods-sync:
     ./scripts/check-output-methods-sync.sh
+
+# @category lint
+# Lint E2E tests with oxlint
+e2e-lint:
+    npx oxlint -c .oxlintrc.json e2e/
 
 # @category lint
 # Auto-fix lint issues
