@@ -128,7 +128,7 @@ export class VmManager {
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
-    const videoPath = join(dir, "recording.mp4");
+    const videoPath = join(dir, "recording.mkv");
     const ffmpegArgs = ["-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath];
     console.log(`  [rec] ffmpeg args: ${ffmpegArgs.join(" ")}`);
     this.recordingFfmpeg = Bun.spawn(
@@ -165,11 +165,17 @@ export class VmManager {
       proc.stdin.write("q");
       proc.stdin.end();
     }
+    // Wait for ffmpeg to flush and exit (up to 10s)
     try {
-      await proc.exited;
+      await Promise.race([
+        proc.exited,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10_000)),
+      ]);
     } catch {
-      // ffmpeg may exit with non-zero when killed
+      proc.kill();
     }
+    // Give filesystem time to flush
+    await new Promise((r) => setTimeout(r, 500));
 
     if (existsSync(videoPath)) {
       console.log(`  [rec] saved: ${videoPath}`);
@@ -182,7 +188,7 @@ export class VmManager {
   /** Create video from PNG screenshots as fallback */
   createVideoFromScreenshots(): void {
     const dir = join(this.config.run.outputDir, "recording");
-    const videoPath = join(dir, "recording.mp4");
+    const videoPath = join(dir, "recording.mkv");
     const pngPattern = join(dir, "frame-*.png");
     let files: string;
     try {
