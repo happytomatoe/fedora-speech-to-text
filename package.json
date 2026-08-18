@@ -15,12 +15,9 @@
     "@girs/pango-1.0": "^4.1.0",
     "@girs/shell-18": "^4.1.0",
     "@girs/st-18": "^4.1.0",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
-    "eslint": "^10.0.0",
-    "eslint-config-google": "^0.14.0",
-    "eslint-plugin-promise": "^7.3.0",
     "lefthook": "^1.11.0",
+    "oxlint": "^1.78.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^6.0.3"
   }
 }

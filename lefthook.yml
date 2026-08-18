@@ -14,8 +14,8 @@ pre-commit:
       run: uv run ruff check --fix {staged_files} && uv run ruff format {staged_files}
       glob: "*.py"
       stage_fixed: true
-    eslint:
-      run: bash -c 'for f in {staged_files}; do npx eslint --stdin --stdin-filename="$f" < "$f" || exit 1; done'
+    oxlint:
+      run: npx oxlint {staged_files}
       glob: "gnome-ext/**/*.js"
     npm-install:
       run: npm install --ignore-scripts 2>/dev/null || true
