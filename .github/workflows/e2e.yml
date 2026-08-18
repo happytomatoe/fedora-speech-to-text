@@ -249,6 +249,7 @@ jobs:
       - name: Upload GNOME Shell log
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: 03-gnome-shell-log
           path: e2e/output/vm-logs/gnome-shell.log
@@ -267,9 +268,10 @@ jobs:
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: 05-screenshots
-          path: e2e/output/test-cases
+          path: e2e/output/test-cases/
           if-no-files-found: warn
           retention-days: 7
 
