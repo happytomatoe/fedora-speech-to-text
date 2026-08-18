@@ -189,6 +189,14 @@ export class VmManager {
   createVideoFromScreenshots(): void {
     const dir = join(this.config.run.outputDir, "recording");
     const videoPath = join(dir, "recording.mkv");
+    // Skip if x11grab already produced a valid file
+    if (existsSync(videoPath)) {
+      const stat = Bun.file(videoPath).size;
+      if (stat > 0) {
+        console.log(`  [rec] x11grab already produced ${videoPath} (${stat} bytes), skipping fallback`);
+        return;
+      }
+    }
     const pngPattern = join(dir, "frame-*.png");
     let files: string;
     try {
