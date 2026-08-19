@@ -9,7 +9,8 @@ DEPLOY_DIR="$HOME/tmp-deploy"
 echo "--- Running install.sh ---"
 chmod +x "$DEPLOY_DIR/install.sh"
 cd "$DEPLOY_DIR"
-yes | bash install.sh --local gnome-ext 2>&1 | tail -5
+yes | bash install.sh --local gnome-ext 2>&1 | tee /tmp/install.log | tail -20
+echo "  install.sh exit code: $?"
 
 echo "--- Configuring dconf ---"
 dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
@@ -36,11 +37,16 @@ killall -HUP gnome-shell 2>/dev/null || true
 sleep 3
 
 # Verify extension is now active
-for i in $(seq 1 10); do
+echo "Waiting for extension to load..."
+for i in $(seq 1 30); do
   STATE=$(gnome-extensions show "$EXT_UUID" 2>&1 | grep State: || true)
   if echo "$STATE" | grep -q "ACTIVE"; then
-    echo "  Extension is ACTIVE after restart"
+    echo "  Extension is ACTIVE after ${i}s"
     break
+  fi
+  if [ $i -eq 10 ] || [ $i -eq 20 ]; then
+    echo "  Still waiting... (attempt $i)"
+    echo "  gnome-extensions show output: $(gnome-extensions show "$EXT_UUID" 2>&1)"
   fi
   sleep 1
 done
@@ -51,7 +57,9 @@ echo "  Extension state: $STATE"
 if echo "$STATE" | grep -q "ACTIVE"; then
   echo "  Extension loaded and active"
 else
-  echo "  WARNING: Extension not active (headless mode may not report it)"
+  echo "  WARNING: Extension not active"
+  echo "  Checking journal for errors..."
+  journalctl --user -b --since '5 minutes ago' --no-pager 2>/dev/null | grep -i 'voice-to-text\|happytomatoe\|extension' | tail -10 || true
 fi
 
 echo "--- Setting up dotoold ---"

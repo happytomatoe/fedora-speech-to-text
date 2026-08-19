@@ -71,10 +71,12 @@ export class ShellHelper {
     }
   }
 
-  /** Dismiss Activities overview via D-Bus Set (always works, ~39ms). */
+  /** Dismiss Activities overview via D-Bus Set and wait for it to close. */
   async dismissAndCheck(): Promise<boolean> {
     const wasOpen = await this.isActivitiesOpen();
     await this.dismissActivities();
+    // Wait for Activities to actually close (up to 2s)
+    await this.waitActivitiesFullyClosed(2000);
     return wasOpen;
   }
 

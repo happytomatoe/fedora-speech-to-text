@@ -70,6 +70,18 @@ export async function checkHealth(
     )).trim();
     extensionActive = state.includes("ACTIVE");
     details.push(`Extension: ${state || "State: UNKNOWN"}`);
+    // Add extra debugging if state is not ACTIVE
+    if (!extensionActive) {
+      const fullOutput = (await exec(
+        `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions show ${extensionUuid} 2>&1`
+      )).trim();
+      details.push(`Extension full output: ${fullOutput.substring(0, 200)}`);
+      // Check if extension is installed
+      const installed = (await exec(
+        `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions list 2>/dev/null | grep ${extensionUuid} || echo not-found`
+      )).trim();
+      details.push(`Extension installed: ${installed}`);
+    }
   } catch {
     details.push("Extension: State: UNKNOWN (check failed)");
   }
