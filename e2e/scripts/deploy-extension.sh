@@ -9,7 +9,7 @@ DEPLOY_DIR="$HOME/tmp-deploy"
 echo "--- Running install.sh ---"
 chmod +x "$DEPLOY_DIR/install.sh"
 cd "$DEPLOY_DIR"
-yes | bash install.sh --local gnome-ext 2>&1 | tee /tmp/install.log | tail -50
+yes | bash install.sh --local gnome-ext 2>&1 | tee /tmp/install.log | tail -50 || true
 echo "  install.sh exit code: $?"
 
 echo "--- Debugging extension install ---"

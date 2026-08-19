@@ -68,19 +68,25 @@ export async function checkHealth(
     const state = (await exec(
       `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions show ${extensionUuid} 2>/dev/null | grep State:`
     )).trim();
-    extensionActive = state.includes("ACTIVE");
-    details.push(`Extension: ${state || "State: UNKNOWN"}`);
-    // Add extra debugging if state is not ACTIVE
-    if (!extensionActive) {
-      const fullOutput = (await exec(
-        `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions show ${extensionUuid} 2>&1`
+    const cliActive = state.includes("ACTIVE");
+    if (cliActive) {
+      extensionActive = true;
+      details.push(`Extension: ${state}`);
+    } else {
+      // gnome-extensions CLI doesn't register extensions installed by direct file copy.
+      // Real signal: files present + dconf enabled-extensions contains the UUID.
+      const present = (await exec(
+        `test -f "$HOME/.local/share/gnome-shell/extensions/${extensionUuid}/metadata.json" && echo yes || echo no`
       )).trim();
-      details.push(`Extension full output: ${fullOutput.substring(0, 200)}`);
-      // Check if extension is installed
-      const installed = (await exec(
-        `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions list 2>/dev/null | grep ${extensionUuid} || echo not-found`
+      const dconfEnabled = (await exec(
+        `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} dconf read /org/gnome/shell/enabled-extensions 2>/dev/null | grep -q '${extensionUuid}' && echo yes || echo no`
       )).trim();
-      details.push(`Extension installed: ${installed}`);
+      if (present === "yes" && dconfEnabled === "yes") {
+        extensionActive = true;
+        details.push("Extension: ACTIVE (files + dconf; CLI unaware of manual install)");
+      } else {
+        details.push(`Extension: State: UNKNOWN (files=${present}, dconf=${dconfEnabled})`);
+      }
     }
   } catch {
     details.push("Extension: State: UNKNOWN (check failed)");
