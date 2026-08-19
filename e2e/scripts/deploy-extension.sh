@@ -12,6 +12,12 @@ cd "$DEPLOY_DIR"
 yes | bash install.sh --local gnome-ext 2>&1 | tee /tmp/install.log | tail -50
 echo "  install.sh exit code: $?"
 
+echo "--- Debugging extension install ---"
+echo "Extension dir exists: $(ls -la $HOME/.local/share/gnome-shell/extensions/$EXT_UUID 2>&1)"
+echo "Extension metadata: $(cat $HOME/.local/share/gnome-shell/extensions/$EXT_UUID/metadata.json 2>&1 | head -5)"
+echo "gnome-extensions list: $(gnome-extensions list 2>&1)"
+echo "gnome-extensions show: $(gnome-extensions show $EXT_UUID 2>&1)"
+
 echo "--- Configuring dconf ---"
 dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
 dconf write /org/gnome/shell/disable-user-extensions false
