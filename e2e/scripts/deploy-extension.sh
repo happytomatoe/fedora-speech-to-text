@@ -19,7 +19,6 @@ fi
 echo "--- Debugging extension install ---"
 echo "Extension dir exists: $(ls -la $EXT_DIR 2>&1)"
 echo "Extension metadata: $(cat $EXT_DIR/metadata.json 2>&1 | head -5)"
-echo "gnome-extensions list: $(gnome-extensions list 2>&1)"
 
 echo "--- Configuring dconf ---"
 dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
@@ -27,23 +26,10 @@ dconf write /org/gnome/shell/disable-user-extensions false
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
 
-echo "--- Enabling extension ---"
-# Wait for gnome-shell
-for i in $(seq 1 6); do
-  if pgrep -x gnome-shell >/dev/null 2>&1; then break; fi
-  sleep 2
-done
-
-DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
-export DBUS_SESSION_BUS_ADDRESS="$DBUS"
-gnome-extensions enable "$EXT_UUID" 2>&1 || true
-
-
 echo "--- Setting up dotoold ---"
-# Fix uinput permissions
+mkdir -p "$HOME/.local/bin"
 sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true
 
-# Create dotoold-wrapper if needed
 if [ ! -f "$HOME/.local/bin/dotoold-wrapper" ]; then
   cat > "$HOME/.local/bin/dotoold-wrapper" << 'WRAPPER'
 #!/bin/bash
@@ -52,7 +38,6 @@ WRAPPER
   chmod +x "$HOME/.local/bin/dotoold-wrapper"
 fi
 
-# Start dotoold
 export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe
 setsid nohup dotoold </dev/null &>/tmp/dotoold.log &
 for i in $(seq 1 5); do
@@ -63,15 +48,9 @@ for i in $(seq 1 5); do
   fi
 done
 
-echo "--- Extension deploy complete ---"
-
-# Reload GNOME Shell so it picks up the newly installed extension
-# Don't restart GDM — that kills the SSH session. Killing gnome-shell
-# lets GDM auto-respawn it while SSH stays alive.
 echo "--- Reloading GNOME Shell ---"
 killall -9 gnome-shell 2>/dev/null || true
 
-# Wait for gnome-shell to respawn
 for i in $(seq 1 30); do
   if pgrep -x gnome-shell >/dev/null 2>&1; then
     echo "  gnome-shell respawned (${i}s)"
@@ -81,24 +60,29 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# Re-get D-Bus address (gnome-shell has new PID)
 DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 
-# Re-enable extension after gnome-shell respawn
+echo "--- Enabling extension ---"
+# Wait for gnome-shell to discover the extension after respawn
+for i in $(seq 1 20); do
+  if gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
+    echo "  Extension discovered by GNOME Shell (${i}s)"
+    break
+  fi
+  sleep 1
+done
 gnome-extensions enable "$EXT_UUID" 2>&1 || true
-dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']" 2>/dev/null || true
 
-# Verify extension is active
+echo "--- Verifying extension ---"
 for i in $(seq 1 10); do
   STATE=$(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || true)
   if echo "$STATE" | grep -qi "active"; then
-    echo "  Extension is ACTIVE after reload"
+    echo "  Extension is ACTIVE"
     break
   fi
   sleep 1
 done
 
-echo "--- Post-reload status ---"
 echo "  gnome-shell PID: $(pgrep -x gnome-shell || echo 'not running')"
 echo "  Extension state: $(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || echo 'unknown')"
