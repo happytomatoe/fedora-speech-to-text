@@ -63,8 +63,12 @@ export async function checkHealth(
   }
 
   // 3. Check extension is active
+  // 3. Check extension is active
   try {
     const dbusAddr = await getDbusAddr(exec);
+    const showOutput = (await exec(
+      `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions show ${extensionUuid} 2>&1`
+    )).trim();
     const state = (await exec(
       `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} gnome-extensions show ${extensionUuid} 2>/dev/null | grep State:`
     )).trim();
@@ -73,14 +77,18 @@ export async function checkHealth(
       extensionActive = true;
       details.push(`Extension: ${state}`);
     } else {
-      // Extension not active — check if it's at least installed
-      const present = (await exec(
+      // Diagnostic: check dconf, file presence, and gnome-extensions list
+      const dconfEnabled = (await exec(`dconf read /org/gnome/shell/enabled-extensions 2>/dev/null || echo '(failed)'`)).trim();
+      const dconfDisableAll = (await exec(`dconf read /org/gnome/shell/disable-user-extensions 2>/dev/null || echo '(failed)'`)).trim();
+      const filePresent = (await exec(
         `test -f "$HOME/.local/share/gnome-shell/extensions/${extensionUuid}/metadata.json" && echo yes || echo no`
       )).trim();
-      if (present === "yes") {
-        details.push(`Extension: INSTALLED but NOT ACTIVE (${state || 'state unknown'})`);
+      const extList = (await exec(`gnome-extensions list 2>/dev/null || echo '(failed)'`)).trim();
+      // Extension not active — check if it's at least installed
+      if (filePresent === "yes") {
+        details.push(`Extension: INSTALLED but NOT ACTIVE (${state || 'state unknown'}); show=${showOutput}; dconf-enabled=${dconfEnabled}; dconf-disable-all=${dconfDisableAll}; list=${extList}`);
       } else {
-        details.push(`Extension: NOT INSTALLED`);
+        details.push(`Extension: NOT INSTALLED; show=${showOutput}; dconf-enabled=${dconfEnabled}; dconf-disable-all=${dconfDisableAll}; list=${extList}; filePresent=${filePresent}`);
       }
     }
   } catch {
