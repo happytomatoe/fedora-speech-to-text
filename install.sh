@@ -208,22 +208,15 @@ install_gnome_extension() {
 
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
-    # Copy extension files directly to gnome-shell extensions directory
-    local INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
-    mkdir -p "$INSTALL_DIR"
-    # Copy extension files
-    for f in "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$LOCAL_DIR"/*.css; do
-      [ -f "$f" ] && cp "$f" "$INSTALL_DIR/"
-    done
-    # Copy subdirectories
-    for d in prefs schemas vendor; do
-      if [ -d "$LOCAL_DIR/$d" ]; then
-        cp -r "$LOCAL_DIR/$d" "$INSTALL_DIR/"
-      fi
-    done
-    echo "  Extension installed to: $INSTALL_DIR"
-    echo "  Files: $(ls -la "$INSTALL_DIR")"
-    # Verify with gnome-extensions
+    # Package as zip and install properly — this registers with GNOME Shell
+    local TMPDIR
+    TMPDIR=$(mktemp -d)
+    local ZIP="$TMPDIR/$EXT_UUID.shell-extension.zip"
+    cd "$LOCAL_DIR" && zip -r "$ZIP" . -x '*.git*' '*/__pycache__/*' && cd - >/dev/null
+    gnome-extensions install --force "$ZIP"
+    rm -rf "$TMPDIR"
+    echo "  Extension installed via gnome-extensions install"
+    # Verify
     gnome-extensions list 2>&1 | grep "$EXT_UUID" || echo "  WARNING: gnome-extensions list does not show extension"
     gnome-extensions show "$EXT_UUID" 2>&1 || true
   else

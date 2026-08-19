@@ -35,23 +35,7 @@ DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0'
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 gnome-extensions enable "$EXT_UUID" 2>&1 || true
 
-# NOTE: Do NOT restart gnome-shell here. In headless QEMU the HUP kills the shell
-# and it does not respawn, leaving the session dead. GNOME Shell dynamically loads
-# extensions when dconf 'enabled-extensions' changes (written above), so no restart
-# is needed — the extension comes up live.
-# Verify extension is now active.
-# Real signal: files present + dconf 'enabled-extensions' lists the UUID.
-# GNOME Shell loads the extension live from this (no restart needed).
-EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
-if [ -f "$EXT_DIR/metadata.json" ] && dconf read /org/gnome/shell/enabled-extensions 2>/dev/null | grep -q "$EXT_UUID"; then
-  echo "  Extension installed and enabled (GNOME Shell loads it live via dconf)."
-else
-  echo "  WARNING: Extension not active"
-  echo "  Files: $([ -f "$EXT_DIR/metadata.json" ] && echo present || echo missing)"
-  echo "  dconf: $(dconf read /org/gnome/shell/enabled-extensions 2>/dev/null)"
-  echo "  Checking journal for errors..."
-  journalctl --user -b --since '5 minutes ago' --no-pager 2>/dev/null | grep -i 'voice-to-text\|happytomatoe\|extension' | tail -10 || true
-fi
+
 
 echo "--- Setting up dotoold ---"
 # Fix uinput permissions
@@ -78,3 +62,41 @@ for i in $(seq 1 5); do
 done
 
 echo "--- Extension deploy complete ---"
+
+# Restart GDM so GNOME Shell starts fresh with the extension loaded
+# On Wayland, this is the only way to load a newly installed extension
+DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
+export DBUS_SESSION_BUS_ADDRESS="$DBUS"
+sudo systemctl restart gdm 2>/dev/null || true
+sleep 3
+
+# Wait for gnome-shell to respawn
+for i in $(seq 1 30); do
+  if pgrep -x gnome-shell >/dev/null 2>&1; then
+    echo "  gnome-shell ready after GDM restart (${i}s)"
+    break
+  fi
+  sleep 1
+done
+
+# Re-get D-Bus address (gnome-shell has new PID)
+DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
+export DBUS_SESSION_BUS_ADDRESS="$DBUS"
+
+# Re-enable extension after GDM restart
+gnome-extensions enable "$EXT_UUID" 2>&1 || true
+dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']" 2>/dev/null || true
+
+# Verify extension is active
+for i in $(seq 1 10); do
+  STATE=$(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || true)
+  if echo "$STATE" | grep -qi "active"; then
+    echo "  Extension is ACTIVE after GDM restart"
+    break
+  fi
+  sleep 1
+done
+
+echo "--- Post-GDM restart status ---"
+echo "  gnome-shell PID: $(pgrep -x gnome-shell || echo 'not running')"
+echo "  Extension state: $(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || echo 'unknown')"

@@ -73,21 +73,14 @@ export async function checkHealth(
       extensionActive = true;
       details.push(`Extension: ${state}`);
     } else {
-      // gnome-extensions CLI doesn't register extensions installed by direct file copy.
-      // Real signal: files present + dconf enabled-extensions contains the UUID.
-      // $HOME is sometimes unset in the bare SSH exec env (first health check).
-      // Second check has the env set — non-fatal either way, the test proceeds.
+      // Extension not active — check if it's at least installed
       const present = (await exec(
         `test -f "$HOME/.local/share/gnome-shell/extensions/${extensionUuid}/metadata.json" && echo yes || echo no`
       )).trim();
-      const dconfEnabled = (await exec(
-        `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} dconf read /org/gnome/shell/enabled-extensions 2>/dev/null | grep -q '${extensionUuid}' && echo yes || echo no`
-      )).trim();
-      if (present === "yes" && dconfEnabled === "yes") {
-        extensionActive = true;
-        details.push("Extension: ACTIVE (files + dconf; CLI unaware of manual install)");
+      if (present === "yes") {
+        details.push(`Extension: INSTALLED but NOT ACTIVE (${state || 'state unknown'})`);
       } else {
-        details.push(`Extension: State: UNKNOWN (files=${present}, dconf=${dconfEnabled})`);
+        details.push(`Extension: NOT INSTALLED`);
       }
     }
   } catch {
