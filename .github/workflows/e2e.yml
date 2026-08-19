@@ -63,6 +63,15 @@ jobs:
           restore-keys: |
             apt-ubuntu-latest-
 
+      - name: Configure fast APT mirror
+        uses: vegardit/fast-apt-mirror.sh@v2
+        with:
+          healthchecks: 20
+          speedtests: 10
+          parallel: 2
+          sample-size: 1024
+          sample-time: 3
+
       - name: Install QEMU + libvirt
         run: |
           sudo apt-get update -q || true
