@@ -49,7 +49,42 @@ for i in $(seq 1 5); do
   fi
 done
 
-# GDM restart + extension enable is handled by deploy-steps.ts (separate SSH calls)
-# because sudo systemctl restart gdm drops the SSH connection.
-echo "--- deploy-extension.sh complete (files deployed, schemas compiled, dconf set) ---"
+# Restart gnome-shell to pick up the extension.
+# We kill gnome-shell (NOT GDM) so SSH stays alive.
+# GDM's auto-login will respawn gnome-shell with the extension loaded.
+echo "--- Restarting gnome-shell to load extension ---"
+OLD_PID=$(pgrep -x gnome-shell || true)
+if [ -n "$OLD_PID" ]; then
+  echo "  Killing gnome-shell (PID $OLD_PID)..."
+  kill $OLD_PID
+  # Wait for gnome-shell to die
+  for i in $(seq 1 10); do
+    sleep 1
+    if ! pgrep -x gnome-shell >/dev/null 2>&1; then
+      echo "  gnome-shell stopped"
+      break
+    fi
+  done
+else
+  echo "  gnome-shell not running, skipping kill"
+fi
+
+# Wait for GDM to respawn gnome-shell
+echo "  Waiting for gnome-shell to restart..."
+for i in $(seq 1 30); do
+  sleep 1
+  if pgrep -x gnome-shell >/dev/null 2>&1; then
+    NEW_PID=$(pgrep -x gnome-shell)
+    echo "  gnome-shell respawned (PID $NEW_PID) after ${i}s"
+    break
+  fi
+  if [ "$i" = "30" ]; then
+    echo "  WARNING: gnome-shell did not restart within 30s"
+  fi
+done
+
+# Verify extension is loaded
+sleep 2
+echo "  Extension list: $(gnome-extensions list 2>/dev/null || echo '(empty)')"
 echo "  gnome-shell PID: $(pgrep -x gnome-shell || echo 'not running')"
+echo "--- deploy-extension.sh complete ---"

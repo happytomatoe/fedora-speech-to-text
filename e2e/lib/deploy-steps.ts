@@ -199,41 +199,28 @@ export async function deployExtension(
     throw e;
   }
 
-  // Step 2: Restart GDM to force GNOME Shell to rescan extensions
-  // This drops the SSH connection, so we handle it as a separate step
-  const tGdm = Date.now();
-  console.log("  Restarting GDM to rescan extensions...");
-  try {
-    // This SSH call will likely fail (connection drops), but GDM restarts anyway
-    await dExec(deployer, 'sudo systemctl restart gdm 2>/dev/null || true', cfg.sshKey, cfg.sshPort, cfg.sshUser, 10);
-  } catch {
-    // Expected: SSH connection drops when GDM restarts
-    console.log("  SSH disconnected during GDM restart (expected)");
-  }
-
-  // Step 3: Wait for SSH to reconnect and gnome-shell to start
-  console.log("  Waiting for GDM + gnome-shell to start...");
+  // deploy-extension.sh already kills gnome-shell and waits for respawn.
+  // Just verify gnome-shell is running after the script completes.
+  console.log("  Verifying gnome-shell is running...");
   let gnomeShellReady = false;
-  for (let i = 0; i < 40; i++) {
-    await new Promise(r => setTimeout(r, 2000));
+  for (let i = 0; i < 20; i++) {
     try {
       const ready = await dExec(deployer, 'pgrep -x gnome-shell >/dev/null && echo ready || echo not-ready', cfg.sshKey, cfg.sshPort, cfg.sshUser, 10);
       if (ready.includes('ready')) {
-        console.log(`  gnome-shell ready (${i * 2}s)`);
+        console.log(`  gnome-shell ready (${i}s)`);
         gnomeShellReady = true;
-        // Extra wait for gnome-shell to fully initialize
-        await new Promise(r => setTimeout(r, 3000));
         break;
       }
     } catch {
-      // SSH not ready yet, keep waiting
+      // keep waiting
     }
+    await new Promise(r => setTimeout(r, 2000));
   }
   if (!gnomeShellReady) {
-    console.log("  WARNING: gnome-shell did not become ready within 80s");
+    console.log("  WARNING: gnome-shell did not become ready within 40s");
   }
 
-  // Step 4: Enable the extension
+  // Enable the extension
   console.log("  Enabling extension...");
   const extUuid = cfg.extensionUuid;
   for (let i = 0; i < 10; i++) {
@@ -250,7 +237,7 @@ export async function deployExtension(
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  // Step 5: Verify extension is active
+  // Verify extension is active
   for (let i = 0; i < 10; i++) {
     try {
       const show = await dExec(deployer, `gnome-extensions show '${extUuid}' 2>/dev/null | grep State: || true`, cfg.sshKey, cfg.sshPort, cfg.sshUser, 10);
@@ -264,7 +251,6 @@ export async function deployExtension(
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  console.log(`  GDM restart + enable: ${Date.now() - tGdm}ms [time]`);
   console.log(`  deploy extension: ${Date.now() - t0}ms [time]`);
 }
 
