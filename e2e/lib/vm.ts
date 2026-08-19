@@ -289,8 +289,11 @@ export class VmManager {
       "-no-reboot",
     ].flat();
     // Wrap in setsid + nohup to detach from parent process group
-    const wrappedCmd = `setsid nohup ${qemuArgs.join(" ")} &>/dev/null &`;
-    this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
+    // Redirect stderr to a log file (not /dev/null) so QEMU crashes are visible in CI artifacts
+    mkdirSync(this.config.run.outputDir, { recursive: true });
+    const qemuLogPath = join(this.config.run.outputDir, 'qemu-stderr.log');
+    const wrappedCmd = `setsid nohup ${qemuArgs.join(' ')} 2>${qemuLogPath} &>/dev/null &`;
+    this.process = Bun.spawn(['sh', '-c', wrappedCmd], {
       cwd: vmDir,
       stdout: "inherit",
       stderr: "inherit",
