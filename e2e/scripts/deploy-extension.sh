@@ -8,6 +8,7 @@ DEPLOY_DIR="$HOME/tmp-deploy"
 EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 
 echo "--- Deploying extension via rsync ---"
+echo "Source dir contents: $(ls -la $DEPLOY_DIR/gnome-ext/ 2>&1)"
 mkdir -p "$EXT_DIR"
 rsync -a --delete "$DEPLOY_DIR/gnome-ext/" "$EXT_DIR/"
 
