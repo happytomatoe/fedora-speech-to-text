@@ -208,15 +208,16 @@ install_gnome_extension() {
 
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
-    mkdir -p "$INSTALL_DIR"
-    rsync -av --delete \
-      --include='prefs/' --include='prefs/**' \
-      --include='schemas/' --include='schemas/**' \
-      --include='vendor/' --include='vendor/**' \
-      --include='*.js' --include='*.json' --include='*.css' \
-      --exclude='*' \
-      "$LOCAL_DIR/" "$INSTALL_DIR/"
-    glib-compile-schemas "$INSTALL_DIR/schemas/"
+    # Create a zip and use gnome-extensions install for proper registration
+    local TMPDIR
+    TMPDIR=$(mktemp -d)
+    cd "$LOCAL_DIR"
+    zip -r "$TMPDIR/$EXT_UUID.shell-extension.zip" . \
+      --include '*.js' '*.json' '*.css' \
+      'prefs/*' 'schemas/*' 'vendor/*'
+    cd - > /dev/null
+    gnome-extensions install --force "$TMPDIR/$EXT_UUID.shell-extension.zip"
+    rm -rf "$TMPDIR"
   else
     RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
     echo "Downloading: $RELEASE_URL"
