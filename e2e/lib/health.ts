@@ -75,8 +75,10 @@ export async function checkHealth(
     } else {
       // gnome-extensions CLI doesn't register extensions installed by direct file copy.
       // Real signal: files present + dconf enabled-extensions contains the UUID.
+      // Resolve home explicitly: $HOME is sometimes unset in the SSH exec env.
+      const home = (await exec('h=$(getent passwd "$(id -u)" | cut -d: -f6); echo "${h:-$HOME}"')).trim();
       const present = (await exec(
-        `test -f "$HOME/.local/share/gnome-shell/extensions/${extensionUuid}/metadata.json" && echo yes || echo no`
+        `test -f "${home}/.local/share/gnome-shell/extensions/${extensionUuid}/metadata.json" && echo yes || echo no`
       )).trim();
       const dconfEnabled = (await exec(
         `DBUS_SESSION_BUS_ADDRESS=${dbusAddr} dconf read /org/gnome/shell/enabled-extensions 2>/dev/null | grep -q '${extensionUuid}' && echo yes || echo no`
