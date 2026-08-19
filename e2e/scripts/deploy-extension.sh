@@ -28,6 +28,23 @@ DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0'
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 gnome-extensions enable "$EXT_UUID" 2>&1 || true
 
+# Restart GNOME Shell to load the extension
+echo "--- Restarting GNOME Shell ---"
+DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
+export DBUS_SESSION_BUS_ADDRESS="$DBUS"
+killall -HUP gnome-shell 2>/dev/null || true
+sleep 3
+
+# Verify extension is now active
+for i in $(seq 1 10); do
+  STATE=$(gnome-extensions show "$EXT_UUID" 2>&1 | grep State: || true)
+  if echo "$STATE" | grep -q "ACTIVE"; then
+    echo "  Extension is ACTIVE after restart"
+    break
+  fi
+  sleep 1
+done
+
 # Verify
 STATE=$(gnome-extensions show "$EXT_UUID" 2>&1 || true)
 echo "  Extension state: $STATE"

@@ -102,24 +102,12 @@ export class VmManager {
   async captureFrame(label: string): Promise<void> {
     if (!this.config.recordMode) return;
     const dir = join(this.config.run.outputDir, "recording");
-    const localPath = join(dir, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.png`);
-    const remotePath = "/tmp/e2e-screenshot.png";
+    const path = join(dir, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.ppm`);
     try {
-      // Use portal screenshot for Wayland compositor capture
-      const portalResult = await this.shell.exec(`python3 ~/portal-screenshot.py ${remotePath} 2>&1 || true`);
-      console.log(`  [rec] portal result: ${portalResult.substring(0, 100)}`);
-      const ok = await this.fetchScreenshot(remotePath, localPath);
-      if (!ok) throw new Error("fetch failed");
+      await this.qemu.screendump(path);
       console.log(`  [rec] ${label}`);
     } catch {
-      // Fallback to QEMU screendump
-      try {
-        const ppmPath = localPath.replace(".png", ".ppm");
-        await this.qemu.screendump(ppmPath);
-        console.log(`  [rec] ${label} (fallback)`);
-      } catch {
-        // Ignore all errors
-      }
+      // Ignore screendump errors
     }
   }
 
@@ -199,20 +187,20 @@ export class VmManager {
       }
       console.log(`  [rec] x11produced ${videoPath} but only ${stat} bytes (<1KB), using fallback`);
     }
-    const pngPattern = join(dir, "frame-*.png");
+    const ppmPattern = join(dir, "frame-*.ppm");
     let files: string;
     try {
-      files = execSync(`ls ${pngPattern} 2>/dev/null | head -1`, { encoding: "utf-8" }).trim();
+      files = execSync(`ls ${ppmPattern} 2>/dev/null | head -1`, { encoding: "utf-8" }).trim();
     } catch {
       files = "";
     }
     if (!files) {
-      console.log("  [rec] no PNG files for fallback");
+      console.log("  [rec] no PPM files for fallback");
       return;
     }
     try {
       const result = execSync(
-        `ffmpeg -y -framerate 1 -pattern_type glob -i '${pngPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>&1`,
+        `ffmpeg -y -framerate 1 -pattern_type glob -i '${ppmPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>&1`,
         { encoding: "utf-8" }
       );
       if (existsSync(videoPath)) {
@@ -288,8 +276,9 @@ export class VmManager {
       "-smp", "4",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
-      // CI: SDL for x11grab recording; Local: display none (no window)
+      // VNC for recording (unified CI + local); SDL on CI for x11grab fallback
       "-display", process.env.CI ? "sdl" : "none",
+      "-vnc", ":1",
       "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
@@ -411,13 +400,13 @@ export class VmManager {
       }
       console.log("  [xvfb] display :99 ready");
     } else {
-      // VNC fallback — check port 5900
+      // VNC fallback — check port 5901 (-vnc :1)
       const net = await import("node:net");
       await pollUntil(
-        "VNC port 5900 listening",
+        "VNC port 5901 listening",
         async () => {
           return new Promise<boolean>((resolve) => {
-            const sock = net.createConnection(5900, "localhost");
+            const sock = net.createConnection(5901, "localhost");
             const timer = setTimeout(() => { sock.destroy(); resolve(false); }, 2000);
             sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(true); });
             sock.on("error", () => { clearTimeout(timer); resolve(false); });

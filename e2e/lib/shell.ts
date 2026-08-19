@@ -135,7 +135,7 @@ export class ShellHelper {
     await Bun.sleep(300);
   }
 
-  async sendHotkey(): Promise<void> {
+  async sendHotkey(outputMethod = "mutter-virtual"): Promise<void> {
     const dbusAddr = await this.getShellDbusAddr();
     const dbusBase = `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method`;
 
@@ -143,7 +143,7 @@ export class ShellHelper {
       await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StopRecording`);
       this.isRecording = false;
     } else {
-      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"mutter-virtual"}'`);
+      await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"${outputMethod}"}'`);
       this.isRecording = true;
     }
   }

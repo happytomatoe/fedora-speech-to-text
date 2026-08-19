@@ -59,7 +59,7 @@ const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 
 // Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual, mutter-commit)
 const outputMethodIdx = args.indexOf("--output-method");
-const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "mutter-commit";
+const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : (process.env.CI ? "mutter-commit" : "type");
 
 // Parse --parallel <n> (run n VMs in parallel)
 const parallelIdx = args.indexOf("--parallel");
@@ -282,12 +282,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(200);
   // Show service log in terminal so test activity is visible on screen
   const tmuxSession = tmuxCfg.session;
-  await shell.exec(`tmux send-keys -t ${tmuxSession} 'tail -f /tmp/voice-service.log' Enter`);
+  
 
   vm.startRecording();
   t = Date.now();
   console.log("Starting recording via hotkey...");
-  await shell.sendHotkey();
+  await shell.sendHotkey(OUTPUT_METHOD);
   await shell.waitForRecordingStart();
   timing("start-recording", t);
 
@@ -347,7 +347,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   t = Date.now();
   console.log("Stopping recording via hotkey...");
-  await shell.sendHotkey();
+  await shell.sendHotkey(OUTPUT_METHOD);
   await Bun.sleep(200);
   timing("stop-recording", t);
 
