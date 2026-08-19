@@ -208,24 +208,24 @@ install_gnome_extension() {
 
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
-    # Create a zip and use gnome-extensions install for proper registration
-    local TMPDIR
-    TMPDIR=$(mktemp -d)
-    cd "$LOCAL_DIR"
-    python3 -c "
-import zipfile, os, glob
-with zipfile.ZipFile('$TMPDIR/$EXT_UUID.shell-extension.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
-    for pattern in ['*.js', '*.json', '*.css']:
-        for f in glob.glob(pattern):
-            zf.write(f)
-    for d in ['prefs', 'schemas', 'vendor']:
-        for root, dirs, files in os.walk(d):
-            for f in files:
-                zf.write(os.path.join(root, f))
-"
-    cd - > /dev/null
-    gnome-extensions install --force "$TMPDIR/$EXT_UUID.shell-extension.zip"
-    rm -rf "$TMPDIR"
+    # Copy extension files directly to gnome-shell extensions directory
+    local INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+    mkdir -p "$INSTALL_DIR"
+    # Copy extension files
+    for f in "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$LOCAL_DIR"/*.css; do
+      [ -f "$f" ] && cp "$f" "$INSTALL_DIR/"
+    done
+    # Copy subdirectories
+    for d in prefs schemas vendor; do
+      if [ -d "$LOCAL_DIR/$d" ]; then
+        cp -r "$LOCAL_DIR/$d" "$INSTALL_DIR/"
+      fi
+    done
+    echo "  Extension installed to: $INSTALL_DIR"
+    echo "  Files: $(ls -la "$INSTALL_DIR")"
+    # Verify with gnome-extensions
+    gnome-extensions list 2>&1 | grep "$EXT_UUID" || echo "  WARNING: gnome-extensions list does not show extension"
+    gnome-extensions show "$EXT_UUID" 2>&1 || true
   else
     RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
     echo "Downloading: $RELEASE_URL"
