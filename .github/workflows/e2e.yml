@@ -64,7 +64,7 @@ jobs:
             apt-ubuntu-latest-
 
       - name: Configure fast APT mirror
-        uses: vegardit/fast-apt-mirror.sh@v1.4.5
+        uses: vegardit/fast-apt-mirror.sh@v1
         with:
           healthchecks: 20
           speedtests: 10
