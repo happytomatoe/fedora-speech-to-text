@@ -211,6 +211,7 @@ install_gnome_extension() {
     # Create a zip and use gnome-extensions install for proper registration
     local TMPDIR
     TMPDIR=$(mktemp -d)
+    cd "$LOCAL_DIR"
     python3 -c "
 import zipfile, os, glob
 with zipfile.ZipFile('$TMPDIR/$EXT_UUID.shell-extension.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -222,6 +223,7 @@ with zipfile.ZipFile('$TMPDIR/$EXT_UUID.shell-extension.zip', 'w', zipfile.ZIP_D
             for f in files:
                 zf.write(os.path.join(root, f))
 "
+    cd - > /dev/null
     gnome-extensions install --force "$TMPDIR/$EXT_UUID.shell-extension.zip"
     rm -rf "$TMPDIR"
   else
