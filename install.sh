@@ -43,6 +43,7 @@ detect_os() {
 install_prerequisites() {
   echo "Installing prerequisites..."
   install_pkg unzip
+  install_pkg zip
   install_pkg curl
   install_pkg libsecret
 

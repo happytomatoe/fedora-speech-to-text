@@ -829,6 +829,10 @@ async function main(): Promise<void> {
       throw new Error(`Health check failed: GNOME Shell not running: ${healthAfterDeploy.details.join('; ')}`);
     }
     if (!healthAfterDeploy.extensionActive) {
+      const extDetail = healthAfterDeploy.details.find(d => d.startsWith('Extension:')) || '';
+      if (extDetail.includes('NOT INSTALLED')) {
+        throw new Error(`Health check failed: Extension not installed. ${healthAfterDeploy.details.join('; ')}`);
+      }
       console.log("  WARNING: Extension state UNKNOWN (headless gnome-shell may not report it)");
     }
     
