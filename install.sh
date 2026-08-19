@@ -212,7 +212,10 @@ install_gnome_extension() {
     local TMPDIR
     TMPDIR=$(mktemp -d)
     local ZIP="$TMPDIR/$EXT_UUID.shell-extension.zip"
-    cd "$LOCAL_DIR" && zip -r "$ZIP" . -x '*.git*' '*/__pycache__/*' && cd - >/dev/null
+    # Use absolute path (LOCAL_DIR may be relative)
+    local ABS_LOCAL_DIR
+    ABS_LOCAL_DIR="$(cd "$LOCAL_DIR" && pwd)"
+    cd "$ABS_LOCAL_DIR" && zip -r "$ZIP" . -x '*.git*' '*/__pycache__/*' && cd - >/dev/null
     gnome-extensions install --force "$ZIP"
     rm -rf "$TMPDIR"
     echo "  Extension installed via gnome-extensions install"
