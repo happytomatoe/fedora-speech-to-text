@@ -795,7 +795,7 @@ async function main(): Promise<void> {
     timing("boot-vm", t);
     
     // Record pre-deploy PID for crash detection
-    const preDeployPid = await vm.recordPreDeployPid();
+    let preDeployPid = await vm.recordPreDeployPid();
     
     // Try to restore from snapshot (unless --no-snapshot)
     const hasSnap = !NO_SNAPSHOT && await vm.hasSnapshot("ready");
@@ -811,6 +811,17 @@ async function main(): Promise<void> {
       const skipDeps = vm.config.skipDeps || vm.config.baseImage.includes('golden-gnome-deps');
       await startVoiceService(vm.shell, vm.deployCfg, pollUntil, pollForCommandOutput, skipDeps, vm.deployer);
     } else {
+      // If overlay was reused (not freshly created) and no snapshot exists,
+      // recreate it to ensure a clean state. A dirty overlay from a previous
+      // failed run can cause gnome-shell crashes and other flaky failures.
+      if (!vm.wasOverlayFresh) {
+        console.log("\n--- Reused overlay without snapshot, recreating for clean state ---");
+        await vm.recreateOverlay();
+        await vm.waitForSsh();
+        // Record new pre-deploy PID after fresh boot
+        preDeployPid = await vm.recordPreDeployPid();
+      }
+
       console.log(NO_SNAPSHOT ? "\n--- --no-snapshot: deploying fresh ---" : "\n--- No snapshot found, deploying fresh ---");
       t = Date.now();
       const steps: Step[] = [

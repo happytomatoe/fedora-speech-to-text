@@ -40,6 +40,10 @@ export class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
   booted = false;
   private freshlyBooted = false;
+  private overlayWasFresh = false;
+
+  /** Whether the overlay was freshly created (not reused from a previous run). */
+  get wasOverlayFresh(): boolean { return this.overlayWasFresh; }
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
@@ -250,7 +254,8 @@ export class VmManager {
     })();
 
     Bun.spawnSync(["rm", "-f", socketPath]);
-
+    // Track whether overlay was freshly created (for snapshot fallback logic)
+    this.overlayWasFresh = !!(updateMode || staleOverlay || !existsSync(overlayImage));
     if (updateMode || staleOverlay || !existsSync(overlayImage)) {
       console.log("Creating fresh VM overlay...");
       const proc = Bun.spawnSync([
@@ -261,6 +266,7 @@ export class VmManager {
     } else {
       console.log("Reusing existing overlay...");
     }
+
 
     // Use setsid to run QEMU in a new session so it survives parent abort/timeout
     // Check if KVM is usable (file exists + readable)
@@ -313,6 +319,32 @@ export class VmManager {
 
     await this.qemu.connect();
     await this.verifyDisplayReady();
+  }
+
+  /**
+   * Recreate the overlay from the base image and boot fresh.
+   * Used when no snapshot exists and the overlay was reused from a previous (potentially failed) run.
+   */
+  async recreateOverlay(): Promise<void> {
+    const { overlayImage, socketPath } = this.config.run;
+
+    // Shutdown if running
+    if (this.booted) {
+      try {
+        await this.qemu.systemPowerdown();
+        await Bun.sleep(3000);
+      } catch { /* force kill below */ }
+      Bun.spawnSync(["pkill", "-f", `qemu-system.*${overlayImage}`]);
+      await Bun.sleep(1000);
+      this.booted = false;
+    }
+
+    // Delete stale overlay
+    Bun.spawnSync(["rm", "-f", overlayImage]);
+    console.log("  Recreated overlay from base image");
+
+    // Boot fresh
+    await this.boot();
   }
 
   async waitForSsh(): Promise<void> {
