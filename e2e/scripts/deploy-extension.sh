@@ -1,22 +1,25 @@
 #!/bin/bash
-# E2E: Deploy GNOME extension via install.sh + dconf
-# Args: $1 = extension UUID, $2 = project root (for install.sh path)
+# E2E: Deploy GNOME extension via rsync + dconf (bypasses gnome-extensions install)
+# Args: $1 = extension UUID
 set -euo pipefail
 
 EXT_UUID="${1:-voice-to-text@happytomatoe.com}"
 DEPLOY_DIR="$HOME/tmp-deploy"
+EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 
-echo "--- Running install.sh ---"
-chmod +x "$DEPLOY_DIR/install.sh"
-cd "$DEPLOY_DIR"
-yes | bash install.sh --local gnome-ext 2>&1 | tee /tmp/install.log | tail -50 || true
-echo "  install.sh exit code: $?"
+echo "--- Deploying extension via rsync ---"
+mkdir -p "$EXT_DIR"
+rsync -a --delete "$DEPLOY_DIR/gnome-ext/" "$EXT_DIR/"
+
+echo "--- Compiling schemas ---"
+if [ -d "$EXT_DIR/schemas" ]; then
+  glib-compile-schemas "$EXT_DIR/schemas/" 2>&1 || true
+fi
 
 echo "--- Debugging extension install ---"
-echo "Extension dir exists: $(ls -la $HOME/.local/share/gnome-shell/extensions/$EXT_UUID 2>&1)"
-echo "Extension metadata: $(cat $HOME/.local/share/gnome-shell/extensions/$EXT_UUID/metadata.json 2>&1 | head -5)"
+echo "Extension dir exists: $(ls -la $EXT_DIR 2>&1)"
+echo "Extension metadata: $(cat $EXT_DIR/metadata.json 2>&1 | head -5)"
 echo "gnome-extensions list: $(gnome-extensions list 2>&1)"
-echo "gnome-extensions show: $(gnome-extensions show $EXT_UUID 2>&1)"
 
 echo "--- Configuring dconf ---"
 dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']"
@@ -34,7 +37,6 @@ done
 DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 gnome-extensions enable "$EXT_UUID" 2>&1 || true
-
 
 
 echo "--- Setting up dotoold ---"
@@ -83,7 +85,7 @@ done
 DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 
-# Re-enable extension after GDM restart
+# Re-enable extension after gnome-shell respawn
 gnome-extensions enable "$EXT_UUID" 2>&1 || true
 dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']" 2>/dev/null || true
 
@@ -91,12 +93,12 @@ dconf write /org/gnome/shell/enabled-extensions "['$EXT_UUID']" 2>/dev/null || t
 for i in $(seq 1 10); do
   STATE=$(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || true)
   if echo "$STATE" | grep -qi "active"; then
-    echo "  Extension is ACTIVE after GDM restart"
+    echo "  Extension is ACTIVE after reload"
     break
   fi
   sleep 1
 done
 
-echo "--- Post-GDM restart status ---"
+echo "--- Post-reload status ---"
 echo "  gnome-shell PID: $(pgrep -x gnome-shell || echo 'not running')"
 echo "  Extension state: $(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || echo 'unknown')"
