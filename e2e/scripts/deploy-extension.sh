@@ -63,17 +63,17 @@ done
 
 echo "--- Extension deploy complete ---"
 
-# Restart GDM so GNOME Shell starts fresh with the extension loaded
-# On Wayland, this is the only way to load a newly installed extension
-DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
-export DBUS_SESSION_BUS_ADDRESS="$DBUS"
-sudo systemctl restart gdm 2>/dev/null || true
-sleep 3
+# Reload GNOME Shell so it picks up the newly installed extension
+# Don't restart GDM — that kills the SSH session. Killing gnome-shell
+# lets GDM auto-respawn it while SSH stays alive.
+echo "--- Reloading GNOME Shell ---"
+killall -9 gnome-shell 2>/dev/null || true
 
 # Wait for gnome-shell to respawn
 for i in $(seq 1 30); do
   if pgrep -x gnome-shell >/dev/null 2>&1; then
-    echo "  gnome-shell ready after GDM restart (${i}s)"
+    echo "  gnome-shell respawned (${i}s)"
+    sleep 2
     break
   fi
   sleep 1
