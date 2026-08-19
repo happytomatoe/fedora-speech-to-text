@@ -438,34 +438,21 @@ class RecordingEngine:
             use_typing = output_method in ("type", "mutter-virtual")
             logger.info("Engine config: output_method=%s, use_typing=%s", output_method, use_typing)
             _step("config_parsed")
-            logger.info("Engine: config parsed, opening dotoolc...")
+            logger.info("Engine: config parsed, starting recorder immediately...")
 
-            # 2. Open dotoolc pipe early if typing
-            typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
-            if use_typing or output_method == "mutter-commit":
-                try:
-                    if output_method == "mutter-virtual":
-                        mutter = MutterVirtualTyper()
-                        await mutter.start()
-                        typer = mutter
-                    elif output_method == "mutter-commit":
-                        mutter_paste = MutterVirtualPaster()
-                        await mutter_paste.start()
-                        typer = mutter_paste
-                    else:
-                        typer = DotoolTyper()
-                        await typer.start()
-                    logger.info("Output method %s initialized", output_method)
-                except DotoolcNotFoundError as e:
-                    logger.warning("Typing requested but dotoolc not found: %s", e)
-                    if self.on_error:
-                        self.on_error(f"Typing not available: {e}")
-            self._typer = typer
+            # 2. Start recording RIGHT AWAY — don't block on typer/providers
+            decrease_pct = config.get("decrease_speaker_volume", 50)
+            fd, audio_path = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
 
-            _step("dotoolc_opened")
+            raw_device = config.get("device")
+            device = None if raw_device in (None, "", "__system_default__") else raw_device
+            vad_enabled = config.get("vad_enabled", True)
+            provider = config.get("provider", "voxtral")
+            mode = config.get("mode", "batch")
+            language = config.get("language", "en")
 
             # 3. Check for debug mode (test file instead of microphone)
-            # Lazy import to avoid circular dependencies in production builds
             try:
                 from voice_to_text.debug import handle_debug_recording, is_debug_mode  # noqa: PLC0415
             except ImportError:
@@ -480,10 +467,7 @@ class RecordingEngine:
                 self.state = EngineState.RECORDING
                 self._notify_state()
 
-                # handle_debug_recording is guaranteed non-None when is_debug_mode() is True
-                assert handle_debug_recording is not None, (
-                    "handle_debug_recording must be set when debug mode is active"
-                )
+                assert handle_debug_recording is not None
                 text = await handle_debug_recording(
                     config, on_level=self.on_audio_level, _cancel_event=self._cancel_event
                 )
@@ -491,62 +475,12 @@ class RecordingEngine:
                 self.state = EngineState.PROCESSING
                 self._notify_state()
 
-                # Output the result
-                if text and typer:
-                    await typer.stream_diff(text)
+                if text and self._typer:
+                    await self._typer.stream_diff(text)
                 logger.info("DEBUG MODE: Transcription complete")
-                return  # Exit early, skip normal recording flow
+                return
 
-            # 4. Set up providers
-            provider = config.get("provider", "voxtral")
-            mode = config.get("mode", "batch")
-            language = config.get("language", "en")
-
-            transcriber: HybridTranscriber | None = None
-            batch_provider = None
-
-            if mode in ("hybrid", "streaming"):
-                config_mgr = ConfigManager()
-                hybrid_cfg = config_mgr.config.get("transcription", {}).get("hybrid", {})
-                streaming_name = config.get("streaming_provider") or hybrid_cfg.get("streaming_provider", "deepgram")
-                if mode == "hybrid":
-                    batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
-                    streaming_config = config_mgr.get_provider_config(streaming_name)
-                    batch_config = config_mgr.get_provider_config(batch_name)
-                    # Construct providers in a worker thread: their __init__
-                    # may run blocking I/O (e.g. API key resolution).
-                    streaming_provider = await asyncio.to_thread(
-                        get_streaming_provider, streaming_name, streaming_config
-                    )
-                    batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
-                else:
-                    # streaming mode — use streaming provider as both
-                    streaming_config = config_mgr.get_provider_config(streaming_name)
-                    streaming_provider = await asyncio.to_thread(
-                        get_streaming_provider, streaming_name, streaming_config
-                    )
-                    batch_provider = None  # no batch in pure streaming mode
-                transcriber = HybridTranscriber(streaming_provider, batch_provider or streaming_provider)  # type: ignore[arg-type]
-            else:
-                config_mgr = ConfigManager()
-                provider_config = config_mgr.get_provider_config(provider)
-                # Construct the provider in a worker thread: its __init__ may
-                # run blocking I/O (e.g. API key resolution).
-                batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
-
-            self._transcriber = transcriber
-            self._batch_provider = batch_provider
-            _step("providers_initialized")
-            logger.info("Engine: providers initialized, starting recorder...")
-
-            # 5. Record audio via InputStream + Queue
-            decrease_pct = config.get("decrease_speaker_volume", 50)
-            fd, audio_path = tempfile.mkstemp(suffix=".wav")
-            os.close(fd)
-
-            raw_device = config.get("device")
-            device = None if raw_device in (None, "", "__system_default__") else raw_device
-            vad_enabled = config.get("vad_enabled", True)
+            # 4. Create recorder and start immediately
             recorder = AsyncAudioRecorder(
                 device=device,
                 sample_rate=SAMPLE_RATE,
@@ -555,9 +489,9 @@ class RecordingEngine:
             self._recorder = recorder
 
             # Enable preroll buffer for batch mode only (not streaming)
-            # Config can override: preroll_enabled defaults to True for batch mode
             preroll_config = config.get("preroll_enabled")
-            use_preroll = preroll_config if preroll_config is not None else not transcriber
+            # Can't know transcriber yet, default to True (batch mode)
+            use_preroll = preroll_config if preroll_config is not None else True
             recorder.enable_preroll(use_preroll)
             if use_preroll:
                 logger.info("Preroll buffer enabled for batch mode")
@@ -573,35 +507,101 @@ class RecordingEngine:
                 self.state = EngineState.RECORDING
                 self._notify_state()
                 _step("recorder_started")
-                logger.info("Engine: recording started")
+                logger.info("Engine: recording started (typer/providers initializing in background)")
 
-                # Start streaming if in hybrid mode
-                if transcriber:
-                    await transcriber.start_stream(language, sample_rate=recorder.sample_rate)
+            # 5. Initialize typer + providers IN BACKGROUND (don't block recording)
+            async def _init_background():
+                # Typer
+                output_method = config.get("output_method", "mutter-virtual")
+                use_typing = output_method in ("type", "mutter-virtual")
+                typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
+                if use_typing or output_method == "mutter-commit":
+                    try:
+                        if output_method == "mutter-virtual":
+                            mutter = MutterVirtualTyper()
+                            await mutter.start()
+                            typer = mutter
+                        elif output_method == "mutter-commit":
+                            mutter_paste = MutterVirtualPaster()
+                            await mutter_paste.start()
+                            typer = mutter_paste
+                        else:
+                            typer = DotoolTyper()
+                            await typer.start()
+                        logger.info("Output method %s initialized (background)", output_method)
+                    except DotoolcNotFoundError as e:
+                        logger.warning("Typing requested but dotoolc not found: %s", e)
+                        if self.on_error:
+                            self.on_error(f"Typing not available: {e}")
+                self._typer = typer
+                _step("dotoolc_opened")
+
+                # Providers
+                transcriber: HybridTranscriber | None = None
+                batch_provider = None
+                if mode in ("hybrid", "streaming"):
+                    config_mgr = ConfigManager()
+                    hybrid_cfg = config_mgr.config.get("transcription", {}).get("hybrid", {})
+                    streaming_name = config.get("streaming_provider") or hybrid_cfg.get(
+                        "streaming_provider", "deepgram"
+                    )
+                    if mode == "hybrid":
+                        batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
+                        streaming_config = config_mgr.get_provider_config(streaming_name)
+                        batch_config = config_mgr.get_provider_config(batch_name)
+                        streaming_provider = await asyncio.to_thread(
+                            get_streaming_provider, streaming_name, streaming_config
+                        )
+                        batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
+                    else:
+                        streaming_config = config_mgr.get_provider_config(streaming_name)
+                        streaming_provider = await asyncio.to_thread(
+                            get_streaming_provider, streaming_name, streaming_config
+                        )
+                        batch_provider = None
+                    transcriber = HybridTranscriber(streaming_provider, batch_provider or streaming_provider)  # type: ignore[arg-type]
+                else:
+                    config_mgr = ConfigManager()
+                    provider_config = config_mgr.get_provider_config(provider)
+                    batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
+                self._transcriber = transcriber
+                self._batch_provider = batch_provider
+                _step("providers_initialized")
+                logger.info("Engine: providers initialized (background)")
+
+            background_task = asyncio.create_task(_init_background())
+
+            # 6. For hybrid/streaming: wait for providers before starting stream
+            if mode in ("hybrid", "streaming"):
+                await background_task
+                if self._transcriber:
+                    await self._transcriber.start_stream(language, sample_rate=recorder.sample_rate)
                     _step("stream_started")
 
-                # Recording loop — read chunks from the queue
-                # Use a short timeout so cancellation is responsive even
-                # when no audio data arrives (no microphone signal etc.)
-                while not self._cancel_event.is_set():
-                    try:
-                        chunk = await asyncio.wait_for(recorder.read_chunk(), timeout=0.1)
-                    except TimeoutError:
-                        continue  # no data yet, re-check cancellation
-                    if chunk is None:
-                        break  # stream ended
+            logger.info("Engine: recording active, background init running...")
 
-                    # Emit audio level for D-Bus signal
-                    if self.on_audio_level:
-                        self.on_audio_level(recorder.smoothed_level)
+            # Recording loop — read chunks from the queue
+            # Use a short timeout so cancellation is responsive even
+            # when no audio data arrives (no microphone signal etc.)
+            while not self._cancel_event.is_set():
+                try:
+                    chunk = await asyncio.wait_for(recorder.read_chunk(), timeout=0.1)
+                except TimeoutError:
+                    continue  # no data yet, re-check cancellation
+                if chunk is None:
+                    break  # stream ended
+
+                # Emit audio level for D-Bus signal
+                if self.on_audio_level:
+                    self.on_audio_level(recorder.smoothed_level)
 
                     # Feed streaming provider + type incrementally
-                    if transcriber and typer:
-                        partial = await transcriber.on_audio_chunk(chunk)
+                    if self._transcriber and self._typer:
+                        partial = await self._transcriber.on_audio_chunk(chunk)
                         if partial:
-                            await typer.stream_diff(partial)
-                    elif transcriber:
-                        await transcriber.on_audio_chunk(chunk)
+                            await self._typer.stream_diff(partial)
+                    elif self._transcriber:
+                        await self._transcriber.on_audio_chunk(chunk)
 
             # 6. Stop microphone before transitioning to processing
             filepath = recorder.stop()
@@ -610,8 +610,8 @@ class RecordingEngine:
             self._notify_state()
             if self._skip_output:
                 logger.info("Output skipped (cancel)")
-                if typer and isinstance(typer, MutterVirtualPaster):
-                    await typer.flush()
+                if self._typer and isinstance(self._typer, MutterVirtualPaster):
+                    await self._typer.flush()
                 if filepath:
                     with contextlib.suppress(OSError):
                         os.unlink(filepath)
@@ -623,11 +623,11 @@ class RecordingEngine:
                     custom_words = (
                         raw_custom_words if raw_custom_words is not None else postprocess_cfg.get("custom_words", [])
                     )
-                    if transcriber:
-                        text = await transcriber.on_recording_stop(filepath, language, custom_words)
+                    if self._transcriber:
+                        text = await self._transcriber.on_recording_stop(filepath, language, custom_words)
                     else:
-                        assert batch_provider is not None
-                        text = await batch_provider.transcribe_file(filepath, language, custom_words)
+                        assert self._batch_provider is not None
+                        text = await self._batch_provider.transcribe_file(filepath, language, custom_words)
                     _step("transcription_done")
                     # Apply text post-processing
                     if text:
@@ -643,22 +643,22 @@ class RecordingEngine:
                     # Check cancellation again after transcription completes
                     if self._skip_output:
                         logger.info("Output skipped (cancel) after transcription")
-                        if typer and isinstance(typer, MutterVirtualPaster):
-                            await typer.flush()
+                        if self._typer and isinstance(self._typer, MutterVirtualPaster):
+                            await self._typer.flush()
                         return
 
                     # If we were typing incrementally, apply final corrections
-                    if text and typer and typer._usable:
+                    if text and self._typer and self._typer._usable:
                         logger.info(
                             "Applying final stream_diff with typer=%s, text_len=%d",
-                            type(typer).__name__,
+                            type(self._typer).__name__,
                             len(text),
                         )
-                        await typer.stream_diff(text)
+                        await self._typer.stream_diff(text)
                         # For MutterVirtualPaster, commit the accumulated text after streaming
-                        if isinstance(typer, MutterVirtualPaster):
-                            await typer.flush()
-                    elif text and typer and not typer._usable:
+                        if isinstance(self._typer, MutterVirtualPaster):
+                            await self._typer.flush()
+                    elif text and self._typer and not self._typer._usable:
                         logger.warning("Typer is not usable, skipping stream_diff")
 
                     _step("output_done")

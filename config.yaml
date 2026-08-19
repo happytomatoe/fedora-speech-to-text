@@ -83,4 +83,4 @@ postprocess:
   # custom_filler_words: null  # override filler list; null=language defaults, []=disable
 
 # Performance profiling (logs timing for each startup step)
-profiling: false
+profiling: true
