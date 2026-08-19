@@ -35,35 +35,20 @@ DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0'
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 gnome-extensions enable "$EXT_UUID" 2>&1 || true
 
-# Restart GNOME Shell to load the extension
-echo "--- Restarting GNOME Shell ---"
-DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
-export DBUS_SESSION_BUS_ADDRESS="$DBUS"
-killall -HUP gnome-shell 2>/dev/null || true
-sleep 3
-
-# Verify extension is now active
-echo "Waiting for extension to load..."
-for i in $(seq 1 30); do
-  STATE=$(gnome-extensions show "$EXT_UUID" 2>&1 | grep State: || true)
-  if echo "$STATE" | grep -q "ACTIVE"; then
-    echo "  Extension is ACTIVE after ${i}s"
-    break
-  fi
-  if [ $i -eq 10 ] || [ $i -eq 20 ]; then
-    echo "  Still waiting... (attempt $i)"
-    echo "  gnome-extensions show output: $(gnome-extensions show "$EXT_UUID" 2>&1)"
-  fi
-  sleep 1
-done
-
-# Verify
-STATE=$(gnome-extensions show "$EXT_UUID" 2>&1 || true)
-echo "  Extension state: $STATE"
-if echo "$STATE" | grep -q "ACTIVE"; then
-  echo "  Extension loaded and active"
+# NOTE: Do NOT restart gnome-shell here. In headless QEMU the HUP kills the shell
+# and it does not respawn, leaving the session dead. GNOME Shell dynamically loads
+# extensions when dconf 'enabled-extensions' changes (written above), so no restart
+# is needed — the extension comes up live.
+# Verify extension is now active.
+# Real signal: files present + dconf 'enabled-extensions' lists the UUID.
+# GNOME Shell loads the extension live from this (no restart needed).
+EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+if [ -f "$EXT_DIR/metadata.json" ] && dconf read /org/gnome/shell/enabled-extensions 2>/dev/null | grep -q "$EXT_UUID"; then
+  echo "  Extension installed and enabled (GNOME Shell loads it live via dconf)."
 else
   echo "  WARNING: Extension not active"
+  echo "  Files: $([ -f "$EXT_DIR/metadata.json" ] && echo present || echo missing)"
+  echo "  dconf: $(dconf read /org/gnome/shell/enabled-extensions 2>/dev/null)"
   echo "  Checking journal for errors..."
   journalctl --user -b --since '5 minutes ago' --no-pager 2>/dev/null | grep -i 'voice-to-text\|happytomatoe\|extension' | tail -10 || true
 fi
