@@ -49,41 +49,7 @@ for i in $(seq 1 5); do
   fi
 done
 
-echo "--- Reloading GNOME Shell ---"
-killall -9 gnome-shell 2>/dev/null || true
-
-for i in $(seq 1 30); do
-  if pgrep -x gnome-shell >/dev/null 2>&1; then
-    echo "  gnome-shell respawned (${i}s)"
-    sleep 2
-    break
-  fi
-  sleep 1
-done
-
-DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2- || true)
-export DBUS_SESSION_BUS_ADDRESS="$DBUS"
-
-echo "--- Enabling extension ---"
-# Wait for gnome-shell to discover the extension after respawn
-for i in $(seq 1 20); do
-  if gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
-    echo "  Extension discovered by GNOME Shell (${i}s)"
-    break
-  fi
-  sleep 1
-done
-gnome-extensions enable "$EXT_UUID" 2>&1 || true
-
-echo "--- Verifying extension ---"
-for i in $(seq 1 10); do
-  STATE=$(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || true)
-  if echo "$STATE" | grep -qi "active"; then
-    echo "  Extension is ACTIVE"
-    break
-  fi
-  sleep 1
-done
-
+# GDM restart + extension enable is handled by deploy-steps.ts (separate SSH calls)
+# because sudo systemctl restart gdm drops the SSH connection.
+echo "--- deploy-extension.sh complete (files deployed, schemas compiled, dconf set) ---"
 echo "  gnome-shell PID: $(pgrep -x gnome-shell || echo 'not running')"
-echo "  Extension state: $(gnome-extensions show "$EXT_UUID" 2>/dev/null | grep State: || echo 'unknown')"
