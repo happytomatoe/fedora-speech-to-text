@@ -1,7 +1,7 @@
 #!/bin/bash
 # E2E: Deploy GNOME extension via rsync + dconf (bypasses gnome-extensions install)
 # Args: $1 = extension UUID
-set -euo pipefail
+# No set -e: grep returns 1 when no match, which is normal during deploy
 
 EXT_UUID="${1:-voice-to-text@happytomatoe.com}"
 DEPLOY_DIR="$HOME/tmp-deploy"
@@ -60,7 +60,7 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
+DBUS=$(cat /proc/$(pgrep -x gnome-shell | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep ^DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2- || true)
 export DBUS_SESSION_BUS_ADDRESS="$DBUS"
 
 echo "--- Enabling extension ---"
