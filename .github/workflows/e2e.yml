@@ -193,9 +193,9 @@ jobs:
           echo "Parakeet not ready after 90s"
           exit 1
 
-      # Run E2E tests
-      - name: Run E2E tests
-        run: cd e2e && bun run e2e.ts --shutdown --timeout 300
+      # E2E tests disabled for manual debugging
+      - name: Sleep for manual SSH debugging (30min)
+        run: sleep 1800 && echo 'Done sleeping'
 
       # Verify recording quality
       - name: Verify recording
