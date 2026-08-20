@@ -2,7 +2,7 @@ name: SSH Debug
 
 on:
   pull_request:
-
+  workflow_dispatch:
 jobs:
   debug:
     runs-on: ubuntu-latest
