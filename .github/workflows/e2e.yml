@@ -249,6 +249,27 @@ jobs:
           $SSH 'pgrep -x gnome-shell && echo gnome-shell running || echo gnome-shell NOT running'
           $SSH 'gnome-extensions list 2>/dev/null || echo no extensions'
 
+      # Deploy voice service to VM
+      - name: Deploy voice service
+        run: |
+          SSH_KEY=e2e/qemu-images/id_ed25519
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+          SSH="ssh -i $SSH_KEY $SSH_OPTS -p 2222 testuser@localhost"
+          # Copy Python source
+          $SSH 'mkdir -p ~/voice_to_text/src/voice_to_text'
+          rsync -azc --delete -e "ssh -i $SSH_KEY $SSH_OPTS -p 2222" src/voice_to_text/ testuser@localhost:~/voice_to_text/src/voice_to_text/
+          # Copy test audio
+          scp -i $SSH_KEY $SSH_OPTS -P 2222 e2e/fixtures/test-audio.wav testuser@localhost:/tmp/test-audio.wav
+          # Copy config
+          $SSH 'mkdir -p ~/.config/voice-to-text'
+          scp -i $SSH_KEY $SSH_OPTS -P 2222 e2e/fixtures/voice-to-text-config.ci.yaml testuser@localhost:~/.config/voice-to-text/config.yaml
+          # Copy start script
+          $SSH 'mkdir -p ~/tmp-deploy/scripts'
+          scp -i $SSH_KEY $SSH_OPTS -P 2222 e2e/scripts/start-voice-service.sh testuser@localhost:~/tmp-deploy/scripts/
+          # Start voice service
+          $SSH 'bash ~/tmp-deploy/scripts/start-voice-service.sh mutter-commit'
+          echo "Voice service deployed"
+
       # Sleep for manual SSH debugging (30min)
       - name: Sleep for manual SSH debugging (30min)
         run: sleep 1800 && echo 'Done sleeping'
