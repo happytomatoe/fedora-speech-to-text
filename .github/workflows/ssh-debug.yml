@@ -21,12 +21,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SSH_CMD="${{ steps.tmate.outputs.ssh-command }}"
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "### 🔌 SSH Debug Session
+          cat <<EOF > /tmp/comment.md
+          ### 🔌 SSH Debug Session
           \`\`\`
           $SSH_CMD
           \`\`\`
-          Session runs for **10 minutes**."
+          Session runs for **10 minutes**.
+          EOF
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/comment.md
 
       - name: Keep alive
         run: sleep 600
