@@ -1,6 +1,9 @@
 name: SSH Debug
 
 on:
+  push:
+    branches:
+      - ci/ssh-debug
   workflow_dispatch:
 
 jobs:
