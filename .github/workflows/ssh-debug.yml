@@ -1,7 +1,7 @@
 name: SSH Debug
 
 on:
-  workflow_dispatch:
+  pull_request:
 
 jobs:
   debug:
@@ -15,17 +15,18 @@ jobs:
         with:
           detached: true
 
-      - name: Show SSH command
+      - name: Comment SSH command on PR
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SSH_CMD="${{ steps.tmate.outputs.ssh-command }}"
-          echo "### 🔌 SSH Debug Session" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "$SSH_CMD" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Session runs for **10 minutes**." >> "$GITHUB_STEP_SUMMARY"
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "### 🔌 SSH Debug Session
+          \`\`\`
+          $SSH_CMD
+          \`\`\`
+          Session runs for **10 minutes**."
 
       - name: Keep alive
         run: sleep 600
