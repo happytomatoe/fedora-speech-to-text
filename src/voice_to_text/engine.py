@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import shutil
 import tempfile
 import threading
 import time as _time
@@ -666,10 +667,8 @@ class RecordingEngine:
                     logger.info("Transcription completed: %d characters", len(text) if text else 0)
 
                 finally:
-                    # Clean up temp WAV file after transcription
-                    with contextlib.suppress(OSError):
-                        os.unlink(filepath)
-
+                    # Save or delete temp WAV file
+                    self._store_audio(filepath)
         except Exception as e:
             logger.exception("Recording failed")
             if self.on_error:
@@ -710,6 +709,23 @@ class RecordingEngine:
         self._transcriber = None
         self._batch_provider = None
         self._task = None
+
+    @staticmethod
+    def _store_audio(filepath: str) -> None:
+        """Move or delete temp audio file based on recording_action config."""
+        if not filepath:
+            return
+        config_mgr = ConfigManager()
+        if config_mgr.config.get("audio", {}).get("recording_action", "delete") == "save":
+            save_dir = "/tmp/voice-to-text"
+            os.makedirs(save_dir, exist_ok=True)
+            try:
+                shutil.move(filepath, os.path.join(save_dir, "last.wav"))
+            except OSError:
+                logger.warning("Failed to save audio to %s", save_dir)
+        else:
+            with contextlib.suppress(OSError):
+                os.unlink(filepath)
 
     def _notify_state(self):
         if self.on_state_change:
