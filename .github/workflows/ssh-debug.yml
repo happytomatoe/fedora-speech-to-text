@@ -23,6 +23,7 @@ jobs:
         with:
           message: |
             ### 🔌 SSH Debug Session
+            Run: ${{ github.run_id }}
             ```
             ${{ steps.tmate.outputs.ssh-command }}
             ```

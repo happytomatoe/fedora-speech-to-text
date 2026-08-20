@@ -18,20 +18,19 @@ prerequisites:
 
 ### 1. Trigger workflow
 
-E2E (workflow_dispatch — only works from default branch):
-```bash
-gh workflow run "E2E Tests" -f debug=true
-```
-
-SSH Debug (pull_request — triggers on push):
 ```bash
 git commit --allow-empty -m "trigger ssh debug" && git push
 ```
 
-### 2. Wait for comment
+### 2. Get run ID and wait for comment
 
 ```bash
-watch -n 5 'gh api repos/happytomatoe/fedora-speech-to-text/issues/109/comments --jq '"'"'.[-1].body'"'"''
+# Get the latest run ID
+RUN_ID=$(gh run list --workflow=ssh-debug.yml --limit=1 --json databaseId --jq '.[0].databaseId')
+echo "Run: $RUN_ID"
+
+# Wait for comment with this run ID
+watch -n 5 'gh api repos/happytomatoe/fedora-speech-to-text/issues/109/comments --jq '"'"'.[] | select(.body | contains("Run: '$RUN_ID'")) | .body'"'"''
 ```
 
 ### 3. Copy SSH command from comment
