@@ -29,12 +29,10 @@ git commit --allow-empty -m "trigger ssh debug" && git push
 The script waits for the PR comment, then SSHes in via Herdr:
 
 ```bash
-ssh-connect.sh [PR_NUMBER]
+.agents/skills/ssh-debug-github-runner/scripts/ssh-connect.sh [PR_NUMBER] [GITHUB_WORKFLOW_RUN_ID]
 ```
 
-If no PR number, auto-detects from current branch.
-
-Script location: `scripts/ssh-connect.sh` (relative to this skill directory).
+If no PR number, auto-detects from current branch. If no run ID, uses latest SSH comment.
 
 ### 3. Run commands in the runner
 
