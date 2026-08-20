@@ -65,14 +65,11 @@ if echo "$SCREEN" | grep -qi "fingerprint\|are you sure\|host key"; then
   sleep 0.5
 fi
 
-# --- Dismiss tmux status bar (press q) ---
-SCREEN=$(herdr pane read "$PANE_ID" --source visible --lines 20 2>/dev/null || true)
-if echo "$SCREEN" | grep -qE '\[?q\]?|press.*q|dismiss.*bar'; then
-  echo "Dismissing tmux status bar..."
-  herdr pane send-text "$PANE_ID" "q"
-  herdr pane send-keys "$PANE_ID" enter
-  sleep 0.5
-fi
+# --- Dismiss tmux status bar (always present in tmate) ---
+sleep 2  # wait for tmate to fully render
+echo "Dismissing tmux status bar..."
+herdr pane send-keys "$PANE_ID" q
+sleep 0.5
 
 # --- Wait for shell prompt ---
 echo "Waiting for shell prompt..."
