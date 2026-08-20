@@ -80,6 +80,16 @@ for i in $(seq 1 30); do
   fi
   if [ "$i" = "30" ]; then
     echo "  WARNING: gnome-shell did not restart within 30s"
+    # Fallback: manually start gnome-shell if GDM doesn't respawn it
+    echo "  Starting gnome-shell manually..."
+    export DISPLAY=:99
+    dbus-launch gnome-session --session=gnome &>/dev/null &
+    sleep 3
+    if pgrep -x gnome-shell >/dev/null 2>&1; then
+      echo "  gnome-shell started manually (PID $(pgrep -x gnome-shell))"
+    else
+      echo "  ERROR: Could not start gnome-shell"
+    fi
   fi
 done
 
