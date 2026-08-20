@@ -157,6 +157,9 @@ jobs:
           restore-keys: |
             e2e-golden-
 
+      # Inject extension + D-Bus service into golden image (if not cached with injection)
+      - name: Inject extension into golden image
+        run: just e2e-inject-extension
       # Setup E2E environment (downloads golden image + SSH keys from Filen if not cached)
       - name: Setup E2E environment
         run: just qemu-e2e-setup
@@ -194,12 +197,9 @@ jobs:
           echo "Parakeet not ready after 90s"
           exit 1
 
-      # Run E2E tests (commented out for manual SSH debugging)
-      # - name: Run E2E tests
-      #   run: cd e2e && bun run e2e.ts --shutdown --timeout 300
-      - name: Sleep for manual SSH debugging (45min)
-        run: sleep 2700 && echo 'Done sleeping'
-      # Verify recording quality
+      # Run E2E tests
+      - name: Run E2E tests
+        run: cd e2e && bun run e2e.ts --shutdown --timeout 300
       - name: Verify recording
         if: always()
         run: |

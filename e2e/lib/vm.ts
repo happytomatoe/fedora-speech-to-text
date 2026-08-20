@@ -34,6 +34,8 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  /** Skip extension deploy if true (extension pre-installed in golden image) */
+  skipExtensionDeploy?: boolean;
 }
 
 export class VmManager {
@@ -515,9 +517,13 @@ EOF`);
     await this.deployPortalScreenshot();
 
     const t2 = Date.now();
-    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    const skipExtension = this.config.skipExtensionDeploy || false;
+    if (skipExtension) {
+      console.log(`  Skipping deployExtension (pre-installed in golden image)`);
+    } else {
+      await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    }
     console.log(`  deployExtension: ${Date.now() - t2}ms`);
-
     // Deploy Python source and test audio (sequential, sync operations)
     const t3 = Date.now();
     await deployPythonSource(this.deployCfg, this.deployer);
@@ -549,7 +555,13 @@ EOF`);
     await this.deployer.connect();
 
     // Deploy extension via install.sh --local
-    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    // Deploy extension via install.sh --local (skip if pre-installed in golden image)
+    const skipExtension = this.config.skipExtensionDeploy || false;
+    if (skipExtension) {
+      console.log(`  Skipping deployExtension (pre-installed in golden image)`);
+    } else {
+      await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    }
     console.log(`  setupForPrefs total: ${Date.now() - t0}ms`);
   }
 

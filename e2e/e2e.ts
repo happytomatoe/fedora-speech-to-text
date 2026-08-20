@@ -712,6 +712,7 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    skipExtensionDeploy: BASE_IMAGE.includes('golden-gnome-deps'),
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
