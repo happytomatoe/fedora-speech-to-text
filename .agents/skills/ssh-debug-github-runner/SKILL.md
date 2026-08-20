@@ -17,60 +17,32 @@ Reference: <https://github.com/marketplace/actions/debugging-with-tmate>
   - `mshick/add-pr-comment@v3` to post SSH command
   - `sleep 600` to keep session alive
 
-## Steps
-
-### 1. Push to trigger workflow
+## Quick Start
+### 1. Trigger the workflow
 
 ```bash
 git commit --allow-empty -m "trigger ssh debug" && git push
 ```
 
-### 2. Wait for PR comment with SSH command
+### 2. Connect
+
+The script waits for the PR comment, then SSHes in via Herdr:
 
 ```bash
-# Get PR number for current branch
-PR_NUMBER=$(gh pr list --head $(git branch --show-current) --json number --jq '.[0].number')
-
-# Wait for comment (polls every 5s, timeout 90s)
-wait_until 90 5 "SSH comment" bash -c \
-  "gh api repos/{owner}/{repo}/issues/$PR_NUMBER/comments --jq '.[] | select(.body | contains(\"SSH Debug Session\")) | .body'"
+ssh-connect.sh [PR_NUMBER]
 ```
 
-### 3. Extract SSH command
+If no PR number, auto-detects from current branch.
 
-```bash
-SSH_CMD=$(gh api repos/{owner}/{repo}/issues/$PR_NUMBER/comments \
-  --jq '.[] | select(.body | contains("SSH Debug Session")) | .body' \
-  | grep -oP 'ssh \K[^\s]+')
-```
+Script location: `scripts/ssh-connect.sh` (relative to this skill directory).
 
-### 4. Herdr right split pane + SSH
-
-```bash
-# Create split pane
-PANE_ID=$(herdr pane split --current --direction right --cwd "$PWD" --no-focus | jq -r '.result.pane.pane_id')
-
-# Run SSH command
-herdr pane run $PANE_ID "ssh $SSH_CMD"
-
-# Accept host key (first time)
-wait_until 10 2 "host key prompt" herdr pane read $PANE_ID --source visible --lines 20
-herdr pane send-text $PANE_ID "yes"
-herdr pane send-keys $PANE_ID enter
-
-# If tmux status bar appears, press q
-herdr pane send-text $PANE_ID "q"
-herdr pane send-keys $PANE_ID enter
-```
-
-### 5. Run commands in the runner
+### 3. Run commands in the runner
 
 ```bash
 herdr pane send-text $PANE_ID "whoami && hostname && pwd"
 herdr pane send-keys $PANE_ID enter
 herdr pane read $PANE_ID --source visible --lines 20
 ```
-
 ## How It Works
 
 1. Workflow triggers on `pull_request`
@@ -84,4 +56,5 @@ herdr pane read $PANE_ID --source visible --lines 20
 - **"Connection closed"**: tmate session expired or workflow ended
 - **No PR comment**: Check `pull-requests: write` permission in workflow
 - **Host key prompt**: Type `yes` + enter (first connection only)
-- **tmux status bar**: Press `q` to dismiss
+- **tmux status bar**: Press `q` to dismiss — DO NOT read screen before dismissing, prompt is hidden behind it
+- **Can't see prompt**: Always dismiss tmux bar first, then read. The bar obscures the shell prompt.
