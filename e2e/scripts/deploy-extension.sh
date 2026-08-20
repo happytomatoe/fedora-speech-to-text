@@ -49,29 +49,38 @@ for i in $(seq 1 5); do
   fi
 done
 
-# Restart GDM to cleanly respawn gnome-shell with extension loaded.
-# Previous approach: kill gnome-shell + wait for GDM auto-respawn.
-# Problem: GDM doesn't always respawn gnome-shell after external kill.
-# GDM restart does NOT kill SSH sessions.
-echo "--- Restarting GDM to load extension ---"
+# Auto-login testuser via GDM (needed after GDM restart)
+echo "--- Configuring GDM auto-login ---"
+sudo mkdir -p /etc/gdm
+sudo bash -c 'cat > /etc/gdm/custom.conf << EOF
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin=testuser
+EOF'
 sudo systemctl restart gdm
 
-# Wait for GDM to respawn gnome-shell
-echo "  Waiting for gnome-shell to restart..."
+# Wait for testuser's gnome-shell to start
+echo "  Waiting for testuser gnome-shell..."
 for i in $(seq 1 30); do
   sleep 1
-  if pgrep -x gnome-shell >/dev/null 2>&1; then
-    NEW_PID=$(pgrep -x gnome-shell)
-    echo "  gnome-shell respawned (PID $NEW_PID) after ${i}s"
+  # Check for gnome-shell running as testuser (not gdm)
+  if pgrep -u testuser -x gnome-shell >/dev/null 2>&1; then
+    NEW_PID=$(pgrep -u testuser -x gnome-shell)
+    echo "  testuser gnome-shell started (PID $NEW_PID) after ${i}s"
     break
   fi
   if [ "$i" = "30" ]; then
-    echo "  WARNING: gnome-shell did not restart within 30s"
+    echo "  WARNING: testuser gnome-shell did not start within 30s"
+    echo "  gnome-shell processes:"
+    pgrep -a gnome-shell || echo "    (none)"
   fi
 done
 
-# Verify extension is loaded
+# Verify extension is loaded in testuser session
 sleep 2
+export DISPLAY=:0
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
 echo "  Extension list: $(gnome-extensions list 2>/dev/null || echo '(empty)')"
+echo "  testuser gnome-shell PID: $(pgrep -u testuser -x gnome-shell || echo 'not running')"
 echo "  gnome-shell PID: $(pgrep -x gnome-shell || echo 'not running')"
 echo "--- deploy-extension.sh complete ---"

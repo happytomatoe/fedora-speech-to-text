@@ -74,7 +74,9 @@ sleep 0.5
 # --- Wait for shell prompt ---
 echo "Waiting for shell prompt..."
 if herdr pane wait-output "$PANE_ID" --regex '\$|#|>' --timeout 30000 --raw 2>/dev/null; then
-  echo "Connected!"
+  echo ""
+  echo "✅ SSH connected! You can now run commands in the runner."
+  echo "   Try: herdr pane send-text $PANE_ID \"whoami && hostname\""
   echo ""
   herdr pane read "$PANE_ID" --source visible --lines 20
   exit 0
