@@ -39,13 +39,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup SSH debug session (tmate)
+        if: github.event_name == 'workflow_dispatch'
         id: tmate
         uses: mxschmitt/action-tmate@v3
         with:
           detached: true
 
       - name: Comment SSH command on PR
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: mshick/add-pr-comment@v3
         with:
           message: |
@@ -56,7 +57,7 @@ jobs:
             ```
             Session runs for **45 minutes** (workflow timeout).
             Use: `.agents/skills/ssh-debug-github-runner/scripts/ssh-connect.sh [PR_NUMBER] ${{ github.run_id }}`
-      # Cache apt packages to skip re-downloading QEMU + libvirt (~40s saved)
+
       - name: Restore apt cache
         id: cache-apt
         uses: actions/cache/restore@v4
