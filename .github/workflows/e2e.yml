@@ -40,16 +40,15 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup SSH debug session (tmate)
+        id: tmate
         if: ${{ github.event.inputs.debug == 'true' }}
         uses: mxschmitt/action-tmate@v3
         with:
           timeout-minutes: 30
-          limit-access-to-actor: true
 
       # Cache apt packages to skip re-downloading QEMU + libvirt (~40s saved)
       - name: Restore apt cache
