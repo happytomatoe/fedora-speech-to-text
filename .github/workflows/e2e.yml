@@ -157,9 +157,6 @@ jobs:
           restore-keys: |
             e2e-golden-
 
-      # Inject extension + D-Bus service into golden image (if not cached with injection)
-      - name: Inject extension into golden image
-        run: just e2e-inject-extension
       # Setup E2E environment (downloads golden image + SSH keys from Filen if not cached)
       - name: Setup E2E environment
         run: just qemu-e2e-setup
@@ -167,6 +164,9 @@ jobs:
           FILEN_EMAIL: ${{ secrets.FILEN_EMAIL }}
           FILEN_PASSWORD: ${{ secrets.FILEN_PASSWORD }}
 
+      # Inject extension + D-Bus service into golden image (after setup ensures it exists)
+      - name: Inject extension into golden image
+        run: just e2e-inject-extension
       # Start Parakeet container (runs on host, not in VM)
       - name: Start Parakeet
         run: |

@@ -32,9 +32,13 @@ if [ ! -d "$EXT_DIR/schemas" ]; then
   exit 1
 fi
 
-# virt-customize must be available
-if ! toolbox run --container fedora-toolbox-44 which virt-customize >/dev/null 2>&1; then
-  echo "ERROR: virt-customize not found in toolbox"
+# Detect virt-customize: prefer bare, fall back to toolbox
+if command -v virt-customize >/dev/null 2>&1; then
+  vc() { virt-customize "$@"; }
+elif toolbox run --container fedora-toolbox-44 which virt-customize >/dev/null 2>&1; then
+  vc() { toolbox run --container fedora-toolbox-44 virt-customize "$@"; }
+else
+  echo "ERROR: virt-customize not found (install virtinst or run inside toolbox)"
   exit 1
 fi
 
@@ -50,7 +54,7 @@ glib-compile-schemas "$SCHEMA_DIR/" 2>/dev/null || true
 
 # Step 2: Copy extension to system-wide location
 echo "2. Copying extension to /usr/share/gnome-shell/extensions/..."
-toolbox run --container fedora-toolbox-44 virt-customize \
+vc \
   -a "$IMAGE" \
   --run-command "mkdir -p /usr/share/gnome-shell/extensions/$EXT_UUID" \
   --copy-in "$EXT_DIR"/metadata.json:/usr/share/gnome-shell/extensions/$EXT_UUID/ \
@@ -59,7 +63,7 @@ toolbox run --container fedora-toolbox-44 virt-customize \
 
 # Copy JS files separately (glob doesn't work with --copy-in)
 for jsfile in "$EXT_DIR"/*.js; do
-  toolbox run --container fedora-toolbox-44 virt-customize \
+  vc \
     -a "$IMAGE" \
     --copy-in "$jsfile":/usr/share/gnome-shell/extensions/$EXT_UUID/
 done
@@ -82,7 +86,7 @@ cp "$SERVICE_DIR/com.happytomatoe.VoiceToText.user.service" "$TMPDIR/"
 # Upload wheel + service files, install inside image
 WHEEL=$(ls "$TMPDIR"/*.whl)
 WHEEL_NAME=$(basename "$WHEEL")
-toolbox run --container fedora-toolbox-44 virt-customize \
+vc \
   -a "$IMAGE" \
   --upload "$WHEEL":/tmp/"$WHEEL_NAME" \
   --upload "$TMPDIR/com.happytomatoe.VoiceToText.service":/tmp/dbus-session.service \
@@ -93,7 +97,7 @@ toolbox run --container fedora-toolbox-44 virt-customize \
 
 # Step 4: Enable extension via dconf (system-wide default)
 echo "4. Enabling extension via dconf..."
-toolbox run --container fedora-toolbox-44 virt-customize \
+vc \
   -a "$IMAGE" \
   --run-command "mkdir -p /etc/dconf/db/local.d" \
   --run-command "printf '[org/gnome/shell]\nenabled-extensions=[\"$EXT_UUID\"]\n' > /etc/dconf/db/local.d/00-extensions" \

@@ -640,7 +640,7 @@ qemu-e2e-kill:
 # @category e2e-qemu
 # Inject GNOME extension + D-Bus service into golden image (offline, no VM boot)
 e2e-inject-extension image='e2e/qemu-images/golden-gnome-deps.qcow2':
-    bash e2e/scripts/inject-extension.sh --image {{image}}
+    bash e2e/scripts/inject-extension.sh --image {{ image }}
 
 # @category e2e-qemu
 # Start QEMU E2E test VM (keeps running for SPICE connection)
