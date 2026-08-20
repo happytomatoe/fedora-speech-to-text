@@ -10,7 +10,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup tmate session
+        id: tmate
         uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
 
-      - name: Sleep for 10 minutes
+      - name: Show SSH command
+        if: always()
+        run: |
+          SSH_CMD="${{ steps.tmate.outputs.ssh-command }}"
+          echo "### 🔌 SSH Debug Session" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$SSH_CMD" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Session runs for **10 minutes**." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep alive
         run: sleep 600
