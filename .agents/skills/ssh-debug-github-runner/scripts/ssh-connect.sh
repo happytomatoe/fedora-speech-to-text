@@ -54,37 +54,31 @@ echo "Pane: $PANE_ID"
 # --- Run SSH ---
 herdr pane send-text "$PANE_ID" "ssh $SSH_CMD"
 herdr pane send-keys "$PANE_ID" enter
-sleep 0.5
 
 # --- Accept host key if prompted ---
-SCREEN=$(herdr pane read "$PANE_ID" --source visible --lines 20 2>/dev/null || true)
-if echo "$SCREEN" | grep -qi "fingerprint\|are you sure\|host key"; then
+echo "Checking for host key prompt..."
+if herdr pane wait-output "$PANE_ID" --regex 'fingerprint|are you sure|host key' --timeout 10000 --raw 2>/dev/null; then
   echo "Accepting host key..."
   herdr pane send-text "$PANE_ID" "yes"
   herdr pane send-keys "$PANE_ID" enter
-  sleep 0.5
 fi
 
 # --- Dismiss tmux status bar (always present in tmate) ---
-sleep 2  # wait for tmate to fully render
+echo "Waiting for tmate to render..."
+herdr pane wait-output "$PANE_ID" --regex '\[?' --timeout 15000 --raw 2>/dev/null || true
+sleep 1
 echo "Dismissing tmux status bar..."
 herdr pane send-keys "$PANE_ID" q
 sleep 0.5
 
 # --- Wait for shell prompt ---
 echo "Waiting for shell prompt..."
-MARKER="SSH_READY_$$"
-for i in $(seq 1 20); do
-  herdr pane send-text "$PANE_ID" "echo $MARKER"
-  herdr pane send-keys "$PANE_ID" enter
-  sleep 1
-  SCREEN=$(herdr pane read "$PANE_ID" --source recent --lines 10 2>/dev/null || true)
-  if echo "$SCREEN" | grep -q "$MARKER"; then
-    echo "Connected!"
-    echo ""
-    herdr pane read "$PANE_ID" --source visible --lines 20
-    exit 0
-  fi
-done
+if herdr pane wait-output "$PANE_ID" --regex '\$|#|>' --timeout 30000 --raw 2>/dev/null; then
+  echo "Connected!"
+  echo ""
+  herdr pane read "$PANE_ID" --source visible --lines 20
+  exit 0
+fi
+
 echo "WARNING: Could not confirm shell prompt. Check pane manually."
 herdr pane read "$PANE_ID" --source visible --lines 30
