@@ -13,6 +13,10 @@ prerequisites:
 
 # SSH Debug GitHub Runner
 
+Reference: https://github.com/marketplace/actions/debugging-with-tmate
+
+# SSH Debug GitHub Runner
+
 ## Steps
 
 ### 1. Trigger workflow
@@ -43,7 +47,9 @@ Run the SSH command EXACTLY as it appears in the comment — copy-paste, no flag
 ssh <user>@<host>  # from comment
 ```
 
-tmate uses its own keys — do NOT use GitHub SSH keys.
+- If GitHub account has SSH keys → only those keys can connect (need private key in agent)
+- If GitHub account has NO keys → anyone can connect (no auth needed)
+- To check: `gh api user/keys`
 
 ### 5. Cleanup
 
