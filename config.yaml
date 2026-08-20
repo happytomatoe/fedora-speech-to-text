@@ -65,6 +65,8 @@ audio:
   bluetooth_mic: true
   speaker:
     decrease_volume: 50  # 0-100: % to decrease speaker volume when recording (0=no change, 100=mute)
+  # "delete" = remove after transcription, "save" = keep last recording in /tmp/voice-to-text/
+  recording_action: delete
 
 logging:
   file: "/tmp/voice-to-text.log"
