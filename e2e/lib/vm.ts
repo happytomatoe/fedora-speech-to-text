@@ -339,6 +339,12 @@ export class VmManager {
       this.booted = false;
     }
 
+    // Kill Xvfb + i3 so boot() can restart them cleanly
+    this.xvfbProcess?.kill("SIGKILL");
+    this.xvfbProcess = null;
+    this.i3Process?.kill("SIGKILL");
+    this.i3Process = null;
+
     // Delete stale overlay
     Bun.spawnSync(["rm", "-f", overlayImage]);
     console.log("  Recreated overlay from base image");
