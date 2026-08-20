@@ -75,26 +75,24 @@ echo "3. Installing Python package + D-Bus service..."
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# Build a wheel for offline install
+# Build a wheel (pip install happens at firstboot with full networking)
 cd "$PROJECT_ROOT"
 uv build --wheel -o "$TMPDIR/" 2>/dev/null
 
 # Copy D-Bus service files
 cp "$SERVICE_DIR/com.happytomatoe.VoiceToText.service" "$TMPDIR/"
 cp "$SERVICE_DIR/com.happytomatoe.VoiceToText.user.service" "$TMPDIR/"
-
-# Upload wheel + service files, install inside image
+# Upload wheel + service files
 WHEEL=$(ls "$TMPDIR"/*.whl)
 WHEEL_NAME=$(basename "$WHEEL")
 vc \
   -a "$IMAGE" \
-  --network \
   --upload "$WHEEL":/tmp/"$WHEEL_NAME" \
   --upload "$TMPDIR/com.happytomatoe.VoiceToText.service":/tmp/dbus-session.service \
   --upload "$TMPDIR/com.happytomatoe.VoiceToText.user.service":/tmp/systemd-user.service \
-  --run-command "pip3 install --break-system-packages /tmp/$WHEEL_NAME && rm /tmp/$WHEEL_NAME" \
   --run-command "mkdir -p /usr/share/dbus-1/services && cp /tmp/dbus-session.service /usr/share/dbus-1/services/com.happytomatoe.VoiceToText.service && rm /tmp/dbus-session.service" \
-  --run-command "mkdir -p /usr/lib/systemd/user && cp /tmp/systemd-user.service /usr/lib/systemd/user/com.happytomatoe.VoiceToText.user.service && rm /tmp/systemd-user.service"
+  --run-command "mkdir -p /usr/lib/systemd/user && cp /tmp/systemd-user.service /usr/lib/systemd/user/com.happytomatoe.VoiceToText.user.service && rm /tmp/systemd-user.service" \
+  --firstboot-command "pip3 install --break-system-packages /tmp/$WHEEL_NAME && rm /tmp/$WHEEL_NAME"
 
 # Step 4: Enable extension via dconf (system-wide default)
 echo "4. Enabling extension via dconf..."
