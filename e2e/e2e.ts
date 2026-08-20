@@ -837,6 +837,9 @@ async function main(): Promise<void> {
     const healthAfterDeploy = await vm.healthCheck(preDeployPid);
     logHealthCheck(healthAfterDeploy);
     if (!healthAfterDeploy.gnomeShell) {
+      console.log("  GNOME Shell not running — sleeping 10min for SSH debug");
+      console.log("  Press Ctrl+C to abort, or wait for timeout.");
+      await new Promise(r => setTimeout(r, 600_000));  // 10 minutes
       throw new Error(`Health check failed: GNOME Shell not running: ${healthAfterDeploy.details.join('; ')}`);
     }
     if (!healthAfterDeploy.extensionActive) {
