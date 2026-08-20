@@ -1,56 +1,55 @@
 ---
 name: ssh-debug-github-runner
-description: SSH into a running GitHub Actions runner for live debugging
-triggers:
-  - ssh into runner
-  - debug runner
-  - login to runner
-  - ssh debug
-prerequisites:
-  - tmate must be in the workflow
-  - `gh` CLI authenticated
+description: SSH into a running GitHub Actions runner for live debugging via tmate. Triggers on 'ssh into runner', 'debug runner', 'login to runner', 'ssh debug'.
 ---
 
 # SSH Debug GitHub Runner
 
-Reference: https://github.com/marketplace/actions/debugging-with-tmate
+Reference: <https://github.com/marketplace/actions/debugging-with-tmate>
 
-# SSH Debug GitHub Runner
+## Prerequisites
 
-## Steps
+- `gh` CLI authenticated
+- `herdr` available (for Herdr writesplit)
+- Workflow `.github/workflows/e2e.yml` with:
+  - `mxschmitt/action-tmate@v3` with `detached: true`
+  - `mshick/add-pr-comment@v3` to post SSH command
 
-### 1. Trigger workflow
+## Quick Start
+### 1. Trigger the workflow
 
 ```bash
 git commit --allow-empty -m "trigger ssh debug" && git push
 ```
 
-### 2. Get run ID and wait for comment
+### 2. Connect
+
+The script waits for the PR comment, then SSHes in via Herdr:
 
 ```bash
-# Get the latest run ID
-RUN_ID=$(gh run list --workflow=ssh-debug.yml --limit=1 --json databaseId --jq '.[0].databaseId')
-echo "Run: $RUN_ID"
-
-# Wait for comment with this run ID
-watch -n 5 'gh api repos/happytomatoe/fedora-speech-to-text/issues/109/comments --jq '"'"'.[] | select(.body | contains("Run: '$RUN_ID'")) | .body'"'"''
+.agents/skills/ssh-debug-github-runner/scripts/ssh-connect.sh [PR_NUMBER] [GITHUB_WORKFLOW_RUN_ID]
 ```
 
-### 3. Copy SSH command from comment
-Look for line like: `ssh xyzabc123@lon1.tmate.io`
+If no PR number, auto-detects from current branch. If no run ID, uses latest SSH comment.
 
-### 4. Connect
-
-Run the SSH command EXACTLY as it appears in the comment — copy-paste, no flags, no modifications:
+### 3. Run commands in the runner
 
 ```bash
-ssh <user>@<host>  # from comment
+herdr pane send-text $PANE_ID "whoami && hostname && pwd"
+herdr pane send-keys $PANE_ID enter
+herdr pane read $PANE_ID --source visible --lines 20
 ```
+## How It Works
 
-- If GitHub account has SSH keys → only those keys can connect (need private key in agent)
-- If GitHub account has NO keys → anyone can connect (no auth needed)
-- To check: `gh api user/keys`
+1. E2E workflow triggers on `pull_request` or `push`
+2. tmate starts in detached mode (session ID printed, workflow continues)
+3. `add-pr-comment` posts SSH command to PR (on PR events only)
+4. E2E tests run while tmate session is active
+5. You SSH in via Herdr writesplit pane to troubleshoot
+## Troubleshooting
 
-### 5. Cleanup
-
-tmate session auto-closes after timeout or workflow completion.
+- **"Connection closed"**: tmate session expired or workflow ended
+- **No PR comment**: Check `pull-requests: write` permission in workflow
+- **Host key prompt**: Type `yes` + enter (first connection only)
+- **tmux status bar**: Press `q` to dismiss — DO NOT read screen before dismissing, prompt is hidden behind it
+- **Can't see prompt**: Always dismiss tmux bar first, then read. The bar obscures the shell prompt.

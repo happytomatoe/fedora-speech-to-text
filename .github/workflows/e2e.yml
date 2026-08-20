@@ -6,13 +6,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      debug:
-        description: 'Enable SSH debug session via tmate'
-        required: false
-        default: 'false'
-        type: boolean
-
 jobs:
   # Mutation testing — reports hollow tests but never fails CI
   gutcheck:
@@ -40,16 +33,29 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup SSH debug session (tmate)
         id: tmate
-        if: ${{ github.event.inputs.debug == 'true' }}
         uses: mxschmitt/action-tmate@v3
         with:
-          timeout-minutes: 30
+          detached: true
 
+      - name: Comment SSH command on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: mshick/add-pr-comment@v3
+        with:
+          message: |
+            ### 🔌 SSH Debug Session
+            Run: ${{ github.run_id }}
+            ```
+            ${{ steps.tmate.outputs.ssh-command }}
+            ```
+            Session runs for **45 minutes** (workflow timeout).
+            Use: `.agents/skills/ssh-debug-github-runner/scripts/ssh-connect.sh [PR_NUMBER] ${{ github.run_id }}`
       # Cache apt packages to skip re-downloading QEMU + libvirt (~40s saved)
       - name: Restore apt cache
         id: cache-apt
