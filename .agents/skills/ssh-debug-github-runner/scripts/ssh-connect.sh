@@ -73,16 +73,18 @@ sleep 0.5
 
 # --- Wait for shell prompt ---
 echo "Waiting for shell prompt..."
-for i in $(seq 1 10); do
-  SCREEN=$(herdr pane read "$PANE_ID" --source visible --lines 30 2>/dev/null || true)
-  if echo "$SCREEN" | grep -qE '\$|#|>'; then
+MARKER="SSH_READY_$$"
+for i in $(seq 1 20); do
+  herdr pane send-text "$PANE_ID" "echo $MARKER"
+  herdr pane send-keys "$PANE_ID" enter
+  sleep 1
+  SCREEN=$(herdr pane read "$PANE_ID" --source recent --lines 10 2>/dev/null || true)
+  if echo "$SCREEN" | grep -q "$MARKER"; then
     echo "Connected!"
     echo ""
     herdr pane read "$PANE_ID" --source visible --lines 20
     exit 0
   fi
-  sleep 0.5
 done
-#
-# echo "WARNING: Could not confirm shell prompt. Check pane manually."
-# herdr pane read "$PANE_ID" --source visible --lines 30
+echo "WARNING: Could not confirm shell prompt. Check pane manually."
+herdr pane read "$PANE_ID" --source visible --lines 30
