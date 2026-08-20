@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SSH into GitHub Actions runner after workflow posts tmate comment.
-# Usage: ssh-connect.sh PR_NUMBER [RUN_ID]
+# Usage: ssh-connect.sh PR_NUMBER [GITHUB_WORKFLOW_RUN_ID]
 # If no run ID, uses latest SSH comment.
 set -euo pipefail
 
 PR_NUMBER="${1:-}"
-RUN_ID="${2:-}"
+GITHUB_WORKFLOW_RUN_ID="${2:-}"
 POLL_INTERVAL=5
 TIMEOUT=90
 
@@ -23,10 +23,10 @@ echo "PR #$PR_NUMBER"
 echo "Waiting for SSH comment (timeout ${TIMEOUT}s)..."
 SSH_CMD=""
 for i in $(seq 1 $((TIMEOUT / POLL_INTERVAL))); do
-  if [ -n "$RUN_ID" ]; then
+  if [ -n "$GITHUB_WORKFLOW_RUN_ID" ]; then
     # Find comment for specific run
     SSH_CMD=$(gh api "repos/{owner}/{repo}/issues/$PR_NUMBER/comments" \
-      --jq ".[] | select(.body | contains(\"Run: $RUN_ID\")) | .body" 2>/dev/null |
+      --jq ".[] | select(.body | contains(\"Run: $GITHUB_WORKFLOW_RUN_ID\")) | .body" 2>/dev/null |
       grep -oP 'ssh \K[^\s]+' || true)
   else
     # Find latest SSH comment (any run)
