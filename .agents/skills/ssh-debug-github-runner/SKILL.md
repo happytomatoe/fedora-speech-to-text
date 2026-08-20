@@ -9,7 +9,6 @@ triggers:
 prerequisites:
   - tmate must be in the workflow
   - `gh` CLI authenticated
-  - GitHub-registered SSH key must be in ssh-agent
 ---
 
 # SSH Debug GitHub Runner
@@ -34,14 +33,17 @@ watch -n 5 'gh api repos/happytomatoe/fedora-speech-to-text/issues/109/comments 
 ```
 
 ### 3. Copy SSH command from comment
-
 Look for line like: `ssh xyzabc123@lon1.tmate.io`
 
-### 4. Connect (no flags, run as-is)
+### 4. Connect
+
+Run the SSH command EXACTLY as it appears in the comment — copy-paste, no flags, no modifications:
 
 ```bash
-ssh xyzabc123@lon1.tmate.io
+ssh <user>@<host>  # from comment
 ```
+
+tmate uses its own keys — do NOT use GitHub SSH keys.
 
 ### 5. Cleanup
 
