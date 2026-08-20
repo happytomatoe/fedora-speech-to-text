@@ -14,6 +14,7 @@ jobs:
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-
+        with:
+           limit-access-to-actor: true
       - name: Sleep for 10 minutes
         run: sleep 600
