@@ -88,6 +88,7 @@ WHEEL=$(ls "$TMPDIR"/*.whl)
 WHEEL_NAME=$(basename "$WHEEL")
 vc \
   -a "$IMAGE" \
+  --network \
   --upload "$WHEEL":/tmp/"$WHEEL_NAME" \
   --upload "$TMPDIR/com.happytomatoe.VoiceToText.service":/tmp/dbus-session.service \
   --upload "$TMPDIR/com.happytomatoe.VoiceToText.user.service":/tmp/systemd-user.service \
