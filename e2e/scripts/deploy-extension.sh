@@ -49,25 +49,12 @@ for i in $(seq 1 5); do
   fi
 done
 
-# Restart gnome-shell to pick up the extension.
-# We kill gnome-shell (NOT GDM) so SSH stays alive.
-# GDM's auto-login will respawn gnome-shell with the extension loaded.
-echo "--- Restarting gnome-shell to load extension ---"
-OLD_PID=$(pgrep -x gnome-shell || true)
-if [ -n "$OLD_PID" ]; then
-  echo "  Killing gnome-shell (PID $OLD_PID)..."
-  kill $OLD_PID
-  # Wait for gnome-shell to die
-  for i in $(seq 1 10); do
-    sleep 1
-    if ! pgrep -x gnome-shell >/dev/null 2>&1; then
-      echo "  gnome-shell stopped"
-      break
-    fi
-  done
-else
-  echo "  gnome-shell not running, skipping kill"
-fi
+# Restart GDM to cleanly respawn gnome-shell with extension loaded.
+# Previous approach: kill gnome-shell + wait for GDM auto-respawn.
+# Problem: GDM doesn't always respawn gnome-shell after external kill.
+# GDM restart does NOT kill SSH sessions.
+echo "--- Restarting GDM to load extension ---"
+sudo systemctl restart gdm
 
 # Wait for GDM to respawn gnome-shell
 echo "  Waiting for gnome-shell to restart..."
@@ -80,17 +67,6 @@ for i in $(seq 1 30); do
   fi
   if [ "$i" = "30" ]; then
     echo "  WARNING: gnome-shell did not restart within 30s"
-    # Fallback: manually start gnome-shell if GDM doesn't respawn it
-    echo "  Starting gnome-shell manually..."
-    export DISPLAY=:99
-    DBUS_LAUNCH=$(which dbus-launch 2>/dev/null || echo /usr/share/miniconda/bin/dbus-launch)
-    $DBUS_LAUNCH gnome-session --session=gnome &>/dev/null &
-    sleep 3
-    if pgrep -x gnome-shell >/dev/null 2>&1; then
-      echo "  gnome-shell started manually (PID $(pgrep -x gnome-shell))"
-    else
-      echo "  ERROR: Could not start gnome-shell"
-    fi
   fi
 done
 
