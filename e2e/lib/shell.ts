@@ -122,6 +122,15 @@ export class ShellHelper {
     );
   }
 
+  /** Run a D-Bus command via SSH with the correct session bus address. */
+  private async dbusExec(command: string): Promise<string> {
+    const dbusAddr = await this.getShellDbusAddr();
+    if (!this._deployer) throw new Error("No deployer for dbusExec");
+    const { stdout, stderr, code } = await this._deployer.exec(`DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' ${command}`);
+    if (code !== 0) throw new Error(`D-Bus command failed (code ${code}): stdout=${stdout} stderr=${stderr}`);
+    return stdout.trim();
+  }
+
   private async getShellDbusAddr(): Promise<string> {
     // Return cached address (D-Bus session address never changes after GNOME Shell starts)
     if (this.dbusAddr) return this.dbusAddr;
@@ -328,6 +337,25 @@ export class ShellHelper {
   async screenshot(path: string): Promise<void> {
     if (!this.session) throw new Error("No session");
     await this.session.shell.screenshot(path);
+  }
+  /** Start GNOME Shell screencast via D-Bus. Returns the output filename. */
+  async startScreencast(fileTemplate: string): Promise<string> {
+    const result = await this.dbusExec(
+      `gdbus call --session --dest org.gnome.Shell.Screencast --object-path /org/gnome/Shell/Screencast --method org.gnome.Shell.Screencast.Screencast '${fileTemplate}' '{}'`
+    );
+    // Parse: (true, '/tmp/file.webm')
+    const match = result.match(/'([^']+)'/);
+    if (!match || !result.includes('true')) {
+      throw new Error(`Screencast start failed: ${result}`);
+    }
+    return match[1];
+  }
+
+  /** Stop GNOME Shell screencast via D-Bus. */
+  async stopScreencast(): Promise<void> {
+    await this.dbusExec(
+      `gdbus call --session --dest org.gnome.Shell.Screencast --object-path /org/gnome/Shell/Screencast --method org.gnome.Shell.Screencast.StopScreencast`
+    );
   }
 
   async waitText(text: string, opts?: { timeout?: number }): Promise<void> {

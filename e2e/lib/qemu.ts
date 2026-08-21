@@ -212,7 +212,7 @@ export class QemuMonitor extends EventEmitter {
     await this.execute(`loadvm ${tag}`, timeoutMs);
   }
 
-  async delvm(tag: string): Promise<void> {
+  async deleteSnapshot(tag: string): Promise<void> {
     await this.execute(`delvm ${tag}`);
   }
 

@@ -330,6 +330,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   } catch {
     // Best effort — may fail if udev rule already set permissions
   }
+  // Kill existing dotoold and remove stale pipe before starting fresh
+  try {
+    sshExec("pkill -f dotoold; rm -f /run/user/$(id -u)/dotool-pipe; sleep 0.5", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  } catch {
+    // Ignore — may not be running
+  }
   execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
   await pollUntilFn(
     "dotool pipe",
@@ -398,8 +404,8 @@ export async function startVoiceService(
     }
   }
 
-  // Kill existing voice service
-  sshExec("killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  // Kill existing voice service (systemd user service + any python3 processes)
+  sshExec("systemctl --user stop com.happytomatoe.VoiceToText.user.service 2>/dev/null; killall -9 python3 2>/dev/null; true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   await Bun.sleep(1000);
   await pollUntilFn(
     "old voice service to die",
@@ -410,7 +416,6 @@ export async function startVoiceService(
     5000
   );
   await Bun.sleep(500);
-
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   scpToVm(join(cfg.fixtureDir, "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);

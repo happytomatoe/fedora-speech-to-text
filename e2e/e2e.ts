@@ -50,6 +50,7 @@ if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const NO_SNAPSHOT = args.includes("--no-snapshot");
 const SNAPSHOT_MODE = !NO_SNAPSHOT;
 const SKIP_DEPS = args.includes("--skip-deps");
+const SPICE_MODE = args.includes("--spice");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
@@ -258,6 +259,32 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("03-pre-recording");
   timing("capture-frame", t);
 
+  // Start screen recording (Xvfb+x11grab on host, or GNOME Shell screencast in VM)
+  t = Date.now();
+  const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
+  mkdirSync(screencastDir, { recursive: true });
+  let screencastFile = "";
+  let useXvfbRecording = false;
+  // Guarantee ffmpeg cleanup on any exit path
+  process.on('exit', () => {
+    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
+    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
+  });
+  try {
+    vm.startRecording();
+    useXvfbRecording = true;
+  } catch (e) {
+    console.log(`  Xvfb recording not available: ${e}`);
+    // Fallback to GNOME Shell screencast
+    try {
+      screencastFile = await shell.startScreencast("/tmp/e2e-screencast");
+      console.log(`  Screencast started: ${screencastFile}`);
+    } catch (e2) {
+      console.log(`  Screencast start failed: ${e2}`);
+    }
+  }
+  timing("start-screencast", t);
+
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
   await shell.dismissActivities();
@@ -350,6 +377,20 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(200); // Brief settle for D-Bus round-trip
   timing("stop-recording", t);
 
+  // Stop recording
+  t = Date.now();
+  if (useXvfbRecording) {
+    await vm.stopRecording();
+  } else if (screencastFile) {
+    try {
+      await shell.stopScreencast();
+      console.log(`  Screencast stopped: ${screencastFile}`);
+    } catch (e) {
+      console.log(`  Screencast stop failed: ${e}`);
+    }
+  }
+  timing("stop-screencast", t);
+
   t = Date.now();
   await vm.captureFrame("06-recording-stopped");
   timing("capture-frame", t);
@@ -375,6 +416,29 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Cleanup: kill tmux session
   await tmux.killSession(tmuxCfg);
+
+  // Retrieve screencast file from VM
+  // Retrieve screencast file from VM
+  if (screencastFile) {
+    // Validate path: must be an absolute path, no traversal, ends with .webm
+    if (!/^\/tmp\/e2e-screencast[^']*\.webm$/.test(screencastFile)) {
+      console.log(`  Screencast file path rejected: ${screencastFile}`);
+    } else {
+      t = Date.now();
+      const localPath = join(screencastDir, "test-recording.webm");
+      try {
+        execSync(
+          `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
+          { encoding: "utf-8", timeout: 10000 }
+        );
+        const stats = require("node:fs").statSync(localPath);
+        console.log(`  Screencast saved: ${localPath} (${(stats.size / 1024).toFixed(1)}KB)`);
+      } catch (e) {
+        console.log(`  Screencast retrieval failed: ${e}`);
+      }
+      timing("retrieve-screencast", t);
+    }
+  }
 }
 
 /**
@@ -725,6 +789,7 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    spiceMode: SPICE_MODE,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -765,7 +830,8 @@ async function main(): Promise<void> {
       extensionUuid: CONFIG.extension.uuid,
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
-      skipDeps: SKIP_DEPS
+      skipDeps: SKIP_DEPS,
+      spiceMode: SPICE_MODE,
     });
     
     const results = await runner.runAll();
@@ -839,8 +905,6 @@ async function main(): Promise<void> {
         testsFailed++;
       }
 
-      // Create video from screenshots
-      createVideoFromScreenshots(run);
     } else {
       // Fresh mode: original behavior
       await new StepRunner().run([

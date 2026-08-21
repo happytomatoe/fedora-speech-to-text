@@ -1014,8 +1014,8 @@ qemu-e2e-update-ts:
 
 # @category e2e-qemu
 # Run E2E tests (snapshot mode by default, fast ~40s after first run)
-e2e:
-    cd e2e && bun run e2e.ts
+e2e *ARGS:
+    cd e2e && bun run e2e.ts {{ ARGS }}
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
@@ -1042,7 +1042,39 @@ e2e-no-snapshot:
 e2e-update:
     cd e2e && bun run e2e.ts --update
 
-# @category gnome-ext
+# @category e2e-qemu
+# Set up libvirt VM definition (for manual management)
+e2e-setup-vm:
+    bash e2e/setup-vm.sh
+
+# @category e2e-qemu
+# Start E2E VM via libvirtd (manual management)
+e2e-start:
+    virsh -c qemu:///session start e2e
+
+# @category e2e-qemu
+# Stop E2E VM via libvirtd
+e2e-stop:
+    virsh -c qemu:///session destroy e2e
+
+# @category e2e-qemu
+# Record VM screen via SPICE (requires spice-gtk3)
+e2e-record output='e2e/output/recording.mp4':
+    python3 e2e/lib/spice-record.py --host localhost --port 5930 --output {{ output }}
+
+# @category e2e-qemu
+# Clone open-source repos for API reference (GNOME Shell, etc.)
+download-open-src:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p opensrc
+    if [ ! -d opensrc/gnome-shell ]; then
+      echo "Cloning GNOME Shell (gnome-48 branch)..."
+      git clone --depth 1 --branch gnome-48 https://gitlab.gnome.org/GNOME/gnome-shell.git opensrc/gnome-shell
+    else
+      echo "opensrc/gnome-shell already exists, skipping."
+    fi
+
 # Query AT-SPI accessibility tree in the nested GNOME Shell
 atspi-tree:
     ./skills/atspi-nested-shell/scripts/atspi-query.sh
