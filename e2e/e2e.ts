@@ -251,20 +251,26 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Pre-recording pane captured.");
   timing("snapshot-pane", t);
 
-  // Start GNOME Shell screencast
+  // Start screen recording (Xvfb+x11grab on host, or GNOME Shell screencast in VM)
   t = Date.now();
   const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
   mkdirSync(screencastDir, { recursive: true });
-  // Screencast template must be a VM-local path (GNOME Shell runs inside the VM)
-  const screencastTemplate = "/tmp/e2e-screencast";
   let screencastFile = "";
+  let useXvfbRecording = false;
   try {
-    screencastFile = await shell.startScreencast(screencastTemplate);
-    console.log(`  Screencast started: ${screencastFile}`);
-  } catch (e) {
-    console.log(`  Screencast start failed: ${e}`);
+    vm.startRecording();
+    useXvfbRecording = true;
+    console.log("  Recording started (Xvfb+x11grab)");
+  } catch {
+    // Fallback to GNOME Shell screencast
+    try {
+      screencastFile = await shell.startScreencast("/tmp/e2e-screencast");
+      console.log(`  Screencast started: ${screencastFile}`);
+    } catch (e) {
+      console.log(`  All recording methods failed: ${e}`);
+    }
   }
-  timing("start-screencast", t);
+  timing("start-recording", t);
 
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
@@ -356,9 +362,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(200); // Brief settle for D-Bus round-trip
   timing("stop-recording", t);
 
-  // Stop screencast
+  // Stop recording
   t = Date.now();
-  if (screencastFile) {
+  if (useXvfbRecording) {
+    await vm.stopRecording();
+  } else if (screencastFile) {
     try {
       await shell.stopScreencast();
       console.log(`  Screencast stopped: ${screencastFile}`);
@@ -366,7 +374,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log(`  Screencast stop failed: ${e}`);
     }
   }
-  timing("stop-screencast", t);
 
   t = Date.now();
   timing("capture-frame", t);

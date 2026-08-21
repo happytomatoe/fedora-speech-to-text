@@ -1,5 +1,6 @@
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
@@ -39,6 +40,11 @@ export class VmManager {
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
+
+  private recordingFfmpeg: ReturnType<typeof Bun.spawn> | null = null;
+  private xvfbProcess: ReturnType<typeof Bun.spawn> | null = null;
+  private i3Process: ReturnType<typeof Bun.spawn> | null = null;
+  frameCount = 0;
 
   private deployCfg: DeployConfig;
 
@@ -117,7 +123,8 @@ export class VmManager {
       console.log("Reusing existing overlay...");
     }
 
-    // Use setsid to run QEMU in a new session so it survives parent abort/timeout
+    // Start Xvfb for recording if available
+    const hasXvfb = await this.startXvfb();
     const qemuArgs = [
       "qemu-system-x86_64",
       "-enable-kvm",
@@ -125,9 +132,9 @@ export class VmManager {
       "-m", "4096",
       "-smp", "2",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
-      "-device", "virtio-vga",
-      "-display", "none",
-      "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
+      "-device", "virtio-vga-gl",
+      // Use GTK+Xvfb for recording, fall back to headless+SPICE
+      ...(hasXvfb ? ["-display", "gtk,gl=on"] : ["-device", "virtio-vga", "-display", "none", "-spice", `port=${this.config.run.spicePort},disable-ticketing=on"]),
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
@@ -136,8 +143,9 @@ export class VmManager {
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
-    // Wrap in setsid + nohup to detach from parent process group
-    const wrappedCmd = `setsid nohup ${qemuArgs.join(" ")} &>/dev/null &`;
+    // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
+    const envPrefix = hasXvfb ? "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=" : "";
+    const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} &>/dev/null &`;
     this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
       cwd: vmDir,
       stdout: "inherit",
@@ -156,8 +164,12 @@ export class VmManager {
     }
 
     await this.qemu.connect();
-    await this.verifySpice();
-  }
+    if (!hasXvfb) {
+      await this.verifySpice();
+    } else {
+      // Resize QEMU window to fullscreen on Xvfb
+      await this.resizeQemuWindow();
+    }
 
   async waitForSsh(): Promise<void> {
     await this.shell.openSshSession({
@@ -338,6 +350,126 @@ export class VmManager {
     }
   }
 
+  // --- Recording (Xvfb + x11grab) ---
+
+  private async startXvfb(): Promise<boolean> {
+    try {
+      const check = Bun.spawnSync(["which", "Xvfb"], { stdout: "pipe", stderr: "pipe" });
+      if (check.exitCode !== 0) {
+        console.log("  [xvfb] not found, skipping");
+        return false;
+      }
+    } catch {
+      console.log("  [xvfb] not found, skipping");
+      return false;
+    }
+
+    this.xvfbProcess = Bun.spawn(
+      ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
+      { stdout: "pipe", stderr: "pipe" }
+    );
+
+    for (let i = 0; i < 50; i++) {
+      try {
+        const result = Bun.spawnSync(["xdpyinfo", "-display", ":99"], { stdout: "pipe", stderr: "pipe" });
+        if (result.exitCode === 0) {
+          process.env.DISPLAY = ":99";
+          console.log("  [xvfb] ready on :99");
+          return true;
+        }
+      } catch { /* ignore */ }
+      await Bun.sleep(100);
+    }
+    console.log("  [xvfb] failed to start");
+    this.xvfbProcess?.kill("SIGKILL");
+    this.xvfbProcess = null;
+    return false;
+
+  /** Resize QEMU window to fill Xvfb display */
+  private async resizeQemuWindow(): Promise<void> {
+    // Wait for QEMU window to appear
+    for (let i = 0; i < 20; i++) {
+      try {
+        const result = Bun.spawnSync(["xdotool", "search", "--name", "QEMU"], {
+          stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99", WAYLAND_DISPLAY: "" }
+        });
+        const wids = result.stdout.toString().trim().split("\n").filter(Boolean);
+        if (wids.length > 0) {
+          const wid = wids[wids.length - 1];
+          // Resize to 1920x1080
+          Bun.spawnSync(["xdotool", "windowsize", wid, "1920", "1080"], {
+            stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99", WAYLAND_DISPLAY: "" }
+          });
+          console.log(`  [xvfb] QEMU window resized to 1920x1080`);
+          return;
+        }
+      } catch { /* ignore */ }
+      await Bun.sleep(500);
+    }
+    console.log("  [xvfb] could not find QEMU window to resize");
+  }
+
+  /** Start continuous recording via x11grab + ffmpeg */
+  startRecording(): void {
+    if (this.recordingFfmpeg) return;
+    const dir = join(this.config.run.outputDir, "recording");
+    mkdirSync(dir, { recursive: true });
+    const videoPath = join(dir, "recording.mp4");
+    this.recordingFfmpeg = Bun.spawn(
+      ["ffmpeg", "-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath],
+      { stdout: "pipe", stderr: "pipe", stdin: "pipe" }
+    );
+    console.log("  [rec] started ffmpeg x11grab");
+  }
+
+  /** Stop recording and return video path */
+  async stopRecording(): Promise<string | null> {
+    if (!this.recordingFfmpeg) return null;
+    const proc = this.recordingFfmpeg;
+    this.recordingFfmpeg = null;
+    const videoPath = join(this.config.run.outputDir, "recording", "recording.mp4");
+
+    if (proc.stdin) {
+      proc.stdin.write("q");
+      proc.stdin.end();
+    }
+    try {
+      await proc.exited;
+    } catch {
+      // ffmpeg may exit non-zero when killed
+    }
+
+    if (existsSync(videoPath)) {
+      console.log(`  [rec] saved: ${videoPath}`);
+      return videoPath;
+    }
+    console.log("  [rec] no video produced");
+    return null;
+  }
+
+  /** Create video from PNG screenshots as fallback */
+  createVideoFromScreenshots(): void {
+    const dir = join(this.config.run.outputDir, "recording");
+    const videoPath = join(dir, "recording.mp4");
+    const pngPattern = join(dir, "frame-*.png");
+    try {
+      execSync(`ffmpeg -y -framerate 1 -pattern_type glob -i '${pngPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>&1`, { encoding: "utf-8" });
+      if (existsSync(videoPath)) {
+        console.log(`  [rec] created from screenshots: ${videoPath}`);
+      }
+    } catch (e: any) {
+      console.log(`  [rec] ffmpeg fallback failed: ${e.stderr || e.message}`);
+    }
+  }
+
+  private cleanupRecording(): void {
+    this.recordingFfmpeg?.kill("SIGKILL");
+    this.recordingFfmpeg = null;
+    this.xvfbProcess?.kill("SIGKILL");
+    this.xvfbProcess = null;
+    this.i3Process?.kill("SIGKILL");
+    this.i3Process = null;
+  }
 
   async shutdown(): Promise<void> {
     if (!this.booted) {
@@ -362,10 +494,10 @@ export class VmManager {
       await Bun.sleep(5000);
     } finally {
       this.process?.kill("SIGKILL");
+      this.cleanupRecording();
       this.qemu.close();
       await this.shell.close();
       await this.deployer.disconnect();
-    }
   }
 
   // --- Polling (thin wrappers for convenience) ---
