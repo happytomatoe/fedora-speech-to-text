@@ -352,14 +352,6 @@ export class VmManager {
     }
   }
 
-  async hasSnapshot(name: string): Promise<boolean> {
-    try {
-      const info = await this.qemu.infoSnapshots();
-      return info.includes(name);
-    } catch {
-      return false;
-    }
-  }
 
   async shutdown(): Promise<void> {
     if (!this.booted) {

@@ -1042,6 +1042,26 @@ e2e-no-snapshot:
 e2e-update:
     cd e2e && bun run e2e.ts --update
 
+# @category e2e-qemu
+# Set up libvirt VM definition (for manual management)
+e2e-setup-vm:
+    bash e2e/setup-vm.sh
+
+# @category e2e-qemu
+# Start E2E VM via libvirtd (manual management)
+e2e-start:
+    virsh -c qemu:///session start e2e
+
+# @category e2e-qemu
+# Stop E2E VM via libvirtd
+e2e-stop:
+    virsh -c qemu:///session destroy e2e
+
+# @category e2e-qemu
+# Record VM screen via SPICE (requires spice-gtk3)
+e2e-record output='e2e/output/recording.mp4':
+    python3 e2e/lib/spice-record.py --host localhost --port 5930 --output {{ output }}
+
 # @category gnome-ext
 # Query AT-SPI accessibility tree in the nested GNOME Shell
 atspi-tree:
