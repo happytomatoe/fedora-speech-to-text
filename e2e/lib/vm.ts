@@ -30,6 +30,7 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  spiceMode?: boolean;
 }
 
 export class VmManager {
@@ -117,8 +118,16 @@ export class VmManager {
       console.log("Reusing existing overlay...");
     }
 
-    // Start Xvfb for recording if available
-    const hasXvfb = await this.startXvfb();
+    // Start Xvfb (required unless --spice mode)
+    const useSpice = this.config.spiceMode ?? false;
+    if (useSpice) {
+      console.log("  [spice] mode: using SPICE display (no recording)");
+    } else {
+      const hasXvfb = await this.startXvfb();
+      if (!hasXvfb) {
+        throw new Error("Xvfb not found. Install it: sudo dnf install xorg-x11-server-Xvfb. Or use --spice mode.");
+      }
+    }
 
     const qemuArgs = [
       "qemu-system-x86_64",
@@ -135,15 +144,15 @@ export class VmManager {
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
-    if (hasXvfb) {
-      qemuArgs.push("-device", "virtio-vga-gl", "-display", "gtk,gl=on");
-    } else {
+    if (useSpice) {
       qemuArgs.push("-device", "virtio-vga", "-display", "none", "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`);
+    } else {
+      qemuArgs.push("-device", "virtio-vga-gl", "-display", "gtk,gl=on");
     }
 
     // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
-    const qemuEnv = hasXvfb ? { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" } : {};
-    const envPrefix = hasXvfb ? "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=" : "";
+    const qemuEnv = useSpice ? {} : { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
+    const envPrefix = useSpice ? "" : "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=";
     const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} &>/dev/null &`;
     this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
       cwd: vmDir,
@@ -163,10 +172,10 @@ export class VmManager {
     }
 
     await this.qemu.connect();
-    if (hasXvfb) {
-      await this.resizeQemuWindow();
-    } else {
+    if (useSpice) {
       await this.verifySpice();
+    } else {
+      await this.resizeQemuWindow();
     }
   }
   async waitForSsh(): Promise<void> {
@@ -355,8 +364,16 @@ export class VmManager {
   private async startXvfb(): Promise<boolean> {
     try {
       const check = Bun.spawnSync(["which", "Xvfb"], { stdout: "pipe", stderr: "pipe" });
-      if (check.exitCode !== 0) { console.log("  [xvfb] not found, skipping"); return false; }
-    } catch { console.log("  [xvfb] not found, skipping"); return false; }
+      if (check.exitCode !== 0) { console.log("  [xvfb] not found"); return false; }
+    } catch { console.log("  [xvfb] not found"); return false; }
+
+    // Check if Xvfb is already running on :99 (use xdotool instead of xdpyinfo which may not be installed)
+    try {
+      Bun.spawnSync(["xdotool", "getdisplaygeometry", ":99"], { stdout: "pipe", stderr: "pipe" });
+      console.log("  [xvfb] already running on :99");
+      return true;
+    } catch { /* not running, start it */ }
+
     this.xvfbProcess = Bun.spawn(
       ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
       { stdout: "pipe", stderr: "pipe" }
@@ -364,7 +381,7 @@ export class VmManager {
     for (let i = 0; i < 20; i++) {
       if (this.xvfbProcess.exitCode !== null) { console.log("  [xvfb] failed to start"); return false; }
       try {
-        Bun.spawnSync(["xdpyinfo", "-display", ":99"], { stdout: "pipe", stderr: "pipe" });
+        Bun.spawnSync(["xdotool", "getdisplaygeometry", ":99"], { stdout: "pipe", stderr: "pipe" });
         console.log("  [xvfb] started on :99 (1920x1080)");
         return true;
       } catch { /* ignore */ }
@@ -399,7 +416,12 @@ export class VmManager {
   }
 
   /** Start continuous recording via x11grab + ffmpeg */
+  /** Start continuous recording via x11grab + ffmpeg (Xvfb mode only) */
   startRecording(): void {
+    if (this.config.spiceMode) {
+      console.log("  [recording] skipped: SPICE mode has no x11grab support");
+      return;
+    }
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });

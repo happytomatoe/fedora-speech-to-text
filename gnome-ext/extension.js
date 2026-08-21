@@ -231,13 +231,14 @@ export default class VoiceToTextExtension extends Extension {
                         );
                     }
                     if (state === 'recording') {
+                        console.log(`VoiceToText: StateChanged('recording') — widget=${this._audioLevelWidget ? 'exists' : 'null'}`);
                         this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
                         if (this._profiling) {
                             console.log(
                                 `VoiceToText: [PROFIL] USER CAN SPEAK NOW, total elapsed: ${elapsed}ms`
                             );
-                        }
+                          }
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
                     } else if (state === 'idle') {

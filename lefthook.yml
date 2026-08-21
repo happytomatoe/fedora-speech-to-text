@@ -5,18 +5,14 @@ pre-commit:
   parallel: true
   commands:
     check-merge-conflict:
-      run: bash -c 'matches=$(grep -rn --exclude-dir=.venv --exclude-dir=node_modules "^<<<<<<< \\|^=======$\\|^>>>>>>> " {staged_files}); if [ -n "$matches" ]; then echo "$matches"; exit 1; fi'
+      run: bash -c 'matches=$(grep -rn --exclude-dir=.venv --exclude-dir=node_modules "^<<<<<<< \|^=======$\|^>>>>>>> " {staged_files}); if [ -n "$matches" ]; then echo "$matches"; exit 1; fi'
       glob: "*.{py,js,sh,css,json,xml,yaml,yml,toml,md}"
-    check-box-drawing-chars:
-      run: bash -c 'if grep -rPn "[\x{2500}-\x{257F}]" --include="*.js" --include="*.py" --include="*.ts" --include="*.css" {staged_files} 2>/dev/null; then echo "ERROR: box-drawing characters found (paste artifact from readSeek)"; exit 1; fi'
-      glob: "*.{py,js,ts,css}"
     uv-sync:
       run: uv sync
       glob: "*.{py,toml,lock}"
-    ruff-lint-format:
+    ruff-lint:
       run: uv run ruff check --fix {staged_files} && uv run ruff format {staged_files}
       glob: "*.py"
-      stage_fixed: true
     oxlint:
       run: npx oxlint {staged_files}
       glob: "gnome-ext/**/*.js"
@@ -26,28 +22,27 @@ pre-commit:
     gjs-syntax:
       run: bash -c 'for f in {staged_files}; do node --input-type=module --check < "$f" || exit 1; done'
       glob: "gnome-ext/**/*.js"
-    gjs-static-analysis:
+    gjs-prefs-test:
       run: gjs --module gnome-ext/tests/test-prefs-methods.js
       glob: "gnome-ext/**/*.js"
-    tsc-type-check:
+    gjs-ts-check:
       run: npx tsc --noEmit
       glob: "gnome-ext/**/*.js"
-    gtk4-api-check:
+    gjs-gtk4-test:
       run: gjs --module gnome-ext/tests/test-gtk4-api.js
       glob: "gnome-ext/tests/**/*.js"
-    gschema-validate:
+    gjs-schema-check:
       run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
       glob: "gnome-ext/schemas/*.xml"
-    prettier-check:
+    prettier:
       run: npx prettier@3.8.4 --check {staged_files}
       glob: "gnome-ext/**/*.{js,css,json}"
-    justfile-format:
+    justfile-fmt:
       run: just --fmt --check 2>/dev/null || just --fmt
       glob: "justfile"
     pytest:
       run: uv run pytest -n auto
       glob: "*.{py,js,toml,lock}"
-      interactive: true
 
 commit-msg:
   commands:

@@ -50,6 +50,7 @@ if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const NO_SNAPSHOT = args.includes("--no-snapshot");
 const SNAPSHOT_MODE = !NO_SNAPSHOT;
 const SKIP_DEPS = args.includes("--skip-deps");
+const SPICE_MODE = args.includes("--spice");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
@@ -732,6 +733,7 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    spiceMode: SPICE_MODE,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -772,7 +774,8 @@ async function main(): Promise<void> {
       extensionUuid: CONFIG.extension.uuid,
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
-      skipDeps: SKIP_DEPS
+      skipDeps: SKIP_DEPS,
+      spiceMode: SPICE_MODE,
     });
     
     const results = await runner.runAll();

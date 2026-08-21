@@ -18,7 +18,11 @@ export class AudioLevelWidget {
         this.onCancel = null; // callback when cancel button clicked
     }
     show() {
-        if (this._widget) return;
+        if (this._widget) {
+            console.log('VoiceToText-Widget: show() called but widget already exists');
+            return;
+        }
+        console.log('VoiceToText-Widget: show() called, scheduling create in 300ms');
 
         // Delay showing the widget to avoid initial audio spikes
         this._showTimeoutId = GLib.timeout_add(
@@ -26,6 +30,7 @@ export class AudioLevelWidget {
             SHOW_DELAY_MS,
             () => {
                 this._showTimeoutId = 0;
+                console.log('VoiceToText-Widget: timer fired, creating widget');
                 this._createWidget();
                 return GLib.SOURCE_REMOVE;
             }
@@ -34,6 +39,7 @@ export class AudioLevelWidget {
 
     _createWidget() {
         if (this._widget) return;
+        console.log('VoiceToText-Widget: _createWidget() called');
 
         this._widget = new St.BoxLayout({
             style_class: 'osd-widget',
@@ -76,20 +82,24 @@ export class AudioLevelWidget {
         });
         this._widget.add_child(this._cancelButton);
 
+        console.log('VoiceToText-Widget: adding widget to topChrome');
         Main.layoutManager.addTopChrome(this._widget);
         this._positionWidget();
         this._visible = true;
+        console.log('VoiceToText-Widget: widget created and visible');
     }
 
     hide() {
         // Cancel any pending show timeout
         if (this._showTimeoutId) {
+            console.log('VoiceToText-Widget: hide() cancelling pending show timer');
             GLib.source_remove(this._showTimeoutId);
             this._showTimeoutId = 0;
         }
 
         if (!this._widget) return;
 
+        console.log('VoiceToText-Widget: hide() removing widget');
         Main.layoutManager.removeChrome(this._widget);
         this._widget.destroy();
         this._widget = null;
@@ -140,7 +150,10 @@ export class AudioLevelWidget {
         if (!this._widget) return;
 
         const monitor = Main.layoutManager.primaryMonitor;
-        if (!monitor) return;
+        if (!monitor) {
+            console.log('VoiceToText-Widget: no primary monitor found');
+            return;
+        }
 
         const [, widgetWidth] = this._widget.get_preferred_width(-1);
         const [, widgetHeight] = this._widget.get_preferred_height(-1);
@@ -148,6 +161,7 @@ export class AudioLevelWidget {
         const x = monitor.x + (monitor.width - widgetWidth) / 2;
         const y = monitor.y + monitor.height - widgetHeight - MARGIN_BOTTOM;
 
+        console.log(`VoiceToText-Widget: positioned at (${x}, ${y}), size=${widgetWidth}x${widgetHeight}, monitor=${monitor.width}x${monitor.height}`);
         this._widget.set_position(x, y);
     }
 

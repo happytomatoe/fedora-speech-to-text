@@ -1014,8 +1014,8 @@ qemu-e2e-update-ts:
 
 # @category e2e-qemu
 # Run E2E tests (snapshot mode by default, fast ~40s after first run)
-e2e:
-    cd e2e && bun run e2e.ts
+e2e *ARGS:
+    cd e2e && bun run e2e.ts {{ ARGS }}
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
