@@ -190,9 +190,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   };
 
   t = Date.now();
-  await vm.captureFrame("01-desktop");
   timing("capture-frame", t);
-
   // Step 1: Dismiss Activities overview (D-Bus Set is idempotent)
   t = Date.now();
   console.log("Dismissing Activities...");
@@ -245,7 +243,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   timing("open-terminal", t);
 
   t = Date.now();
-  await vm.captureFrame("02-tmux-started");
   timing("capture-frame", t);
 
   // Step 3: Snapshot pane content before recording (for transcription detection)
@@ -254,9 +251,20 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Pre-recording pane captured.");
   timing("snapshot-pane", t);
 
+  // Start GNOME Shell screencast
   t = Date.now();
-  await vm.captureFrame("03-pre-recording");
-  timing("capture-frame", t);
+  const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
+  mkdirSync(screencastDir, { recursive: true });
+  // Screencast template must be a VM-local path (GNOME Shell runs inside the VM)
+  const screencastTemplate = "/tmp/e2e-screencast";
+  let screencastFile = "";
+  try {
+    screencastFile = await shell.startScreencast(screencastTemplate);
+    console.log(`  Screencast started: ${screencastFile}`);
+  } catch (e) {
+    console.log(`  Screencast start failed: ${e}`);
+  }
+  timing("start-screencast", t);
 
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
@@ -290,7 +298,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   timing("start-recording", t);
 
   t = Date.now();
-  await vm.captureFrame("04-recording-started");
   timing("capture-frame", t);
 
   // Step 5: Wait for transcription (voice service types via dotool into tmux)
@@ -339,7 +346,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   timing("transcription", t);
 
   t = Date.now();
-  await vm.captureFrame("05-transcription-received");
   timing("capture-frame", t);
 
   // Step 6: Stop recording
@@ -350,8 +356,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(200); // Brief settle for D-Bus round-trip
   timing("stop-recording", t);
 
+  // Stop screencast
   t = Date.now();
-  await vm.captureFrame("06-recording-stopped");
+  if (screencastFile) {
+    try {
+      await shell.stopScreencast();
+      console.log(`  Screencast stopped: ${screencastFile}`);
+    } catch (e) {
+      console.log(`  Screencast stop failed: ${e}`);
+    }
+  }
+  timing("stop-screencast", t);
+
+  t = Date.now();
   timing("capture-frame", t);
 
   // Step 7: Write result to file
@@ -375,6 +392,23 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Cleanup: kill tmux session
   await tmux.killSession(tmuxCfg);
+
+  // Retrieve screencast file from VM
+  if (screencastFile) {
+    t = Date.now();
+    const localPath = join(screencastDir, "test-recording.webm");
+    try {
+      execSync(
+        `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
+        { encoding: "utf-8", timeout: 10000 }
+      );
+      const stats = require("node:fs").statSync(localPath);
+      console.log(`  Screencast saved: ${localPath} (${(stats.size / 1024).toFixed(1)}KB)`);
+    } catch (e) {
+      console.log(`  Screencast retrieval failed: ${e}`);
+    }
+    timing("retrieve-screencast", t);
+  }
 }
 
 /**
@@ -429,41 +463,6 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
   } catch (err) {
     console.log(`  Screenshot capture failed: ${err}`);
     return "";
-  }
-}
-
-/**
- * Create a video from screenshots using ffmpeg.
- */
-function createVideoFromScreenshots(run: RunContext): void {
-  const recordingDir = join(run.outputDir, "recording");
-  const outputDir = join(run.outputDir, "test-cases", getTestCaseName());
-  const videoPath = join(outputDir, "test-recording.mp4");
-  const screenshotPattern = join(recordingDir, "frame-*.ppm");
-  
-  try {
-    // Check if ffmpeg is available
-    execSync("which ffmpeg", { stdio: "ignore" });
-    
-    // Check if there are any screenshots
-    const files = require("node:fs").readdirSync(recordingDir).filter((f: string) => f.startsWith("frame-") && f.endsWith(".ppm"));
-    if (files.length === 0) {
-      return;
-    }
-    
-    // Create video from screenshots
-    // Each screenshot shows for 2 seconds (6 screenshots = 12 seconds total)
-    execSync(
-      `ffmpeg -y -framerate 0.5 -pattern_type glob -i '${screenshotPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
-      { stdio: "ignore" }
-    );
-    
-    if (existsSync(videoPath)) {
-      const stats = require("node:fs").statSync(videoPath);
-      console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
-    }
-  } catch {
-    // ffmpeg not available or failed - skip video creation
   }
 }
 
@@ -839,8 +838,6 @@ async function main(): Promise<void> {
         testsFailed++;
       }
 
-      // Create video from screenshots
-      createVideoFromScreenshots(run);
     } else {
       // Fresh mode: original behavior
       await new StepRunner().run([

@@ -1062,7 +1062,19 @@ e2e-stop:
 e2e-record output='e2e/output/recording.mp4':
     python3 e2e/lib/spice-record.py --host localhost --port 5930 --output {{ output }}
 
-# @category gnome-ext
+# @category e2e-qemu
+# Clone open-source repos for API reference (GNOME Shell, etc.)
+download-open-src:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p opensrc
+    if [ ! -d opensrc/gnome-shell ]; then
+      echo "Cloning GNOME Shell (gnome-48 branch)..."
+      git clone --depth 1 --branch gnome-48 https://gitlab.gnome.org/GNOME/gnome-shell.git opensrc/gnome-shell
+    else
+      echo "opensrc/gnome-shell already exists, skipping."
+    fi
+
 # Query AT-SPI accessibility tree in the nested GNOME Shell
 atspi-tree:
     ./skills/atspi-nested-shell/scripts/atspi-query.sh

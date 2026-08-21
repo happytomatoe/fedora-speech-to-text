@@ -7,15 +7,15 @@ This folder contains cloned repositories for API reference and development.
 Used to inspect internal APIs like `Main.inputMethod.commit()`.
 
 - **Repo:** https://gitlab.gnome.org/GNOME/gnome-shell
-- **Branch:** `gnome-50` (matches our target: GNOME 45-50)
-
+- **Branch:** `gnome-48` (matches our VM: GNOME Shell 48.8)
 ```bash
 cd opensrc
-git clone --depth 1 --branch gnome-50 https://gitlab.gnome.org/GNOME/gnome-shell.git
+git clone --depth 1 --branch gnome-48 https://gitlab.gnome.org/GNOME/gnome-shell.git
 ```
 
 ### Key files to inspect
 
+- `js/ui/screenshot.js` — Screenshot & Screencast D-Bus service (org.gnome.Shell.Screencast)
 - `js/misc/inputMethod.js` — InputMethod class (wraps IBus, calls `this.commit()`)
 - `js/ui/main.js` — Main module (exports `Main.inputMethod`)
 - `js/ui/keyboard.js` — Virtual keyboard implementation
