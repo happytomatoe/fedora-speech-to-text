@@ -330,6 +330,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   } catch {
     // Best effort — may fail if udev rule already set permissions
   }
+  // Kill existing dotoold and remove stale pipe before starting fresh
+  try {
+    sshExec("pkill -f dotoold; rm -f /run/user/$(id -u)/dotool-pipe; sleep 0.5", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  } catch {
+    // Ignore — may not be running
+  }
   execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
   await pollUntilFn(
     "dotool pipe",
