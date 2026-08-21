@@ -40,6 +40,7 @@ export class VmManager {
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
+  frameCount = 0;
 
   private deployCfg: DeployConfig;
 
@@ -68,6 +69,17 @@ export class VmManager {
 
   // --- VM lifecycle ---
 
+  async captureFrame(label: string): Promise<void> {
+    if (!this.config.recordMode) return;
+    const dir = join(this.config.run.outputDir, "recording");
+    const path = join(dir, `frame-${String(this.frameCount++).padStart(4, "0")}-${label}.ppm`);
+    try {
+      await this.qemu.screendump(path);
+      console.log(`  [rec] ${label}`);
+    } catch {
+      // Ignore screendump errors
+    }
+  }
 
   async boot(): Promise<void> {
     const { baseImage, vmDir, updateMode } = this.config;
