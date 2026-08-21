@@ -420,6 +420,7 @@ class RecordingEngine:
         """Full recording + transcription pipeline."""
         # Check if profiling is enabled
         config_mgr = ConfigManager()
+        engine_cfg = config_mgr.config.get("engine", {})
         profiling_enabled = config_mgr.config.get("profiling", False)
 
         _t0 = _time.monotonic()
@@ -547,7 +548,7 @@ class RecordingEngine:
 
             raw_device = config.get("device")
             device = None if raw_device in (None, "", "__system_default__") else raw_device
-            vad_enabled = config.get("vad_enabled", True)
+            vad_enabled = config.get("vad_enabled", engine_cfg.get("vad_enabled", True))
             recorder = AsyncAudioRecorder(
                 device=device,
                 sample_rate=SAMPLE_RATE,
