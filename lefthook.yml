@@ -7,6 +7,9 @@ pre-commit:
     check-merge-conflict:
       run: bash -c 'matches=$(grep -rn --exclude-dir=.venv --exclude-dir=node_modules "^<<<<<<< \\|^=======$\\|^>>>>>>> " {staged_files}); if [ -n "$matches" ]; then echo "$matches"; exit 1; fi'
       glob: "*.{py,js,sh,css,json,xml,yaml,yml,toml,md}"
+    check-box-drawing-chars:
+      run: bash -c 'if grep -rPn "[\x{2500}-\x{257F}]" --include="*.js" --include="*.py" --include="*.ts" --include="*.css" {staged_files} 2>/dev/null; then echo "ERROR: box-drawing characters found (paste artifact from readSeek)"; exit 1; fi'
+      glob: "*.{py,js,ts,css}"
     uv-sync:
       run: uv sync
       glob: "*.{py,toml,lock}"
