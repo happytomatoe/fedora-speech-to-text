@@ -203,6 +203,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await shell.waitActivitiesDismissed();
   timing("dismiss-activities", t);
 
+  // Step 1b: Open preferences and take screenshots
+  t = Date.now();
+  await runPreferencesTests(vm, run);
+  timing("preferences-screenshots", t);
+
   // Step 2: Open terminal with tmux inside (dotool needs a focused window)
   t = Date.now();
   console.log("Opening terminal with tmux...");
@@ -595,8 +600,10 @@ function updateReferenceImages(run: RunContext): void {
   // Create reference directories
   const commonRefDir = join(CONFIG.paths.referencesDir, "common");
   const testCaseRefDir = join(CONFIG.paths.referencesDir, "test-cases", testCase);
+  const prefsRefDir = join(CONFIG.paths.referencesDir, "preferences");
   mkdirSync(commonRefDir, { recursive: true });
   mkdirSync(testCaseRefDir, { recursive: true });
+  mkdirSync(prefsRefDir, { recursive: true });
   
   // Copy common screenshots
   const commonLabels = ["01-desktop", "02-tmux-started", "03-pre-recording", "04-recording-started", "06-recording-stopped"];
@@ -615,6 +622,17 @@ function updateReferenceImages(run: RunContext): void {
   if (existsSync(transcriptionSrc)) {
     execSync(`cp "${transcriptionSrc}" "${transcriptionDst}"`, { encoding: "utf-8" });
     console.log(`  Copied: transcription → test-cases/${testCase}/`);
+  }
+  
+  // Copy preferences screenshots
+  const prefsLabels = ["prefs-main", "prefs-scrolled-1", "prefs-scrolled-2", "prefs-scrolled-3", "prefs-after-add"];
+  for (const label of prefsLabels) {
+    const src = join(run.outputDir, "preferences", `${label}.png`);
+    const dst = join(prefsRefDir, `screenshot-${label}.png`);
+    if (existsSync(src)) {
+      execSync(`cp "${src}" "${dst}"`, { encoding: "utf-8" });
+      console.log(`  Copied: ${label} → preferences/`);
+    }
   }
 }
 /**
