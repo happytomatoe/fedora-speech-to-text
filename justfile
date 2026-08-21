@@ -22,12 +22,13 @@ test:
     uv run pytest -n auto
 
 # @category lint
-# Run all linters (Python + GNOME extension)
+# Run all linters (Python + GNOME extension + E2E)
 lint:
     uv run ruff check .
     uv run ruff format --check .
     uv run pyright
     just gnome-ext-lint
+    just e2e-lint
     just check-output-methods-sync
     echo "All lint checks passed!"
 
@@ -35,6 +36,11 @@ lint:
 # Check output methods are in sync across engine, prefs, and schema
 check-output-methods-sync:
     ./scripts/check-output-methods-sync.sh
+
+# @category lint
+# Lint E2E tests with oxlint
+e2e-lint:
+    npx oxlint -c .oxlintrc.json e2e/
 
 # @category lint
 # Auto-fix lint issues
@@ -632,6 +638,11 @@ qemu-e2e-kill:
     echo "Done"
 
 # @category e2e-qemu
+# Inject GNOME extension + D-Bus service into golden image (offline, no VM boot)
+e2e-inject-extension image='e2e/qemu-images/golden-gnome-deps.qcow2':
+    bash e2e/scripts/inject-extension.sh --image {{ image }}
+
+# @category e2e-qemu
 # Start QEMU E2E test VM (keeps running for SPICE connection)
 qemu-e2e-vm port='5930':
     #!/usr/bin/env bash
@@ -975,6 +986,11 @@ qemu-e2e-setup:
         echo "" >> "$TEMP_DIR/cloud-init/user-data"
         echo "runcmd:" >> "$TEMP_DIR/cloud-init/user-data"
         echo "  - systemctl set-default graphical.target" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - dnf install -y xorg-x11-server-Xvfb" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - mkdir -p /etc/gdm/custom.conf" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - echo -e '[daemon]\\nAutomaticLoginEnable=True\\nAutomaticLogin=testuser' > /etc/gdm/custom.conf" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - Xvfb :99 -screen 0 1920x1080x24 &" >> "$TEMP_DIR/cloud-init/user-data"
+        echo "  - export DISPLAY=:99" >> "$TEMP_DIR/cloud-init/user-data"
         mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
         rm -rf "$TEMP_DIR"
         echo "✓ Cloud-init ISO created: $CLOUD_INIT"

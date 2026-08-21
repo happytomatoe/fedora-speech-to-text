@@ -1,0 +1,347 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  # Mutation testing — reports hollow tests but never fails CI
+  gutcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: uv sync
+      - run: cd e2e && bun install
+      - uses: beepometer/gutcheck@v0
+        with:
+          fail-on-hollow: false
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH debug session (tmate)
+        id: tmate
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+
+      - name: Comment SSH command on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: mshick/add-pr-comment@v3
+        with:
+          message: |
+            ### 🔌 SSH Debug Session
+            Run: ${{ github.run_id }}
+            ```
+            ${{ steps.tmate.outputs.ssh-command }}
+            ```
+            Session runs for **45 minutes** (workflow timeout).
+            Use: `.agents/skills/ssh-debug-github-runner/scripts/ssh-connect.sh [PR_NUMBER] ${{ github.run_id }}`
+
+
+      - name: Restore apt cache
+        id: cache-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: apt-ubuntu-latest-v1
+          restore-keys: |
+            apt-ubuntu-latest-
+
+      - name: Configure fast APT mirror
+        uses: vegardit/fast-apt-mirror.sh@v1
+        with:
+          healthchecks: 20
+          speedtests: 10
+          parallel: 2
+          sample-size: 1024
+          sample-time: 3
+
+      - name: Install QEMU + libvirt
+        run: |
+          sudo apt-get update -q || true
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-system-gui qemu-system-modules-opengl qemu-system-modules-spice qemu-utils genisoimage libvirt-clients virtinst libguestfs-tools ffmpeg xvfb i3-wm x11-utils
+          # Enable KVM
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          # Fix libguestfs: kernel images are root-only on Ubuntu (LP#759725)
+          sudo chmod +r /boot/vmlinuz-* 2>/dev/null || true
+          echo '--- KVM diagnostics ---'
+          ls -la /dev/kvm 2>&1 || echo 'WARNING: /dev/kvm not found'
+          cat /proc/cpuinfo | grep -c vmx || echo 'No hardware virtualization flags'
+          # Enable libvirt user session (ignore if group doesn't exist on Ubuntu)
+          sudo usermod -aG kvm $USER || true
+          sudo usermod -aG libvirt $USER || sudo usermod -aG libvirt-qemu $USER || true
+          echo 'LIBVIRT_DEFAULT_URI=qemu:///session' >> $HOME/.bashrc
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Cache Parakeet models (avoids 30s+ download from HuggingFace each run)
+      - name: Restore Parakeet models from cache
+        id: cache-parakeet
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/parakeet/models
+          key: parakeet-models-v1
+          restore-keys: |
+            parakeet-models-
+
+      # Cache tool installs (bun, filen, just, shell-use)
+      - name: Restore tool cache
+        id: cache-tools
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.local/share/.bun/install/cache
+          key: tools-v1
+          restore-keys: |
+            tools-
+
+      - name: Install E2E dependencies
+        run: cd e2e && bun install
+
+      # Cache bun global installs (filen CLI)
+      - name: Restore bun cache
+        id: cache-bun
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-global-v1
+          restore-keys: |
+            bun-global-
+
+      - name: Install Filen CLI
+        run: |
+          if ! command -v filen &>/dev/null; then
+            bun install -g @filen/cli
+          fi
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install just
+        run: uv tool install rust-just@1.58.0
+
+      # Cache golden image (3.4GB) + SSH keys — skips Filen download on cache hit
+      - name: Restore golden image from cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            e2e/qemu-images/golden-gnome-deps.qcow2
+            e2e/qemu-images/id_ed25519
+            e2e/qemu-images/id_ed25519.pub
+          key: e2e-golden-v4
+          restore-keys: |
+            e2e-golden-
+
+      # Setup E2E environment (downloads golden image + SSH keys from Filen if not cached)
+      - name: Setup E2E environment
+        run: just qemu-e2e-setup
+        env:
+          FILEN_EMAIL: ${{ secrets.FILEN_EMAIL }}
+          FILEN_PASSWORD: ${{ secrets.FILEN_PASSWORD }}
+
+      # Inject extension + D-Bus service into golden image (after setup ensures it exists)
+      - name: Inject extension into golden image
+        run: just e2e-inject-extension
+        env:
+          LIBGUESTFS_BACKEND: direct
+      # Start Parakeet container (runs on host, not in VM)
+      - name: Start Parakeet
+        run: |
+          # Check if already running
+          if curl -sf http://localhost:5092/health >/dev/null 2>&1; then
+            echo "Parakeet already running"
+            exit 0
+          fi
+          # Detect runtime
+          RT=""
+          for rt in podman docker; do
+            if command -v $rt &>/dev/null; then RT=$rt; break; fi
+          done
+          if [ -z "$RT" ]; then echo "No container runtime found"; exit 1; fi
+          echo "Using $RT"
+          # Start container
+          MODELS_DIR="$HOME/parakeet/models"
+          mkdir -p "$MODELS_DIR"
+          $RT run -d --name parakeet-v2 -p 5092:5092 -v "$MODELS_DIR:/models:Z" ghcr.io/achetronic/parakeet:latest
+          # Wait for healthy
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:5092/health >/dev/null 2>&1; then
+              echo "Parakeet ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Parakeet not ready after 90s"
+          exit 1
+
+      # Run E2E tests
+      - name: Run E2E tests
+        run: cd e2e && bun run e2e.ts --shutdown --timeout 300
+      - name: Verify recording
+        if: always()
+        run: |
+          REC=$(ls e2e/qemu-images/persistent-run/main/output/recording/recording.mp4 2>/dev/null | head -1)
+          if [ -z "$REC" ]; then
+            echo "WARNING: No recording.mp4 found (test may have been cancelled)"
+            exit 0
+          fi
+          SIZE=$(stat -c%s "$REC")
+          echo "Recording size: $SIZE bytes"
+          if [ "$SIZE" -lt 51200 ]; then
+            echo "WARNING: Recording too small (<50KB): $SIZE bytes"
+            exit 0
+          fi
+          # Verify it's a valid video
+          ffprobe -v error -show_entries format=duration,size -of csv=p=0 "$REC" || {
+            echo "WARNING: ffprobe failed — recording is not a valid video"
+            exit 0
+          }
+          echo "Recording OK: $(ffprobe -v error -show_entries format=duration -of csv=p=0 "$REC")s, $SIZE bytes"
+
+
+
+      # Save Parakeet models to cache (only on first run)
+      - name: Save Parakeet models to cache
+        if: steps.cache-parakeet.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ~/parakeet/models
+          key: parakeet-models-v1
+
+      # Save tool cache
+      - name: Save tool cache
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.local/share/.bun/install/cache
+          key: tools-v1
+
+      # Save golden image + SSH keys to cache (only on first run)
+      - name: Save golden image to cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            e2e/qemu-images/golden-gnome-deps.qcow2
+            e2e/qemu-images/id_ed25519
+            e2e/qemu-images/id_ed25519.pub
+          key: e2e-golden-v4
+
+      # Save apt cache
+      - name: Save apt cache
+        if: steps.cache-apt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: apt-ubuntu-latest-v1
+
+      # Save bun cache
+      - name: Save bun cache
+        if: steps.cache-bun.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ~/.bun/install/cache
+          key: bun-global-v1
+
+      # Always upload artifacts (for debugging both failures and flaky passes)
+      # Each file as separate artifact so they can be downloaded individually
+      # Output lives in e2e/qemu-images/persistent-run/main/output/ (not e2e/output/)
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 01-test-log
+          path: e2e/output/e2e.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload voice service log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 02-voice-service-log
+          path: e2e/output/vm-logs/voice-service.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload GNOME Shell log
+        if: always()
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: 03-gnome-shell-log
+          path: e2e/output/vm-logs/gnome-shell.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload serial console log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 04-serial-log
+          path: e2e/qemu-images/persistent-run/*/serial.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload QEMU stderr log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 04-qemu-stderr
+          path: e2e/qemu-images/persistent-run/*/output/qemu-stderr.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: 05-screenshots
+          path: e2e/qemu-images/persistent-run/main/output/test-cases
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload recording
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 06-recording
+          path: e2e/qemu-images/persistent-run/main/output/recording/
+          if-no-files-found: warn
+          retention-days: 7

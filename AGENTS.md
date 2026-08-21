@@ -85,6 +85,7 @@ When modifying files in `gnome-ext/`:
 
 See `e2e/AGENTS.md` for detailed instructions.
 
+
 **Key commands:**
 
 - Update references: `just qemu-e2e-update-ts` or `cd e2e && bun run e2e.ts --update`

@@ -83,6 +83,12 @@ sudo chown root:input /dev/uinput 2>/dev/null || true
 echo "10. Enabling GDM service..."
 sudo systemctl enable gdm 2>/dev/null || true
 
+# 11. Skip GNOME Initial Setup and Tour on first login
+echo "11. Disabling GNOME Initial Setup and Tour..."
+mkdir -p ~/.config
+echo "yes" > ~/.config/gnome-initial-setup-done
+touch ~/.config/gnome-tour-done
+
 echo ""
 echo "=== All dependencies installed! ==="
 echo "Golden image is ready for E2E tests."

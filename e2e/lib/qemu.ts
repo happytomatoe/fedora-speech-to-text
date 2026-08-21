@@ -11,6 +11,8 @@ export class QemuMonitor extends EventEmitter {
   private buffer = "";
   private waitingForPrompt = false;
   private promptCallback: ((output: string) => void) | null = null;
+  private commandSent = false;
+  private _lastCommand = "";
   private commandQueue: Array<() => void> = [];
   private executing = false;
 
@@ -76,16 +78,37 @@ export class QemuMonitor extends EventEmitter {
     const text = data.toString();
     this.buffer += text;
 
-    // Check for prompt — indicates QEMU is ready
-    if (this.buffer.includes("(qemu) ")) {
-      const output = this.buffer;
-      this.buffer = "";
+    // Check for (qemu)  prompt
+    const prompt = "(qemu) ";
+    if (!this.waitingForPrompt || !this.promptCallback) return;
 
-      if (this.waitingForPrompt && this.promptCallback) {
+    if (!this.commandSent) {
+      // During connect: resolve on first prompt
+      if (this.buffer.includes(prompt)) {
+        const output = this.buffer;
+        this.buffer = "";
         this.waitingForPrompt = false;
         const cb = this.promptCallback;
         this.promptCallback = null;
         cb(output);
+      }
+    } else {
+      // After command: QEMU echoes each keystroke, creating many prompts.
+      // Wait until we see the command text in the buffer (echo complete),
+      // then resolve on the next prompt after that.
+      const cmdIdx = this.buffer.indexOf(this._lastCommand);
+      if (cmdIdx >= 0) {
+        // Find prompt AFTER the command text
+        const afterCmd = this.buffer.indexOf(prompt, cmdIdx + this._lastCommand.length);
+        if (afterCmd >= 0) {
+          const output = this.buffer;
+          this.buffer = "";
+          this.waitingForPrompt = false;
+          this.commandSent = false;
+          const cb = this.promptCallback;
+          this.promptCallback = null;
+          cb(output);
+        }
       }
     }
   }
@@ -196,6 +219,8 @@ export class QemuMonitor extends EventEmitter {
 
       this.sock!.once("error", onError);
       this.sock!.once("close", onClose);
+      this._lastCommand = command;
+      this.commandSent = true;
       this.sock!.write(command + "\n");
     });
   }

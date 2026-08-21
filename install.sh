@@ -43,6 +43,7 @@ detect_os() {
 install_prerequisites() {
   echo "Installing prerequisites..."
   install_pkg unzip
+  install_pkg zip
   install_pkg curl
   install_pkg libsecret
 
@@ -208,13 +209,20 @@ install_gnome_extension() {
 
   if [ -n "${LOCAL_DIR:-}" ]; then
     echo "Installing from local directory: $LOCAL_DIR"
-    rm -rf "$INSTALL_DIR"
-    mkdir -p "$INSTALL_DIR/prefs" "$INSTALL_DIR/schemas"
-    cp "$LOCAL_DIR"/*.js "$LOCAL_DIR"/*.json "$LOCAL_DIR"/*.css "$INSTALL_DIR/" 2>/dev/null || true
-    cp "$LOCAL_DIR/prefs/"*.js "$INSTALL_DIR/prefs/" 2>/dev/null || true
-    cp "$LOCAL_DIR/schemas/"*.xml "$INSTALL_DIR/schemas/" 2>/dev/null || true
-    cp -r "$LOCAL_DIR/vendor" "$INSTALL_DIR/" 2>/dev/null || true
-    glib-compile-schemas "$INSTALL_DIR/schemas/"
+    # Package as zip and install properly — this registers with GNOME Shell
+    local TMPDIR
+    TMPDIR=$(mktemp -d)
+    local ZIP="$TMPDIR/$EXT_UUID.shell-extension.zip"
+    # Use absolute path (LOCAL_DIR may be relative)
+    local ABS_LOCAL_DIR
+    ABS_LOCAL_DIR="$(cd "$LOCAL_DIR" && pwd)"
+    cd "$ABS_LOCAL_DIR" && zip -r "$ZIP" . -x '*.git*' '*/__pycache__/*' && cd - >/dev/null
+    gnome-extensions install --force "$ZIP"
+    rm -rf "$TMPDIR"
+    echo "  Extension installed via gnome-extensions install"
+    # Verify
+    gnome-extensions list 2>&1 | grep "$EXT_UUID" || echo "  WARNING: gnome-extensions list does not show extension"
+    gnome-extensions show "$EXT_UUID" 2>&1 || true
   else
     RELEASE_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$EXT_UUID.shell-extension.zip"
     echo "Downloading: $RELEASE_URL"
@@ -395,8 +403,16 @@ main() {
   detect_os
   install_prerequisites
   install_uv
-  fetch_latest_tag
-  install_python_service
+  # Skip fetch_latest_tag when using local directory (no git needed)
+  if [ -z "$LOCAL_DIR" ]; then
+    fetch_latest_tag
+  else
+    LATEST_TAG="local"
+  fi
+  # Skip Python service install when using local dir (deployed separately)
+  if [ -z "$LOCAL_DIR" ]; then
+    install_python_service
+  fi
   install_dbus_services
   install_gnome_extension
   enable_extension

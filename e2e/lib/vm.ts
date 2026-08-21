@@ -1,10 +1,12 @@
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
+import { checkHealth, recordPreDeployPid, type HealthCheckResult } from "./health.js";
 import {
   DeployConfig,
   waitForGdmLogin,
@@ -13,6 +15,8 @@ import {
   deployPythonSource,
   deployTestAudio,
   startVoiceService,
+  scpToVm,
+  scpFromVm,
 } from "./deploy-steps.js";
 
 export interface VmConfig {
@@ -30,16 +34,25 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  /** Skip extension deploy if true (extension pre-installed in golden image) */
+  skipExtensionDeploy?: boolean;
 }
 
 export class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
   booted = false;
   private freshlyBooted = false;
+  private overlayWasFresh = false;
+
+  /** Whether the overlay was freshly created (not reused from a previous run). */
+  get wasOverlayFresh(): boolean { return this.overlayWasFresh; }
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
   frameCount = 0;
+  private recordingFfmpeg: ReturnType<typeof Bun.spawn> | null = null;
+  private xvfbProcess: ReturnType<typeof Bun.spawn> | null = null;
+  private i3Process: ReturnType<typeof Bun.spawn> | null = null;
 
   private deployCfg: DeployConfig;
 
@@ -70,6 +83,28 @@ export class VmManager {
 
   // --- VM lifecycle ---
 
+  /** Fetch screenshot from VM via SSH cat + base64 (avoids SCP overhead) */
+  private async fetchScreenshot(remotePath: string, localPath: string): Promise<boolean> {
+    try {
+      const b64 = await this.shell.exec(`base64 < ${remotePath}`);
+      if (!b64 || b64.trim().length === 0) {
+        console.log(`  [rec] fetchScreenshot: empty base64 from ${remotePath}`);
+        return false;
+      }
+      const buf = Buffer.from(b64, "base64");
+      if (buf.length === 0) {
+        console.log(`  [rec] fetchScreenshot: decoded to 0 bytes`);
+        return false;
+      }
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(localPath, buf);
+      return true;
+    } catch (e) {
+      console.log(`  [rec] fetchScreenshot error: ${e}`);
+      return false;
+    }
+  }
+
   async captureFrame(label: string): Promise<void> {
     if (!this.config.recordMode) return;
     const dir = join(this.config.run.outputDir, "recording");
@@ -79,6 +114,108 @@ export class VmManager {
       console.log(`  [rec] ${label}`);
     } catch {
       // Ignore screendump errors
+    }
+  }
+
+  /** Start continuous recording via x11grab + ffmpeg (CI only — local uses display none) */
+  startRecording(): void {
+    if (!process.env.CI) { console.log("  [rec] skipping x11grab (not CI)"); return; }
+    if (this.recordingFfmpeg) return;
+    const dir = join(this.config.run.outputDir, "recording");
+    mkdirSync(dir, { recursive: true });
+    const videoPath = join(dir, "recording.mp4");
+    const ffmpegArgs = ["-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0", "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath];
+    console.log(`  [rec] ffmpeg args: ${ffmpegArgs.join(" ")}`);
+    this.recordingFfmpeg = Bun.spawn(
+      ["ffmpeg", ...ffmpegArgs],
+      { stdout: "pipe", stderr: "pipe", stdin: "pipe", env: { ...process.env, DISPLAY: process.env.DISPLAY || ":99" } }
+    );
+    // Log ffmpeg stderr for debugging
+    if (this.recordingFfmpeg.stderr) {
+      const reader = this.recordingFfmpeg.stderr.getReader();
+      const decoder = new TextDecoder();
+      (async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          if (text.includes("frame=") || text.includes("error") || text.includes("x11grab")) {
+            console.log(`  [rec] ffmpeg: ${text.trim().substring(0, 200)}`);
+          }
+        }
+      })();
+    }
+    console.log("  [rec] started ffmpeg x11grab capture");
+  }
+
+  /** Stop recording and return video path */
+  async stopRecording(): Promise<string | null> {
+    if (!this.recordingFfmpeg) return null;
+    const proc = this.recordingFfmpeg;
+    this.recordingFfmpeg = null;
+    const videoPath = join(this.config.run.outputDir, "recording", "recording.mp4");
+
+    // Send 'q' to ffmpeg to stop gracefully
+    if (proc.stdin) {
+      proc.stdin.write("q");
+      proc.stdin.end();
+    }
+    // Wait for ffmpeg to flush and exit (up to 10s)
+    try {
+      await Promise.race([
+        proc.exited,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10_000)),
+      ]);
+    } catch {
+      proc.kill();
+    }
+    // Give filesystem time to flush
+    await new Promise((r) => setTimeout(r, 500));
+
+    if (existsSync(videoPath)) {
+      console.log(`  [rec] saved: ${videoPath}`);
+      return videoPath;
+    }
+    console.log("  [rec] no video produced");
+    return null;
+  }
+
+  /** Create video from PNG screenshots as fallback */
+  createVideoFromScreenshots(): void {
+    const dir = join(this.config.run.outputDir, "recording");
+    const videoPath = join(dir, "recording.mp4");
+    // Skip if x11grab already produced a valid file (must be >1KB, not just header)
+    if (existsSync(videoPath)) {
+      const stat = Bun.file(videoPath).size;
+      if (stat > 1024) {
+        console.log(`  [rec] x11grab already produced ${videoPath} (${stat} bytes), skipping fallback`);
+        return;
+      }
+      console.log(`  [rec] x11produced ${videoPath} but only ${stat} bytes (<1KB), using fallback`);
+    }
+    const ppmPattern = join(dir, "frame-*.ppm");
+    let files: string;
+    try {
+      files = execSync(`ls ${ppmPattern} 2>/dev/null | head -1`, { encoding: "utf-8" }).trim();
+    } catch {
+      files = "";
+    }
+    if (!files) {
+      console.log("  [rec] no PPM files for fallback");
+      return;
+    }
+    try {
+      const result = execSync(
+        `ffmpeg -y -framerate 1 -pattern_type glob -i '${ppmPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>&1`,
+        { encoding: "utf-8" }
+      );
+      if (existsSync(videoPath)) {
+        console.log(`  [rec] created from screenshots: ${videoPath}`);
+      } else {
+        console.log("  [rec] ffmpeg ran but no video produced");
+      }
+    } catch (e: any) {
+      console.log(`  [rec] ffmpeg failed: ${e.stderr || e.message}`);
     }
   }
 
@@ -119,7 +256,8 @@ export class VmManager {
     })();
 
     Bun.spawnSync(["rm", "-f", socketPath]);
-
+    // Track whether overlay was freshly created (for snapshot fallback logic)
+    this.overlayWasFresh = !!(updateMode || staleOverlay || !existsSync(overlayImage));
     if (updateMode || staleOverlay || !existsSync(overlayImage)) {
       console.log("Creating fresh VM overlay...");
       const proc = Bun.spawnSync([
@@ -131,16 +269,24 @@ export class VmManager {
       console.log("Reusing existing overlay...");
     }
 
+
     // Use setsid to run QEMU in a new session so it survives parent abort/timeout
+    // Check if KVM is usable (file exists + readable)
+    const kvmAvailable = existsSync("/dev/kvm");
+    console.log(`  KVM: ${kvmAvailable ? 'available' : 'NOT available (using TCG software emulation)'}`);
+    // Start Xvfb + i3 before QEMU (if available)
+    const hasXvfb = await this.startXvfb();
+
     const qemuArgs = [
       "qemu-system-x86_64",
-      "-enable-kvm",
-      "-cpu", "host",
-      "-m", "4096",
-      "-smp", "2",
+      ...(kvmAvailable ? ["-enable-kvm", "-cpu", "host"] : ["-cpu", "max"]),
+      "-m", "8192",
+      "-smp", "4",
       "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
       "-device", "virtio-vga",
-      "-display", "none",
+      // VNC for recording (unified CI + local); SDL on CI for x11grab fallback
+      "-display", process.env.CI ? "sdl" : "none",
+      "-vnc", ":1",
       "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
@@ -149,13 +295,17 @@ export class VmManager {
       "-device", "virtio-rng-pci",
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
-    ];
+    ].flat();
     // Wrap in setsid + nohup to detach from parent process group
-    const wrappedCmd = `setsid nohup ${qemuArgs.join(" ")} &>/dev/null &`;
-    this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
+    // Redirect stderr to a log file (not /dev/null) so QEMU crashes are visible in CI artifacts
+    mkdirSync(this.config.run.outputDir, { recursive: true });
+    const qemuLogPath = join(this.config.run.outputDir, 'qemu-stderr.log');
+    const wrappedCmd = `setsid nohup ${qemuArgs.join(' ')} 2>${qemuLogPath} &>/dev/null &`;
+    this.process = Bun.spawn(['sh', '-c', wrappedCmd], {
       cwd: vmDir,
       stdout: "inherit",
       stderr: "inherit",
+      env: { ...process.env, DISPLAY: process.env.DISPLAY || ":99" },
     });
 
     this.booted = true;
@@ -170,27 +320,50 @@ export class VmManager {
     }
 
     await this.qemu.connect();
-    await this.verifySpice();
+    await this.verifyDisplayReady();
+  }
+
+  /**
+   * Recreate the overlay from the base image and boot fresh.
+   * Used when no snapshot exists and the overlay was reused from a previous (potentially failed) run.
+   */
+  async recreateOverlay(): Promise<void> {
+    const { overlayImage, socketPath } = this.config.run;
+
+    // Shutdown if running
+    if (this.booted) {
+      try {
+        await this.qemu.systemPowerdown();
+        await Bun.sleep(3000);
+      } catch { /* force kill below */ }
+      Bun.spawnSync(["pkill", "-f", `qemu-system.*${overlayImage}`]);
+      await Bun.sleep(1000);
+      this.booted = false;
+    }
+
+    // Kill Xvfb + i3 so boot() can restart them cleanly
+    this.xvfbProcess?.kill("SIGKILL");
+    this.xvfbProcess = null;
+    this.i3Process?.kill("SIGKILL");
+    this.i3Process = null;
+
+    // Delete stale overlay
+    Bun.spawnSync(["rm", "-f", overlayImage]);
+    console.log("  Recreated overlay from base image");
+
+    // Boot fresh
+    await this.boot();
   }
 
   async waitForSsh(): Promise<void> {
-    await this.shell.openSshSession({
-      sshKey: this.config.sshKey,
-      sshPort: this.config.run.sshPort,
-      sshUser: this.config.sshUser,
-    });
-  }
-
-  /** Verify Spice display is accessible */
-  async verifySpice(): Promise<void> {
-    const spicePort = this.config.run.spicePort;
+    // Wait for SSH port to be reachable before shell-use connection
     const net = await import("node:net");
-    
+    const sshPort = this.config.run.sshPort;
     await pollUntil(
-      `Spice port ${spicePort} listening`,
+      `SSH port ${sshPort} listening`,
       async () => {
         return new Promise<boolean>((resolve) => {
-          const sock = net.createConnection(spicePort, "localhost");
+          const sock = net.createConnection(sshPort, "localhost");
           const timer = setTimeout(() => {
             sock.destroy();
             resolve(false);
@@ -206,15 +379,121 @@ export class VmManager {
           });
         });
       },
-      10000
+      120_000,
+      1000
     );
+    // Configure shell helper with SSH credentials (no PTY session needed)
+    this.shell.configure({
+      sshKey: this.config.sshKey,
+      sshPort: this.config.run.sshPort,
+      sshUser: this.config.sshUser,
+    });
+  }
+
+  /** Start Xvfb virtual display and i3 window manager. Returns true if Xvfb ready. */
+  private async startXvfb(): Promise<boolean> {
+    // Check if Xvfb is available
+    try {
+      const check = Bun.spawnSync(["which", "Xvfb"], { stdout: "pipe", stderr: "pipe" });
+      if (check.exitCode !== 0) {
+        console.log("  [xvfb] not found, using real display");
+        return false;
+      }
+    } catch {
+      console.log("  [xvfb] not found, using real display");
+      return false;
+    }
+
+    // Start Xvfb on display :99
+    this.xvfbProcess = Bun.spawn(
+      ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
+      { stdout: "pipe", stderr: "pipe" }
+    );
+
+    // Wait for Xvfb to be ready (check if process is alive)
+    await Bun.sleep(500);
+    if (this.xvfbProcess && !this.xvfbProcess.killed) {
+      process.env.DISPLAY = ":99";
+      console.log("  [xvfb] ready on :99");
+      // Start i3 if available
+      try {
+        const i3Check = Bun.spawnSync(["which", "i3"], { stdout: "pipe", stderr: "pipe" });
+        if (i3Check.exitCode === 0) {
+          const i3Config = "/tmp/i3config";
+          writeFileSync(i3Config, `# i3 config file (v4)\nfont pango:monospace 12\ndefault_border pixel 0\n`);
+          this.i3Process = Bun.spawn(["i3", "-c", i3Config], { stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99" } });
+          console.log("  [i3] started");
+        }
+      } catch { /* i3 optional */ }
+      return true;
+    }
+    console.log("  [xvfb] failed to start, using real display");
+    this.xvfbProcess?.kill("SIGKILL");
+    this.xvfbProcess = null;
+    return false;
+  }
+
+  /** Verify display is accessible (X11 if Xvfb, VNC otherwise) */
+  async verifyDisplayReady(): Promise<void> {
+    if (process.env.DISPLAY === ":99") {
+      // Xvfb — just check Xvfb process is alive
+      if (!this.xvfbProcess || this.xvfbProcess.killed) {
+        console.log("  [xvfb] process not running");
+        return;
+      }
+      console.log("  [xvfb] display :99 ready");
+    } else {
+      // VNC fallback — check port 5901 (-vnc :1)
+      const net = await import("node:net");
+      await pollUntil(
+        "VNC port 5901 listening",
+        async () => {
+          return new Promise<boolean>((resolve) => {
+            const sock = net.createConnection(5901, "localhost");
+            const timer = setTimeout(() => { sock.destroy(); resolve(false); }, 2000);
+            sock.on("connect", () => { clearTimeout(timer); sock.destroy(); resolve(true); });
+            sock.on("error", () => { clearTimeout(timer); resolve(false); });
+          });
+        },
+        10000
+      );
+    }
+  }
+
+  /** Deploy portal screenshot script for Wayland capture */
+  private async deployPortalScreenshot(): Promise<void> {
+    const scriptPath = join(this.config.projectRoot, "e2e/scripts/portal-screenshot.py");
+    if (!existsSync(scriptPath)) {
+      console.log("  [portal] script not found, skipping");
+      return;
+    }
+    try {
+      // Copy script to VM user home
+      const remoteScript = "~/portal-screenshot.py";
+      scpToVm(scriptPath, remoteScript, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await this.shell.exec("chmod +x ~/portal-screenshot.py");
+      
+      // Create desktop file for portal registration
+      await this.shell.exec(`mkdir -p ~/.local/share/applications && cat > ~/.local/share/applications/io.github.voice-to-text-e2e.desktop << 'EOF'
+[Desktop Entry]
+Name=VoiceToText E2E
+Exec=python3 ~/portal-screenshot.py
+Type=Application
+EOF`);
+      
+      // Pre-authorize in permission store
+      await this.shell.exec(`flatpak permission-set screenshot screenshot io.github.voice-to-text-e2e yes 2>/dev/null || true`);
+      
+      console.log("  [portal] screenshot script deployed");
+    } catch (e) {
+      console.log(`  [portal] deploy failed: ${e}`);
+    }
   }
 
   async setup(): Promise<void> {
     const t0 = Date.now();
-    const shellExec = this.shell.exec.bind(this.shell);
     if (this.freshlyBooted) {
-      await waitForGdmLogin(shellExec);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog, this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
@@ -229,24 +508,31 @@ export class VmManager {
       const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
       console.log(`  Skipping installDependencies (${reason})`);
     } else {
-      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.deployer);
     }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
 
-    const t2 = Date.now();
-    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
-    console.log(`  deployExtension: ${Date.now() - t2}ms`);
+    // Deploy portal screenshot script for Wayland capture
+    await this.deployPortalScreenshot();
 
+    const t2 = Date.now();
+    const skipExtension = this.config.skipExtensionDeploy || false;
+    if (skipExtension) {
+      console.log(`  Skipping deployExtension (pre-installed in golden image)`);
+    } else {
+      await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    }
+    console.log(`  deployExtension: ${Date.now() - t2}ms`);
     // Deploy Python source and test audio (sequential, sync operations)
     const t3 = Date.now();
-    deployPythonSource(this.deployCfg);
-    deployTestAudio(this.deployCfg);
+    await deployPythonSource(this.deployCfg, this.deployer);
+    await deployTestAudio(this.deployCfg, this.deployer);
     console.log(`  deploy Python+audio: ${Date.now() - t3}ms`);
 
     const t4 = Date.now();
     const skipDeps = this.config.skipDeps || isGoldenDepsImage;
-    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps);
+    await startVoiceService(this.shell, this.deployCfg, pollUntil, pollForCommandOutput, skipDeps, this.deployer);
     console.log(`  startVoiceService: ${Date.now() - t4}ms`);
 
     console.log(`  setup total: ${Date.now() - t0}ms`);
@@ -258,9 +544,8 @@ export class VmManager {
    */
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
-    const shellExec = this.shell.exec.bind(this.shell);
     if (this.freshlyBooted) {
-      await waitForGdmLogin(shellExec);
+      await waitForGdmLogin(this.shell, this.config.sshKey, this.config.run.sshPort, this.config.sshUser, this.config.run.serialLog, this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
@@ -270,8 +555,30 @@ export class VmManager {
     await this.deployer.connect();
 
     // Deploy extension via install.sh --local
-    await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    // Deploy extension via install.sh --local (skip if pre-installed in golden image)
+    const skipExtension = this.config.skipExtensionDeploy || false;
+    if (skipExtension) {
+      console.log(`  Skipping deployExtension (pre-installed in golden image)`);
+    } else {
+      await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
+    }
     console.log(`  setupForPrefs total: ${Date.now() - t0}ms`);
+  }
+
+  // --- Health checks ---
+
+  /** Record gnome-shell PID before deployment (for crash detection). */
+  async recordPreDeployPid(): Promise<string> {
+    return recordPreDeployPid(this.shell.exec.bind(this.shell));
+  }
+
+  /** Run all health checks (gnome-shell alive, extension active, no JS errors, no crash). */
+  async healthCheck(preDeployPid?: string): Promise<HealthCheckResult> {
+    return checkHealth(
+      this.shell.exec.bind(this.shell),
+      this.config.extensionUuid,
+      preDeployPid
+    );
   }
 
   // --- Snapshot management ---
@@ -290,7 +597,15 @@ export class VmManager {
   async saveCleanSnapshot(tag = "clean"): Promise<void> {
     console.log(`Preparing clean snapshot '${tag}'...`);
     
-    // 1. Ensure Activities is closed
+    // 1. Kill voice service so snapshot is clean (deploy will restart it)
+    try {
+      await this.shell.exec("systemctl --user stop com.happytomatoe.VoiceToText.user.service 2>/dev/null; systemctl --user disable com.happytomatoe.VoiceToText.user.service 2>/dev/null; systemctl --user stop com.happytomatoe.VoiceToText.service 2>/dev/null; killall -9 voice-to-text-dbus python3 2>/dev/null; pkill -9 -f voice-to-text 2>/dev/null; true");
+      await Bun.sleep(1000);
+    } catch {
+      // Ignore — service may not be running
+    }
+    
+    // 2. Ensure Activities is closed
     await this.shell.dismissActivities();
     await this.shell.waitActivitiesFullyClosed();
     await Bun.sleep(500);
@@ -311,6 +626,7 @@ export class VmManager {
     if (!info.includes(tag)) {
       throw new Error(`Snapshot save failed — not found in info snapshots`);
     }
+    
   }
 
   async resetToCleanState(tag = "clean", retries = 2): Promise<void> {
@@ -324,13 +640,8 @@ export class VmManager {
         // 2. Wait for guest OS to settle
         await Bun.sleep(2000);
         
-        // 3. Reconnect SSH session (TCP connections are stale after restore)
+        // 3. Invalidate D-Bus cache (session bus changes after restore)
         await this.shell.close();
-        await this.shell.openSshSession({
-          sshKey: this.config.sshKey,
-          sshPort: this.config.run.sshPort,
-          sshUser: this.config.sshUser,
-        });
         
         // 4. Verify voice service is accessible
         await this.pollForCommandOutput(
@@ -349,15 +660,6 @@ export class VmManager {
         if (attempt === retries) throw err;
         await Bun.sleep(1000);
       }
-    }
-  }
-
-  async hasSnapshot(name: string): Promise<boolean> {
-    try {
-      const info = await this.qemu.infoSnapshots();
-      return info.includes(name);
-    } catch {
-      return false;
     }
   }
 
@@ -384,9 +686,44 @@ export class VmManager {
       await Bun.sleep(5000);
     } finally {
       this.process?.kill("SIGKILL");
+      this.xvfbProcess?.kill("SIGKILL");
+      this.i3Process?.kill("SIGKILL");
       this.qemu.close();
       await this.shell.close();
       await this.deployer.disconnect();
+    }
+  }
+
+  // --- Log collection ---
+
+  /** Fetch logs from VM to local output directory for artifact upload. */
+  async fetchLogs(outputDir: string): Promise<void> {
+    const vmLogsDir = join(outputDir, "vm-logs");
+    mkdirSync(vmLogsDir, { recursive: true });
+    const logs = [
+      { remote: "/tmp/voice-service.log", local: "voice-service.log" },
+      { remote: "/tmp/gnome-shell.log", local: "gnome-shell.log" },
+    ];
+    for (const { remote, local } of logs) {
+      try {
+        const content = await this.shell.exec(`cat ${remote} 2>/dev/null`);
+        if (content.trim()) {
+          writeFileSync(join(vmLogsDir, local), content);
+        }
+      } catch {
+        // File may not exist or SSH down — skip
+      }
+    }
+    // Capture tmux pane content (useful for debugging terminal output)
+    try {
+      const paneContent = await this.shell.exec(
+        `tmux capture-pane -t e2e:0 -p 2>/dev/null`
+      );
+      if (paneContent.trim()) {
+        writeFileSync(join(vmLogsDir, "tmux-pane.txt"), paneContent);
+      }
+    } catch {
+      // tmux may not be running — skip
     }
   }
 

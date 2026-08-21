@@ -1,0 +1,38 @@
+# E2E test timeouts (all values in seconds)
+timeouts:
+  # Global test watchdog — kills the process if exceeded
+  global: 300
+
+  # VM lifecycle
+  boot_vm: 120
+  wait_ssh: 120
+
+  # Setup phase (GDM + gnome-shell + extension deploy)
+  setup: 600
+
+  # SSH exec default (deployer.exec per-command timeout)
+  ssh_exec: 120
+
+  # install.sh execution (network installs need more time)
+  install_sh: 180
+
+  # GNOME Shell startup polling (total budget for pgrep loop)
+  gnome_shell: 180
+
+  # GDM restart stabilization wait
+  gdm_restart: 5
+
+  # GDM active poll
+  gdm_active: 30
+
+  # User session ready poll (D-Bus socket)
+  user_session: 30
+
+  # GNOME Shell D-Bus registration poll
+  shell_dbus: 30
+
+  # Extension ready poll
+  extension_ready: 30
+
+  # Parakeet transcription result poll
+  transcription: 30

@@ -8,8 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install just
-        uses: extractions/setup-just@v2
 
       - name: Install system dependencies
         run: |
@@ -30,6 +28,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install just
+        run: uv tool install rust-just@1.58.0
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -43,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --locked
-          npm ci
+          npm install
 
       - name: Get Silero model URL from source
         run: |
