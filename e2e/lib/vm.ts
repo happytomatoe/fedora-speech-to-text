@@ -390,6 +390,8 @@ export class VmManager {
       ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
       { stdout: "pipe", stderr: "pipe" }
     );
+    // Give Xvfb a moment to initialize before probing
+    await Bun.sleep(200);
     for (let i = 0; i < 20; i++) {
       if (this.xvfbProcess.exitCode !== null) { console.log("  [xvfb] failed to start"); return false; }
       try {
@@ -443,6 +445,13 @@ export class VmManager {
         "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath],
       { stdout: "pipe", stderr: "pipe" }
     );
+    // Check if ffmpeg failed immediately (e.g., codec not available, display not found)
+    if (this.recordingFfmpeg.exitCode !== null) {
+      const stderr = this.recordingFfmpeg.stderr?.toString() || "";
+      console.log(`  [recording] ffmpeg exited immediately (code=${this.recordingFfmpeg.exitCode}): ${stderr.slice(0, 200)}`);
+      this.recordingFfmpeg = null;
+      return;
+    }
     console.log(`  [recording] started → ${videoPath}`);
   }
 

@@ -265,6 +265,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   mkdirSync(screencastDir, { recursive: true });
   let screencastFile = "";
   let useXvfbRecording = false;
+  // Guarantee ffmpeg cleanup on any exit path
+  process.on('exit', () => {
+    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
+    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
+  });
   try {
     vm.startRecording();
     useXvfbRecording = true;
@@ -308,6 +313,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   t = Date.now();
   console.log("Starting recording via hotkey...");
   await shell.sendHotkey();
+  await shell.waitForRecordingStart();
   timing("start-recording", t);
 
   t = Date.now();
@@ -412,20 +418,26 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await tmux.killSession(tmuxCfg);
 
   // Retrieve screencast file from VM
+  // Retrieve screencast file from VM
   if (screencastFile) {
-    t = Date.now();
-    const localPath = join(screencastDir, "test-recording.webm");
-    try {
-      execSync(
-        `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
-        { encoding: "utf-8", timeout: 10000 }
-      );
-      const stats = require("node:fs").statSync(localPath);
-      console.log(`  Screencast saved: ${localPath} (${(stats.size / 1024).toFixed(1)}KB)`);
-    } catch (e) {
-      console.log(`  Screencast retrieval failed: ${e}`);
+    // Validate path: must be an absolute path, no traversal, ends with .webm
+    if (!/^\/tmp\/e2e-screencast[^']*\.webm$/.test(screencastFile)) {
+      console.log(`  Screencast file path rejected: ${screencastFile}`);
+    } else {
+      t = Date.now();
+      const localPath = join(screencastDir, "test-recording.webm");
+      try {
+        execSync(
+          `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
+          { encoding: "utf-8", timeout: 10000 }
+        );
+        const stats = require("node:fs").statSync(localPath);
+        console.log(`  Screencast saved: ${localPath} (${(stats.size / 1024).toFixed(1)}KB)`);
+      } catch (e) {
+        console.log(`  Screencast retrieval failed: ${e}`);
+      }
+      timing("retrieve-screencast", t);
     }
-    timing("retrieve-screencast", t);
   }
 }
 
