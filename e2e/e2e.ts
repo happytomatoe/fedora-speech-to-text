@@ -308,7 +308,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   t = Date.now();
   console.log("Starting recording via hotkey...");
   await shell.sendHotkey();
-  await shell.waitForRecordingStart();
   timing("start-recording", t);
 
   t = Date.now();
