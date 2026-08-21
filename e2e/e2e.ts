@@ -260,17 +260,17 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   try {
     vm.startRecording();
     useXvfbRecording = true;
-    console.log("  Recording started (Xvfb+x11grab)");
-  } catch {
+  } catch (e) {
+    console.log(`  Xvfb recording not available: ${e}`);
     // Fallback to GNOME Shell screencast
     try {
       screencastFile = await shell.startScreencast("/tmp/e2e-screencast");
       console.log(`  Screencast started: ${screencastFile}`);
-    } catch (e) {
-      console.log(`  All recording methods failed: ${e}`);
+    } catch (e2) {
+      console.log(`  Screencast start failed: ${e2}`);
     }
   }
-  timing("start-recording", t);
+  timing("start-screencast", t);
 
   // Ensure Activities is dismissed right before recording
   // (may re-open after initial dismiss or from gnome-shell restart)
@@ -374,6 +374,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log(`  Screencast stop failed: ${e}`);
     }
   }
+  timing("stop-screencast", t);
 
   t = Date.now();
   timing("capture-frame", t);
