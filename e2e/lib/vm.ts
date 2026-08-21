@@ -485,7 +485,7 @@ export class VmManager {
     // Delete snapshot if it exists
     try {
       if (await this.hasSnapshot("clean")) {
-        await this.qemu.delvm("clean");
+        await this.qemu.deleteSnapshot("clean");
       }
     } catch {
       // Ignore — snapshot may not exist

@@ -51,6 +51,7 @@ export class Virsh {
   }
 
   /** Execute HMP command via virsh */
+  /** Execute HMP (Human Monitor Protocol) command via virsh qemu-monitor-command. */
   static hmp(command: string, timeoutMs = 10000): string {
     const result = spawnSync(
       "virsh",
@@ -81,7 +82,8 @@ export class Virsh {
   }
 
   /** Delete a snapshot */
-  static delvm(tag: string): void {
+  /** Delete a snapshot */
+  static deleteSnapshot(tag: string): void {
     this.hmp(`delvm ${tag}`);
   }
 
