@@ -52,6 +52,15 @@ export const VoiceIndicator = GObject.registerClass(
             });
             this._box.add_child(this._icon);
 
+            // Provider initials label (e.g. "VX+DG"), right of the mic icon.
+            this._providerLabel = new St.Label({
+                text: '',
+                y_align: Clutter.ActorAlign.CENTER,
+                style_class: 'system-status-icon',
+            });
+            this._providerLabel.visible = false;
+            this._box.add_child(this._providerLabel);
+
             this._spinner = createSpinner({
                 style_class: 'system-status-icon',
                 visible: false,
@@ -120,6 +129,12 @@ export const VoiceIndicator = GObject.registerClass(
             this._icon.visible = false;
             this._spinner.visible = true;
             this._stopBtn.visible = false;
+        }
+
+        setProviderLabel(display) {
+            const text = (display || '').trim();
+            this._providerLabel.text = text;
+            this._providerLabel.visible = text !== '';
         }
 
         setRecordingActive() {

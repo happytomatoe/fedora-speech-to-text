@@ -20,6 +20,9 @@ const VoiceToTextIface = `
     <method name="GetStatus">
       <arg type="s" direction="out"/>
     </method>
+    <method name="GetInitials">
+      <arg type="s" direction="out"/>
+    </method>
     <signal name="AudioLevel">
       <arg type="d" name="level"/>
     </signal>
@@ -33,6 +36,28 @@ const VoiceToTextIface = `
 </node>`;
 
 const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
+
+// Default provider name → panel initials mapping (config.yaml
+// `provider_indicator.labels` overrides take precedence Python-side).
+const PROVIDER_INITIALS = {
+    deepgram: 'DG',
+    groq: 'GQ',
+    voxtral: 'VX',
+    elevenlabs: '11L',
+    parakeet: 'PK',
+    moonshine: 'MO',
+    '60db': '60',
+};
+
+/** Map a GetInitials() response like "voxtral+deepgram" to "VX+DG".
+ *  Unknown tokens (e.g. yaml label overrides) pass through verbatim. */
+export function mapProviderInitials(value) {
+    if (!value) return '';
+    return value
+        .split('+')
+        .map(token => PROVIDER_INITIALS[token] ?? token)
+        .join('+');
+}
 
 const SessionManagerIface =
     '<node>\
@@ -245,6 +270,7 @@ export default class VoiceToTextExtension extends Extension {
                         this._audioLevelWidget?.hide();
                         this._recording = false;
                         this._releaseInhibitor();
+                        this._updateProviderLabel();
                     }
                 }
             );
@@ -268,6 +294,8 @@ export default class VoiceToTextExtension extends Extension {
             this._signalIds.push(errorId);
 
             console.log('VoiceToText: D-Bus proxy connected');
+
+            this._updateProviderLabel();
 
             // Sync state on (re)enable — engine may already be recording
             const proxyRef = this._proxy;
@@ -295,6 +323,19 @@ export default class VoiceToTextExtension extends Extension {
             );
             this._showNotification('Voice-to-Text D-Bus service not running. ');
         }
+    }
+
+    _updateProviderLabel() {
+        const proxyRef = this._proxy;
+        if (!proxyRef) return;
+        proxyRef.GetInitialsAsync().then(
+            value => {
+                // Guard: proxy may have been replaced while promise was pending
+                if (this._proxy !== proxyRef) return;
+                this._indicator?.setProviderLabel(mapProviderInitials(value));
+            },
+            () => {} // service may be older / not running — keep label as-is
+        );
     }
 
     _disconnectDBusSignals() {
