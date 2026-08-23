@@ -19,6 +19,7 @@ from dbus_next.aio import MessageBus
 from dbus_next.errors import DBusError
 from dbus_next.service import ServiceInterface, method, signal
 
+from voice_to_text.config import ConfigManager
 from voice_to_text.engine import EngineState, RecordingEngine
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,19 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "com.happytomatoe.VoiceToText"
 OBJECT_PATH = "/com/happytomatoe/VoiceToText"
+
+
+def format_provider_initials(names: list[str], cfg: dict) -> str:
+    """Format active provider names for the panel indicator.
+
+    ``cfg`` is the ``provider_indicator`` section of config.yaml. Returns ''
+    when the feature is disabled or ``names`` is empty; otherwise joins names
+    with '+' after applying any ``labels`` overrides verbatim.
+    """
+    if not cfg.get("enabled", True):
+        return ""
+    overrides = cfg.get("labels", {})
+    return "+".join(str(overrides.get(name, name)) for name in names)
 
 
 # ── Signal values (stashed by callbacks, read by signal getters) ──────
@@ -161,6 +175,18 @@ class VoiceToTextInterface(ServiceInterface):
     def GetStatus(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
         """Return current state: idle/recording/processing."""
         return self._state
+
+    @method()
+    def GetInitials(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
+        """Return the active provider display string, e.g. 'voxtral' or 'voxtral+deepgram'.
+
+        The GNOME extension maps canonical names to 2-3 letter initials.
+        ``provider_indicator.labels`` entries in config.yaml override a name
+        verbatim. Returns '' when the feature is disabled or no provider is
+        active yet.
+        """
+        cfg = ConfigManager().config.get("provider_indicator", {})
+        return format_provider_initials(getattr(self._engine, "_active_provider_names", []), cfg)
 
     @method()
     def ListInputDevices(self) -> "a(ss)":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]

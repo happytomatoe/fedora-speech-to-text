@@ -17,10 +17,13 @@ class TestElevenLabsProvider:
         assert provider.name == "elevenlabs"
 
     @pytest.mark.asyncio
-    async def test_transcribe_file_request_format(self):
+    async def test_transcribe_file_request_format(self, monkeypatch):
         mock_response = Mock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"text": "hello world", "language_code": "eng"}
+
+        # Isolate from a real ELEVENLABS_API_KEY in the ambient environment.
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
 
         with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
             provider = ElevenLabsProvider({"api_key": "test_key"})

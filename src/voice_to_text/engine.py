@@ -346,6 +346,7 @@ class RecordingEngine:
         self._recorder: AsyncAudioRecorder | None = None
         self._transcriber: HybridTranscriber | None = None
         self._batch_provider = None
+        self._active_provider_names: list[str] = []
         self._task: asyncio.Task | None = None
         self._cancel_event = asyncio.Event()
         self._skip_output = False
@@ -538,6 +539,12 @@ class RecordingEngine:
 
             self._transcriber = transcriber
             self._batch_provider = batch_provider
+            if mode == "hybrid":
+                self._active_provider_names = [streaming_name, batch_name]
+            elif mode == "streaming":
+                self._active_provider_names = [streaming_name]
+            else:
+                self._active_provider_names = [provider]
             _step("providers_initialized")
             logger.info("Engine: providers initialized, starting recorder...")
 
