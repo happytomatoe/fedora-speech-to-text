@@ -361,6 +361,21 @@ class RecordingEngine:
         self.on_error: Callable[[str], None] | None = None
         self.on_state_change: Callable[[EngineState], None] | None = None
 
+    def _resolve_provider_names(self, config: dict[str, Any]) -> list[str]:
+        """Resolve active provider names from the session config + config.yaml.
+
+        Used by the D-Bus GetInitials method for the panel indicator.
+        """
+        mode = config.get("mode", "batch")
+        if mode in ("hybrid", "streaming"):
+            hybrid_cfg = ConfigManager().config.get("transcription", {}).get("hybrid", {})
+            streaming_name = config.get("streaming_provider") or hybrid_cfg.get("streaming_provider", "deepgram")
+            if mode == "hybrid":
+                batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
+                return [streaming_name, batch_name]
+            return [streaming_name]
+        return [config.get("provider", "voxtral")]
+
     async def start(self, config: dict[str, Any]) -> None:
         """Start recording and transcription."""
         if self.state != EngineState.IDLE:
@@ -440,6 +455,9 @@ class RecordingEngine:
             output_method = config.get("output_method", "mutter-virtual")
             use_typing = output_method in ("type", "mutter-virtual")
             logger.info("Engine config: output_method=%s, use_typing=%s", output_method, use_typing)
+            # Resolve provider names early (debug mode returns below, before
+            # provider construction) so the panel indicator can show them.
+            self._active_provider_names = self._resolve_provider_names(config)
             _step("config_parsed")
             logger.info("Engine: config parsed, opening dotoolc...")
 
@@ -539,12 +557,6 @@ class RecordingEngine:
 
             self._transcriber = transcriber
             self._batch_provider = batch_provider
-            if mode == "hybrid":
-                self._active_provider_names = [streaming_name, batch_name]
-            elif mode == "streaming":
-                self._active_provider_names = [streaming_name]
-            else:
-                self._active_provider_names = [provider]
             _step("providers_initialized")
             logger.info("Engine: providers initialized, starting recorder...")
 
