@@ -56,7 +56,7 @@ export const VoiceIndicator = GObject.registerClass(
             this._providerLabel = new St.Label({
                 text: '',
                 y_align: Clutter.ActorAlign.CENTER,
-                style_class: 'system-status-icon',
+                style_class: 'provider-indicator-label',
             });
             this._providerLabel.visible = false;
             this._box.add_child(this._providerLabel);
