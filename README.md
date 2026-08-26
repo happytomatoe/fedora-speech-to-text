@@ -27,6 +27,7 @@ By using internal fedora API (mutter methods) we can higher throughput.
 ```
 ## Configuration
 <img width="324" height="108" alt="Screenshot From 2026-08-26 10-37-33" src="https://github.com/user-attachments/assets/7d2a59e3-2597-4d8c-a11f-1ca9513d8226" />
+
 Right click on icon to see preferences
 
 ## How to use
