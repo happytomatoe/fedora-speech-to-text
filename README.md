@@ -1,9 +1,7 @@
 # Fedora speech to text
 
 Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.
-# Demo
 
-<https://github.com/user-attachments/assets/95bd743b-4af4-4329-b6d2-b3b3b979d45a>
 
 # Why choose this over alternatives
 
@@ -17,6 +15,10 @@ Other repositories don't integrate natively with GNOME Wayland because of compat
 | `type` (ydotool) | **4,760 ms** | ~936× slower |
 
 By using internal fedora API (mutter methods) we can higher throughput.
+
+# Demo
+
+<https://github.com/user-attachments/assets/95bd743b-4af4-4329-b6d2-b3b3b979d45a>
 
 ## Installation
 
