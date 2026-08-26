@@ -551,8 +551,7 @@ gnome-ext-pack:
         --exclude='bun.lock' \
         "$SRC/" "dist/$UUID/"
     glib-compile-schemas "dist/$UUID/schemas/"
-    rm -f "dist/$UUID.shell-extension.zip"
-    cd "dist/$UUID" && zip -r "../$UUID.shell-extension.zip" . -x '*.pyc' '__pycache__/*'
+    cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
     echo "Extension packed to dist/$UUID.shell-extension.zip"
 
 # @category e2e
@@ -1111,6 +1110,6 @@ ego-lint:
     echo "⚠️  Warning: Extensions with FAIL issues will likely be REJECTED."
     echo ""
     echo "Running ego-lint on gnome-ext/..."
-    ./ego-lint --show=fail,warn gnome-ext/
+    ./scripts/ego-lint --show=fail,warn gnome-ext/
     echo ""
     echo "=== EGO Review Complete ==="

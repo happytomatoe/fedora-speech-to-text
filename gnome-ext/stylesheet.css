@@ -1,12 +1,3 @@
-/* Provider indicator label */
-.provider-indicator-label {
-    font-size: 10pt;
-    font-weight: bold;
-    color: currentColor;  /* Adapts to theme (dark on light, light on dark) */
-    padding: 0 4px;
-    min-width: 2ch;
-}
-
 /* Floating OSD widget — segmented meter */
 .osd-widget {
     background-color: rgba(30, 30, 30, 0.85);
