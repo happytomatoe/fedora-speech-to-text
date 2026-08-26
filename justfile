@@ -551,7 +551,8 @@ gnome-ext-pack:
         --exclude='bun.lock' \
         "$SRC/" "dist/$UUID/"
     glib-compile-schemas "dist/$UUID/schemas/"
-    cd dist && zip -r "$UUID.shell-extension.zip" "$UUID"
+    rm -f "dist/$UUID.shell-extension.zip"
+    cd "dist/$UUID" && zip -r "../$UUID.shell-extension.zip" . -x '*.pyc' '__pycache__/*'
     echo "Extension packed to dist/$UUID.shell-extension.zip"
 
 # @category e2e
