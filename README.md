@@ -4,7 +4,7 @@ Convert speech to text for free by using free APIs or local models (Parakeet, Mo
 
 # Why choose this over alternatives
 
-Other repositories don't integrate natively with GNOME Wayland because of compatibility issues ([Handy](https://handy.computer)) or they use ydotool. Ydotool is slower than alternatives:
+Other repositories don't integrate natively with GNOME Wayland because of compatibility issues or they use ydotool. Ydotool is slower than alternatives:
 
 | Output method | Average time (235 chars) | vs baseline (× slower) |
 |--------------|---------------------------|------------------------|
