@@ -18,13 +18,6 @@ setup:
 run *args:
     PYTHONPATH=src .venv/bin/python -m voice_to_text.__main__ {{ args }}
 
-# @category benchmark
-# Run end-to-end typing latency benchmark (dotool, mutter-virtual, mutter-commit)
-# Requires: dotoold running + GNOME extension with TypeText D-Bus service
-benchmark-typing:
-    # Requires system PyGObject (gi) — not in the uv venv
-    PYTHONPATH=src /usr/bin/python3 scripts/benchmark-typing-e2e.py
-
 test:
     uv run pytest -n auto
 

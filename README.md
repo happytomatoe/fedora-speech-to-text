@@ -1,22 +1,6 @@
 # Fedora speech to text
 
-Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora Gnome Wayland(Standard Fedora Workstation).
-
-# Why choose this over alternatives:
-Other repositories uh don't integrate natively with uh GNOME Wyaland because of compatibility issues [Handy](https://handy.computer) or they use ydotool. Ydotool is slower than alternatives:
-
-| Output method | Average time (235 chars) | vs baseline (× slower) |
-|--------------|---------------------------|------------------------|
-| `mutter-commit` | **5.1 ms** | baseline |
-| `mutter-virtual` | **174 ms** | ~34× slower |
-| `type` (dotool) | **2,012 ms** | ~395× slower |
-| `type` (ydotool) | **4,760 ms** | ~936× slower |
-
-By using internal fedora API(mutter methods) we can higher throughput.
-
-# Demo
-<https://github.com/user-attachments/assets/a51d6826-e417-4e69-afd0-9ff40799d3a1>
-
+Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.
 
 # Providers
 
@@ -34,6 +18,7 @@ Local:
 
 This repo contains gnome extension and python application
 
+<https://github.com/user-attachments/assets/a51d6826-e417-4e69-afd0-9ff40799d3a1>
 
 ## Requirements
 
@@ -145,6 +130,14 @@ Configure via `output-method` in preferences or `config.yaml`:
 | `type` | Types via dotool (keystroke simulation) | dotoolc running |
 | `mutter-virtual` | Char-by-char typing via GNOME Shell virtual keyboard | GNOME extension |
 | `mutter-commit` | Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation | GNOME extension |
+
+### How each method works
+
+**`type`** — Uses [dotool](https://github.com/fcambus/dotool) to simulate keystrokes. Requires `dotoolc` daemon running. Works on both X11 and Wayland.
+
+**`mutter-virtual`** — Uses GNOME Shell's `Clutter.VirtualDevice` to send key events character by character. Bypasses X11/Wayland clipboard entirely. Slow for long text.
+
+**`mutter-commit`** — Calls `Main.inputMethod.commit(text)` directly via GNOME Shell's internal input method. Bypasses clipboard and keystroke simulation entirely. Should work universally with any focused input.
 
 ## Attribution
 
