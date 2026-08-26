@@ -12,7 +12,7 @@ command_exists() {
   command -v "$1" &>/dev/null
 }
 
-install_pkg() {
+install_system_pkg() {
   local pkg="$1"
   if command_exists "$pkg"; then
     echo "  $pkg already installed, skipping."
@@ -23,7 +23,7 @@ install_pkg() {
     return 0
   fi
   echo "  Installing $pkg..."
-  sudo "$PKG_MGR" install -y "$pkg" || true
+  sudo "$PKG_MGR" install "$pkg"
 }
 
 # --- High-level functions ---
@@ -42,9 +42,9 @@ detect_os() {
 
 install_prerequisites() {
   echo "Installing prerequisites..."
-  install_pkg unzip
-  install_pkg curl
-  install_pkg libsecret
+  install_system_pkg unzip
+  install_system_pkg curl
+  install_system_pkg libsecret
 
   if ! command_exists dotool; then
     echo ""
@@ -149,7 +149,7 @@ install_uv() {
     echo "ERROR: Failed to install uv."
     exit 1
   fi
-  echo "uv installed."
+  echo "uv installed into $HOME/.local/bin"
 }
 
 fetch_latest_tag() {
@@ -361,15 +361,7 @@ print_summary() {
   echo ""
   echo "=== Installation Complete ==="
   echo ""
-  echo "Next steps:"
-  echo "  1. Restart GNOME Shell (Alt+F2, r, Enter on X11) or log out/in on Wayland"
-  echo "  2. Set your API keys in environment variables or via secret-tool"
-  echo "  3. Use the hotkey (default: Super+Q) to start/stop recording"
-  echo ""
-  echo "Useful commands:"
-  echo "  ps aux | grep voice-to-text-dbus    # Check if service is running"
-  echo "  journalctl --user | grep voice      # Service logs"
-  echo "  gnome-extensions prefs $EXT_UUID    # Extension settings"
+  echo "Relogin to activate gnome extension"
 }
 
 # --- Parse arguments ---

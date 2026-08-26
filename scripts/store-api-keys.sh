@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Store API keys for voice-to-text providers using gum
-
-if ! command -v gum &>/dev/null; then
-  echo "Error: 'gum' is required. Install it from https://github.com/charmbracelet/gum"
-  echo "  go install github.com/charmbracelet/gum@latest"
-  echo "  brew install gum      # macOS"
-  echo "  sudo dnf install gum  # Fedora"
-  exit 1
-fi
+# Store API keys for voice-to-text providers (pure bash)
 
 if ! command -v secret-tool &>/dev/null; then
   echo "Error: 'secret-tool' is required (usually in libsecret-tools package)."
@@ -19,22 +11,15 @@ if ! command -v secret-tool &>/dev/null; then
   exit 1
 fi
 
-GUM=$(command -v gum)
+echo "voice-to-text — API Key Storage"
 
-$GUM style --border normal --padding "0 2" --margin "0 0 1" "voice-to-text — API Key Storage"
+providers=("Deepgram" "Voxtral" "Groq" "ElevenLabs" "60db")
 
-provider=$($GUM choose \
-  --header "Which provider's API key do you want to store?" \
-  "Deepgram" \
-  "Voxtral" \
-  "Groq" \
-  "ElevenLabs" \
-  "60db")
-
-if [ -z "$provider" ]; then
-  echo "No provider selected. Aborted."
-  exit 0
-fi
+echo "Which provider's API key do you want to store?"
+select provider in "${providers[@]}"; do
+  [ -n "$provider" ] && break
+  echo "Invalid selection. Try again."
+done
 
 # Map display name to keyring username + create-key URL
 case "$provider" in
@@ -65,9 +50,9 @@ ElevenLabs)
 esac
 
 echo
-$GUM style --foreground 212 "Create a new API key here:" "$url"
+echo "Create a new API key here: $url"
 echo
 
-echo
-secret-tool store --label="${provider} API Key" service voice-to-text username "$username" &&
-  $GUM style --foreground 10 "✓ ${provider} API key stored (service=voice-to-text, username=${username})"
+if secret-tool store --label="${provider} API Key" service voice-to-text username "$username"; then
+  echo "✓ ${provider} API key stored (service=voice-to-text, username=${username})"
+fi
