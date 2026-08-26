@@ -23,7 +23,7 @@ install_system_pkg() {
     return 0
   fi
   echo "  Installing $pkg..."
-  sudo "$PKG_MGR" install "$pkg" || true
+  sudo "$PKG_MGR" install "$pkg"
 }
 
 # --- High-level functions ---
