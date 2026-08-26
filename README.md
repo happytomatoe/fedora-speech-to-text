@@ -2,6 +2,19 @@
 
 Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.
 
+# Why choose this over alternatives
+
+Other repositories don't integrate natively with GNOME Wayland because of compatibility issues ([Handy](https://handy.computer)) or they use ydotool. Ydotool is slower than alternatives:
+
+| Output method | Average time (235 chars) | vs baseline (× slower) |
+|--------------|---------------------------|------------------------|
+| `mutter-commit` | **5.1 ms** | baseline |
+| `mutter-virtual` | **174 ms** | ~34× slower |
+| `type` (dotool) | **2,012 ms** | ~395× slower |
+| `type` (ydotool) | **4,760 ms** | ~936× slower |
+
+By using internal fedora API (mutter methods) we can higher throughput.
+
 # Providers
 
 Cloud:
