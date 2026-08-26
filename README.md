@@ -25,6 +25,16 @@ By using internal fedora API (mutter methods) we can higher throughput.
 ```bash
  curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/happytomatoe/voice-to-text/refs/heads/main/install.sh | bash
 ```
+## Configuration
+<img width="324" height="108" alt="Screenshot From 2026-08-26 10-37-33" src="https://github.com/user-attachments/assets/7d2a59e3-2597-4d8c-a11f-1ca9513d8226" />
+Right click on icon to see preferences
+
+## How to use
+
+- Set custom hotkey or use press Super+W to start recording 
+- Dictate
+- Press hotkey to stop recording
+
 # Providers
 
 Cloud:
@@ -43,16 +53,7 @@ Local:
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
-- [Groq API key](https://console.groq.com/keys) OR [Voxtral API key](https://mistral.ai) OR [ElevenLabs API key](https://elevenlabs.io/app/settings/api-keys)
-
-
-## How to use
-
-- Press Super+W
-- Dictate
-- Press Super+W
-
-## Configuration
+- API Key if you would use cloud api
 
 ### API Keys
 
@@ -131,24 +132,6 @@ just service-stop
 ### Other Settings
 
 Edit [`config.yaml`](./config.yaml) to customize if you are using python app or right click on microphone icon->Preferences if you are using gnome extension
-
-## Output Methods
-
-Configure via `output-method` in preferences or `config.yaml`:
-
-| Method | How it works | Requirements |
-|--------|--------------|--------------|
-| `type` | Types via dotool (keystroke simulation) | dotoolc running |
-| `mutter-virtual` | Char-by-char typing via GNOME Shell virtual keyboard | GNOME extension |
-| `mutter-commit` | Commits text via `Main.inputMethod.commit()` — bypasses clipboard and keystroke simulation | GNOME extension |
-
-### How each method works
-
-**`type`** — Uses [dotool](https://github.com/fcambus/dotool) to simulate keystrokes. Requires `dotoolc` daemon running. Works on both X11 and Wayland.
-
-**`mutter-virtual`** — Uses GNOME Shell's `Clutter.VirtualDevice` to send key events character by character. Bypasses X11/Wayland clipboard entirely. Slow for long text.
-
-**`mutter-commit`** — Calls `Main.inputMethod.commit(text)` directly via GNOME Shell's internal input method. Bypasses clipboard and keystroke simulation entirely. Should work universally with any focused input.
 
 ## Attribution
 
