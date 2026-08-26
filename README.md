@@ -1,6 +1,9 @@
 # Fedora speech to text
 
 Convert speech to text for free by using free APIs or local models (Parakeet, Moonshine) on Fedora.
+# Demo
+
+<https://github.com/user-attachments/assets/95bd743b-4af4-4329-b6d2-b3b3b979d45a>
 
 # Why choose this over alternatives
 
@@ -15,6 +18,16 @@ Other repositories don't integrate natively with GNOME Wayland because of compat
 
 By using internal fedora API (mutter methods) we can higher throughput.
 
+## Installation
+
+```bash
+ curl -sSL https://raw.githubusercontent.com/happytomatoe/voice-to-text/refs/heads/main/install.sh | bash
+```
+# Quickstart
+Store api key
+```bash
+
+```
 # Providers
 
 Cloud:
@@ -26,27 +39,15 @@ Cloud:
 - ElevenLabs
 
 Local:
-- Parakeet
+- Parakeet. You can install it in podman container using [this script](./parakeet-v2.sh)
 - Moonshine (streaming + batch, CPU-only)
-
-This repo contains gnome extension and python application
-
-<https://github.com/user-attachments/assets/95bd743b-4af4-4329-b6d2-b3b3b979d45a>
 
 ## Requirements
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [Groq API key](https://console.groq.com/keys) OR [Voxtral API key](https://mistral.ai) OR [ElevenLabs API key](https://elevenlabs.io/app/settings/api-keys)
-- Linux with `xclip`/`xsel` (X11) if you'll use clipboard functionality
 
-## Installation
-
-```bash
- curl -sSL https://raw.githubusercontent.com/happytomatoe/voice-to-text/refs/heads/main/install.sh | bash
-```
-
-If you want to use Parakeet check out [this script](./parakeet-v2.sh)
 
 ## How to use
 
