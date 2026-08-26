@@ -21,12 +21,7 @@ By using internal fedora API (mutter methods) we can higher throughput.
 ## Installation
 
 ```bash
- curl -sSL https://raw.githubusercontent.com/happytomatoe/voice-to-text/refs/heads/main/install.sh | bash
-```
-# Quickstart
-Store api key
-```bash
-
+ curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/happytomatoe/voice-to-text/refs/heads/main/install.sh | bash
 ```
 # Providers
 
