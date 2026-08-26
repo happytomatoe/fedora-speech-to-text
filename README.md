@@ -132,7 +132,7 @@ just service-stop
 
 ### Other Settings
 
-Edit [`config.yaml`](./config.yaml) to customize if you are using python app or right click on microphone icon->Preferences if you are using gnome extension
+Edit [`config.yaml`](./config.yaml)
 
 ## Attribution
 
