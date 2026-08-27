@@ -32,9 +32,9 @@ export class TypeTextService {
                 Clutter.InputDeviceType.KEYBOARD_DEVICE
             );
             if (this._virtualKeyboard) {
-                console.log('VoiceToText: TypeText virtual keyboard obtained');
+                console.debug('VoiceToText: TypeText virtual keyboard obtained');
             } else {
-                console.log(
+                console.debug(
                     'VoiceToText: TypeText virtual keyboard not available'
                 );
             }
@@ -62,7 +62,7 @@ export class TypeTextService {
                             connection,
                             '/com/happytomatoe/TypeText'
                         );
-                        console.log(
+                        console.debug(
                             'VoiceToText: TypeText D-Bus object exported at /com/happytomatoe/TypeText'
                         );
                     } catch (e) {
@@ -73,13 +73,13 @@ export class TypeTextService {
                     }
                 },
                 (connection, name) => {
-                    console.log(`VoiceToText: bus name acquired: ${name}`);
+                    console.debug(`VoiceToText: bus name acquired: ${name}`);
                 },
                 (connection, _name) => {
                     console.error(`VoiceToText: bus name lost: ${_name}`);
                 }
             );
-            console.log(
+            console.debug(
                 'VoiceToText: bus_own_name called for com.happytomatoe.TypeText'
             );
         } catch (e) {
@@ -102,10 +102,10 @@ export class TypeTextService {
 
     TypeText(text) {
         if (!this._virtualKeyboard) {
-            console.log('VoiceToText: TypeText virtual keyboard not available');
+            console.debug('VoiceToText: TypeText virtual keyboard not available');
             return;
         }
-        console.log(`VoiceToText: TypeText typing ${text.length} chars`);
+        console.debug(`VoiceToText: TypeText typing ${text.length} chars`);
         try {
             let time = Clutter.get_current_event_time() * 1000;
             for (const char of text) {
@@ -164,11 +164,11 @@ export class TypeTextService {
             throw new Error('No focused input context');
         }
         try {
-            console.log(
+            console.debug(
                 `VoiceToText: CommitText committing ${text.length} chars via inputMethod`
             );
             Main.inputMethod.commit(text);
-            console.log('VoiceToText: CommitText completed');
+            console.debug('VoiceToText: CommitText completed');
         } catch (e) {
             console.error('VoiceToText: CommitText failed:', e);
             throw e;
