@@ -408,6 +408,10 @@ export async function startVoiceService(
   // Always ensure Python deps are present. The golden image may be
   // missing some (e.g. onnxruntime), and a fresh uv install is cheap and
   // idempotent — so we don't depend on the image being perfectly provisioned.
+  // Skip when skipDeps (golden image has deps pre-installed).
+  if (skipDeps) {
+    console.log("  Skipping Python deps install (golden image)");
+  } else {
   console.log("Installing Python dependencies...");
   const uvResult = await shell.exec(
     "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
@@ -426,6 +430,7 @@ export async function startVoiceService(
       console.log("  FATAL: pip install failed:", (e as Error).message);
       throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
     }
+  }
   }
 
   // portaudio-devel (for sounddevice) is provided by the golden image; only

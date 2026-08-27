@@ -159,28 +159,35 @@ export class VmManager {
     if (useSpice) {
       qemuArgs.push("-device", "virtio-vga", "-display", "none", "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`);
     } else {
-      qemuArgs.push("-device", "virtio-vga-gl", "-display", "gtk,gl=on");
+      // Use VNC display for headless compatibility (port 5900)
+      qemuArgs.push("-device", "virtio-vga", "-vnc", ":0,password=off");
     }
 
     // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
     const qemuEnv = useSpice ? {} : { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
     const envPrefix = useSpice ? "" : "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=";
-    const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} &>/dev/null &`;
+    // Capture QEMU stderr to a log file for debugging
+    const qemuStderrLog = join(this.config.run.runDir, "qemu-stderr.log");
+    const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} 2>"${qemuStderrLog}" &`;
     this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
       cwd: vmDir,
       stdout: "inherit",
       stderr: "inherit",
     });
+    // Give QEMU a moment to start and create the monitor socket
+    await Bun.sleep(1000);
 
     this.booted = true;
     this.freshlyBooted = true;
 
-    for (let i = 0; i < 30; i++) {
+    // Wait for QEMU monitor socket to appear (up to 30s)
+    for (let i = 0; i < 60; i++) {
       if (existsSync(socketPath)) break;
       await Bun.sleep(500);
+      if (i % 10 === 9) console.log(`  [boot] waiting for monitor socket... (${(i + 1) * 500}ms)`);
     }
     if (!existsSync(socketPath)) {
-      throw new Error("QEMU monitor socket never appeared — QEMU may have failed to start");
+      throw new Error("QEMU monitor socket never appeared after 30s — QEMU may have failed to start");
     }
 
     await this.qemu.connect();
@@ -220,7 +227,7 @@ export class VmManager {
         { stderr: "ignore", stdout: "ignore" },
       );
       if (res.exitCode === 0) return;
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 500));
     }
     throw new Error("SSH handshake did not succeed within timeout");
   }
@@ -256,15 +263,15 @@ export class VmManager {
 
   async setup(): Promise<void> {
     const t0 = Date.now();
+    // Establish deployer SSH connection first (needed for waitForGdmLogin)
+    await this.deployer.connect();
+
     if (this.freshlyBooted) {
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
     console.log(`  GDM login: ${Date.now() - t0}ms`);
-
-    // Establish deployer SSH connection (after GDM login, before deployment)
-    await this.deployer.connect();
 
     const t1 = Date.now();
     const isGoldenDepsImage = this.config.baseImage.includes('golden-gnome-deps');
@@ -301,15 +308,15 @@ export class VmManager {
    */
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
+    // Establish deployer SSH connection first (needed for waitForGdmLogin)
+    await this.deployer.connect();
+
     if (this.freshlyBooted) {
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
     console.log(`  GDM login: ${Date.now() - t0}ms`);
-
-    // Establish deployer SSH connection
-    await this.deployer.connect();
 
     // Deploy extension via install.sh --local
     await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
