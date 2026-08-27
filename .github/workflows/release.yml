@@ -40,20 +40,15 @@ jobs:
       - name: Build Python package
         run: uv build --out-dir dist
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Pack GNOME extension
         run: |
-          UUID="voice-to-text@happytomatoe.com"
-          SRC="gnome-ext"
-          rm -rf "dist/$UUID"
-          mkdir -p "dist/$UUID/schemas"
+          sudo apt-get update && sudo apt-get install -y rsync zip libglib2.0-bin
           VERSION_NUM=$(echo "${{ steps.tag_version.outputs.new_tag }}" | sed 's/^v//')
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION_NUM\"/g" "$SRC"/metadata.json
-
-          cp "$SRC"/*.js "$SRC"/*.json "$SRC"/*.css "dist/$UUID/"
-          cp "$SRC"/schemas/*.xml "dist/$UUID/schemas/"
-          cp "$SRC"/metadata.json "dist/$UUID/"
-          glib-compile-schemas "dist/$UUID/schemas/"
-          cd "dist/$UUID" && zip -r "../$UUID.shell-extension.zip" ./*
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION_NUM\"/g" gnome-ext/metadata.json
+          just gnome-ext-pack
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
