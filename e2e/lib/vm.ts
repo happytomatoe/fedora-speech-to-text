@@ -159,8 +159,9 @@ export class VmManager {
     if (useSpice) {
       qemuArgs.push("-device", "virtio-vga", "-display", "none", "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`);
     } else {
-      // Use VNC display for headless compatibility (port 5900)
-      qemuArgs.push("-device", "virtio-vga", "-vnc", ":0,password=off");
+      // GTK display without GL — renders a real window on Xvfb so x11grab
+      // recording works. GL variant (virtio-vga-gl + gl=on) fails headless.
+      qemuArgs.push("-device", "virtio-vga", "-display", "gtk,gl=off");
     }
 
     // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
