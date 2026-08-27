@@ -3,7 +3,7 @@
     "description": "Global hotkey voice transcription with top-bar audio visualizer",
     "uuid": "voice-to-text@happytomatoe.com",
     "shell-version": ["45", "46", "47", "48", "49", "50"],
-    "version": 2,
+    "version": "0.0.0",
     "url": "https://github.com/happytomatoe/voice-to-text",
     "settings-schema": "org.gnome.shell.extensions.voice-to-text",
     "prefs": {
