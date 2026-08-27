@@ -902,7 +902,7 @@ if [[ "$REPORT" == true ]]; then
 
     echo ""
     echo "--- VERDICT ---"
-    UNIQUE_WARN_COUNT=$(grep "^WARN|" "$RESULTS_FILE" | cut -d'|' -f2 | sort -u | wc -l)
+    UNIQUE_WARN_COUNT=$(grep "^WARN|" "$RESULTS_FILE" | cut -d'|' -f2 | sort -u | wc -l || true)
     if [[ $FAIL_COUNT -ge 3 ]]; then
         echo "  WILL BE REJECTED: $FAIL_COUNT blocking issue(s) found"
     elif [[ $FAIL_COUNT -ge 1 ]]; then
