@@ -75,6 +75,8 @@ logging:
 # Engine configuration
 engine:
   stop_timeout: 120  # seconds to wait for transcription to complete after stop
+  vad_enabled: false  # disable Silero VAD (not needed for batch mode with hotkey)
+  preroll_enabled: false  # disable pre-roll buffer (not needed for batch mode)
 
 # Text post-processing
 postprocess:
