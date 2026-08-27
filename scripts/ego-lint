@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # ego-lint.sh — Orchestrator for GNOME Shell extension EGO compliance checks
-# Vendored from https://github.com/ZviBaratz/gnome-extension-reviewer
 #
 # Usage: ego-lint.sh [EXTENSION_DIR]
 #   EXTENSION_DIR defaults to the current working directory.
