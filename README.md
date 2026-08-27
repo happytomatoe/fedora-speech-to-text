@@ -58,7 +58,7 @@ Local:
 
 ### API Keys
 
-You can provide API keys in three ways:
+You can provide API keys using next:
 
 #### 1. Environment Variables (Default)
 
