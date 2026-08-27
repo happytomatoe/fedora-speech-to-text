@@ -7,6 +7,14 @@ EXT_UUID="voice-to-text@happytomatoe.com"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 DBUS_SERVICE_DIR="$HOME/.local/share/dbus-1/services"
 
+# --- Non-interactive detection ---
+# Skip prompts/network when driven by CI, with NONINTERACTIVE=1 set, or with no
+# TTY (e.g. an E2E harness invoking install.sh over SSH). The E2E path installs
+# only the extension; the test VM's golden image provides python-service/dotool.
+if [ -n "${NONINTERACTIVE:-}" ] || [ -n "${CI:-}" ] || [ ! -t 0 ]; then
+  NONINTERACTIVE=1
+fi
+
 # --- Helper functions ---
 command_exists() {
   command -v "$1" &>/dev/null
@@ -47,13 +55,20 @@ install_prerequisites() {
   install_system_pkg libsecret
 
   if ! command_exists dotool; then
-    echo ""
-    echo "dotool is a keyboard input tool. We can build it from source now"
-    echo "or you can use other output methods like the ones Fedora's internal API provides by default."
-    read -p "Install dotool now? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-      install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+    # Skip the interactive prompt when not attached to a TTY (e.g. CI/E2E runs
+    # drive install.sh non-interactively). Building dotool from source needs a
+    # network git clone, which would hang a non-interactive session.
+    if [ -t 0 ]; then
+      echo ""
+      echo "dotool is a keyboard input tool. We can build it from source now"
+      echo "or you can use other output methods like the ones Fedora's internal API provides by default."
+      read -p "Install dotool now? [Y/n] " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+      fi
+    else
+      echo "dotool not found and no TTY for prompt; skipping (provide it out-of-band)."
     fi
   fi
 }
@@ -78,7 +93,7 @@ install_dotool() {
     if toolbox run -c "$TOOLBOX_NAME" sh -c "
       sudo dnf install -y gcc make libev-devel systemd-devel git
       rm -rf /tmp/dotool-build
-      git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool-build
+      timeout 120 git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool-build
       cd /tmp/dotool-build && ./build.sh
       cp dotool dotoolc dotoold \"$BIN_DIR/\"
     " 2>/dev/null; then
@@ -101,7 +116,7 @@ install_dotool() {
       -v "$BIN_DIR:/out:Z" \
       fedora:latest sh -c "
         dnf install -y gcc make libev-devel systemd-devel git
-        git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool
+        timeout 120 git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool
         cd /tmp/dotool && ./build.sh
         cp dotool dotoolc dotoold /out/
       " 2>/dev/null; then
@@ -118,7 +133,7 @@ install_dotool() {
   if [ "$install_ok" = true ]; then
     local TMPDIR
     TMPDIR=$(mktemp -d)
-    if git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
+    if timeout 120 git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
       (cd "$TMPDIR/dotool" && ./build.sh 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/"); then
       rm -rf "$TMPDIR"
       echo "  dotool built successfully from source."
@@ -143,7 +158,7 @@ install_uv() {
     return 0
   fi
   echo "Installing uv..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+  curl -LsSf -m 120 https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
   if ! command_exists uv; then
     echo "ERROR: Failed to install uv."
@@ -167,10 +182,14 @@ fetch_latest_tag() {
 }
 
 install_python_service() {
+  if command_exists voice-to-text-dbus; then
+    echo "Python D-Bus service already installed, skipping."
+    return 0
+  fi
   echo ""
   echo "--- Installing Python D-Bus service ---"
   echo "Installing version $LATEST_TAG..."
-  uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
+  timeout 420 uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
   echo "Python D-Bus service installed (voice-to-text-dbus)."
 }
 
@@ -185,7 +204,7 @@ install_dbus_services() {
     echo "Copied D-Bus service file."
   else
     echo "Downloading D-Bus service file from repository..."
-    curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
+    curl -sL -m 120 "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
   fi
 
   local SYSTEMD_DIR="$HOME/.config/systemd/user"
@@ -194,7 +213,7 @@ install_dbus_services() {
   if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
     cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
     echo "Copied systemd user service."
-  elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
+  elif curl -sL -m 120 "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
     echo "Downloaded systemd user service."
   else
     echo "WARNING: Could not install systemd user service."
@@ -220,7 +239,7 @@ install_gnome_extension() {
     echo "Downloading: $RELEASE_URL"
     local TMPDIR
     TMPDIR=$(mktemp -d)
-    curl -L -o "$TMPDIR/extension.zip" "$RELEASE_URL"
+    curl -L -m 120 -o "$TMPDIR/extension.zip" "$RELEASE_URL"
     gnome-extensions install --force "$TMPDIR/extension.zip"
     rm -rf "$TMPDIR"
   fi
@@ -271,7 +290,7 @@ install_config() {
     echo "Existing config found at $CONFIG_FILE; leaving it unchanged."
   else
     echo "Downloading default config..."
-    curl -L -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
+    curl -L -m 120 -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
     if [ -f "$CONFIG_FILE" ]; then
       echo "Default config installed at $CONFIG_FILE."
     else
@@ -375,6 +394,8 @@ for ((i=1; i<=$#; i++)); do
   if [ "${!i}" = "--local" ]; then
     next=$((i+1))
     LOCAL_DIR="${!next}"
+  elif [ "${!i}" = "--e2e" ]; then
+    E2E=1
   fi
 done
 if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
@@ -385,6 +406,16 @@ fi
 # --- Main ---
 main() {
   detect_os
+  # Non-interactive/E2E: install only the extension. The python D-Bus service,
+  # dotool and OS deps are pre-provisioned by the golden test image, so we skip
+  # every network/sudo/uv/git step that would hang a headless SSH session.
+  if [ "${E2E:-0}" = "1" ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
+    echo "Non-interactive/E2E mode: installing extension only."
+    install_gnome_extension
+    enable_extension
+    print_summary
+    return 0
+  fi
   install_prerequisites
   install_uv
   fetch_latest_tag

@@ -42,15 +42,23 @@ console.error = (...args: any[]) => {
 // Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
-const SHUTDOWN = args.includes("--shutdown");
+// Default: shut the VM down after the test (pass/fail). Keep it running for
+// manual debugging with --keep-vm.
+const KEEP_VM = args.includes("--keep-vm");
 const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
+// Snapshots disabled for now: QEMU savevm fails with the GL display
+// (-device virtio-vga-gl -display gtk,gl=on), and they're unused in --update
+// mode because boot() always refreshes the overlay. The fresh (deploy + test)
+// path below runs instead.
 const NO_SNAPSHOT = args.includes("--no-snapshot");
-const SNAPSHOT_MODE = !NO_SNAPSHOT;
+const SNAPSHOT_MODE = false;
 const SKIP_DEPS = args.includes("--skip-deps");
-const SPICE_MODE = args.includes("--spice");
+// SPICE display is the default (works); xvfb/GL path is broken.
+// Use --no-spice to force xvfb+GL (currently broken).
+const SPICE_MODE = !args.includes("--no-spice");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
@@ -203,11 +211,6 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await shell.waitActivitiesDismissed();
   timing("dismiss-activities", t);
 
-  // Step 1b: Open preferences and take screenshots
-  t = Date.now();
-  await runPreferencesTests(vm, run);
-  timing("preferences-screenshots", t);
-
   // Step 2: Open terminal with tmux inside (dotool needs a focused window)
   t = Date.now();
   console.log("Opening terminal with tmux...");
@@ -264,7 +267,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("03-pre-recording");
   timing("capture-frame", t);
 
-  // Start screen recording (Xvfb+x11grab on host, or GNOME Shell screencast in VM)
+  // Start screen recording now so the basic test AND the preferences window are both captured
   t = Date.now();
   const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
   mkdirSync(screencastDir, { recursive: true });
@@ -290,7 +293,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   }
   timing("start-screencast", t);
 
-  // Ensure Activities is dismissed right before recording
+  // Ensure Activities is dismissed and terminal focused before the hotkey
   // (may re-open after initial dismiss or from gnome-shell restart)
   await shell.dismissActivities();
   const activitiesOpen2 = await shell.isActivitiesOpen();
@@ -382,7 +385,26 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await Bun.sleep(200); // Brief settle for D-Bus round-trip
   timing("stop-recording", t);
 
-  // Stop recording
+  // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.
+  console.log("Closing terminal before preferences tests...");
+  await tmux.killSession(tmuxCfg);
+  await shell.exec("pkill -f ghostty 2>/dev/null; pkill -f gnome-terminal 2>/dev/null; true");
+  // Poll until the terminal emulator has actually exited (no blind sleep)
+  await vm.pollUntil(
+    "terminal closed",
+    async () => {
+      const out = await shell.exec("pgrep -f ghostty; pgrep -f gnome-terminal; true");
+      return out.trim().length === 0;
+    },
+    5000
+  );
+
+  // Open preferences window (still inside the screen recording).
+  t = Date.now();
+  await runPreferencesTests(vm, run);
+  timing("preferences-screenshots", t);
+
+  // Stop screen recording
   t = Date.now();
   if (useXvfbRecording) {
     await vm.stopRecording();
@@ -955,12 +977,12 @@ async function main(): Promise<void> {
     console.error("\nFATAL:", err);
     testsFailed++;
   } finally {
-    if (SHUTDOWN) {
+    if (!KEEP_VM) {
       await vm.shutdown();
       run.cleanup();
       console.log("\nVM shut down.");
     } else {
-      console.log("\nVM kept running (pass --shutdown to stop)");
+      console.log("\nVM kept running (pass --keep-vm to leave it up)");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${run.sshPort} ${SSH_USER}@localhost`);
       console.log(`Spice: spice://localhost:${run.spicePort}`);
     }

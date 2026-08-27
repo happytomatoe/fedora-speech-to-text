@@ -27,6 +27,7 @@ class DotoolcNotFoundError(RuntimeError):
     """Raised when ``dotoolc`` is not found in PATH."""
 
 
+# TODO: Rename file to dotool_typer
 class DotoolTyper:
     """Types text via a persistent pipe to the ``dotoolc`` binary.
 

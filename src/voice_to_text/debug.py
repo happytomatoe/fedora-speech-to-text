@@ -60,12 +60,10 @@ async def handle_debug_recording(  # noqa: C901, PLR0912
     logger.info("DEBUG MODE: Using test file %s instead of microphone", debug_file)
     logger.info("DEBUG MODE: Will show audio level for %d seconds", DEBUG_RECORDING_DURATION)
 
-    # Get provider config
     config_mgr = ConfigManager()
     provider = config.get("provider", "voxtral")
     provider_config = config_mgr.get_provider_config(provider)
 
-    # Create provider
     batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
 
     try:

@@ -191,11 +191,38 @@ export class VmManager {
     }
   }
   async waitForSsh(): Promise<void> {
+    // Wait for a full SSH handshake, not just an open port — sshd may accept
+    // the TCP connection but reset during the handshake on a fresh boot under
+    // load, which makes the ssh2 Deployer connections flake with ECONNRESET.
+    await this.waitForSshHandshake();
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
       sshPort: this.config.run.sshPort,
       sshUser: this.config.sshUser,
     });
+  }
+
+  private async waitForSshHandshake(timeoutMs = 90000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const res = Bun.spawnSync(
+        [
+          "ssh",
+          "-i", this.config.sshKey,
+          "-p", String(this.config.run.sshPort),
+          "-o", "StrictHostKeyChecking=no",
+          "-o", "UserKnownHostsFile=/dev/null",
+          "-o", "BatchMode=yes",
+          "-o", "ConnectTimeout=5",
+          `${this.config.sshUser}@localhost`,
+          "true",
+        ],
+        { stderr: "ignore", stdout: "ignore" },
+      );
+      if (res.exitCode === 0) return;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    throw new Error("SSH handshake did not succeed within timeout");
   }
 
   /** Verify Spice display is accessible */
@@ -229,9 +256,8 @@ export class VmManager {
 
   async setup(): Promise<void> {
     const t0 = Date.now();
-    const shellExec = this.shell.exec.bind(this.shell);
     if (this.freshlyBooted) {
-      await waitForGdmLogin(shellExec);
+      await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
@@ -275,9 +301,8 @@ export class VmManager {
    */
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
-    const shellExec = this.shell.exec.bind(this.shell);
     if (this.freshlyBooted) {
-      await waitForGdmLogin(shellExec);
+      await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
