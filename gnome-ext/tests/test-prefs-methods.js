@@ -14,7 +14,7 @@ import GLib from 'gi://GLib';
 function readFile(path) {
     const [ok, contents] = GLib.file_get_contents(path);
     if (!ok) throw new Error(`Failed to read ${path}`);
-    return imports.byteArray.toString(contents);
+    return new TextDecoder().decode(contents);
 }
 
 /** @param {string} source */

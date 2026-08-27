@@ -66,6 +66,9 @@ jobs:
       - name: Run lefthook pre-commit checks
         run: npx lefthook run pre-commit --all-files --no-tty
 
+      - name: Run ego-lint (EGO compliance)
+        run: ./scripts/ego-lint --show=fail,warn gnome-ext/
+
   test:
     runs-on: ubuntu-latest
     steps:
