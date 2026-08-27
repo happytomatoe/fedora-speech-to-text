@@ -8,7 +8,7 @@
     <key name="input-device" type="s">
       <default>"__system_default__"</default>
       <summary>Audio input device for recording</summary>
-      <description>Sounddevice device id (name) used for microphone capture. "__system_default__" lets PortAudio choose. Usually "pipewire" on PipeWire systems.</description>
+      <description>Sounddevice device id (name) used for microphone capture. "__system_default__" lets PortAudio choose</description>
     </key>
     <key name="stop-timeout-seconds" type="i">
       <default>300</default>
@@ -24,7 +24,7 @@
       <summary>Language code for transcription</summary>
     </key>
     <key name="output-method" type="s">
-      <default>"mutter-virtual"</default>
+      <default>"mutter-commit"</default>
       <summary>Output method for transcribed text</summary>
     </key>
     <key name="inhibit-sleep" type="b">

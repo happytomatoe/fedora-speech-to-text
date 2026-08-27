@@ -17,161 +17,162 @@ const TypeTextIface = `
 </node>`;
 
 export class TypeTextService {
-    constructor() {
-        this._virtualKeyboard = null;
-        this._dbusImpl = null;
-        this._ownerId = null;
+  constructor() {
+    this._virtualKeyboard = null;
+    this._dbusImpl = null;
+    this._ownerId = null;
+  }
+
+  enable() {
+    try {
+      const backend = Clutter.get_default_backend();
+      const seat = backend.get_default_seat();
+      this._virtualKeyboard = seat.create_virtual_device(
+        Clutter.InputDeviceType.KEYBOARD_DEVICE
+      );
+      if (this._virtualKeyboard) {
+        console.debug('VoiceToText: TypeText virtual keyboard obtained');
+      } else {
+        console.debug(
+          'VoiceToText: TypeText virtual keyboard not available'
+        );
+      }
+    } catch (e) {
+      console.error(
+        'VoiceToText: TypeText failed to get virtual keyboard:',
+        e
+      );
+      //TODO: Add system notification
     }
 
-    enable() {
-        // Get virtual keyboard via Clutter
-        try {
-            const backend = Clutter.get_default_backend();
-            const seat = backend.get_default_seat();
-            this._virtualKeyboard = seat.create_virtual_device(
-                Clutter.InputDeviceType.KEYBOARD_DEVICE
+    try {
+      //TODO: Refactor for clarity
+      this._ownerId = Gio.bus_own_name(
+        Gio.BusType.SESSION,
+        'com.happytomatoe.TypeText',
+        Gio.BusNameOwnerFlags.NONE,
+        (connection, _name) => {
+          try {
+            this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(
+              TypeTextIface,
+              this
             );
-            if (this._virtualKeyboard) {
-                console.debug('VoiceToText: TypeText virtual keyboard obtained');
-            } else {
-                console.debug(
-                    'VoiceToText: TypeText virtual keyboard not available'
-                );
-            }
-        } catch (e) {
-            console.error(
-                'VoiceToText: TypeText failed to get virtual keyboard:',
-                e
-            );
-        }
-
-        // Claim bus name + export object
-        try {
-            this._ownerId = Gio.bus_own_name(
-                Gio.BusType.SESSION,
-                'com.happytomatoe.TypeText',
-                Gio.BusNameOwnerFlags.NONE,
-                (connection, _name) => {
-                    // Bus acquired — export D-Bus object
-                    try {
-                        this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(
-                            TypeTextIface,
-                            this
-                        );
-                        this._dbusImpl.export(
-                            connection,
-                            '/com/happytomatoe/TypeText'
-                        );
-                        console.debug(
-                            'VoiceToText: TypeText D-Bus object exported at /com/happytomatoe/TypeText'
-                        );
-                    } catch (e) {
-                        console.error(
-                            'VoiceToText: TypeText D-Bus export failed:',
-                            e
-                        );
-                    }
-                },
-                (connection, name) => {
-                    console.debug(`VoiceToText: bus name acquired: ${name}`);
-                },
-                (connection, _name) => {
-                    console.error(`VoiceToText: bus name lost: ${_name}`);
-                }
+            this._dbusImpl.export(
+              connection,
+              '/com/happytomatoe/TypeText'
             );
             console.debug(
-                'VoiceToText: bus_own_name called for com.happytomatoe.TypeText'
+              'VoiceToText: TypeText D-Bus object exported at /com/happytomatoe/TypeText'
             );
-        } catch (e) {
-            console.error('VoiceToText: bus_own_name failed:', e);
-        }
-    }
-
-    disable() {
-        if (this._dbusImpl) {
-            this._dbusImpl.unexport();
-            this._dbusImpl = null;
-        }
-        if (this._ownerId) {
-            Gio.bus_unown_name(this._ownerId);
-            this._ownerId = null;
-        }
-        this._virtualKeyboard = null;
-        this._savedClipboard = null;
-    }
-
-    TypeText(text) {
-        if (!this._virtualKeyboard) {
-            console.debug('VoiceToText: TypeText virtual keyboard not available');
-            return;
-        }
-        console.debug(`VoiceToText: TypeText typing ${text.length} chars`);
-        try {
-            let time = Clutter.get_current_event_time() * 1000;
-            for (const char of text) {
-                if (char === '\n') {
-                    this._virtualKeyboard.notify_keyval(
-                        time++,
-                        Clutter.KEY_Return,
-                        Clutter.KeyState.PRESSED
-                    );
-                    this._virtualKeyboard.notify_keyval(
-                        time++,
-                        Clutter.KEY_Return,
-                        Clutter.KeyState.RELEASED
-                    );
-                } else if (char === '\x08') {
-                    // Handle backspace (U+0008) for diff-correction
-                    this._virtualKeyboard.notify_keyval(
-                        time++,
-                        Clutter.KEY_BackSpace,
-                        Clutter.KeyState.PRESSED
-                    );
-                    this._virtualKeyboard.notify_keyval(
-                        time++,
-                        Clutter.KEY_BackSpace,
-                        Clutter.KeyState.RELEASED
-                    );
-                } else {
-                    const charCode = char.charCodeAt(0);
-                    const keyval = Clutter.unicode_to_keysym(
-                        char.codePointAt(0)
-                    );
-                    if (keyval !== 0) {
-                        this._virtualKeyboard.notify_keyval(
-                            time++,
-                            keyval,
-                            Clutter.KeyState.PRESSED
-                        );
-                        this._virtualKeyboard.notify_keyval(
-                            time++,
-                            keyval,
-                            Clutter.KeyState.RELEASED
-                        );
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('VoiceToText: TypeText failed:', e);
-        }
-    }
-
-    CommitText(text) {
-        if (!Main.inputMethod.currentFocus) {
+          } catch (e) {
             console.error(
-                'VoiceToText: CommitText failed: no focused input context'
+              'VoiceToText: TypeText D-Bus export failed:',
+              e
             );
-            throw new Error('No focused input context');
+          }
+        },
+        (connection, name) => {
+          console.debug(`VoiceToText: bus name acquired: ${name}`);
+        },
+        (connection, _name) => {
+          console.error(`VoiceToText: bus name lost: ${_name}`);
         }
-        try {
-            console.debug(
-                `VoiceToText: CommitText committing ${text.length} chars via inputMethod`
-            );
-            Main.inputMethod.commit(text);
-            console.debug('VoiceToText: CommitText completed');
-        } catch (e) {
-            console.error('VoiceToText: CommitText failed:', e);
-            throw e;
-        }
+      );
+      console.debug(
+        'VoiceToText: bus_own_name called for com.happytomatoe.TypeText'
+      );
+    } catch (e) {
+      console.error('VoiceToText: bus_own_name failed:', e);
+      //TODO: At system notification
     }
+  }
+
+  disable() {
+    if (this._dbusImpl) {
+      this._dbusImpl.unexport();
+      this._dbusImpl = null;
+    }
+    if (this._ownerId) {
+      Gio.bus_unown_name(this._ownerId);
+      this._ownerId = null;
+    }
+    this._virtualKeyboard = null;
+    this._savedClipboard = null;
+  }
+
+  TypeText(text) {
+    if (!this._virtualKeyboard) {
+      console.debug('VoiceToText: TypeText virtual keyboard not available');
+      return;
+    }
+    console.debug(`VoiceToText: TypeText typing ${text.length} chars`);
+    try {
+      let time = Clutter.get_current_event_time() * 1000;
+      for (const char of text) {
+        if (char === '\n') {
+          this._virtualKeyboard.notify_keyval(
+            time++,
+            Clutter.KEY_Return,
+            Clutter.KeyState.PRESSED
+          );
+          this._virtualKeyboard.notify_keyval(
+            time++,
+            Clutter.KEY_Return,
+            Clutter.KeyState.RELEASED
+          );
+        } else if (char === '\x08') {
+          // Handle backspace (U+0008) for diff-correction
+          this._virtualKeyboard.notify_keyval(
+            time++,
+            Clutter.KEY_BackSpace,
+            Clutter.KeyState.PRESSED
+          );
+          this._virtualKeyboard.notify_keyval(
+            time++,
+            Clutter.KEY_BackSpace,
+            Clutter.KeyState.RELEASED
+          );
+        } else {
+          //TODO: Do we need next line
+          const charCode = char.charCodeAt(0);
+          const keyval = Clutter.unicode_to_keysym(
+            char.codePointAt(0)
+          );
+          if (keyval !== 0) {
+            this._virtualKeyboard.notify_keyval(
+              time++,
+              keyval,
+              Clutter.KeyState.PRESSED
+            );
+            this._virtualKeyboard.notify_keyval(
+              time++,
+              keyval,
+              Clutter.KeyState.RELEASED
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.error('VoiceToText: TypeText failed:', e);
+    }
+  }
+
+  CommitText(text) {
+    if (!Main.inputMethod.currentFocus) {
+      console.error(
+        'VoiceToText: CommitText failed: no focused input context'
+      );
+      throw new Error('No focused input context');
+    }
+    try {
+      console.debug(
+        `VoiceToText: CommitText committing ${text.length} chars via inputMethod`
+      );
+      Main.inputMethod.commit(text);
+      console.debug('VoiceToText: CommitText completed');
+    } catch (e) {
+      console.error('VoiceToText: CommitText failed:', e);
+      throw e;
+    }
+  }
 }

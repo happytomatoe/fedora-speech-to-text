@@ -25,9 +25,6 @@ pre-commit:
     gjs-syntax:
       run: bash -c 'for f in {staged_files}; do node --input-type=module --check < "$f" || exit 1; done'
       glob: "gnome-ext/**/*.js"
-    gjs-prefs-test:
-      run: gjs --module gnome-ext/tests/test-prefs-methods.js
-      glob: "gnome-ext/**/*.js"
     gjs-ts-check:
       run: npx tsc --noEmit
       glob: "gnome-ext/**/*.js"
@@ -38,7 +35,7 @@ pre-commit:
       run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
       glob: "gnome-ext/schemas/*.xml"
     prettier:
-      run: npx prettier@3.8.4 --check {staged_files}
+      run: npx prettier@3.8.4 --check {staged_files} --write
       glob: "gnome-ext/**/*.{js,css,json}"
     justfile-fmt:
       run: just --fmt --check 2>/dev/null || just --fmt

@@ -2,12 +2,13 @@
 /**
  * Config YAML ↔ GSettings synchronization.
  *
- * Pure utility functions — no GTK/Adw imports needed.
+ * Pure utility functions
  */
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {load as yamlLoad, dump as yamlDump} from '../vendor/js-yaml.mjs';
 
+//TODO: refactor to have some single central location for the config path.
 const CONFIG_PATH = GLib.build_filenamev([
     GLib.get_home_dir(),
     '.config',
@@ -58,7 +59,6 @@ function readConfigYaml() {
 
 function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
-    // Ensure parent directory exists
     const parent = file.get_parent();
     if (parent && !parent.query_exists(null)) {
         parent.make_directory_with_parents(null);

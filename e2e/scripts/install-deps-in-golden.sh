@@ -46,7 +46,8 @@ $HOME/.local/bin/uv pip install --system --quiet \
     jellyfish \
     rapidfuzz \
     sounddevice \
-    groq 2>/dev/null || {
+    groq \
+    onnxruntime 2>/dev/null || {
     echo "  uv install failed, falling back to pip..."
     python3 -m pip install --user --break-system-packages --quiet \
         httpx \

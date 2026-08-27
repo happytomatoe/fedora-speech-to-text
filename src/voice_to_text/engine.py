@@ -77,7 +77,6 @@ class AsyncAudioRecorder:
         self._queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=1000)
         self._wav_file = None
         self._filepath: str | None = None
-        # Voice Activity Detection
         self._vad_enabled = vad_enabled
         self._vad: SmoothedVAD | None = None
         if vad_enabled:

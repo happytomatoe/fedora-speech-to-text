@@ -44,7 +44,6 @@
 .osd-segment.red {
     background-color: #f54242;
 }
-/* Stop button — ghost circle → red on hover (option #37) */
 .osd-stop-button {
     width: 36px;
     height: 36px;
