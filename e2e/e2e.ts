@@ -589,7 +589,7 @@ async function verifyWithScreenshot(
       require("node:fs").mkdirSync(diffDir, { recursive: true });
       
       const result = execSync(
-        `compare -metric MSE "${referencePath}" "${screenshot}" "${diffPath}" 2>&1`,
+        `compare -metric MSE "${referencePath}" "${screenshot}" "${diffPath}" 2>&1 || true`,
         { encoding: "utf-8", timeout: 10000 }
       ).trim();
       
@@ -666,9 +666,11 @@ async function compareWithReference(name: string, captured: string, run: RunCont
   try {
     const diffPath = join(run.outputDir, "preferences", `diff-${name}.png`);
     const result = execSync(
-      `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1`,
+      `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1 || true`,
       { encoding: "utf-8", timeout: 10000 }
     ).trim();
+    // compare prints "<mse> (<normalized>)" and exits 1 whenever images differ
+    // (even negligibly) — parse stdout instead of relying on exit code.
     const mse = parseFloat(result);
     if (mse >= 100) {
       throw new Error(`Visual regression on ${name}: MSE=${mse} (threshold=100), diff: ${diffPath}`);
