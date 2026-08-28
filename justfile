@@ -960,6 +960,10 @@ qemu-e2e-setup:
         echo "Copying overlay from main branch..."
         mkdir -p "$(dirname "$OVERLAY_FILE")"
         cp "$MAIN_VM_DIR/persistent-run/main/overlay.qcow2" "$OVERLAY_FILE"
+        # Copied overlay's backing file points at the SOURCE worktree's golden
+        # image (absolute path baked in at creation). Rebase to local golden so
+        # restore doesn't silently break if that worktree disappears.
+        qemu-img rebase -u -b "$(realpath "$GOLDEN_FILE")" -F qcow2 "$OVERLAY_FILE"
         echo "✓ Copied: $OVERLAY_FILE"
     else
         echo "Downloading overlay.qcow2 from Filen..."
