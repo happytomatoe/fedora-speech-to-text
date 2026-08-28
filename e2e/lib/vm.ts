@@ -80,7 +80,7 @@ export class VmManager {
     }
   }
 
-  async boot(): Promise<void> {
+  async boot(loadvmTag?: string): Promise<void> {
     const { baseImage, vmDir, updateMode } = this.config;
     const { socketPath, overlayImage, sshPort } = this.config.run;
 
@@ -153,6 +153,10 @@ export class VmManager {
     // GTK display without GL — renders a real window on Xvfb so x11grab
     // recording works. GL variant (virtio-vga-gl + gl=on) fails headless.
     qemuArgs.push("-device", "virtio-vga", "-display", "gtk,gl=off");
+
+    // Restore from snapshot during startup when requested — guest resumes
+    // directly from snapshot instead of doing a full boot.
+    if (loadvmTag) qemuArgs.push("-loadvm", loadvmTag);
 
     // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
     const qemuEnv = { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
@@ -290,7 +294,10 @@ export class VmManager {
     try {
       // Check if the overlay file exists and has snapshots (without booting VM)
       if (!existsSync(this.config.run.overlayImage)) return false;
-      const result = Bun.spawnSync(["qemu-img", "snapshot", "-l", this.config.run.overlayImage]);
+      // -U/--force-share: QEMU may hold a write lock on the overlay (VM
+      // running), which would otherwise make this command fail and look like
+      // "no snapshot".
+      const result = Bun.spawnSync(["qemu-img", "snapshot", "-l", "-U", this.config.run.overlayImage]);
       const output = result.stdout.toString();
       return output.includes(tag);
     } catch {
@@ -322,6 +329,22 @@ export class VmManager {
     if (!info.includes(tag)) {
       throw new Error(`Snapshot save failed — not found in info snapshots`);
     }
+  }
+
+  /** Reconnect shell and verify guest state after a snapshot restore (-loadvm or loadvm). */
+  async reconnectAfterRestore(): Promise<void> {
+    await Bun.sleep(2000);
+    await this.shell.openSshSession({
+      sshKey: this.config.sshKey,
+      sshPort: this.config.run.sshPort,
+      sshUser: this.config.sshUser,
+    });
+    await this.pollForCommandOutput(
+      "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+      "com.happytomatoe.VoiceToText",
+      10000
+    );
+    this.shell.resetRecordingState();
   }
 
   async resetToCleanState(tag = "clean", retries = 2): Promise<void> {

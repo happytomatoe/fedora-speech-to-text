@@ -983,32 +983,39 @@ async function main(): Promise<void> {
   try {
     if (SNAPSHOT_MODE) {
       // Snapshot mode: restore if exists, otherwise deploy and save
-      // Always boot first (needed for both paths)
+      // Check snapshot BEFORE boot — with -loadvm the guest resumes directly
+      // from the snapshot instead of doing a full boot.
       let t = Date.now();
-      await new StepRunner().run([
-        { name: "preflight", fn: preflight },
-        { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
-      ]);
-      timing("boot-vm", t);
-      
+      preflight();
       const hasSnap = await vm.hasSnapshot("ready");
+      let restored = false;
       
       if (hasSnap) {
-        console.log("\n--- Snapshot 'ready' found, restoring ---");
-        t = Date.now();
-        await vm.resetToCleanState("ready");
-        timing("restore-snapshot", t);
-        // Deploy test audio for this specific test case (snapshot has old audio)
-        deployTestAudio(vm.deployCfg);
-      } else {
-        console.log("\n--- No snapshot found, deploying fresh ---");
-        t = Date.now();
+        console.log("\n--- Snapshot 'ready' found, booting with -loadvm ---");
+        try {
+          await vm.boot("ready");
+          // After -loadvm, reconnect shell + verify service
+          await vm.waitForSshHandshake();
+          await vm.reconnectAfterRestore();
+          restored = true;
+        } catch (e) {
+          console.log(`-loadvm boot failed (${e}), falling back to fresh boot`);
+        }
+      }
+      
+      if (!restored) {
+        console.log("\n--- No snapshot restore, deploying fresh ---");
         await new StepRunner().run([
+          { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
+          { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
           { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
           { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
         ]);
         timing("deploy-and-save-snapshot", t);
+      } else {
+        timing("restore-snapshot", t);
+        // Deploy test audio for this specific test case (snapshot has old audio)
+        deployTestAudio(vm.deployCfg);
       }
       
       // Run test
