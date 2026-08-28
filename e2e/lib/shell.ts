@@ -315,57 +315,6 @@ export class ShellHelper {
     );
   }
 
-  /** Take a guest-side screenshot via xdg-desktop-portal (works on Wayland, unlike QEMU screendump for window-focused captures).
-   *  Returns guest-side PNG path. Falls back to null if portal fails. */
-  async portalScreenshot(guestPngPath: string): Promise<string | null> {
-    if (!this._deployer) return null;
-    try {
-      const script = `
-import os, sys, shutil, random
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gio, GLib
-
-bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-loop = GLib.MainLoop()
-screenshot_uri = None
-
-def on_response(connection, sender_name, object_path, interface_name, signal_name, parameters, user_data):
-    global screenshot_uri
-    if parameters[0] == 0:
-        screenshot_uri = parameters[1].get('uri', '')
-    loop.quit()
-
-token = f"screenshot_{random.randint(1000,9999)}"
-unique_name = bus.get_unique_name().replace(':', '').replace('.', '_')
-request_path = f"/org/freedesktop/portal/desktop/request/{unique_name}/{token}"
-bus.signal_subscribe('org.freedesktop.portal.Desktop', 'org.freedesktop.portal.Request', 'Response', request_path, None, Gio.DBusSignalFlags.NONE, on_response, None)
-
-bus.call_sync('org.freedesktop.portal.Desktop', '/org/freedesktop/portal/desktop', 'org.freedesktop.portal.Screenshot', 'Screenshot',
-    GLib.Variant('(sa{sv})', ('', {'handle_token': GLib.Variant('s', token), 'interactive': GLib.Variant('b', False), 'modal': GLib.Variant('b', False)})),
-    GLib.VariantType('(o)'), Gio.DBusCallFlags.NONE, -1, None)
-
-GLib.timeout_add(10000, loop.quit)
-loop.run()
-
-if screenshot_uri:
-    shutil.copy2(screenshot_uri.replace('file://', ''), sys.argv[1])
-    print(sys.argv[1])
-else:
-    sys.exit(1)
-`;
-      // dbus-run-session: portal calls need the user session bus, not a new one
-      const { stdout, code } = await this._deployer.exec(
-        `export XDG_RUNTIME_DIR=/run/user/$(id -u); DBUS_SESSION_BUS_ADDRESS=$(cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-) python3 -c '${script.replace(/'/g, `'\"'\"'`)}' ${guestPngPath}`
-      );
-      if (code === 0 && stdout.includes(guestPngPath)) return guestPngPath;
-      return null;
-    } catch (err) {
-      console.log(`  portal screenshot failed: ${err instanceof Error ? err.message : err}`);
-      return null;
-    }
-  }
-
   async waitText(text: string, opts?: { timeout?: number }): Promise<void> {
     // Poll-based replacement for the shell-use PTY waitText: `exec` the command
     // and wait for its output to contain `text`.
