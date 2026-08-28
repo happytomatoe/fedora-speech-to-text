@@ -43,9 +43,6 @@ pre-commit:
     justfile-fmt:
       run: just --fmt --check 2>/dev/null || just --fmt
       glob: "justfile"
-    pytest:
-      run: uv run pytest -n auto
-      glob: "*.{py,js,toml,lock}"
 
 commit-msg:
   commands:
@@ -54,6 +51,9 @@ commit-msg:
 
 pre-push:
   commands:
+    pytest:
+      run: uv run pytest -n auto
+      glob: "*.{py,js,toml,lock}"
     vulture:
       run: uv run vulture src/ --min-confidence 80
       glob: "*.py"
