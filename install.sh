@@ -188,8 +188,13 @@ install_python_service() {
   fi
   echo ""
   echo "--- Installing Python D-Bus service ---"
-  echo "Installing version $LATEST_TAG..."
-  uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
+  if [ -n "${LOCAL_SERVICE_DIR:-}" ]; then
+    echo "Installing from local directory: $LOCAL_SERVICE_DIR"
+    uv tool install "$LOCAL_SERVICE_DIR" --force
+  else
+    echo "Installing version $LATEST_TAG..."
+    uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
+  fi
   echo "Python D-Bus service installed (voice-to-text-dbus)."
 }
 
@@ -394,12 +399,19 @@ for ((i=1; i<=$#; i++)); do
   if [ "${!i}" = "--local" ]; then
     next=$((i+1))
     LOCAL_DIR="${!next}"
+  elif [ "${!i}" = "--local-service" ]; then
+    next=$((i+1))
+    LOCAL_SERVICE_DIR="${!next}"
   elif [ "${!i}" = "--e2e" ]; then
     E2E=1
   fi
 done
 if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
   echo "ERROR: --local directory does not exist: $LOCAL_DIR" >&2
+  exit 1
+fi
+if [ -n "${LOCAL_SERVICE_DIR:-}" ] && [ ! -d "$LOCAL_SERVICE_DIR" ]; then
+  echo "ERROR: --local-service directory does not exist: $LOCAL_SERVICE_DIR" >&2
   exit 1
 fi
 
