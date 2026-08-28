@@ -119,7 +119,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     );
     recordingGroup.add(showAudioLevelRow);
 
-    const stopTimeoutRow = makeSpinRow({
+    makeSpinRow({
       title: _('Stop Timeout'),
       subtitle: _(
         'Seconds to wait for recording process to stop before forcing it'
@@ -145,7 +145,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     );
     recordingGroup.add(inhibitSleepRow);
 
-    const decreaseVolumeRow = makeSpinRow({
+    makeSpinRow({
       title: _('Decrease Speaker Volume'),
       subtitle: _(
         'Reduce speaker output volume during recording (0=no change, 100=mute)'
