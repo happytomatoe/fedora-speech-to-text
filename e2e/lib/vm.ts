@@ -337,6 +337,7 @@ export class VmManager {
         
         // 3. Reconnect SSH session (TCP connections are stale after restore)
         await this.shell.close();
+        await this.shell.reconnect();
         await this.shell.openSshSession({
           sshKey: this.config.sshKey,
           sshPort: this.config.run.sshPort,

@@ -51,6 +51,29 @@ export class ShellHelper {
   }
 
   async exec(command: string, timeoutMs = 30000): Promise<string> {
+    const sshExecOnce = async (): Promise<string> => {
+      if (!this.session) throw new Error("No session");
+      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+      const sshHost = `${this.session.sshUser}@${this.session.host}`;
+      return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
+        encoding: "utf-8",
+        timeout: timeoutMs,
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    };
+    if (this._deployer) {
+      try {
+        const result = await this._deployer.exec(command);
+        return result.stdout.trim();
+      } catch (err) {
+        // Persistent connection can die (VM reboot, snapshot restore, GDM
+        // restart) — fall back to a one-shot ssh call instead of failing.
+        console.log(`  deployer exec failed (${err instanceof Error ? err.message : err}), retrying via one-shot ssh`);
+        return sshExecOnce();
+      }
+    }
+    return sshExecOnce();
+  }
     if (this._deployer) {
       const result = await this._deployer.exec(command);
       return result.stdout.trim();
@@ -307,6 +330,13 @@ export class ShellHelper {
       const out = await this.exec(text, timeout);
       if (out.includes(text)) return;
       await Bun.sleep(200);
+    }
+  }
+
+  async reconnect(): Promise<void> {
+    if (this._deployer) {
+      await this._deployer.disconnect();
+      await this._deployer.connect();
     }
   }
 
