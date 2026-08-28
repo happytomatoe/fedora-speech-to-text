@@ -55,7 +55,6 @@ const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);
 export default class VoiceToTextExtension extends Extension {
   enable() {
     this._showNotification('VoiceToText: enable() called');
-    console.log('VoiceToText: enable() called');
     this._settings = this.getSettings(
       'org.gnome.shell.extensions.voice-to-text'
     );
