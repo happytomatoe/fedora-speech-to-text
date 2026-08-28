@@ -200,7 +200,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                     async with asyncio.timeout(5.0):
                         await self._session_stopped.wait()
                 except TimeoutError:
-                    pass
+                    logger.debug("Timeout waiting for 60db stream stop confirmation")
             except Exception as e:
                 logger.warning("Error stopping 60db stream: %s", e)
             finally:

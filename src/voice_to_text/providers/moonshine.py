@@ -69,8 +69,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
             )
             logger.info("Moonshine model loaded: %s (%s)", model_path, model_arch)
 
-    # --- StreamingProvider interface ---
-
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Start a streaming transcription session."""
         self._sample_rate = sample_rate
@@ -118,8 +116,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         self._finalized_text = ""
         return result
 
-    # --- BatchProvider interface ---
-
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
@@ -130,8 +126,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         text = " ".join(line.text for line in transcript.lines).strip()
         logger.info("Moonshine batch result: %s", text[:100])
         return text
-
-    # --- Common ---
 
     @property
     def name(self) -> str:

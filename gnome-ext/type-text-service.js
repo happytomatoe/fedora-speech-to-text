@@ -1,8 +1,6 @@
 import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
-import St from 'gi://St';
 
 const TypeTextIface = `
 <node>
@@ -61,9 +59,6 @@ export class TypeTextService {
               connection,
               '/com/happytomatoe/TypeText'
             );
-            console.debug(
-              'VoiceToText: TypeText D-Bus object exported at /com/happytomatoe/TypeText'
-            );
           } catch (e) {
             console.error(
               'VoiceToText: TypeText D-Bus export failed:',
@@ -77,9 +72,6 @@ export class TypeTextService {
         (connection, _name) => {
           console.error(`VoiceToText: bus name lost: ${_name}`);
         }
-      );
-      console.debug(
-        'VoiceToText: bus_own_name called for com.happytomatoe.TypeText'
       );
     } catch (e) {
       console.error('VoiceToText: bus_own_name failed:', e);
@@ -102,10 +94,8 @@ export class TypeTextService {
 
   TypeText(text) {
     if (!this._virtualKeyboard) {
-      console.debug('VoiceToText: TypeText virtual keyboard not available');
       return;
     }
-    console.debug(`VoiceToText: TypeText typing ${text.length} chars`);
     try {
       let time = Clutter.get_current_event_time() * 1000;
       for (const char of text) {
@@ -133,8 +123,6 @@ export class TypeTextService {
             Clutter.KeyState.RELEASED
           );
         } else {
-          //TODO: Do we need next line
-          const charCode = char.charCodeAt(0);
           const keyval = Clutter.unicode_to_keysym(
             char.codePointAt(0)
           );
@@ -165,11 +153,7 @@ export class TypeTextService {
       throw new Error('No focused input context');
     }
     try {
-      console.debug(
-        `VoiceToText: CommitText committing ${text.length} chars via inputMethod`
-      );
       Main.inputMethod.commit(text);
-      console.debug('VoiceToText: CommitText completed');
     } catch (e) {
       console.error('VoiceToText: CommitText failed:', e);
       throw e;

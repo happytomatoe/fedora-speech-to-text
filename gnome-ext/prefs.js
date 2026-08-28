@@ -18,6 +18,28 @@ import {
 } from './prefs/provider-row.js';
 import { createCustomWordsGroup } from './prefs/custom-words-row.js';
 
+/**
+ * Create a bound Adw.SpinRow, add it to `group`, and trigger `onSync` on change.
+ */
+function makeSpinRow({ title, subtitle, lower, upper, step, key, settings, group, onSync }) {
+  const row = new Adw.SpinRow({
+    title,
+    subtitle,
+    adjustment: new Gtk.Adjustment({
+      lower,
+      upper,
+      step_increment: step,
+      page_increment: 10,
+    }),
+  });
+  settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);
+  group.add(row);
+  row.connect('notify::value', () => {
+    onSync().catch(e => console.error('VoiceToText: sync failed:', e));
+  });
+  return row;
+}
+
 export default class VoiceToTextPrefs extends ExtensionPreferences {
   fillPreferencesWindow(window) {
     this._window = window;
@@ -97,29 +119,18 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     );
     recordingGroup.add(showAudioLevelRow);
 
-    const stopTimeoutRow = new Adw.SpinRow({
+    const stopTimeoutRow = makeSpinRow({
       title: _('Stop Timeout'),
       subtitle: _(
         'Seconds to wait for recording process to stop before forcing it'
       ),
-      adjustment: new Gtk.Adjustment({
-        lower: 1,
-        upper: 120,
-        step_increment: 1,
-        page_increment: 10,
-      }),
-    });
-    settings.bind(
-      'stop-timeout-seconds',
-      stopTimeoutRow,
-      'value',
-      Gio.SettingsBindFlags.DEFAULT
-    );
-    recordingGroup.add(stopTimeoutRow);
-    stopTimeoutRow.connect('notify::value', () => {
-      _syncAllToConfig().catch(e =>
-        console.error('VoiceToText: sync failed:', e)
-      );
+      lower: 1,
+      upper: 120,
+      step: 1,
+      key: 'stop-timeout-seconds',
+      settings,
+      group: recordingGroup,
+      onSync: _syncAllToConfig,
     });
 
     const inhibitSleepRow = new Adw.SwitchRow({
@@ -134,29 +145,18 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     );
     recordingGroup.add(inhibitSleepRow);
 
-    const decreaseVolumeRow = new Adw.SpinRow({
+    const decreaseVolumeRow = makeSpinRow({
       title: _('Decrease Speaker Volume'),
       subtitle: _(
         'Reduce speaker output volume during recording (0=no change, 100=mute)'
       ),
-      adjustment: new Gtk.Adjustment({
-        lower: 0,
-        upper: 100,
-        step_increment: 5,
-        page_increment: 10,
-      }),
-    });
-    settings.bind(
-      'decrease-speaker-volume',
-      decreaseVolumeRow,
-      'value',
-      Gio.SettingsBindFlags.DEFAULT
-    );
-    recordingGroup.add(decreaseVolumeRow);
-    decreaseVolumeRow.connect('notify::value', () => {
-      _syncAllToConfig().catch(e =>
-        console.error('VoiceToText: sync failed:', e)
-      );
+      lower: 0,
+      upper: 100,
+      step: 5,
+      key: 'decrease-speaker-volume',
+      settings,
+      group: recordingGroup,
+      onSync: _syncAllToConfig,
     });
 
     const languageRow = new Adw.ActionRow({

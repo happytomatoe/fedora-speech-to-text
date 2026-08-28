@@ -11,7 +11,7 @@ function sshOpts(sshKey: string, sshPort: number): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
 }
 
-export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
+function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
   if (retries < 1) retries = 1;
   const host = `${sshUser}@localhost`;
   let lastErr: Error | null = null;
@@ -37,12 +37,12 @@ export async function sshExecAsync(command: string, sshKey: string, sshPort: num
   }
 }
 
-export function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
+function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
 }
 
-export function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
+function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   const scpOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${sshKey} -P ${sshPort}`;
   execSync(`scp ${scpOpts} ${src} ${host}:${dest}`, { stdio: "pipe" });

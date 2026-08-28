@@ -4,6 +4,9 @@
 pre-commit:
   parallel: true
   commands:
+    knip:
+      run: bunx knip
+      glob: "*.{ts,js,json}"
     check-dbus-service-name:
       run: uv run pytest tests/test_dbus_service_name.py -q
       glob: "*.{py,js,xml}"
@@ -51,6 +54,9 @@ commit-msg:
 
 pre-push:
   commands:
+    vulture:
+      run: uv run vulture src/ --min-confidence 80
+      glob: "*.py"
     e2e-test:
       # Runs via `just e2e` so behavior matches manual runs (incl. always-on
       # tee of full output to /tmp/fedora-speech-to-text-e2e-run.log).

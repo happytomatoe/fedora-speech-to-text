@@ -124,10 +124,13 @@ export class AudioLevelWidget {
 
             // Only update if class changed
             let currentClass = 'idle';
-            if (seg.has_style_class_name('green')) currentClass = 'green';
-            else if (seg.has_style_class_name('yellow'))
-                currentClass = 'yellow';
-            else if (seg.has_style_class_name('red')) currentClass = 'red';
+            if (seg.has_style_class_name('green')) {
+              currentClass = 'green';
+            } else if (seg.has_style_class_name('yellow')) {
+              currentClass = 'yellow';
+            } else if (seg.has_style_class_name('red')) {
+              currentClass = 'red';
+            }
 
             if (targetClass !== currentClass) {
                 seg.remove_style_class_name(currentClass);

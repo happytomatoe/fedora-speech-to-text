@@ -358,7 +358,7 @@ class WebSocketStreamingProvider(StreamingProvider):
                                 if transcript:
                                     self._finalized_text = (self._finalized_text + " " + transcript).strip()
             except TimeoutError:
-                pass
+                logger.debug("Timeout draining %s stream during close", self.name)
         except Exception as e:
             logger.warning("Error closing %s stream: %s", self.name, e)
         finally:

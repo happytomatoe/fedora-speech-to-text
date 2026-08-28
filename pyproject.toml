@@ -64,4 +64,5 @@ dev = [
     "ruff>=0.15.0",
     "types-requests",
     "types-PyYAML",
+    "vulture>=2.16",
 ]
