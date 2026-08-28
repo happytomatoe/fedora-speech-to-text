@@ -28,6 +28,15 @@ export function sshExec(command: string, sshKey: string, sshPort: number, sshUse
   throw lastErr!;
 }
 
+/** Async sshExec variant for use inside async poll loops. */
+export async function sshExecAsync(command: string, sshKey: string, sshPort: number, sshUser = "testuser"): Promise<string> {
+  try {
+    return sshExec(command, sshKey, sshPort, sshUser);
+  } catch {
+    return ""; // Poll callers treat empty output as "not ready yet"
+  }
+}
+
 export function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
@@ -55,34 +64,48 @@ export interface DeployConfig {
 
 // --- Deployment steps ---
 
-export async function waitForGdmLogin(
-  shellExec: (cmd: string) => Promise<string>
-): Promise<void> {
+// Max wait for GDM/GNOME Shell to register on the session bus after boot/restart
+const GDM_READY_TIMEOUT_MS = 240_000;
+
+export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
   console.log("Waiting for GNOME Shell to register on D-Bus...");
-  // Use gdbus wait to get shell on D-Bus quickly (~350ms)
-  await shellExec("gdbus wait --session --timeout=60 org.gnome.Shell");
-  console.log(`  gdbus wait: ${Date.now() - t0}ms [time]`);
-  
-  // Poll SessionIsActive — indicates full session is up.
-  // The PTY shell is functional after gdbus wait returns.
-  const t1 = Date.now();
+  // Poll for org.gnome.Shell on the session bus over plain SSH. A
+  // slow/contended VT can't trip a "prompt visible" text-match, and polling
+  // (rather than a single blocking `gdbus wait`) gives visible progress and a
+  // hard cap so a slow boot can't look like an indefinite hang under host
+  // contention.
+  // Force the session-bus address: a non-interactive SSH session may lack the
+  // session env, so gdbus --session wouldn't see the bus the GDM graphical
+  // session registers gnome-shell on. Fall back to pgrep (bus-independent).
+  const deadline = t0 + GDM_READY_TIMEOUT_MS;
   let ready = false;
-  for (let i = 0; i < 20; i++) {
-    const result = await shellExec(
-      `busctl --user get-property org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager SessionIsActive 2>&1 || true`
+  let i = 0;
+  let lastOut = "";
+  while (Date.now() < deadline) {
+    const { stdout } = await deployer.exec(
+      "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell 2>&1 || true"
     );
-    if (result.includes("b true")) {
+    lastOut = stdout;
+    if (stdout.includes("org.gnome.Shell")) {
       ready = true;
       break;
     }
-    await Bun.sleep(100);
+    const pgrep = await deployer.exec("pgrep -x gnome-shell >/dev/null 2>&1 && echo up || true");
+    if (pgrep.stdout.includes("up")) {
+      ready = true;
+      break;
+    }
+    i++;
+    if (i % 10 === 0) {
+      console.log(`  still waiting for GNOME Shell… (${Math.round((Date.now() - t0) / 1000)}s)`);
+    }
+    await Bun.sleep(1000);
   }
-  console.log(`  session ready: ${Date.now() - t1}ms [time]`);
   console.log(`  GDM login total: ${Date.now() - t0}ms [time]`);
-  
   if (!ready) {
-    console.log("WARNING: Session did not become ready in time, continuing anyway");
+    console.error(`  last gdbus output: ${lastOut.slice(0, 200)}`);
+    throw new Error("GNOME Shell did not register on the session bus in time");
   }
 }
 
@@ -147,18 +170,26 @@ export async function deployExtension(
     await deployer.exec('mkdir -p ~/tmp-deploy');
     await deployer.uploadFile(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh');
     await deployer.uploadDir(extDir, '~/tmp-deploy/gnome-ext');
+    // Upload service/ too so install.sh --local uses local copies instead of
+    // curling github (the VM may have no/slow network under contention).
+    await deployer.uploadDir(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service');
   } else {
     sshExec(`mkdir -p ~/tmp-deploy`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(join(cfg.projectRoot, 'install.sh'), '~/tmp-deploy/install.sh', cfg.sshKey, cfg.sshPort, cfg.sshUser);
     rsyncToVm(extDir, '~/tmp-deploy/gnome-ext', cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    rsyncToVm(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service', cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
   
   const tInstall = Date.now();
   if (deployer) {
-    await deployer.exec('chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext');
+    // gnome-extensions needs the session bus, which a non-interactive SSH
+    // exec may lack — set it explicitly so install.sh --local doesn't stall.
+    // --e2e makes install.sh install only the extension (skip sudo/dnf/uv/git
+    // network steps that hang a headless SSH session); golden image provides the rest.
+    await deployer.exec('export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus; chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --e2e --local ~/tmp-deploy/gnome-ext');
   } else {
-    sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --local ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --e2e --local ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
   
@@ -299,7 +330,25 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     }
   }
 
-  if (!extensionFound) throw new Error("Extension failed to load after two GDM restarts");
+  if (!extensionFound) {
+    // Surface why the extension never reached ACTIVE so the failure is
+    // diagnosable instead of a bare "failed after two GDM restarts".
+    console.log("\n[deploy] Extension failed to load. Dumping diagnostics:");
+    const dump = (label: string, cmd: string) => {
+      try {
+        const out = sshExec(cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        console.log(`--- ${label} ---\n` + out.trim().split("\n").map((l) => "  " + l).join("\n"));
+      } catch (e) {
+        console.log(`--- ${label} --- (failed: ${(e as Error).message})`);
+      }
+    };
+    dump("gnome-extensions list", "gnome-extensions list 2>&1");
+    dump(`gnome-extensions show ${cfg.extensionUuid}`, `gnome-extensions show ${cfg.extensionUuid} 2>&1`);
+    dump("dconf enabled-extensions", "dconf read /org/gnome/shell/enabled-extensions 2>&1; dconf read /org/gnome/shell/disable-user-extensions 2>&1");
+    dump("install dir", `ls -la $HOME/.local/share/gnome-shell/extensions/${cfg.extensionUuid}/ 2>&1; echo '--- schemas ---'; ls $HOME/.local/share/gnome-shell/extensions/${cfg.extensionUuid}/schemas/ 2>&1`);
+    dump("journalctl extension errors", "journalctl -b 2>&1 | grep -i 'voice-to-text' | tail -25");
+    throw new Error("Extension failed to load after two GDM restarts");
+  }
 
   sshExec(`gnome-extensions enable ${cfg.extensionUuid} 2>/dev/null || true`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   const extState = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
@@ -340,8 +389,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   await pollUntilFn(
     "dotool pipe",
     async () => {
-      const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
-      return output.includes("ready");
+      try {
+        const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
+        return output.includes("ready");
+      } catch {
+        return false; // ssh hiccup — retry
+      }
     },
     10000
   );
@@ -368,11 +421,37 @@ export async function startVoiceService(
   pollForCommandOutputFn: typeof pollForCommandOutput,
   skipDeps = false
 ): Promise<void> {
+  // Always ensure Python deps are present. The golden image may be
+  // missing some (e.g. onnxruntime), and a fresh uv install is cheap and
+  // idempotent — so we don't depend on the image being perfectly provisioned.
+  // Skip when skipDeps (golden image has deps pre-installed).
   if (skipDeps) {
-    console.log("Skipping Python dependency installation (deps pre-installed)");
+    console.log("  Skipping Python deps install (golden image)");
   } else {
-    console.log("Installing Python dependencies...");
-    // Install portaudio-devel for sounddevice (not in base image)
+  console.log("Installing Python dependencies...");
+  const uvResult = await shell.exec(
+    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
+  );
+  if (!uvResult.includes("__UV_OK__")) {
+    // Fallback to pip if uv not available / network constrained
+    console.log("  uv install failed, falling back to pip...");
+    try {
+      sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      sshExec(
+        "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
+        cfg.sshKey, cfg.sshPort, cfg.sshUser
+      );
+      console.log("  pip install completed");
+    } catch (e) {
+      console.log("  FATAL: pip install failed:", (e as Error).message);
+      throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
+    }
+  }
+  }
+
+  // portaudio-devel (for sounddevice) is provided by the golden image; only
+  // install it when we're not relying on that pre-provisioned image.
+  if (!skipDeps) {
     try {
       const paCheck = sshExec("rpm -q portaudio-devel 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       if (paCheck.includes("missing")) {
@@ -382,26 +461,6 @@ export async function startVoiceService(
     } catch {
       // Continue — sounddevice install may fail with clear error
     }
-    // Use uv for faster, more reliable installs (matches install.sh approach)
-    const uvResult = await shell.exec(
-      "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
-    );
-    if (!uvResult.includes("__UV_OK__")) {
-      // Fallback to pip if uv not available
-      console.log("  uv install failed, falling back to pip...");
-      // Use sshExec for pip (shell.exec has issues with long output)
-      try {
-        sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-        sshExec(
-          "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
-          cfg.sshKey, cfg.sshPort, cfg.sshUser
-        );
-        console.log("  pip install completed");
-      } catch (e) {
-        console.log("  FATAL: pip install failed:", (e as Error).message);
-        throw new Error(`Dependency installation failed (uv and pip both failed): ${(e as Error).message}`);
-      }
-    }
   }
 
   // Kill existing voice service (systemd user service + any python3 processes)
@@ -410,8 +469,12 @@ export async function startVoiceService(
   await pollUntilFn(
     "old voice service to die",
     async () => {
-      const output = await shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
-      return output.trim().length === 0;
+      try {
+        const output = await shell.exec("busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'");
+        return output.trim().length === 0;
+      } catch {
+        return false; // ssh hiccup during setup — retry
+      }
     },
     5000
   );
@@ -423,15 +486,54 @@ export async function startVoiceService(
   // Set output method from config (default to 'type')
   const outputMethod = cfg.outputMethod || 'type';
   console.log(`  Using output method: ${outputMethod}`);
-  
-  await shell.exec(
-    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=~/voice_to_text/src; cd ~; nohup python3 -m voice_to_text > /tmp/voice-service.log 2>&1 &`
-  );
 
-  await pollForCommandOutputFn(
-    shell.exec.bind(shell),
-    "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
-    "com.happytomatoe.VoiceToText",
-    15000
+  // Sanity probe: confirm the deployed source has an entrypoint and the
+  // interpreter is present BEFORE we start it blind. Surfaces path/version
+  // mistakes instead of a silent 60s bus-name timeout.
+  try {
+    const probe = await shell.exec(
+      "ls -la $HOME/voice_to_text/src/voice_to_text/__main__.py 2>&1; " +
+      "python3 --version 2>&1; cat $HOME/.config/voice-to-text/config.yaml 2>&1 | head -20"
+    );
+    console.log("  source probe:\n" + probe.trim().split("\n").map((l) => "    " + l).join("\n"));
+  } catch (e) {
+    console.log("  (source probe failed: " + (e as Error).message) + ")";
+  }
+
+  // Use $HOME (not ~) — tilde doesn't expand inside a scalar assignment under
+  // dash/sh, so PYTHONPATH=~/voice_to_text/src would be taken literally and
+  // the package would never import.
+  await shell.exec(
+    `export PATH=$HOME/.local/bin:$PATH; export XDG_RUNTIME_DIR=/run/user/$(id -u); export VOICE_TO_TEXT_PROVIDER=parakeet; export VOICE_TO_TEXT_DEBUG_FILE=/tmp/test-audio.wav; export VOICE_TO_TEXT_OUTPUT_METHOD=${outputMethod}; export PYTHONPATH=$HOME/voice_to_text/src; cd "$HOME"; setsid python3 -m voice_to_text > /tmp/voice-service.log 2>&1 < /dev/null &`
   );
+  console.log("  voice service launched (logs -> /tmp/voice-service.log)");
+
+  // Bus-name registration can be slow under host contention (Python import +
+  // D-Bus handshake), so allow up to 60s before declaring it dead. On
+  // timeout, dump the service log + process/bus state so the failure is
+  // diagnosable instead of a bare "Timeout waiting for ...".
+  try {
+    await pollForCommandOutputFn(
+      shell.exec.bind(shell),
+      "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+      "com.happytomatoe.VoiceToText",
+      60000
+    );
+  } catch (err) {
+    console.log("\n[voice-service] FAILED to register on D-Bus. Diagnostics:");
+    // Use a fresh SSH connection (sshExec) — the persistent shell session is
+    // dead after the 60s poll, so shell.exec would throw and hide the output.
+    const dump = (label: string, cmd: string) => {
+      try {
+        const out = sshExec(cmd, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        console.log(`--- ${label} ---\n` + out.trim().split("\n").map((l) => "  " + l).join("\n"));
+      } catch (e) {
+        console.log(`--- ${label} --- (failed: ${(e as Error).message})`);
+      }
+    };
+    dump("/tmp/voice-service.log (tail)", "tail -n 80 /tmp/voice-service.log 2>/dev/null || echo '(no log file)'");
+    dump("processes", "ps -eo pid,ppid,stat,cmd 2>/dev/null | grep -i voice_to_text | grep -v grep || echo '(no voice_to_text process running)'");
+    dump("bus / provider", "busctl --user list 2>/dev/null | grep -i voice || echo '(no voice* bus names)'; echo '--- provider reachability ---'; (timeout 3 bash -c 'echo > /dev/tcp/10.0.2.2/5092' 2>/dev/null && echo 'parakeet host:5092 reachable') || echo 'parakeet host:5092 UNREACHABLE'");
+    throw err;
+  }
 }

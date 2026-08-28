@@ -112,7 +112,7 @@ export class ParallelTestRunner {
       const vm = new VmManager(vmConfig);
       this.workers.push({ vm, run, busy: false });
 
-      console.log(`   Worker ${i}: SSH port ${run.sshPort}, Spice port ${run.spicePort}`);
+      console.log(`   Worker ${i}: SSH port ${run.sshPort}`);
     }
   }
 

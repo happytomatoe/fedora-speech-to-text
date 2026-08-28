@@ -214,3 +214,5 @@ class TestSignals:
         mock_engine.on_error("test error")
 
         assert "test error" in errors
+
+

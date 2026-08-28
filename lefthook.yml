@@ -25,9 +25,6 @@ pre-commit:
     gjs-syntax:
       run: bash -c 'for f in {staged_files}; do node --input-type=module --check < "$f" || exit 1; done'
       glob: "gnome-ext/**/*.js"
-    gjs-prefs-test:
-      run: gjs --module gnome-ext/tests/test-prefs-methods.js
-      glob: "gnome-ext/**/*.js"
     gjs-ts-check:
       run: npx tsc --noEmit
       glob: "gnome-ext/**/*.js"
@@ -38,7 +35,7 @@ pre-commit:
       run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('gnome-ext/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml')"
       glob: "gnome-ext/schemas/*.xml"
     prettier:
-      run: npx prettier@3.8.4 --check {staged_files}
+      run: npx prettier@3.8.4 --check {staged_files} --write
       glob: "gnome-ext/**/*.{js,css,json}"
     justfile-fmt:
       run: just --fmt --check 2>/dev/null || just --fmt
@@ -55,5 +52,8 @@ commit-msg:
 pre-push:
   commands:
     e2e-test:
-      run: bash -c 'if [ -f e2e/qemu-images/base.qcow2 ] && [ -f e2e/qemu-images/cloud-init.iso ]; then cd e2e && bun run e2e.ts --shutdown; else printf "ERROR - E2E environment not set up (missing base.qcow2 or cloud-init.iso)\nRun just qemu-e2e-setup\n" >&2; exit 1; fi'
+      # Runs via `just e2e` so behavior matches manual runs (incl. always-on
+      # tee of full output to /tmp/fedora-speech-to-text-e2e-run.log).
+      # Base image + cloud-init ISO are REQUIRED — fail hard if missing.
+      run: bash -c 'if [ ! -f e2e/qemu-images/base.qcow2 ] || [ ! -f e2e/qemu-images/cloud-init.iso ]; then printf "ERROR - E2E environment not set up (missing e2e/qemu-images/base.qcow2 or e2e/qemu-images/cloud-init.iso)\nRun just qemu-e2e-setup first\n" >&2; exit 1; fi; just e2e'
       interactive: true

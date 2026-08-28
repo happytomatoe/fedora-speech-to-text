@@ -1,3 +1,12 @@
+/* Provider indicator label */
+.provider-indicator-label {
+    font-size: 10pt;
+    font-weight: bold;
+    color: currentcolor;  /* Adapts to theme (dark on light, light on dark) */
+    padding: 0 4px;
+    min-width: 2ch;
+}
+
 /* Floating OSD widget — segmented meter */
 .osd-widget {
     background-color: rgba(30, 30, 30, 0.85);
@@ -35,7 +44,6 @@
 .osd-segment.red {
     background-color: #f54242;
 }
-/* Stop button — ghost circle → red on hover (option #37) */
 .osd-stop-button {
     width: 36px;
     height: 36px;

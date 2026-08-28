@@ -100,3 +100,7 @@ opensrc/*
 
 
 
+*.bak
+e2e-label-diff.png
+e2e-output-frame-*.png
+e2e-output-frame-*.png

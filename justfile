@@ -946,6 +946,23 @@ qemu-e2e-setup:
     fi
     echo ""
 
+    # 2b. Overlay with 'ready' snapshot (from main worktree, else Filen)
+    OVERLAY_FILE="$VM_DIR/persistent-run/main/overlay.qcow2"
+    if [[ -f "$OVERLAY_FILE" ]]; then
+        echo "✓ Overlay already exists: $OVERLAY_FILE"
+    elif [[ -f "$MAIN_VM_DIR/persistent-run/main/overlay.qcow2" ]]; then
+        echo "Copying overlay from main branch..."
+        mkdir -p "$(dirname "$OVERLAY_FILE")"
+        cp "$MAIN_VM_DIR/persistent-run/main/overlay.qcow2" "$OVERLAY_FILE"
+        echo "✓ Copied: $OVERLAY_FILE"
+    else
+        echo "Downloading overlay.qcow2 from Filen..."
+        mkdir -p "$(dirname "$OVERLAY_FILE")"
+        filen download "/overlay.qcow2" "$OVERLAY_FILE"
+        echo "✓ Downloaded: $OVERLAY_FILE"
+    fi
+    echo ""
+
     # 3. Cloud-init ISO (required by QEMU boot)
     CLOUD_INIT="$VM_DIR/cloud-init.iso"
     if [[ -f "$CLOUD_INIT" ]]; then
@@ -1015,8 +1032,17 @@ qemu-e2e-update-ts:
 
 # @category e2e-qemu
 # Run E2E tests (snapshot mode by default, fast ~40s after first run)
+# Output is always tee'd to /tmp/fedora-speech-to-text-e2e-run.log — tail it to
+# watch progress: tail -f /tmp/fedora-speech-to-text-e2e-run.log
+# Override with args: just e2e --update
 e2e *ARGS:
-    cd e2e && bun run e2e.ts {{ ARGS }}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e
+    LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
+    : > "$LOG"
+    bun run e2e.ts {{ ARGS }} 2>&1 | tee "$LOG"
+    exit ${PIPESTATUS[0]}
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode

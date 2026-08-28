@@ -7,6 +7,14 @@ EXT_UUID="voice-to-text@happytomatoe.com"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 DBUS_SERVICE_DIR="$HOME/.local/share/dbus-1/services"
 
+# --- Non-interactive detection ---
+# Skip prompts/network when driven by CI, with NONINTERACTIVE=1 set, or with no
+# TTY (e.g. an E2E harness invoking install.sh over SSH). The E2E path installs
+# only the extension; the test VM's golden image provides python-service/dotool.
+if [ -n "${NONINTERACTIVE:-}" ] || [ -n "${CI:-}" ] || [ ! -t 0 ]; then
+  NONINTERACTIVE=1
+fi
+
 # --- Helper functions ---
 command_exists() {
   command -v "$1" &>/dev/null
@@ -47,13 +55,20 @@ install_prerequisites() {
   install_system_pkg libsecret
 
   if ! command_exists dotool; then
-    echo ""
-    echo "dotool is a keyboard input tool. We can build it from source now"
-    echo "or you can use other output methods like the ones Fedora's internal API provides by default."
-    read -p "Install dotool now? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-      install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+    # Skip the interactive prompt when not attached to a TTY (e.g. CI/E2E runs
+    # drive install.sh non-interactively). Building dotool from source needs a
+    # network git clone, which would hang a non-interactive session.
+    if [ -t 0 ]; then
+      echo ""
+      echo "dotool is a keyboard input tool. We can build it from source now"
+      echo "or you can use other output methods like the ones Fedora's internal API provides by default."
+      read -p "Install dotool now? [Y/n] " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        install_dotool || echo "WARNING: dotool installation failed (non-fatal)"
+      fi
+    else
+      echo "dotool not found and no TTY for prompt; skipping (provide it out-of-band)."
     fi
   fi
 }
@@ -167,10 +182,17 @@ fetch_latest_tag() {
 }
 
 install_python_service() {
+  # Always (re)install: an existing binary does not guarantee it matches
+  # $LATEST_TAG / $LOCAL_SERVICE_DIR. uv tool install --force handles upgrades.
   echo ""
   echo "--- Installing Python D-Bus service ---"
-  echo "Installing version $LATEST_TAG..."
-  uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
+  if [ -n "${LOCAL_SERVICE_DIR:-}" ]; then
+    echo "Installing from local directory: $LOCAL_SERVICE_DIR"
+    uv tool install "$LOCAL_SERVICE_DIR" --force
+  else
+    echo "Installing version $LATEST_TAG..."
+    uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
+  fi
   echo "Python D-Bus service installed (voice-to-text-dbus)."
 }
 
@@ -375,16 +397,35 @@ for ((i=1; i<=$#; i++)); do
   if [ "${!i}" = "--local" ]; then
     next=$((i+1))
     LOCAL_DIR="${!next}"
+  elif [ "${!i}" = "--local-service" ]; then
+    next=$((i+1))
+    LOCAL_SERVICE_DIR="${!next}"
+  elif [ "${!i}" = "--e2e" ]; then
+    E2E=1
   fi
 done
 if [ -n "$LOCAL_DIR" ] && [ ! -d "$LOCAL_DIR" ]; then
   echo "ERROR: --local directory does not exist: $LOCAL_DIR" >&2
   exit 1
 fi
+if [ -n "${LOCAL_SERVICE_DIR:-}" ] && [ ! -d "$LOCAL_SERVICE_DIR" ]; then
+  echo "ERROR: --local-service directory does not exist: $LOCAL_SERVICE_DIR" >&2
+  exit 1
+fi
 
 # --- Main ---
 main() {
   detect_os
+  # Only the explicit --e2e mode skips the full install — the golden test image
+  # pre-provisions python-service/dotool. Plain NONINTERACTIVE (e.g. CI without
+  # a TTY) must still perform the full installation.
+  if [ "${E2E:-0}" = "1" ]; then
+    echo "E2E mode: installing extension only."
+    install_gnome_extension
+    enable_extension
+    print_summary
+    return 0
+  fi
   install_prerequisites
   install_uv
   fetch_latest_tag

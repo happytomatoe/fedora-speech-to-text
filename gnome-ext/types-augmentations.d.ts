@@ -4,7 +4,7 @@ import '@girs/gnome-shell/ambient';
 
 // GJS sets import.meta.url to the file's resource:// URI
 declare global {
-    interface ImportMeta {
-        url: string;
-    }
+  interface ImportMeta {
+    url: string;
+  }
 }

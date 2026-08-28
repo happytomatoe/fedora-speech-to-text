@@ -22,7 +22,6 @@ export class RunContext {
   readonly overlayImage: string;
   readonly socketPath: string;
   readonly sshPort: number;
-  readonly spicePort: number;
   readonly outputDir: string;
   readonly serialLog: string;
 
@@ -43,7 +42,6 @@ export class RunContext {
     this.overlayImage = join(this.runDir, "overlay.qcow2");
     this.socketPath = `/tmp/qemu-monitor-${this.id}.sock`;  // Short path (UNIX socket limit: 108 bytes)
     this.sshPort = this.findAvailablePort(2222, 2299);
-    this.spicePort = this.findAvailablePort(5930, 5999);
     this.outputDir = join(this.runDir, "output");
     this.serialLog = join(this.runDir, "serial.log");
 

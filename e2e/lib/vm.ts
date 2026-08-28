@@ -30,11 +30,11 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
-  spiceMode?: boolean;
 }
 
 export class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
+  qemuProcessPid: number | null = null;
   booted = false;
   private freshlyBooted = false;
   qemu: QemuMonitor;
@@ -81,7 +81,7 @@ export class VmManager {
     }
   }
 
-  async boot(): Promise<void> {
+  async boot(loadvmTag?: string): Promise<void> {
     const { baseImage, vmDir, updateMode } = this.config;
     const { socketPath, overlayImage, sshPort } = this.config.run;
 
@@ -130,15 +130,10 @@ export class VmManager {
       console.log("Reusing existing overlay...");
     }
 
-    // Start Xvfb (required unless --spice mode)
-    const useSpice = this.config.spiceMode ?? false;
-    if (useSpice) {
-      console.log("  [spice] mode: using SPICE display (no recording)");
-    } else {
-      const hasXvfb = await this.startXvfb();
-      if (!hasXvfb) {
-        throw new Error("Xvfb not found. Install it: sudo dnf install xorg-x11-server-Xvfb. Or use --spice mode.");
-      }
+    // Start Xvfb (required for the GTK display and x11grab recording)
+    const hasXvfb = await this.startXvfb();
+    if (!hasXvfb) {
+      throw new Error("Xvfb not found. Install it: sudo dnf install xorg-x11-server-Xvfb.");
     }
 
     const qemuArgs = [
@@ -156,41 +151,54 @@ export class VmManager {
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
-    if (useSpice) {
-      qemuArgs.push("-device", "virtio-vga", "-display", "none", "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`);
-    } else {
-      qemuArgs.push("-device", "virtio-vga-gl", "-display", "gtk,gl=on");
-    }
+    // GTK display without GL — renders a real window on Xvfb so x11grab
+    // recording works. GL variant (virtio-vga-gl + gl=on) fails headless.
+    qemuArgs.push("-device", "virtio-vga", "-display", "gtk,gl=off");
+
+    // Restore from snapshot during startup when requested — guest resumes
+    // directly from snapshot instead of doing a full boot.
+    if (loadvmTag) qemuArgs.push("-loadvm", loadvmTag);
 
     // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
-    const qemuEnv = useSpice ? {} : { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
-    const envPrefix = useSpice ? "" : "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=";
-    const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} &>/dev/null &`;
+    const qemuEnv = { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
+    const envPrefix = "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=";
+    // Capture QEMU stderr to a log file for debugging
+    const qemuStderrLog = join(this.config.run.runDir, "qemu-stderr.log");
+    const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} 2>"${qemuStderrLog}" &`;
     this.process = Bun.spawn(["sh", "-c", wrappedCmd], {
       cwd: vmDir,
       stdout: "inherit",
       stderr: "inherit",
     });
+    // Give QEMU a moment to start and create the monitor socket
+    await Bun.sleep(1000);
 
     this.booted = true;
     this.freshlyBooted = true;
 
-    for (let i = 0; i < 30; i++) {
+    // Wait for QEMU monitor socket to appear (up to 30s)
+    for (let i = 0; i < 60; i++) {
       if (existsSync(socketPath)) break;
       await Bun.sleep(500);
+      if (i % 10 === 9) console.log(`  [boot] waiting for monitor socket... (${(i + 1) * 500}ms)`);
     }
     if (!existsSync(socketPath)) {
-      throw new Error("QEMU monitor socket never appeared — QEMU may have failed to start");
+      throw new Error("QEMU monitor socket never appeared after 30s — QEMU may have failed to start");
     }
 
+    // Track the actual QEMU process, not the launcher shell — the shell exits
+    // immediately (trailing `&`), so killing it in shutdown() wouldn't stop QEMU.
+    const qemuPid = Bun.spawnSync(["pgrep", "-f", `qemu-system.*${overlayImage}`]).stdout.toString().trim().split("\n")[0];
+    this.qemuProcessPid = qemuPid ? Number(qemuPid) : null;
+
     await this.qemu.connect();
-    if (useSpice) {
-      await this.verifySpice();
-    } else {
-      await this.resizeQemuWindow();
-    }
+    await this.resizeQemuWindow();
   }
   async waitForSsh(): Promise<void> {
+    // Wait for a full SSH handshake, not just an open port — sshd may accept
+    // the TCP connection but reset during the handshake on a fresh boot under
+    // load, which makes the ssh2 Deployer connections flake with ECONNRESET.
+    await this.waitForSshHandshake();
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
       sshPort: this.config.run.sshPort,
@@ -198,50 +206,47 @@ export class VmManager {
     });
   }
 
-  /** Verify Spice display is accessible */
-  async verifySpice(): Promise<void> {
-    const spicePort = this.config.run.spicePort;
-    const net = await import("node:net");
-    
-    await pollUntil(
-      `Spice port ${spicePort} listening`,
-      async () => {
-        return new Promise<boolean>((resolve) => {
-          const sock = net.createConnection(spicePort, "localhost");
-          const timer = setTimeout(() => {
-            sock.destroy();
-            resolve(false);
-          }, 2000);
-          sock.on("connect", () => {
-            clearTimeout(timer);
-            sock.destroy();
-            resolve(true);
-          });
-          sock.on("error", () => {
-            clearTimeout(timer);
-            resolve(false);
-          });
-        });
-      },
-      10000
-    );
+  async waitForSshHandshake(timeoutMs = 90000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const res = Bun.spawnSync(
+        [
+          "ssh",
+          "-i", this.config.sshKey,
+          "-p", String(this.config.run.sshPort),
+          "-o", "StrictHostKeyChecking=no",
+          "-o", "UserKnownHostsFile=/dev/null",
+          "-o", "BatchMode=yes",
+          "-o", "ConnectTimeout=5",
+          `${this.config.sshUser}@localhost`,
+          "true",
+        ],
+        { stderr: "ignore", stdout: "ignore" },
+      );
+      if (res.exitCode === 0) return;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error("SSH handshake did not succeed within timeout");
   }
+
 
   async setup(): Promise<void> {
     const t0 = Date.now();
-    const shellExec = this.shell.exec.bind(this.shell);
+    // Establish deployer SSH connection first (needed for waitForGdmLogin)
+    await this.deployer.connect();
+
     if (this.freshlyBooted) {
-      await waitForGdmLogin(shellExec);
+      await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
     console.log(`  GDM login: ${Date.now() - t0}ms`);
 
-    // Establish deployer SSH connection (after GDM login, before deployment)
-    await this.deployer.connect();
-
     const t1 = Date.now();
-    const isGoldenDepsImage = this.config.baseImage.includes('golden-gnome-deps');
+    // ponytail: golden-gnome-deps.qcow2 (Aug 8) predates onnxruntime in the dep
+    // list (Aug 27) — image is stale, so deps are ALWAYS installed until the
+    // golden image is rebuilt. Restore the skip when image is refreshed.
+    const isGoldenDepsImage = false;
     if (this.config.skipDeps || isGoldenDepsImage) {
       const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
       console.log(`  Skipping installDependencies (${reason})`);
@@ -275,16 +280,15 @@ export class VmManager {
    */
   async setupForPrefs(): Promise<void> {
     const t0 = Date.now();
-    const shellExec = this.shell.exec.bind(this.shell);
+    // Establish deployer SSH connection first (needed for waitForGdmLogin)
+    await this.deployer.connect();
+
     if (this.freshlyBooted) {
-      await waitForGdmLogin(shellExec);
+      await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
     }
     console.log(`  GDM login: ${Date.now() - t0}ms`);
-
-    // Establish deployer SSH connection
-    await this.deployer.connect();
 
     // Deploy extension via install.sh --local
     await deployExtension(this.shell, this.deployCfg, pollUntil, this.deployer);
@@ -296,7 +300,10 @@ export class VmManager {
     try {
       // Check if the overlay file exists and has snapshots (without booting VM)
       if (!existsSync(this.config.run.overlayImage)) return false;
-      const result = Bun.spawnSync(["qemu-img", "snapshot", "-l", this.config.run.overlayImage]);
+      // -U/--force-share: QEMU may hold a write lock on the overlay (VM
+      // running), which would otherwise make this command fail and look like
+      // "no snapshot".
+      const result = Bun.spawnSync(["qemu-img", "snapshot", "-l", "-U", this.config.run.overlayImage]);
       const output = result.stdout.toString();
       return output.includes(tag);
     } catch {
@@ -330,6 +337,22 @@ export class VmManager {
     }
   }
 
+  /** Reconnect shell and verify guest state after a snapshot restore (-loadvm or loadvm). */
+  async reconnectAfterRestore(): Promise<void> {
+    await Bun.sleep(2000);
+    await this.shell.openSshSession({
+      sshKey: this.config.sshKey,
+      sshPort: this.config.run.sshPort,
+      sshUser: this.config.sshUser,
+    });
+    await this.pollForCommandOutput(
+      "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+      "com.happytomatoe.VoiceToText",
+      10000
+    );
+    this.shell.resetRecordingState();
+  }
+
   async resetToCleanState(tag = "clean", retries = 2): Promise<void> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -343,6 +366,7 @@ export class VmManager {
         
         // 3. Reconnect SSH session (TCP connections are stale after restore)
         await this.shell.close();
+        await this.shell.reconnect();
         await this.shell.openSshSession({
           sshKey: this.config.sshKey,
           sshPort: this.config.run.sshPort,
@@ -351,7 +375,7 @@ export class VmManager {
         
         // 4. Verify voice service is accessible
         await this.pollForCommandOutput(
-          "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
+          "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
           "com.happytomatoe.VoiceToText",
           10000
         );
@@ -379,12 +403,22 @@ export class VmManager {
       if (check.exitCode !== 0) { console.log("  [xvfb] not found"); return false; }
     } catch { console.log("  [xvfb] not found"); return false; }
 
-    // Check if Xvfb is already running on :99 (use xdotool instead of xdpyinfo which may not be installed)
-    try {
-      Bun.spawnSync(["xdotool", "getdisplaygeometry", ":99"], { stdout: "pipe", stderr: "pipe" });
-      console.log("  [xvfb] already running on :99");
-      return true;
-    } catch { /* not running, start it */ }
+    // Check if Xvfb is already running on :99 — probe the X socket directly.
+    // (xdotool inherits XAUTHORITY from the Wayland session and fails with
+    // "Authorization required" even when Xvfb is up.)
+    if (existsSync("/tmp/.X11-unix/X99")) {
+      // Stale-socket check: Xvfb may have died and left the socket behind
+      // ("gtk initialization failed" in QEMU). If no Xvfb process owns it,
+      // remove the socket and start a fresh Xvfb.
+      const pgrep = Bun.spawnSync(["pgrep", "-x", "Xvfb"]);
+      const hasLiveXvfb = pgrep.exitCode === 0 && pgrep.stdout.toString().trim().length > 0;
+      if (hasLiveXvfb) {
+        console.log("  [xvfb] already running on :99");
+        return true;
+      }
+      console.log("  [xvfb] stale /tmp/.X11-unix/X99 socket (no Xvfb process) — removing");
+      try { Bun.spawnSync(["rm", "-f", "/tmp/.X11-unix/X99"]); } catch { /* ignore */ }
+    }
 
     this.xvfbProcess = Bun.spawn(
       ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
@@ -395,9 +429,10 @@ export class VmManager {
     for (let i = 0; i < 20; i++) {
       if (this.xvfbProcess.exitCode !== null) { console.log("  [xvfb] failed to start"); return false; }
       try {
-        Bun.spawnSync(["xdotool", "getdisplaygeometry", ":99"], { stdout: "pipe", stderr: "pipe" });
-        console.log("  [xvfb] started on :99 (1920x1080)");
-        return true;
+        if (existsSync("/tmp/.X11-unix/X99")) {
+          console.log("  [xvfb] started on :99 (1920x1080)");
+          return true;
+        }
       } catch { /* ignore */ }
       await Bun.sleep(100);
     }
@@ -432,10 +467,6 @@ export class VmManager {
   /** Start continuous recording via x11grab + ffmpeg */
   /** Start continuous recording via x11grab + ffmpeg (Xvfb mode only) */
   startRecording(): void {
-    if (this.config.spiceMode) {
-      console.log("  [recording] skipped: SPICE mode has no x11grab support");
-      return;
-    }
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
@@ -474,7 +505,11 @@ export class VmManager {
     if (!this.booted) {
       console.log("VM was not started by this run, skipping shutdown");
       this.qemu.close();
-      await this.shell.close();
+      try {
+        await this.shell.close();
+      } catch {
+        // Ignore — connection may already be gone
+      }
       await this.deployer.disconnect();
       return;
     }
@@ -495,10 +530,23 @@ export class VmManager {
       await this.qemu.systemPowerdown();
       await Bun.sleep(5000);
     } finally {
+      if (this.qemuProcessPid) {
+        try { Bun.spawnSync(["kill", "-9", String(this.qemuProcessPid)]); } catch { /* already gone */ }
+      }
       this.process?.kill("SIGKILL");
       this.qemu.close();
-      await this.shell.close();
-      await this.deployer.disconnect();
+      try {
+        await this.shell.close();
+      } catch (err) {
+        // Ignore — connection may already be gone
+        console.log(`  shell close warning: ${err instanceof Error ? err.message : err}`);
+      }
+      try {
+        await this.deployer.disconnect();
+      } catch (err) {
+        // Ignore — QEMU just died, socket teardown can surface ECONNRESET
+        console.log(`  deployer disconnect warning: ${err instanceof Error ? err.message : err}`);
+      }
     }
   }
 
@@ -508,7 +556,7 @@ export class VmManager {
     desc: string,
     check: () => Promise<boolean>,
     timeoutMs: number,
-    intervalMs = 1000
+    intervalMs = 100
   ): Promise<void> {
     return pollUntil(desc, check, timeoutMs, intervalMs);
   }
@@ -518,7 +566,16 @@ export class VmManager {
   }
 
   async pollForCommandOutput(command: string, expected: string, timeoutMs = 10000): Promise<void> {
-    return pollForCommandOutput(this.shell.exec.bind(this.shell), command, expected, timeoutMs);
+    const { sshExecAsync } = await import("./deploy-steps.js");
+    const cfg = this.config;
+    // Use one-shot ssh with swallow-on-failure: after snapshot restore the
+    // persistent deployer connection is dead and would throw every attempt.
+    return pollForCommandOutput(
+      (cmd) => sshExecAsync(cmd, cfg.sshKey, cfg.run.sshPort, cfg.sshUser),
+      command,
+      expected,
+      timeoutMs
+    );
   }
 
   // --- Private ---
