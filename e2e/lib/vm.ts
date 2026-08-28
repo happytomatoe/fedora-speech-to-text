@@ -378,8 +378,17 @@ export class VmManager {
     // (xdotool inherits XAUTHORITY from the Wayland session and fails with
     // "Authorization required" even when Xvfb is up.)
     if (existsSync("/tmp/.X11-unix/X99")) {
-      console.log("  [xvfb] already running on :99");
-      return true;
+      // Stale-socket check: Xvfb may have died and left the socket behind
+      // ("gtk initialization failed" in QEMU). If no Xvfb process owns it,
+      // remove the socket and start a fresh Xvfb.
+      const pgrep = Bun.spawnSync(["pgrep", "-x", "Xvfb"]);
+      const hasLiveXvfb = pgrep.exitCode === 0 && pgrep.stdout.toString().trim().length > 0;
+      if (hasLiveXvfb) {
+        console.log("  [xvfb] already running on :99");
+        return true;
+      }
+      console.log("  [xvfb] stale /tmp/.X11-unix/X99 socket (no Xvfb process) — removing");
+      try { Bun.spawnSync(["rm", "-f", "/tmp/.X11-unix/X99"]); } catch { /* ignore */ }
     }
 
     this.xvfbProcess = Bun.spawn(
