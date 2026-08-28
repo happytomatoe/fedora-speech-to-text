@@ -74,19 +74,6 @@ export class ShellHelper {
     }
     return sshExecOnce();
   }
-    if (this._deployer) {
-      const result = await this._deployer.exec(command);
-      return result.stdout.trim();
-    }
-    if (!this.session) throw new Error("No session");
-    const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-    const sshHost = `${this.session.sshUser}@${this.session.host}`;
-    return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
-      encoding: "utf-8",
-      timeout: timeoutMs,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-  }
 
   async dotoolCommand(command: string): Promise<void> {
     // Escape single quotes in the command for safe shell interpolation
