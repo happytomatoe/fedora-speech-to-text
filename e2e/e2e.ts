@@ -49,11 +49,12 @@ const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
-// Snapshots disabled for now: QEMU savevm fails with the GL display
-// (-device virtio-vga-gl -display gtk,gl=on), and they're unused in --update
-// mode because boot() always refreshes the overlay. The fresh (deploy + test)
-// path below runs instead.
+// Snapshots: savevm previously failed with the GL display
+// (-device virtio-vga-gl -display gtk,gl=on). Display is now non-GL, so
+// snapshot mode can be re-enabled by flipping this to !NO_SNAPSHOT once
+// savevm/loadvm are verified against the current display config.
 const NO_SNAPSHOT = args.includes("--no-snapshot");
+// ponytail: snapshots disabled pending savevm/loadvm verification on non-GL display — flip to !NO_SNAPSHOT after verifying, remove stale comment
 const SNAPSHOT_MODE = false;
 const SKIP_DEPS = args.includes("--skip-deps");
 

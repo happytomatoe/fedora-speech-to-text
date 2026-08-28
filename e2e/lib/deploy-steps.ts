@@ -70,11 +70,11 @@ const GDM_READY_TIMEOUT_MS = 240_000;
 export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
   console.log("Waiting for GNOME Shell to register on D-Bus...");
-  // Poll for org.gnome.Shell on the session bus. Runs over plain SSH (no
-  // plain SSH), so a slow/contended VT can't trip the "prompt visible"
-  // waitText timeout that made the old shellExec path flaky. Polling (rather
-  // than a single blocking `gdbus wait`) gives visible progress and a hard cap
-  // so a slow boot can't look like an indefinite hang under host contention.
+  // Poll for org.gnome.Shell on the session bus over plain SSH. A
+  // slow/contended VT can't trip a "prompt visible" text-match, and polling
+  // (rather than a single blocking `gdbus wait`) gives visible progress and a
+  // hard cap so a slow boot can't look like an indefinite hang under host
+  // contention.
   // Force the session-bus address: a non-interactive SSH session may lack the
   // session env, so gdbus --session wouldn't see the bus the GDM graphical
   // session registers gnome-shell on. Fall back to pgrep (bus-independent).
@@ -389,8 +389,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   await pollUntilFn(
     "dotool pipe",
     async () => {
-      const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
-      return output.includes("ready");
+      try {
+        const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
+        return output.includes("ready");
+      } catch {
+        return false; // ssh hiccup — retry
+      }
     },
     10000
   );
@@ -465,8 +469,12 @@ export async function startVoiceService(
   await pollUntilFn(
     "old voice service to die",
     async () => {
-      const output = await shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
-      return output.trim().length === 0;
+      try {
+        const output = await shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
+        return output.trim().length === 0;
+      } catch {
+        return false; // ssh hiccup during setup — retry
+      }
     },
     5000
   );
