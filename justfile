@@ -1010,6 +1010,19 @@ qemu-e2e-setup:
     fi
     echo ""
 
+    # 4b. e2e npm deps (post-checkout hook runs this in fresh worktrees where
+    # node_modules doesn't exist yet — pre-push `just e2e` needs ssh2 etc.)
+    if [[ ! -d "e2e/node_modules" ]]; then
+        echo "Installing e2e dependencies..."
+        (cd e2e && bun install)
+        echo "✓ e2e dependencies installed"
+    else
+        echo "✓ e2e dependencies already installed"
+    fi
+    echo ""
+
+    # 5. Done!
+    echo ""
     echo "═══════════════════════════════════════════════════"
     echo "  E2E environment ready!"
     echo ""
