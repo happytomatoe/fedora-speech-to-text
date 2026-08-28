@@ -107,8 +107,8 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         if self._transcriber is not None:
             try:
                 self._transcriber.stop()
-            except Exception:
-                logger.warning("Error stopping Moonshine transcriber", exc_info=True)
+            except Exception as e:
+                logger.warning("Error stopping Moonshine transcriber: %s", e)
         result = self._finalized_text
         if self._partial_result:
             result = (result + " " + self._partial_result).strip()
@@ -137,7 +137,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         if self._transcriber is not None:
             try:
                 self._transcriber.stop()
-            except Exception:
-                logger.warning("Error stopping Moonshine transcriber during close", exc_info=True)
+            except Exception as e:
+                logger.warning("Error stopping Moonshine transcriber during close: %s", e)
             finally:
                 self._transcriber = None

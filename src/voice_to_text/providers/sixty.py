@@ -81,8 +81,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                 try:
                     body = e.response.json()
                     logger.error("60db response body: %s", body)
-                except ValueError:
-                    logger.error("60db response text: %s", e.response.text[:500])
+                except ValueError as ve:
+                    logger.error("60db response parse failed (%s), raw text: %s", ve, e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
                     key_len = len(self.api_key)
                     fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
@@ -141,8 +141,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                 except (ValueError, TypeError):
                     continue
                 self._handle_message(msg)
-        except asyncio.CancelledError:
-            logger.info("60db receive loop cancelled")
+        except asyncio.CancelledError as e:
+            logger.info("60db receive loop cancelled: %s", e)
         except Exception as e:
             logger.warning("60db receive loop error: %s", e)
 
@@ -199,8 +199,8 @@ class SixtyProvider(BatchProvider, StreamingProvider):
                 try:
                     async with asyncio.timeout(5.0):
                         await self._session_stopped.wait()
-                except TimeoutError:
-                    logger.debug("Timeout waiting for 60db stream stop confirmation")
+                except TimeoutError as e:
+                    logger.debug("Timeout waiting for 60db stream stop confirmation: %s", e)
             except Exception as e:
                 logger.warning("Error stopping 60db stream: %s", e)
             finally:

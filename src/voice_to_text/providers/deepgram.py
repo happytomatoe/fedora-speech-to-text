@@ -120,8 +120,8 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
                 try:
                     body = e.response.json()
                     logger.error("Deepgram response body: %s", body)
-                except ValueError:
-                    logger.error("Deepgram response text: %s", e.response.text[:500])
+                except ValueError as ve:
+                    logger.error("Deepgram response parse failed (%s), raw text: %s", ve, e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
                     key_len = len(self.api_key)
                     fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key

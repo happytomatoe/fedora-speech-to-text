@@ -317,8 +317,8 @@ class AsyncAudioRecorder:
                 selection.included_seconds,
                 filepath,
             )
-        except Exception:
-            logger.warning("Failed to prepend preroll audio to WAV file", exc_info=True)
+        except Exception as e:
+            logger.warning("Failed to prepend preroll audio to WAV file: %s", e)
 
     def stop_and_delete(self) -> None:
         """Stop recording and delete the audio file."""
@@ -508,7 +508,8 @@ class RecordingEngine:
 
             if mode in ("hybrid", "streaming"):
                 config_mgr = ConfigManager()
-                hybrid_cfg = config_mgr.config.get("transcription", {}).get("hybrid", {})
+                transcription_cfg = config_mgr.config.get("transcription") or {}
+                hybrid_cfg = transcription_cfg.get("hybrid") or {}
                 streaming_name = config.get("streaming_provider") or hybrid_cfg.get("streaming_provider", "deepgram")
                 if mode == "hybrid":
                     batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
@@ -716,13 +717,14 @@ class RecordingEngine:
         if not filepath:
             return
         config_mgr = ConfigManager()
-        if config_mgr.config.get("audio", {}).get("recording_action", "delete") == "save":
+        audio_cfg = config_mgr.config.get("audio") or {}
+        if audio_cfg.get("recording_action", "delete") == "save":
             save_dir = "/tmp/voice-to-text"
             os.makedirs(save_dir, exist_ok=True)
             try:
                 shutil.move(filepath, os.path.join(save_dir, "last.wav"))
-            except OSError:
-                logger.warning("Failed to save audio to %s", save_dir)
+            except OSError as e:
+                logger.warning("Failed to save audio to %s: %s", save_dir, e)
         else:
             with contextlib.suppress(OSError):
                 os.unlink(filepath)

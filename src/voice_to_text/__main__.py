@@ -65,8 +65,8 @@ async def run_service() -> None:
     if engine_stop_task:
         try:
             await asyncio.wait_for(engine_stop_task, timeout=16.0)
-        except (TimeoutError, asyncio.CancelledError):
-            logger.warning("Engine did not stop in time, disconnecting anyway")
+        except (TimeoutError, asyncio.CancelledError) as e:
+            logger.warning("Engine did not stop in time (%s), disconnecting anyway", e)
     await close_shared_client()
 
     bus.disconnect()

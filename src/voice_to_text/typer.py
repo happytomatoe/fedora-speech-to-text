@@ -346,12 +346,12 @@ class DotoolTyper:
             try:
                 self._process.stdin.close()
                 await asyncio.wait_for(self._process.wait(), timeout=2.0)
-            except TimeoutError:
-                logger.warning("dotoolc did not exit after stdin close; killing")
+            except TimeoutError as e:
+                logger.warning("dotoolc did not exit after stdin close (%s); killing", e)
                 self._process.kill()
                 await self._process.wait()
-            except Exception:
-                logger.exception("Failed to close dotoolc cleanly")
+            except Exception as e:
+                logger.exception("Failed to close dotoolc cleanly: %s", e)
             finally:
                 logger.info("Continuous dotoolc pipe closed")
                 self._process = None
