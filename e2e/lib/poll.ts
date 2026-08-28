@@ -2,7 +2,7 @@ export async function pollUntil(
   desc: string,
   check: () => Promise<boolean>,
   timeoutMs: number,
-  intervalMs = 1000
+  intervalMs = 100
 ): Promise<void> {
   const start = Date.now();
   const quiet = !!process.env.TIMING_MODE;
