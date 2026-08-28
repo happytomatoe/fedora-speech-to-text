@@ -346,7 +346,7 @@ export class VmManager {
         
         // 4. Verify voice service is accessible
         await this.pollForCommandOutput(
-          "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
+          "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
           "com.happytomatoe.VoiceToText",
           10000
         );
@@ -500,7 +500,12 @@ export class VmManager {
         // Ignore — connection may already be gone
         console.log(`  shell close warning: ${err instanceof Error ? err.message : err}`);
       }
-      await this.deployer.disconnect();
+      try {
+        await this.deployer.disconnect();
+      } catch (err) {
+        // Ignore — QEMU just died, socket teardown can surface ECONNRESET
+        console.log(`  deployer disconnect warning: ${err instanceof Error ? err.message : err}`);
+      }
     }
   }
 

@@ -470,7 +470,7 @@ export async function startVoiceService(
     "old voice service to die",
     async () => {
       try {
-        const output = await shell.exec("busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText");
+        const output = await shell.exec("busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'");
         return output.trim().length === 0;
       } catch {
         return false; // ssh hiccup during setup — retry
@@ -515,7 +515,7 @@ export async function startVoiceService(
   try {
     await pollForCommandOutputFn(
       shell.exec.bind(shell),
-      "busctl --user list 2>/dev/null | grep com.happytomatoe.VoiceToText",
+      "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
       "com.happytomatoe.VoiceToText",
       60000
     );

@@ -49,13 +49,38 @@ const NO_RECORD = args.includes("--no-record");
 const RECORD_MODE = !NO_RECORD; // enabled by default
 const TIMING_MODE = args.includes("--timing");
 if (TIMING_MODE) process.env.TIMING_MODE = "1";
+
+// VM shutdown kills the ssh2 Deployer socket mid-connection, which can emit a
+// late ECONNRESET/EPIPE after all tests have finished. Swallow them so
+// teardown noise can't crash the process or flip the exit code.
+const isTeardownSocketError = (err: unknown): boolean => {
+  const code = (err as NodeJS.ErrnoException)?.code ?? "";
+  const msg = err instanceof Error ? err.message : String(err);
+  return code === "ECONNRESET" || code === "EPIPE" || msg.includes("ECONNRESET") || msg.includes("EPIPE");
+};
+process.on("uncaughtException", (err) => {
+  if (isTeardownSocketError(err)) {
+    console.log(`Ignoring late socket error during teardown (${(err as NodeJS.ErrnoException).code})`);
+    return;
+  }
+  console.error("Uncaught exception:", err);
+  process.exitCode = 1;
+});
+process.on("unhandledRejection", (err) => {
+  if (isTeardownSocketError(err)) {
+    console.log(`Ignoring late socket error rejection during teardown (${(err as NodeJS.ErrnoException).code})`);
+    return;
+  }
+  console.error("Unhandled rejection:", err);
+  process.exitCode = 1;
+});
 // Snapshots: savevm previously failed with the GL display
 // (-device virtio-vga-gl -display gtk,gl=on). Display is now non-GL, so
 // snapshot mode can be re-enabled by flipping this to !NO_SNAPSHOT once
 // savevm/loadvm are verified against the current display config.
 const NO_SNAPSHOT = args.includes("--no-snapshot");
 // ponytail: snapshots disabled pending savevm/loadvm verification on non-GL display — flip to !NO_SNAPSHOT after verifying, remove stale comment
-const SNAPSHOT_MODE = false;
+const SNAPSHOT_MODE = true; // TEMP: Phase 1 verification of savevm/loadvm on non-GL gtk display — revert or replace with !NO_SNAPSHOT after verifying (plan: thoughts/shared/plans/re-enable-e2e-snapshots.md)
 const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
@@ -403,7 +428,9 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     "terminal closed",
     async () => {
       try {
-        const out = await shell.exec("pgrep -f ghostty; pgrep -f gnome-terminal; true");
+        // [g]hostty bracket trick: prevents pgrep from matching this very
+        // ssh command's own cmdline (sh -c "...ghostty...").
+        const out = await shell.exec("pgrep -f '[g]hostty'; pgrep -f '[g]nome-terminal'; true");
         return out.trim().length === 0;
       } catch {
         return false;
@@ -1028,7 +1055,12 @@ async function main(): Promise<void> {
     testsFailed++;
   } finally {
     if (!KEEP_VM) {
-      await vm.shutdown();
+      // Hard cap on shutdown: QEMU monitor / ssh2 teardown can hang forever on
+      // a dead socket. Never let cleanup block the exit code.
+      await Promise.race([
+        vm.shutdown().catch((err) => console.log(`  shutdown warning: ${err instanceof Error ? err.message : err}`)),
+        Bun.sleep(20000).then(() => console.log("  shutdown timed out after 20s — killing VM process")),
+      ]);
       run.cleanup();
       console.log("\nVM shut down.");
     } else {
