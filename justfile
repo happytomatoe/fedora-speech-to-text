@@ -1015,8 +1015,17 @@ qemu-e2e-update-ts:
 
 # @category e2e-qemu
 # Run E2E tests (snapshot mode by default, fast ~40s after first run)
+# Output is always tee'd to /tmp/fedora-speech-to-text-e2e-run.log — tail it to
+# watch progress: tail -f /tmp/fedora-speech-to-text-e2e-run.log
+# Override with args: just e2e --update
 e2e *ARGS:
-    cd e2e && bun run e2e.ts {{ ARGS }}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e
+    LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
+    : > "$LOG"
+    bun run e2e.ts {{ ARGS }} 2>&1 | tee "$LOG"
+    exit ${PIPESTATUS[0]}
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
