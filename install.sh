@@ -189,7 +189,7 @@ install_python_service() {
   echo ""
   echo "--- Installing Python D-Bus service ---"
   echo "Installing version $LATEST_TAG..."
-  timeout 420 uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
+  uv tool install "git+https://github.com/$REPO.git@$LATEST_TAG" --force
   echo "Python D-Bus service installed (voice-to-text-dbus)."
 }
 
