@@ -14,7 +14,7 @@ Other repositories don't integrate natively with GNOME Wayland because of compat
 | `type` (dotool) | **2,012 ms** | ~395× slower |
 | `type` (ydotool) | **4,760 ms** | ~936× slower |
 
-By using internal fedora API (mutter methods) we can higher throughput.
+Using internal fedora API (mutter methods) provides higher speed.
 
 # Demo
 
