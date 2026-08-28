@@ -93,7 +93,7 @@ install_dotool() {
     if toolbox run -c "$TOOLBOX_NAME" sh -c "
       sudo dnf install -y gcc make libev-devel systemd-devel git
       rm -rf /tmp/dotool-build
-      timeout 120 git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool-build
+      git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool-build
       cd /tmp/dotool-build && ./build.sh
       cp dotool dotoolc dotoold \"$BIN_DIR/\"
     " 2>/dev/null; then
@@ -116,7 +116,7 @@ install_dotool() {
       -v "$BIN_DIR:/out:Z" \
       fedora:latest sh -c "
         dnf install -y gcc make libev-devel systemd-devel git
-        timeout 120 git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool
+        git clone --depth 1 https://git.sr.ht/~geb/dotool /tmp/dotool
         cd /tmp/dotool && ./build.sh
         cp dotool dotoolc dotoold /out/
       " 2>/dev/null; then
@@ -133,7 +133,7 @@ install_dotool() {
   if [ "$install_ok" = true ]; then
     local TMPDIR
     TMPDIR=$(mktemp -d)
-    if timeout 120 git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
+    if git clone --depth 1 https://git.sr.ht/~geb/dotool "$TMPDIR/dotool" 2>/dev/null &&
       (cd "$TMPDIR/dotool" && ./build.sh 2>/dev/null && cp dotool dotoolc dotoold "$BIN_DIR/"); then
       rm -rf "$TMPDIR"
       echo "  dotool built successfully from source."
@@ -158,7 +158,7 @@ install_uv() {
     return 0
   fi
   echo "Installing uv..."
-  curl -LsSf -m 120 https://astral.sh/uv/install.sh | sh
+  curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
   if ! command_exists uv; then
     echo "ERROR: Failed to install uv."
@@ -204,7 +204,7 @@ install_dbus_services() {
     echo "Copied D-Bus service file."
   else
     echo "Downloading D-Bus service file from repository..."
-    curl -sL -m 120 "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
+    curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.service" -o "$DBUS_SERVICE_DIR/com.happytomatoe.VoiceToText.service"
   fi
 
   local SYSTEMD_DIR="$HOME/.config/systemd/user"
@@ -213,7 +213,7 @@ install_dbus_services() {
   if [ -f "service/com.happytomatoe.VoiceToText.user.service" ]; then
     cp service/com.happytomatoe.VoiceToText.user.service "$SYSTEMD_DIR/"
     echo "Copied systemd user service."
-  elif curl -sL -m 120 "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
+  elif curl -sL "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/service/com.happytomatoe.VoiceToText.user.service" -o "$SYSTEMD_DIR/com.happytomatoe.VoiceToText.user.service"; then
     echo "Downloaded systemd user service."
   else
     echo "WARNING: Could not install systemd user service."
@@ -239,7 +239,7 @@ install_gnome_extension() {
     echo "Downloading: $RELEASE_URL"
     local TMPDIR
     TMPDIR=$(mktemp -d)
-    curl -L -m 120 -o "$TMPDIR/extension.zip" "$RELEASE_URL"
+    curl -L -o "$TMPDIR/extension.zip" "$RELEASE_URL"
     gnome-extensions install --force "$TMPDIR/extension.zip"
     rm -rf "$TMPDIR"
   fi
@@ -290,7 +290,7 @@ install_config() {
     echo "Existing config found at $CONFIG_FILE; leaving it unchanged."
   else
     echo "Downloading default config..."
-    curl -L -m 120 -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
+    curl -L -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
     if [ -f "$CONFIG_FILE" ]; then
       echo "Default config installed at $CONFIG_FILE."
     else
