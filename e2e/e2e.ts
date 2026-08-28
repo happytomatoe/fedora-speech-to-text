@@ -224,8 +224,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.pollUntil(
     "tmux session",
     async () => {
-      const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
-      return output.trim().length > 0;
+      try {
+        const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
+        return output.trim().length > 0;
+      } catch {
+        return false; // ssh hiccup — retry
+      }
     },
     15000
   );
@@ -335,14 +339,18 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     await vm.pollUntil(
       "transcription",
       async () => {
-        const logOutput = await shell.exec(
-          `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
-        );
-        const trimmed = logOutput.trim();
-        if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
-          transcription = trimmed;
-          console.log(`  Got from log: ${transcription}`);
-          return true;
+        try {
+          const logOutput = await shell.exec(
+            `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`
+          );
+          const trimmed = logOutput.trim();
+          if (trimmed && !/^\s*(?:\[[^\]]*\]\s*)?\S+@\S+/.test(trimmed)) {
+            transcription = trimmed;
+            console.log(`  Got from log: ${transcription}`);
+            return true;
+          }
+        } catch {
+          return false; // ssh hiccup — retry
         }
         return false;
       },
@@ -387,12 +395,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Closing terminal before preferences tests...");
   await tmux.killSession(tmuxCfg);
   await shell.exec("pkill -f ghostty 2>/dev/null; pkill -f gnome-terminal 2>/dev/null; true");
-  // Poll until the terminal emulator has actually exited (no blind sleep)
+  // Poll until the terminal emulator has actually exited (no blind sleep).
+  // Use one-shot ssh with swallow-on-error: shell.exec can throw if the
+  // persistent connection hiccups right after tmux kill, and pgrep matching
+  // nothing returns empty via `; true`.
   await vm.pollUntil(
     "terminal closed",
     async () => {
-      const out = await shell.exec("pgrep -f ghostty; pgrep -f gnome-terminal; true");
-      return out.trim().length === 0;
+      try {
+        const out = await shell.exec("pgrep -f ghostty; pgrep -f gnome-terminal; true");
+        return out.trim().length === 0;
+      } catch {
+        return false;
+      }
     },
     5000
   );
