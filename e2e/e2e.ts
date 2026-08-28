@@ -56,9 +56,10 @@ if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const NO_SNAPSHOT = args.includes("--no-snapshot");
 const SNAPSHOT_MODE = false;
 const SKIP_DEPS = args.includes("--skip-deps");
-// xvfb+GTK display is the default (enables screen recording);
-// use --spice to opt out (SPICE has no recording).
-const SPICE_MODE = args.includes("--spice");
+// SPICE display is the default — the xvfb+GTK+GL path fails headless
+// ("OpenGL is not supported by display backend 'gtk'"). Recording comes
+// from the guest-side GNOME screencast instead.
+const SPICE_MODE = !args.includes("--no-spice");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
