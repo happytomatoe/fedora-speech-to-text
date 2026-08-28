@@ -104,10 +104,4 @@ export class Virsh {
     return match ? parseInt(match[1]) : 2222;
   }
 
-  /** Get SPICE port from domain XML */
-  static getSpicePort(): number {
-    const xml = execSync(`virsh -c qemu:///session dumpxml ${VM_NAME}`, { stdio: "pipe" }).toString();
-    const match = xml.match(/<graphics[^>]*type='spice'[^>]*port='(\d+)'/s) || xml.match(/port='(\d+)'/);
-    return match ? parseInt(match[1]) : 5930;
-  }
 }

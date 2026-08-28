@@ -11,7 +11,7 @@ import json
 import pytest
 from dbus_next import DBusError
 
-from voice_to_text.dbus_service import VoiceToTextInterface, format_provider_initials
+from voice_to_text.dbus_service import VoiceToTextInterface
 from voice_to_text.engine import EngineState
 
 # ── Mock engine ──────────────────────────────────────────────────────────
@@ -216,27 +216,3 @@ class TestSignals:
         assert "test error" in errors
 
 
-class TestGetInitials:
-    """GetInitials method (provider indicator)."""
-
-    async def test_empty_before_first_recording(self):
-        """No active providers yet → empty string."""
-        assert format_provider_initials([], {}) == ""
-
-    async def test_batch_provider_names(self):
-        """Canonical names joined with '+' are returned."""
-        assert format_provider_initials(["voxtral"], {}) == "voxtral"
-
-    async def test_hybrid_provider_names(self):
-        """Hybrid mode joins streaming + batch with '+'."""
-        assert format_provider_initials(["deepgram", "groq"], {}) == "deepgram+groq"
-
-    async def test_disabled_flag(self):
-        """provider_indicator.enabled: false → empty string."""
-        cfg = {"enabled": False}
-        assert format_provider_initials(["voxtral"], cfg) == ""
-
-    async def test_label_override(self):
-        """Labels overrides replace a canonical name verbatim."""
-        cfg = {"labels": {"moonshine": "MS"}}
-        assert format_provider_initials(["moonshine", "groq"], cfg) == "MS+groq"

@@ -10,11 +10,6 @@ transcription:
     streaming_provider: "voxtral"
     batch_provider: "voxtral"
 
-# Provider indicator in top panel (next to mic icon)
-provider_indicator:
-  enabled: true          # set false to hide provider label
-  labels: {}             # optional overrides, e.g. moonshine: MS
-
 # Provider-specific configurations
 deepgram:
   model: "nova-3"

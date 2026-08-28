@@ -56,10 +56,6 @@ if (TIMING_MODE) process.env.TIMING_MODE = "1";
 const NO_SNAPSHOT = args.includes("--no-snapshot");
 const SNAPSHOT_MODE = false;
 const SKIP_DEPS = args.includes("--skip-deps");
-// SPICE display is the default — the xvfb+GTK+GL path fails headless
-// ("OpenGL is not supported by display backend 'gtk'"). Recording comes
-// from the guest-side GNOME screencast instead.
-const SPICE_MODE = !args.includes("--no-spice");
 
 // Parse --timeout <seconds> (default: 180)
 const timeoutIdx = args.indexOf("--timeout");
@@ -800,7 +796,6 @@ async function main(): Promise<void> {
   console.log(`Run ID: ${run.id}`);
   console.log(`Run directory: ${run.runDir}`);
   console.log(`SSH port: ${run.sshPort}`);
-  console.log(`Spice port: ${run.spicePort}`);
 
   const vmCfg: VmConfig = {
     run,
@@ -817,7 +812,6 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
-    spiceMode: SPICE_MODE,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -859,7 +853,6 @@ async function main(): Promise<void> {
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
       skipDeps: SKIP_DEPS,
-      spiceMode: SPICE_MODE,
     });
     
     const results = await runner.runAll();
@@ -972,7 +965,6 @@ async function main(): Promise<void> {
     } else {
       console.log("\nVM kept running (pass --keep-vm to leave it up)");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${run.sshPort} ${SSH_USER}@localhost`);
-      console.log(`Spice: spice://localhost:${run.spicePort}`);
     }
   }
 

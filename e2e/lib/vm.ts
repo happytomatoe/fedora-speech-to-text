@@ -30,7 +30,6 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
-  spiceMode?: boolean;
 }
 
 export class VmManager {
@@ -130,15 +129,10 @@ export class VmManager {
       console.log("Reusing existing overlay...");
     }
 
-    // Start Xvfb (required unless --spice mode)
-    const useSpice = this.config.spiceMode ?? false;
-    if (useSpice) {
-      console.log("  [spice] mode: using SPICE display (no recording)");
-    } else {
-      const hasXvfb = await this.startXvfb();
-      if (!hasXvfb) {
-        throw new Error("Xvfb not found. Install it: sudo dnf install xorg-x11-server-Xvfb. Or use --spice mode.");
-      }
+    // Start Xvfb (required for the GTK display and x11grab recording)
+    const hasXvfb = await this.startXvfb();
+    if (!hasXvfb) {
+      throw new Error("Xvfb not found. Install it: sudo dnf install xorg-x11-server-Xvfb.");
     }
 
     const qemuArgs = [
@@ -156,17 +150,13 @@ export class VmManager {
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
-    if (useSpice) {
-      qemuArgs.push("-device", "virtio-vga", "-display", "none", "-spice", `port=${this.config.run.spicePort},disable-ticketing=on`);
-    } else {
-      // GTK display without GL — renders a real window on Xvfb so x11grab
-      // recording works. GL variant (virtio-vga-gl + gl=on) fails headless.
-      qemuArgs.push("-device", "virtio-vga", "-display", "gtk,gl=off");
-    }
+    // GTK display without GL — renders a real window on Xvfb so x11grab
+    // recording works. GL variant (virtio-vga-gl + gl=on) fails headless.
+    qemuArgs.push("-device", "virtio-vga", "-display", "gtk,gl=off");
 
     // Use env to clear Wayland vars so QEMU uses X11 on Xvfb
-    const qemuEnv = useSpice ? {} : { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
-    const envPrefix = useSpice ? "" : "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=";
+    const qemuEnv = { DISPLAY: ":99", WAYLAND_DISPLAY: "", XDG_SESSION_TYPE: "" };
+    const envPrefix = "env DISPLAY=:99 WAYLAND_DISPLAY= XDG_SESSION_TYPE=";
     // Capture QEMU stderr to a log file for debugging
     const qemuStderrLog = join(this.config.run.runDir, "qemu-stderr.log");
     const wrappedCmd = `${envPrefix} ${qemuArgs.join(" ")} 2>"${qemuStderrLog}" &`;
@@ -192,11 +182,8 @@ export class VmManager {
     }
 
     await this.qemu.connect();
-    if (useSpice) {
-      await this.verifySpice();
-    } else {
-      await this.resizeQemuWindow();
-    }
+    await this.qemu.connect();
+    await this.resizeQemuWindow();
   }
   async waitForSsh(): Promise<void> {
     // Wait for a full SSH handshake, not just an open port — sshd may accept
@@ -233,34 +220,6 @@ export class VmManager {
     throw new Error("SSH handshake did not succeed within timeout");
   }
 
-  /** Verify Spice display is accessible */
-  async verifySpice(): Promise<void> {
-    const spicePort = this.config.run.spicePort;
-    const net = await import("node:net");
-    
-    await pollUntil(
-      `Spice port ${spicePort} listening`,
-      async () => {
-        return new Promise<boolean>((resolve) => {
-          const sock = net.createConnection(spicePort, "localhost");
-          const timer = setTimeout(() => {
-            sock.destroy();
-            resolve(false);
-          }, 2000);
-          sock.on("connect", () => {
-            clearTimeout(timer);
-            sock.destroy();
-            resolve(true);
-          });
-          sock.on("error", () => {
-            clearTimeout(timer);
-            resolve(false);
-          });
-        });
-      },
-      10000
-    );
-  }
 
   async setup(): Promise<void> {
     const t0 = Date.now();
@@ -465,10 +424,6 @@ export class VmManager {
   /** Start continuous recording via x11grab + ffmpeg */
   /** Start continuous recording via x11grab + ffmpeg (Xvfb mode only) */
   startRecording(): void {
-    if (this.config.spiceMode) {
-      console.log("  [recording] skipped: SPICE mode has no x11grab support");
-      return;
-    }
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
