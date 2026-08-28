@@ -55,6 +55,9 @@ export interface DeployConfig {
 
 // --- Deployment steps ---
 
+// Max wait for GDM/GNOME Shell to register on the session bus after boot/restart
+const GDM_READY_TIMEOUT_MS = 240_000;
+
 export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
   console.log("Waiting for GNOME Shell to register on D-Bus...");
@@ -66,7 +69,7 @@ export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   // Force the session-bus address: a non-interactive SSH session may lack the
   // session env, so gdbus --session wouldn't see the bus the GDM graphical
   // session registers gnome-shell on. Fall back to pgrep (bus-independent).
-  const deadline = t0 + 240_000;
+  const deadline = t0 + GDM_READY_TIMEOUT_MS;
   let ready = false;
   let i = 0;
   let lastOut = "";

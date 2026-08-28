@@ -640,7 +640,46 @@ function updateReferenceImages(run: RunContext): void {
     execSync(`cp "${transcriptionSrc}" "${transcriptionDst}"`, { encoding: "utf-8" });
     console.log(`  Copied: transcription → test-cases/${testCase}/`);
   }
+  
+  // Copy preferences screenshots
+  const prefsRefDir = join(CONFIG.paths.referencesDir, "preferences");
+  mkdirSync(prefsRefDir, { recursive: true });
+  const prefsNames = ["prefs-main", "prefs-scrolled-1", "prefs-scrolled-2", "prefs-scrolled-3", "prefs-after-add"];
+  for (const name of prefsNames) {
+    const src = join(run.outputDir, "preferences", `${name}.png`);
+    if (existsSync(src)) {
+      execSync(`cp "${src}" "${join(prefsRefDir, `screenshot-${name}.png")}"`, { encoding: "utf-8" });
+      console.log(`  Copied: ${name} → preferences/`);
+    }
+  }
 }
+/**
+ * Compare a captured screenshot against its reference in expected-qemu/preferences/.
+ * Fails if MSE >= threshold. Skips (logs) when no reference exists yet.
+ */
+async function compareWithReference(name: string, captured: string, run: RunContext): Promise<void> {
+  const referencePath = join(CONFIG.paths.referencesDir, "preferences", `screenshot-${name}.png`);
+  if (!existsSync(referencePath)) {
+    console.log(`  No reference for ${name}: ${referencePath} (run with --update to create)`);
+    return;
+  }
+  try {
+    const diffPath = join(run.outputDir, "preferences", `diff-${name}.png`);
+    const result = execSync(
+      `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1`,
+      { encoding: "utf-8", timeout: 10000 }
+    ).trim();
+    const mse = parseFloat(result);
+    if (mse >= 100) {
+      throw new Error(`Visual regression on ${name}: MSE=${mse} (threshold=100), diff: ${diffPath}`);
+    }
+    console.log(`  ${name}: MSE=${mse} (pass)`);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Visual regression")) throw err;
+    console.log(`  ${name} visual check failed: ${err}`);
+  }
+}
+
 /**
  * Run preferences screenshot tests.
  * Opens preferences and takes screenshots of each section.
@@ -769,6 +808,18 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   }
   console.log("  📷 Captured: prefs-after-add.png (should show E2E at top of list)");
   console.log(`  ✅ Screenshot verified: ${stats.size} bytes`);
+  
+  // Visual regression: compare each capture against its reference (if one exists)
+  const captures: Array<[string, string]> = [
+    ["prefs-main", mainPng],
+    ["prefs-scrolled-1", scroll1Png],
+    ["prefs-scrolled-2", scroll2Png],
+    ["prefs-scrolled-3", scroll3Png],
+    ["prefs-after-add", afterAddPng],
+  ];
+  for (const [name, captured] of captures) {
+    await compareWithReference(name, captured, run);
+  }
   
   // Close preferences window using dotool
   console.log("  Closing preferences window...");
