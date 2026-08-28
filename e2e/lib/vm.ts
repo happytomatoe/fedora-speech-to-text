@@ -182,7 +182,6 @@ export class VmManager {
     }
 
     await this.qemu.connect();
-    await this.qemu.connect();
     await this.resizeQemuWindow();
   }
   async waitForSsh(): Promise<void> {
@@ -234,7 +233,10 @@ export class VmManager {
     console.log(`  GDM login: ${Date.now() - t0}ms`);
 
     const t1 = Date.now();
-    const isGoldenDepsImage = this.config.baseImage.includes('golden-gnome-deps');
+    // ponytail: golden-gnome-deps.qcow2 (Aug 8) predates onnxruntime in the dep
+    // list (Aug 27) — image is stale, so deps are ALWAYS installed until the
+    // golden image is rebuilt. Restore the skip when image is refreshed.
+    const isGoldenDepsImage = false;
     if (this.config.skipDeps || isGoldenDepsImage) {
       const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
       console.log(`  Skipping installDependencies (${reason})`);
@@ -371,12 +373,13 @@ export class VmManager {
       if (check.exitCode !== 0) { console.log("  [xvfb] not found"); return false; }
     } catch { console.log("  [xvfb] not found"); return false; }
 
-    // Check if Xvfb is already running on :99 (use xdotool instead of xdpyinfo which may not be installed)
-    try {
-      Bun.spawnSync(["xdotool", "getdisplaygeometry", ":99"], { stdout: "pipe", stderr: "pipe" });
+    // Check if Xvfb is already running on :99 — probe the X socket directly.
+    // (xdotool inherits XAUTHORITY from the Wayland session and fails with
+    // "Authorization required" even when Xvfb is up.)
+    if (existsSync("/tmp/.X11-unix/X99")) {
       console.log("  [xvfb] already running on :99");
       return true;
-    } catch { /* not running, start it */ }
+    }
 
     this.xvfbProcess = Bun.spawn(
       ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac", "-nolisten", "tcp"],
@@ -387,9 +390,10 @@ export class VmManager {
     for (let i = 0; i < 20; i++) {
       if (this.xvfbProcess.exitCode !== null) { console.log("  [xvfb] failed to start"); return false; }
       try {
-        Bun.spawnSync(["xdotool", "getdisplaygeometry", ":99"], { stdout: "pipe", stderr: "pipe" });
-        console.log("  [xvfb] started on :99 (1920x1080)");
-        return true;
+        if (existsSync("/tmp/.X11-unix/X99")) {
+          console.log("  [xvfb] started on :99 (1920x1080)");
+          return true;
+        }
       } catch { /* ignore */ }
       await Bun.sleep(100);
     }
