@@ -2,7 +2,7 @@
 .provider-indicator-label {
     font-size: 10pt;
     font-weight: bold;
-    color: currentColor;  /* Adapts to theme (dark on light, light on dark) */
+    color: currentcolor;  /* Adapts to theme (dark on light, light on dark) */
     padding: 0 4px;
     min-width: 2ch;
 }

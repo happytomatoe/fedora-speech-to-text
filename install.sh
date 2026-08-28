@@ -182,10 +182,8 @@ fetch_latest_tag() {
 }
 
 install_python_service() {
-  if command_exists voice-to-text-dbus; then
-    echo "Python D-Bus service already installed, skipping."
-    return 0
-  fi
+  # Always (re)install: an existing binary does not guarantee it matches
+  # $LATEST_TAG / $LOCAL_SERVICE_DIR. uv tool install --force handles upgrades.
   echo ""
   echo "--- Installing Python D-Bus service ---"
   if [ -n "${LOCAL_SERVICE_DIR:-}" ]; then
@@ -418,11 +416,11 @@ fi
 # --- Main ---
 main() {
   detect_os
-  # Non-interactive/E2E: install only the extension. The python D-Bus service,
-  # dotool and OS deps are pre-provisioned by the golden test image, so we skip
-  # every network/sudo/uv/git step that would hang a headless SSH session.
-  if [ "${E2E:-0}" = "1" ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
-    echo "Non-interactive/E2E mode: installing extension only."
+  # Only the explicit --e2e mode skips the full install — the golden test image
+  # pre-provisions python-service/dotool. Plain NONINTERACTIVE (e.g. CI without
+  # a TTY) must still perform the full installation.
+  if [ "${E2E:-0}" = "1" ]; then
+    echo "E2E mode: installing extension only."
     install_gnome_extension
     enable_extension
     print_summary

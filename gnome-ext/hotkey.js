@@ -27,7 +27,7 @@ export function registerHotkey(name, settings, callback) {
     console.error(
       `VoiceToText: failed to register hotkey '${hotkeyValue}': ${e.message}`
     );
-    //TODO: add system notification
+    throw e; // let caller (extension) show the failure notification
   }
 }
 

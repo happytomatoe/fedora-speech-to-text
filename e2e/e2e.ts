@@ -637,8 +637,8 @@ async function verifyWithScreenshot(
       ).trim();
       
       const mse = parseFloat(result);
-      if (mse >= 100) {
-        return { passed: false, message: `Visual regression: MSE=${mse} (threshold=100)`, screenshot };
+      if (!Number.isFinite(mse) || mse >= 100) {
+        return { passed: false, message: `Visual regression: MSE=${result} (threshold=100)`, screenshot };
       }
       console.log(`  Visual regression: MSE=${mse} (pass)`);
     } catch (err) {
@@ -715,8 +715,8 @@ async function compareWithReference(name: string, captured: string, run: RunCont
     // compare prints "<mse> (<normalized>)" and exits 1 whenever images differ
     // (even negligibly) — parse stdout instead of relying on exit code.
     const mse = parseFloat(result);
-    if (mse >= 100) {
-      throw new Error(`Visual regression on ${name}: MSE=${mse} (threshold=100), diff: ${diffPath}`);
+    if (!Number.isFinite(mse) || mse >= 100) {
+      throw new Error(`Visual regression on ${name}: MSE=${result} (threshold=100), diff: ${diffPath}`);
     }
     console.log(`  ${name}: MSE=${mse} (pass)`);
   } catch (err) {
@@ -756,14 +756,29 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   );
   await Bun.sleep(1000);
   
+  // Capture a prefs screenshot: portal (guest-side, window-accurate) with
+  // QEMU screendump fallback. Returns local PNG path.
+  const capturePrefs = async (name: string): Promise<string> => {
+    const png = join(prefsDir, `${name}.png`);
+    const guestPng = `/tmp/${name}.png`;
+    const portalPath = await vm.shell.portalScreenshot(guestPng);
+    if (portalPath) {
+      execSync(`scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${guestPng} "${png}"`, { encoding: "utf-8" });
+      await vm.deployer.exec(`rm -f ${guestPng}`);
+    } else {
+      // Fallback: QEMU monitor screendump (full display)
+      const ppm = join(prefsDir, `${name}.ppm`);
+      await vm.qemu.screendump(ppm);
+      await Bun.sleep(500);
+      execSync(`convert "${ppm}" "${png}" 2>/dev/null || true`, { encoding: "utf-8" });
+      execSync(`rm -f "${ppm}"`, { encoding: "utf-8" });
+    }
+    console.log(`  📷 Captured: ${name}.png`);
+    return png;
+  };
+
   // Take screenshot of main preferences window
-  const mainPpm = join(prefsDir, "prefs-main.ppm");
-  const mainPng = join(prefsDir, "prefs-main.png");
-  await vm.qemu.screendump(mainPpm);
-  await Bun.sleep(500);
-  execSync(`convert "${mainPpm}" "${mainPng}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${mainPpm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-main.png");
+  const mainPng = await capturePrefs("prefs-main");
   
   // Scroll down to see more settings using dotool (works on Wayland)
   console.log("  Scrolling down to see more settings...");
@@ -778,13 +793,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   );
   await Bun.sleep(1000);
   
-  const scroll1Ppm = join(prefsDir, "prefs-scrolled-1.ppm");
-  const scroll1Png = join(prefsDir, "prefs-scrolled-1.png");
-  await vm.qemu.screendump(scroll1Ppm);
-  await Bun.sleep(500);
-  execSync(`convert "${scroll1Ppm}" "${scroll1Png}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${scroll1Ppm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-scrolled-1.png");
+  const scroll1Png = await capturePrefs("prefs-scrolled-1");
   
   // Scroll down more
   console.log("  Scrolling down more...");
@@ -793,13 +802,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   );
   await Bun.sleep(1000);
   
-  const scroll2Ppm = join(prefsDir, "prefs-scrolled-2.ppm");
-  const scroll2Png = join(prefsDir, "prefs-scrolled-2.png");
-  await vm.qemu.screendump(scroll2Ppm);
-  await Bun.sleep(500);
-  execSync(`convert "${scroll2Ppm}" "${scroll2Png}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${scroll2Ppm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-scrolled-2.png");
+  const scroll2Png = await capturePrefs("prefs-scrolled-2");
   
   // Scroll down even more
   console.log("  Scrolling down even more...");
@@ -808,13 +811,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   );
   await Bun.sleep(1000);
   
-  const scroll3Ppm = join(prefsDir, "prefs-scrolled-3.ppm");
-  const scroll3Png = join(prefsDir, "prefs-scrolled-3.png");
-  await vm.qemu.screendump(scroll3Ppm);
-  await Bun.sleep(500);
-  execSync(`convert "${scroll3Ppm}" "${scroll3Png}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${scroll3Ppm}"`, { encoding: "utf-8" });
-  console.log("  📷 Captured: prefs-scrolled-3.png");
+  const scroll3Png = await capturePrefs("prefs-scrolled-3");
   
   // Test adding a new word via the Add Word button
   console.log("  Testing Add Word functionality...");
@@ -835,13 +832,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   );
   await Bun.sleep(1000);
   
-  // Take screenshot after adding word
-  const afterAddPpm = join(prefsDir, "prefs-after-add.ppm");
-  const afterAddPng = join(prefsDir, "prefs-after-add.png");
-  await vm.qemu.screendump(afterAddPpm);
-  await Bun.sleep(500);
-  execSync(`convert "${afterAddPpm}" "${afterAddPng}" 2>/dev/null || true`, { encoding: "utf-8" });
-  execSync(`rm -f "${afterAddPpm}"`, { encoding: "utf-8" });
+  const afterAddPng = await capturePrefs("prefs-after-add");
   
   // Verify screenshot was captured and has content
   if (!existsSync(afterAddPng)) {
@@ -986,7 +977,7 @@ async function main(): Promise<void> {
       // Check snapshot BEFORE boot — with -loadvm the guest resumes directly
       // from the snapshot instead of doing a full boot.
       let t = Date.now();
-      preflight();
+      await preflight();
       const hasSnap = await vm.hasSnapshot("ready");
       let restored = false;
       

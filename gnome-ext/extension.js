@@ -277,7 +277,7 @@ export default class VoiceToTextExtension extends Extension {
             this._ensureInhibitor();
           }
         },
-        () => { } // ignore errors during init
+        (err) => { console.error('VoiceToText: initial GetStatus failed:', err); } // best-effort init sync
       );
     } catch (e) {
       console.error(

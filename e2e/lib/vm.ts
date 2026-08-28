@@ -34,6 +34,7 @@ export interface VmConfig {
 
 export class VmManager {
   process: ReturnType<typeof Bun.spawn> | null = null;
+  qemuProcessPid: number | null = null;
   booted = false;
   private freshlyBooted = false;
   qemu: QemuMonitor;
@@ -185,6 +186,11 @@ export class VmManager {
       throw new Error("QEMU monitor socket never appeared after 30s — QEMU may have failed to start");
     }
 
+    // Track the actual QEMU process, not the launcher shell — the shell exits
+    // immediately (trailing `&`), so killing it in shutdown() wouldn't stop QEMU.
+    const qemuPid = Bun.spawnSync(["pgrep", "-f", `qemu-system.*${overlayImage}`]).stdout.toString().trim().split("\n")[0];
+    this.qemuProcessPid = qemuPid ? Number(qemuPid) : null;
+
     await this.qemu.connect();
     await this.resizeQemuWindow();
   }
@@ -200,7 +206,7 @@ export class VmManager {
     });
   }
 
-  private async waitForSshHandshake(timeoutMs = 90000): Promise<void> {
+  async waitForSshHandshake(timeoutMs = 90000): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const res = Bun.spawnSync(
@@ -524,6 +530,9 @@ export class VmManager {
       await this.qemu.systemPowerdown();
       await Bun.sleep(5000);
     } finally {
+      if (this.qemuProcessPid) {
+        try { Bun.spawnSync(["kill", "-9", String(this.qemuProcessPid)]); } catch { /* already gone */ }
+      }
       this.process?.kill("SIGKILL");
       this.qemu.close();
       try {
