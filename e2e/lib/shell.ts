@@ -55,11 +55,18 @@ export class ShellHelper {
       if (!this.session) throw new Error("No session");
       const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
       const sshHost = `${this.session.sshUser}@${this.session.host}`;
-      return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
-        encoding: "utf-8",
-        timeout: timeoutMs,
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      try {
+        return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
+          encoding: "utf-8",
+          timeout: timeoutMs,
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
+      } catch (err) {
+        // Nonzero remote exit (e.g. `grep` with no match) — still return stdout
+        const e = err as { stdout?: string; status?: number };
+        if (typeof e.status === "number") return (e.stdout ?? "").trim();
+        throw err;
+      }
     };
     if (this._deployer) {
       try {
