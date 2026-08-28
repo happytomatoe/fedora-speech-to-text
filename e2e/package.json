@@ -7,7 +7,6 @@
     "test:update": "bun run e2e.ts --update"
   },
   "dependencies": {
-    "@microsoft/shell-use": "0.0.1-beta.5",
     "ssh2": "^1.17.0"
   },
   "devDependencies": {

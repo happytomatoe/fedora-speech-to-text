@@ -469,7 +469,7 @@ export class VmManager {
       try {
         await this.shell.close();
       } catch {
-        // Ignore — shell-use daemon may already be gone
+        // Ignore — connection may already be gone
       }
       await this.deployer.disconnect();
       return;
@@ -496,7 +496,7 @@ export class VmManager {
       try {
         await this.shell.close();
       } catch (err) {
-        // Ignore — shell-use daemon may already be gone (ECONNRESET on close)
+        // Ignore — connection may already be gone
         console.log(`  shell close warning: ${err instanceof Error ? err.message : err}`);
       }
       await this.deployer.disconnect();

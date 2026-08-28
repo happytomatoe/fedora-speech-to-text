@@ -62,7 +62,7 @@ export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
   console.log("Waiting for GNOME Shell to register on D-Bus...");
   // Poll for org.gnome.Shell on the session bus. Runs over plain SSH (no
-  // shell-use PTY), so a slow/contended VT can't trip the "prompt visible"
+  // plain SSH), so a slow/contended VT can't trip the "prompt visible"
   // waitText timeout that made the old shellExec path flaky. Polling (rather
   // than a single blocking `gdbus wait`) gives visible progress and a hard cap
   // so a slow boot can't look like an indefinite hang under host contention.

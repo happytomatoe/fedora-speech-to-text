@@ -1043,17 +1043,4 @@ async function main(): Promise<void> {
   }
 }
 
-// The shell-use daemon's close() can surface an ECONNRESET after the SSH
-// session is already torn down. All tests have finished by then — swallow the
-// unhandled rejection so it can't flip our exit code.
-process.on("unhandledRejection", (err) => {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes("ECONNRESET")) {
-    console.log(`Ignoring late ECONNRESET during teardown: ${msg}`);
-    return;
-  }
-  console.error("Unhandled rejection:", err);
-  process.exitCode = 1;
-});
-
 main();

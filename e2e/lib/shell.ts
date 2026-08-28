@@ -1,8 +1,17 @@
-import { ShellUse } from "@microsoft/shell-use";
 import { execSync } from "node:child_process";
 
+/**
+ * SSH-backed helper for running commands in the VM and driving the GNOME session.
+ *
+ * Previously this wrapped @microsoft/shell-use (a local PTY that SSH'd into the
+ * VM), but nothing needed the interactive terminal — every operation is a plain
+ * command that works over a normal SSH exec channel. The PTY layer added
+ * fragility (daemon crashes after GDM restart, ECONNRESET on close) with no
+ * benefit, so all commands now go through the persistent ssh2 Deployer
+ * connection, falling back to one-shot `ssh` CLI calls when no deployer is set.
+ */
+
 export interface ShellSession {
-  shell: ShellUse;
   sshKey: string;
   sshPort: number;
   sshUser: string;
@@ -16,7 +25,7 @@ export class ShellHelper {
   private dbusAddr: string | null = null;
   private _deployer: import("./deploy.js").Deployer | null = null;
 
-  /** Set deployer for fast SSH commands (avoids per-call connection overhead) */
+  /** Set deployer for fast persistent SSH commands */
   setDeployer(deployer: import("./deploy.js").Deployer): void {
     this._deployer = deployer;
   }
@@ -29,89 +38,31 @@ export class ShellHelper {
     cols?: number;
     rows?: number;
   }): Promise<ShellSession> {
-    // Retry shell-use daemon connection — it can crash after GDM restart
-    let lastErr: Error | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      let shell: ShellUse | null = null;
-      try {
-        shell = new ShellUse("e2e-ssh");
-        await shell.open({
-          cols: opts.cols ?? 120,
-          rows: opts.rows ?? 40,
-        });
-
-        const host = opts.host ?? "localhost";
-        await shell.submit(
-          `ssh -i ${opts.sshKey} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${opts.sshPort} ${opts.sshUser}@${host}`
-        );
-
-        // Wait for remote shell prompt (use a more specific pattern to avoid matching local prompt)
-        await shell.waitText(`${opts.sshUser}@localhost`, { timeout: 60000 });
-
-        this.session = { shell, ...opts, host };
-        return this.session;
-      } catch (err) {
-        lastErr = err as Error;
-        console.log(`  SSH session attempt ${attempt + 1} failed: ${lastErr.message}`);
-        // Close the failed instance to avoid resource leak
-        try {
-          await shell?.close();
-        } catch { /* ignore */ }
-        if (attempt < 2) {
-          // Kill any stale daemon session and wait before retry
-          // Scope the pkill to this specific session to avoid killing unrelated sessions
-          try {
-            execSync(`pkill -f 'shell-use.*e2e-ssh' 2>/dev/null || true`, { stdio: "pipe" });
-          } catch { /* ignore */ }
-          await Bun.sleep(3000);
-        }
-      }
-    }
-    throw lastErr ?? new Error("Failed to open SSH session after 3 attempts");
+    // Invalidate cached D-Bus address — the VM may have rebooted since the
+    // last session (GDM restart, snapshot restore).
+    this.dbusAddr = null;
+    this.session = {
+      sshKey: opts.sshKey,
+      sshPort: opts.sshPort,
+      sshUser: opts.sshUser,
+      host: opts.host ?? "localhost",
+    };
+    return this.session;
   }
 
   async exec(command: string, timeoutMs = 30000): Promise<string> {
+    if (this._deployer) {
+      const result = await this._deployer.exec(command);
+      return result.stdout.trim();
+    }
     if (!this.session) throw new Error("No session");
-
-    // Capture screen text before command
-    const before = await this.session.shell.text();
-    const beforeLen = before.length;
-
-    await this.session.shell.submit(command);
-    // Wait for the shell prompt to reappear after command completes
-    await this.session.shell.waitText(`${this.session.sshUser}@localhost`, { timeout: timeoutMs });
-
-    // Get full screen text after command
-    const after = await this.session.shell.text();
-    const afterLines = after.split("\n");
-
-    // Find the command in the output - look for the command followed by new output
-    // Use a more robust approach: find the line containing the command
-    let cmdLineIdx = -1;
-    for (let i = afterLines.length - 1; i >= 0; i--) {
-      if (afterLines[i].includes(command)) {
-        cmdLineIdx = i;
-        break;
-      }
-    }
-
-    if (cmdLineIdx >= 0) {
-      // Get everything after the command line
-      const outputLines = afterLines.slice(cmdLineIdx + 1);
-
-      // Remove trailing prompt lines (lines ending with $ or #)
-      while (
-        outputLines.length > 0 &&
-        /^\s*(?:\[[^\]]*\]\s*)?\S+@\S+(?:\s+\S+)*\s*[#$]\s*$/.test(outputLines[outputLines.length - 1])
-      ) {
-        outputLines.pop();
-      }
-
-      return outputLines.join("\n").trim();
-    }
-
-    // Fallback: return everything after the before text length
-    return after.slice(beforeLen).trim();
+    const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
+    const sshHost = `${this.session.sshUser}@${this.session.host}`;
+    return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
+      encoding: "utf-8",
+      timeout: timeoutMs,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
   }
 
   async dotoolCommand(command: string): Promise<void> {
@@ -138,13 +89,11 @@ export class ShellHelper {
     try {
       let raw: string;
       if (this._deployer) {
-        // Fast path: use persistent SSH connection (avoids ~6s per-call overhead)
         const result = await this._deployer.exec(
           `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
         );
         raw = result.stdout.trim();
       } else {
-        // Fallback: spawn new SSH connection
         const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
         const sshHost = `${this.session.sshUser}@${this.session.host}`;
         raw = execSync(
@@ -179,8 +128,6 @@ export class ShellHelper {
     try {
       const addr = await this.getShellDbusAddr();
       if (!addr) return;
-      // Use execSync directly (like tmuxCmd) to avoid shell.exec() screen capture
-      // interference during Activities dismiss
       const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
       const sshHost = `${this.session.sshUser}@${this.session.host}`;
       execSync(
@@ -201,10 +148,6 @@ export class ShellHelper {
     // Fall through — may already be dismissed
   }
 
-  /**
-   * Force-focus the terminal window using gio launch.
-   * This ensures the terminal receives keyboard input after Activities dismiss.
-   */
   /**
    * Focus the terminal window by clicking on it.
    * Does NOT use gio launch (that opens a new window).
@@ -227,7 +170,7 @@ export class ShellHelper {
   async waitActivitiesFullyClosed(timeoutMs = 5000): Promise<void> {
     const start = Date.now();
     let wasOpen = false;
-    
+
     while (Date.now() - start < timeoutMs) {
       const isOpen = await this.isActivitiesOpen();
       if (wasOpen && !isOpen) {
@@ -254,7 +197,7 @@ export class ShellHelper {
       ).trim();
 
       // Type a test character
-      await this.dotoolCommand("key shift+a");  // 'A' is visible, unlike space
+      await this.dotoolCommand("key shift+a"); // 'A' is visible, unlike space
       await Bun.sleep(200);
 
       // Get tmux content after
@@ -297,6 +240,7 @@ export class ShellHelper {
   resetRecordingState(): void {
     this.isRecording = false;
   }
+
   async waitForRecordingStart(timeoutMs = 10000): Promise<void> {
     const start = Date.now();
 
@@ -334,10 +278,6 @@ export class ShellHelper {
     throw new Error(`Timeout waiting for transcription (${timeoutMs}ms)`);
   }
 
-  async screenshot(path: string): Promise<void> {
-    if (!this.session) throw new Error("No session");
-    await this.session.shell.screenshot(path);
-  }
   /** Start GNOME Shell screencast via D-Bus. Returns the output filename. */
   async startScreencast(fileTemplate: string): Promise<string> {
     const result = await this.dbusExec(
@@ -359,16 +299,24 @@ export class ShellHelper {
   }
 
   async waitText(text: string, opts?: { timeout?: number }): Promise<void> {
-    if (!this.session) throw new Error("No session");
-    await this.session.shell.waitText(text, opts);
+    // Poll-based replacement for the shell-use PTY waitText: `exec` the command
+    // and wait for its output to contain `text`.
+    const timeout = opts?.timeout ?? 30000;
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const out = await this.exec(text, timeout);
+      if (out.includes(text)) return;
+      await Bun.sleep(200);
+    }
   }
 
   async close(): Promise<void> {
-    this.dbusAddr = null;  // Invalidate cached address
-    if (this.session) {
-      await this.session.shell.close();
-      this.session = null;
-    }
-
+    this.dbusAddr = null; // Invalidate cached address
+    this.session = null;
+  }
 }
+
+/** Quote a command for the ssh CLI (double-quoted, escaping inner double quotes). */
+function quote(s: string): string {
+  return `"${s.replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`")}"`;
 }
