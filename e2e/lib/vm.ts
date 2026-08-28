@@ -541,7 +541,7 @@ export class VmManager {
     desc: string,
     check: () => Promise<boolean>,
     timeoutMs: number,
-    intervalMs = 100
+    intervalMs = 1000
   ): Promise<void> {
     return pollUntil(desc, check, timeoutMs, intervalMs);
   }
