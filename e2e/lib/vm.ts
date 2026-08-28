@@ -466,7 +466,11 @@ export class VmManager {
     if (!this.booted) {
       console.log("VM was not started by this run, skipping shutdown");
       this.qemu.close();
-      await this.shell.close();
+      try {
+        await this.shell.close();
+      } catch {
+        // Ignore — shell-use daemon may already be gone
+      }
       await this.deployer.disconnect();
       return;
     }
@@ -489,7 +493,12 @@ export class VmManager {
     } finally {
       this.process?.kill("SIGKILL");
       this.qemu.close();
-      await this.shell.close();
+      try {
+        await this.shell.close();
+      } catch (err) {
+        // Ignore — shell-use daemon may already be gone (ECONNRESET on close)
+        console.log(`  shell close warning: ${err instanceof Error ? err.message : err}`);
+      }
       await this.deployer.disconnect();
     }
   }
