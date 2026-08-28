@@ -756,23 +756,17 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   );
   await Bun.sleep(1000);
   
-  // Capture a prefs screenshot: portal (guest-side, window-accurate) with
-  // QEMU screendump fallback. Returns local PNG path.
+  // Capture a prefs screenshot via QEMU monitor screendump (full display).
+  // CodeRabbit suggested portal/Shell.Screenshot here, but Eval is disabled
+  // in GNOME 50 and portal adds a permission dialog without window accuracy
+  // gains — screendump was correct all along.
   const capturePrefs = async (name: string): Promise<string> => {
     const png = join(prefsDir, `${name}.png`);
-    const guestPng = `/tmp/${name}.png`;
-    const portalPath = await vm.shell.portalScreenshot(guestPng);
-    if (portalPath) {
-      execSync(`scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${guestPng} "${png}"`, { encoding: "utf-8" });
-      await vm.deployer.exec(`rm -f ${guestPng}`);
-    } else {
-      // Fallback: QEMU monitor screendump (full display)
-      const ppm = join(prefsDir, `${name}.ppm`);
-      await vm.qemu.screendump(ppm);
-      await Bun.sleep(500);
-      execSync(`convert "${ppm}" "${png}" 2>/dev/null || true`, { encoding: "utf-8" });
-      execSync(`rm -f "${ppm}"`, { encoding: "utf-8" });
-    }
+    const ppm = join(prefsDir, `${name}.ppm`);
+    await vm.qemu.screendump(ppm);
+    await Bun.sleep(500);
+    execSync(`convert "${ppm}" "${png}" 2>/dev/null || true`, { encoding: "utf-8" });
+    execSync(`rm -f "${ppm}"`, { encoding: "utf-8" });
     console.log(`  📷 Captured: ${name}.png`);
     return png;
   };
