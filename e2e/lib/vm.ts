@@ -520,7 +520,16 @@ export class VmManager {
   }
 
   async pollForCommandOutput(command: string, expected: string, timeoutMs = 10000): Promise<void> {
-    return pollForCommandOutput(this.shell.exec.bind(this.shell), command, expected, timeoutMs);
+    const { sshExecAsync } = await import("./deploy-steps.js");
+    const cfg = this.config;
+    // Use one-shot ssh with swallow-on-failure: after snapshot restore the
+    // persistent deployer connection is dead and would throw every attempt.
+    return pollForCommandOutput(
+      (cmd) => sshExecAsync(cmd, cfg.sshKey, cfg.run.sshPort, cfg.sshUser),
+      command,
+      expected,
+      timeoutMs
+    );
   }
 
   // --- Private ---

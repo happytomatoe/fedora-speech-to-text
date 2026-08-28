@@ -28,6 +28,15 @@ export function sshExec(command: string, sshKey: string, sshPort: number, sshUse
   throw lastErr!;
 }
 
+/** Async sshExec variant for use inside async poll loops. */
+export async function sshExecAsync(command: string, sshKey: string, sshPort: number, sshUser = "testuser"): Promise<string> {
+  try {
+    return sshExec(command, sshKey, sshPort, sshUser);
+  } catch {
+    return ""; // Poll callers treat empty output as "not ready yet"
+  }
+}
+
 export function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
