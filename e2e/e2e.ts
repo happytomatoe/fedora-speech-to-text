@@ -648,7 +648,7 @@ function updateReferenceImages(run: RunContext): void {
   for (const name of prefsNames) {
     const src = join(run.outputDir, "preferences", `${name}.png`);
     if (existsSync(src)) {
-      execSync(`cp "${src}" "${join(prefsRefDir, `screenshot-${name}.png")}"`, { encoding: "utf-8" });
+      execSync(`cp "${src}" "${prefsRefDir}/screenshot-${name}.png"`, { encoding: "utf-8" });
       console.log(`  Copied: ${name} → preferences/`);
     }
   }
