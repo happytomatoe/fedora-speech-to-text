@@ -138,6 +138,9 @@ Edit [`config.yaml`](./config.yaml)
 
 - The diff-based incremental typing algorithm in [`gnome-ext/typer.js`](./gnome-ext/typer.js) is inspired by [nerd-dictation](https://github.com/ideasman42/nerd-dictation)
 
+## Alternatives 
+- [Speed of sound](https://flathub.org/en/apps/io.speedofsound.SpeedOfSound)
+
 ## License
 
 MIT
