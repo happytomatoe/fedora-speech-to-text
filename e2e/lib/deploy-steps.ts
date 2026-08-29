@@ -388,7 +388,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   } catch {
     // Ignore — may not be running
   }
-  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
+  await shell.exec("export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; nohup dotoold &>/tmp/dotoold.log &", 10000).catch(() => {});
   await pollUntilFn(
     "dotool pipe",
     async () => {
