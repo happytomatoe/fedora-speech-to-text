@@ -1,10 +1,5 @@
 version: 1
 
-quality:
-  # Defaults (maxFunctionLoc: 80, maxFileLoc: 400) per PR review — remaining
-  # over-limit functions are tracked for gradual extraction.
-  maxFileLoc: 400
-
 rules:
   # GNOME Shell extension logs to the Shell journal via console.* — that IS the
   # GJS logging convention; oxlint no-console is already off for gnome-ext/.
