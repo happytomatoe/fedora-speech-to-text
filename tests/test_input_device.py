@@ -33,7 +33,7 @@ def _start_with_mock(device, fail_first=False):
                 raise RuntimeError("pipewire unavailable")
         return MagicMock()
 
-    with patch("voice_to_text.engine.sd.InputStream", side_effect=fake_input_stream):
+    with patch("voice_to_text.recorder.sd.InputStream", side_effect=fake_input_stream):
         rec = AsyncAudioRecorder(device=device, sample_rate=16000)
         fd, path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
