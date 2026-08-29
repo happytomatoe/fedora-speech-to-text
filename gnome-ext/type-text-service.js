@@ -15,148 +15,146 @@ const TypeTextIface = `
 </node>`;
 
 export class TypeTextService {
-  constructor() {
-    this._virtualKeyboard = null;
-    this._dbusImpl = null;
-    this._ownerId = null;
-  }
-
-  enable() {
-    try {
-      const backend = Clutter.get_default_backend();
-      const seat = backend.get_default_seat();
-      this._virtualKeyboard = seat.create_virtual_device(
-        Clutter.InputDeviceType.KEYBOARD_DEVICE
-      );
-      if (this._virtualKeyboard) {
-        console.debug('VoiceToText: TypeText virtual keyboard obtained');
-      } else {
-        console.debug(
-          'VoiceToText: TypeText virtual keyboard not available'
-        );
-      }
-    } catch (e) {
-      console.error(
-        'VoiceToText: TypeText failed to get virtual keyboard:',
-        e
-      );
-      //TODO: Add system notification
+    constructor() {
+        this._virtualKeyboard = null;
+        this._dbusImpl = null;
+        this._ownerId = null;
     }
 
-    try {
-      //TODO: Refactor for clarity
-      this._ownerId = Gio.bus_own_name(
-        Gio.BusType.SESSION,
-        'com.happytomatoe.TypeText',
-        Gio.BusNameOwnerFlags.NONE,
-        (connection, _name) => {
-          try {
-            this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(
-              TypeTextIface,
-              this
+    enable() {
+        try {
+            const backend = Clutter.get_default_backend();
+            const seat = backend.get_default_seat();
+            this._virtualKeyboard = seat.create_virtual_device(
+                Clutter.InputDeviceType.KEYBOARD_DEVICE
             );
-            this._dbusImpl.export(
-              connection,
-              '/com/happytomatoe/TypeText'
-            );
-          } catch (e) {
+            if (this._virtualKeyboard) {
+                console.log('[VoiceToText] TypeText virtual keyboard obtained');
+            } else {
+                console.log('[VoiceToText] TypeText virtual keyboard not available');
+            }
+        } catch (e) {
             console.error(
-              'VoiceToText: TypeText D-Bus export failed:',
-              e
+                'VoiceToText: TypeText failed to get virtual keyboard:',
+                e
             );
-          }
-        },
-        (connection, name) => {
-          console.debug(`VoiceToText: bus name acquired: ${name}`);
-        },
-        (connection, _name) => {
-          console.error(`VoiceToText: bus name lost: ${_name}`);
+            //TODO: Add system notification
         }
-      );
-    } catch (e) {
-      console.error('VoiceToText: bus_own_name failed:', e);
-      //TODO: At system notification
-    }
-  }
 
-  disable() {
-    if (this._dbusImpl) {
-      this._dbusImpl.unexport();
-      this._dbusImpl = null;
-    }
-    if (this._ownerId) {
-      Gio.bus_unown_name(this._ownerId);
-      this._ownerId = null;
-    }
-    this._virtualKeyboard = null;
-    this._savedClipboard = null;
-  }
-
-  TypeText(text) {
-    if (!this._virtualKeyboard) {
-      return;
-    }
-    try {
-      let time = Clutter.get_current_event_time() * 1000;
-      for (const char of text) {
-        if (char === '\n') {
-          this._virtualKeyboard.notify_keyval(
-            time++,
-            Clutter.KEY_Return,
-            Clutter.KeyState.PRESSED
-          );
-          this._virtualKeyboard.notify_keyval(
-            time++,
-            Clutter.KEY_Return,
-            Clutter.KeyState.RELEASED
-          );
-        } else if (char === '\x08') {
-          // Handle backspace (U+0008) for diff-correction
-          this._virtualKeyboard.notify_keyval(
-            time++,
-            Clutter.KEY_BackSpace,
-            Clutter.KeyState.PRESSED
-          );
-          this._virtualKeyboard.notify_keyval(
-            time++,
-            Clutter.KEY_BackSpace,
-            Clutter.KeyState.RELEASED
-          );
-        } else {
-          const keyval = Clutter.unicode_to_keysym(
-            char.codePointAt(0)
-          );
-          if (keyval !== 0) {
-            this._virtualKeyboard.notify_keyval(
-              time++,
-              keyval,
-              Clutter.KeyState.PRESSED
+        try {
+            //TODO: Refactor for clarity
+            this._ownerId = Gio.bus_own_name(
+                Gio.BusType.SESSION,
+                'com.happytomatoe.TypeText',
+                Gio.BusNameOwnerFlags.NONE,
+                (connection, _name) => {
+                    try {
+                        this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(
+                            TypeTextIface,
+                            this
+                        );
+                        this._dbusImpl.export(
+                            connection,
+                            '/com/happytomatoe/TypeText'
+                        );
+                    } catch (e) {
+                        console.error(
+                            'VoiceToText: TypeText D-Bus export failed:',
+                            e
+                        );
+                    }
+                },
+                (connection, name) => {
+                    console.log(`[VoiceToText] bus name acquired: ${name}`);
+                },
+                (connection, _name) => {
+                    console.error(`VoiceToText: bus name lost: ${_name}`);
+                }
             );
-            this._virtualKeyboard.notify_keyval(
-              time++,
-              keyval,
-              Clutter.KeyState.RELEASED
-            );
-          }
+        } catch (e) {
+            console.error('VoiceToText: bus_own_name failed:', e);
+            //TODO: At system notification
         }
-      }
-    } catch (e) {
-      console.error('VoiceToText: TypeText failed:', e);
     }
-  }
 
-  CommitText(text) {
-    if (!Main.inputMethod.currentFocus) {
-      console.error(
-        'VoiceToText: CommitText failed: no focused input context'
-      );
-      throw new Error('No focused input context');
+    disable() {
+        if (this._dbusImpl) {
+            this._dbusImpl.unexport();
+            this._dbusImpl = null;
+        }
+        if (this._ownerId) {
+            Gio.bus_unown_name(this._ownerId);
+            this._ownerId = null;
+        }
+        this._virtualKeyboard = null;
+        this._savedClipboard = null;
     }
-    try {
-      Main.inputMethod.commit(text);
-    } catch (e) {
-      console.error('VoiceToText: CommitText failed:', e);
-      throw e;
+
+    TypeText(text) {
+        if (!this._virtualKeyboard) {
+            return;
+        }
+        try {
+            let time = Clutter.get_current_event_time() * 1000;
+            for (const char of text) {
+                if (char === '\n') {
+                    this._virtualKeyboard.notify_keyval(
+                        time++,
+                        Clutter.KEY_Return,
+                        Clutter.KeyState.PRESSED
+                    );
+                    this._virtualKeyboard.notify_keyval(
+                        time++,
+                        Clutter.KEY_Return,
+                        Clutter.KeyState.RELEASED
+                    );
+                } else if (char === '\x08') {
+                    // Handle backspace (U+0008) for diff-correction
+                    this._virtualKeyboard.notify_keyval(
+                        time++,
+                        Clutter.KEY_BackSpace,
+                        Clutter.KeyState.PRESSED
+                    );
+                    this._virtualKeyboard.notify_keyval(
+                        time++,
+                        Clutter.KEY_BackSpace,
+                        Clutter.KeyState.RELEASED
+                    );
+                } else {
+                    const keyval = Clutter.unicode_to_keysym(
+                        char.codePointAt(0)
+                    );
+                    if (keyval !== 0) {
+                        this._virtualKeyboard.notify_keyval(
+                            time++,
+                            keyval,
+                            Clutter.KeyState.PRESSED
+                        );
+                        this._virtualKeyboard.notify_keyval(
+                            time++,
+                            keyval,
+                            Clutter.KeyState.RELEASED
+                        );
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('VoiceToText: TypeText failed:', e);
+        }
     }
-  }
+
+    CommitText(text) {
+        if (!Main.inputMethod.currentFocus) {
+            console.error(
+                'VoiceToText: CommitText failed: no focused input context'
+            );
+            throw new Error('No focused input context');
+        }
+        try {
+            Main.inputMethod.commit(text);
+        } catch (e) {
+            console.error('VoiceToText: CommitText failed:', e);
+            throw e;
+        }
+    }
 }
