@@ -344,21 +344,9 @@ class WebSocketStreamingProvider(StreamingProvider):
 
         try:
             await self._ws.send(json.dumps({"type": "CloseStream"}))
-            try:
-                async with asyncio.timeout(2.0):
-                    while True:
-                        msg = await self._ws.recv()
-                        if isinstance(msg, str):
-                            data = json.loads(msg)
-                            msg_type = data.get("type", "")
-                            if msg_type == "Results":
-                                channel = data.get("channel", {})
-                                alternatives = channel.get("alternatives", [{}])
-                                transcript = alternatives[0].get("transcript", "") if alternatives else ""
-                                if transcript:
-                                    self._finalized_text = (self._finalized_text + " " + transcript).strip()
-            except TimeoutError as e:
-                logger.debug("Timeout draining %s stream during close: %s", self.name, e)
+            await asyncio.wait_for(self._drain_final_transcripts(), timeout=2.0)
+        except TimeoutError as e:
+            logger.debug("Timeout draining %s stream during close: %s", self.name, e)
         except Exception as e:
             logger.warning("Error closing %s stream: %s", self.name, e)
         finally:
@@ -371,6 +359,22 @@ class WebSocketStreamingProvider(StreamingProvider):
         self._partial_result = None
         self._finalized_text = ""
         return result
+
+    async def _drain_final_transcripts(self) -> None:
+        """Collect remaining final transcripts until the server closes the stream."""
+        assert self._ws is not None
+        while True:
+            msg = await self._ws.recv()
+            if not isinstance(msg, str):
+                continue
+            data = json.loads(msg)
+            if data.get("type", "") != "Results":
+                continue
+            channel = data.get("channel") or {}
+            alternatives = channel.get("alternatives") or []
+            transcript = alternatives[0].get("transcript", "") if alternatives else ""
+            if transcript:
+                self._finalized_text = (self._finalized_text + " " + transcript).strip()
 
     async def _process_messages(self) -> None:
         if self._ws is None:
