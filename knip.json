@@ -34,5 +34,6 @@
   "ignore": [
     "gnome-ext/vendor/**",
     "gnome-ext/**"
-  ]
+  ],
+  "ignoreExportsUsedInFile": true
 }
