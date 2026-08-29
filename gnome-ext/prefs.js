@@ -147,7 +147,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         addSpinRow(
             _('Stop Timeout'),
             _(
-                'Seconds to wait for the recording process to stop before forcing it'
+                'Seconds to wait for recording process to stop before forcing it'
             ),
             1,
             120,

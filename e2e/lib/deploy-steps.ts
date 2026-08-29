@@ -200,6 +200,9 @@ export async function deployExtension(
 #!/bin/bash
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
+dconf write /org/gnome/shell/extensions/voice-to-text/show-audio-level-widget "true"
+dconf write /org/gnome/shell/extensions/voice-to-text/inhibit-sleep "true"
+dconf write /org/gnome/shell/extensions/voice-to-text/stop-timeout-seconds "120"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
