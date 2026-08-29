@@ -8,6 +8,7 @@ import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import {
   DeployConfig,
   waitForGdmLogin,
+  ensureGdmAutologin,
   installDependencies,
   deployExtension,
   deployPythonSource,
@@ -256,6 +257,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
+      await ensureGdmAutologin(this.deployer, this.config.sshUser);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
@@ -304,6 +306,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
+      await ensureGdmAutologin(this.deployer, this.config.sshUser);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
