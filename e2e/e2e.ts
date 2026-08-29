@@ -1,6 +1,8 @@
 import { ensureParakeet } from "./lib/parakeet.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { PNG } from "pngjs";
+import pixelmatch from "pixelmatch";
 import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
@@ -709,25 +711,35 @@ function updateReferenceImages(run: RunContext): void {
  * Compare a captured screenshot against its reference.
  * Throws if MSE >= threshold or reference/capture missing.
  */
+/**
+ * Compare a captured screenshot against its reference using pixelmatch
+ * (mapbox/pixelmatch — the standard screenshot-diff library, ~150 LOC, no deps).
+ * Throws on missing reference/capture, size mismatch, or diff-pixel ratio >= 1%.
+ */
 function assertScreenshotMatches(referencePath: string, captured: string, run: RunContext, label: string): void {
   if (!existsSync(referencePath)) throw new Error(`No reference image for ${label}: ${referencePath} (run with --update to create)`);
-  if (!captured) throw new Error(`${label} capture missing — cannot compare`);
-  const diffPath = join(run.outputDir, "test-cases", getTestCaseName(), `diff-${label}.png`);
-  require("node:fs").mkdirSync(require("node:path").dirname(diffPath), { recursive: true });
-  const result = execSync(
-    `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1 || true`,
-    { encoding: "utf-8", timeout: 10000 }
-  ).trim();
-  const mse = parseFloat(result);
-  if (!Number.isFinite(mse) || mse >= 100) {
-    throw new Error(`${label}: MSE=${result} (threshold=100), diff: ${diffPath}`);
+  if (!captured || !existsSync(captured)) throw new Error(`${label} capture missing — cannot compare`);
+  const imgRef = PNG.sync.read(readFileSync(referencePath));
+  const imgAct = PNG.sync.read(readFileSync(captured));
+  if (imgRef.width !== imgAct.width || imgRef.height !== imgAct.height) {
+    throw new Error(`${label}: size mismatch — reference ${imgRef.width}x${imgRef.height} vs actual ${imgAct.width}x${imgAct.height}`);
   }
-  console.log(`  ${label}: MSE=${mse} (pass)`);
+  const diff = new PNG({ width: imgRef.width, height: imgRef.height });
+  const diffPixels = pixelmatch(imgRef.data, imgAct.data, diff.data, imgRef.width, imgRef.height, { threshold: 0.1 });
+  const ratio = diffPixels / (imgRef.width * imgRef.height);
+  const diffPath = join(run.outputDir, "test-cases", getTestCaseName(), `diff-${label}.png`);
+  mkdirSync(require("node:path").dirname(diffPath), { recursive: true });
+  writeFileSync(diffPath, PNG.sync.write(diff));
+  if (ratio >= 0.01) {
+    throw new Error(`${label}: diff-pixel ratio=${(ratio * 100).toFixed(3)}% (${diffPixels} px, threshold=1%), diff: ${diffPath}`);
+  }
+  console.log(`  ${label}: diff=${(ratio * 100).toFixed(3)}% (${diffPixels} px, pass)`);
 }
 
 /**
- * Compare a captured screenshot against its reference in expected-qemu/preferences/.
- * Fails if MSE >= threshold. Skips (logs) when no reference exists yet.
+ * Compare a captured screenshot against its reference in expected-qemu/preferences/
+ * using pixelmatch. Throws if diff-pixel ratio >= 1%. Skips (logs) when no
+ * reference exists yet.
  */
 async function compareWithReference(name: string, captured: string, run: RunContext): Promise<void> {
   const referencePath = join(CONFIG.paths.referencesDir, "preferences", `screenshot-${name}.png`);
@@ -736,20 +748,9 @@ async function compareWithReference(name: string, captured: string, run: RunCont
     return;
   }
   try {
-    const diffPath = join(run.outputDir, "preferences", `diff-${name}.png`);
-    const result = execSync(
-      `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1 || true`,
-      { encoding: "utf-8", timeout: 10000 }
-    ).trim();
-    // compare prints "<mse> (<normalized>)" and exits 1 whenever images differ
-    // (even negligibly) — parse stdout instead of relying on exit code.
-    const mse = parseFloat(result);
-    if (!Number.isFinite(mse) || mse >= 100) {
-      throw new Error(`Visual regression on ${name}: MSE=${result} (threshold=100), diff: ${diffPath}`);
-    }
-    console.log(`  ${name}: MSE=${mse} (pass)`);
+    assertScreenshotMatches(referencePath, captured, run, name);
   } catch (err) {
-    if (err instanceof Error && err.message.includes("Visual regression")) throw err;
+    if (err instanceof Error && err.message.includes("diff-pixel ratio")) throw err;
     console.log(`  ${name} visual check failed: ${err}`);
   }
 }
