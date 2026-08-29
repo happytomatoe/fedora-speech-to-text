@@ -295,8 +295,8 @@ class AsyncAudioRecorder:
                 selection.included_seconds,
                 filepath,
             )
-        except Exception as e:
-            logger.warning("Failed to prepend preroll audio to WAV file: %s", e)
+        except Exception:
+            logger.warning("Failed to prepend preroll audio to WAV file", exc_info=True)
 
     def stop_and_delete(self) -> None:
         """Stop recording and delete the audio file."""
