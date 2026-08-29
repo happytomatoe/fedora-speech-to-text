@@ -59,7 +59,10 @@ When adding or removing an output method, update ALL of these files:
 
 - **ruff** for lint/format: `ruff check .`, `ruff format .` (line-length 120, py313).
 - **pyright** for types: `pyright .`.
-- **bun** + **eslint** for GNOME extension JS linting (see `eslint.config.cjs`).
+- **oxlint** for GNOME extension JS linting (see `.oxlintrc.json`): `npx oxlint gnome-ext/`.
+- **knip** for unused JS/TS exports/deps: `bunx knip` (config: `knip.json`).
+- **vulture** for Python dead code (pre-push): `uv run vulture src/ --min-confidence 80`.
+- **aislop** for AI-slop/code-quality gate: `aislop scan` (pinned 0.15.0; config: `.aislop/config.yml`). Not in hooks — run manually or in CI.
 - **lefthook** is configured (see `lefthook.yml`); run `lefthook run pre-commit` or `just setup` to install hooks.
 
 ## GNOME Extension Development
@@ -75,7 +78,7 @@ When modifying files in `gnome-ext/`:
 2. **Lint** — run JS linting:
 
    ```sh
-   bun run eslint gnome-ext/   # or specific file
+   npx oxlint gnome-ext/   # or specific file
    ```
 
 3. **Visual testing** — if you need to see the UI:
