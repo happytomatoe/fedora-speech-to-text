@@ -1,5 +1,6 @@
 import net from "node:net";
 import { EventEmitter } from "node:events";
+import { setTimeout as sleepMs } from "node:timers/promises";
 
 /**
  * QEMU Human Monitor (HMP) client via Unix socket.
@@ -24,6 +25,30 @@ export class QemuMonitor extends EventEmitter {
    * Waits for the initial "(qemu) " prompt.
    */
   async connect(timeoutMs = 10000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let lastErr: Error | null = null;
+    // ECONNREFUSED/ENOENT on the first attempts is normal: the socket file may
+    // be stale (dead QEMU) or not yet re-created by the starting QEMU. Retry
+    // until the deadline; only a total timeout is fatal.
+    while (Date.now() < deadline) {
+      try {
+        await this.connectOnce(Math.max(1000, deadline - Date.now()));
+        return;
+      } catch (err) {
+        lastErr = err instanceof Error ? err : new Error(String(err));
+        const retryable =
+          lastErr.message.includes("ECONNREFUSED") ||
+          lastErr.message.includes("ENOENT") ||
+          lastErr.message.includes("Connection timeout") ||
+          lastErr.message.includes("Socket closed before QEMU prompt");
+        if (!retryable) throw lastErr;
+        await sleepMs(250);
+      }
+    }
+    throw lastErr ?? new Error(`Connection timeout after ${timeoutMs}ms`);
+  }
+
+  private connectOnce(timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const sock = net.createConnection(this.sockPath);
       let settled = false;
