@@ -543,7 +543,7 @@ function getScreenshotPath(label: string, testCase?: string, outputDir = OUTPUT_
 /**
  * Capture screenshot via QEMU monitor and save as PNG.
  */
-async function captureScreenshot(label: string, run: RunContext): Promise<string> {
+async function captureScreenshot(label: string, run: RunContext, vm?: VmManager): Promise<string> {
   const testCase = getTestCaseName();
   const pngPath = getScreenshotPath(label, testCase, run.outputDir);
   const ppmPath = pngPath.replace(/\.png$/, ".ppm");
@@ -553,11 +553,18 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
   require("node:fs").mkdirSync(dir, { recursive: true });
   
   try {
-    // Use QEMU monitor to capture screenshot
-    execSync(
-      `echo "screendump ${ppmPath}" | nc -U ${run.socketPath} -w 2`,
-      { encoding: "utf-8", timeout: 5000 }
-    );
+    // Use QemuMonitor (HMP over the monitor socket). The previous `nc -U
+    // <socket> -w 2` approach silently fails with Fedora's nc — it exits 0
+    // without connecting, so no PPM was ever produced and convert wrote
+    // nothing — yet "Screenshot saved" was still logged.
+    if (vm) {
+      await vm.qemu.screendump(ppmPath);
+    } else {
+      execSync(
+        `echo "screendump ${ppmPath}" | nc -U ${run.socketPath} -w 2`,
+        { encoding: "utf-8", timeout: 5000 }
+      );
+    }
     // Wait for file to be written
     await Bun.sleep(500);
     // Convert PPM to PNG
@@ -567,6 +574,10 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
     });
     // Clean up PPM
     execSync(`rm -f ${ppmPath}`, { encoding: "utf-8" });
+    if (!existsSync(pngPath)) {
+      console.log(`  Screenshot capture failed: screendump produced no PNG at ${pngPath}`);
+      return "";
+    }
     console.log(`  Screenshot saved: ${pngPath}`);
     return pngPath;
   } catch (err) {
@@ -621,7 +632,7 @@ async function verifyWithScreenshot(
   const testCase = getTestCaseName();
   
   // Capture screenshot
-  const screenshot = await captureScreenshot("05-transcription-received", run);
+  const screenshot = await captureScreenshot("05-transcription-received", run, vm);
   
   // Verify via file (primary method)
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
