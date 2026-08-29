@@ -119,20 +119,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     );
     recordingGroup.add(showAudioLevelRow);
 
-    makeSpinRow({
-      title: _('Stop Timeout'),
-      subtitle: _(
-        'Seconds to wait for recording process to stop before forcing it'
-      ),
-      lower: 1,
-      upper: 120,
-      step: 1,
-      key: 'stop-timeout-seconds',
-      settings,
-      group: recordingGroup,
-      onSync: _syncAllToConfig,
-    });
-
     const inhibitSleepRow = new Adw.SwitchRow({
       title: _('Inhibit Sleep During Recording'),
       subtitle: _('Prevent the system from sleeping while recording'),
@@ -145,19 +131,36 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     );
     recordingGroup.add(inhibitSleepRow);
 
-    makeSpinRow({
-      title: _('Decrease Speaker Volume'),
-      subtitle: _(
-        'Reduce speaker output volume during recording (0=no change, 100=mute)'
-      ),
-      lower: 0,
-      upper: 100,
-      step: 5,
-      key: 'decrease-speaker-volume',
-      settings,
-      group: recordingGroup,
-      onSync: _syncAllToConfig,
-    });
+    const spinSpecs = [
+      {
+        title: _('Stop Timeout'),
+        subtitle: _(
+          'Seconds to wait for recording process to stop before forcing it'
+        ),
+        lower: 1,
+        upper: 120,
+        step: 1,
+        key: 'stop-timeout-seconds',
+      },
+      {
+        title: _('Decrease Speaker Volume'),
+        subtitle: _(
+          'Reduce speaker output volume during recording (0=no change, 100=mute)'
+        ),
+        lower: 0,
+        upper: 100,
+        step: 5,
+        key: 'decrease-speaker-volume',
+      },
+    ];
+    for (const spec of spinSpecs) {
+      makeSpinRow({
+        ...spec,
+        settings,
+        group: recordingGroup,
+        onSync: _syncAllToConfig,
+      });
+    }
 
     const languageRow = new Adw.ActionRow({
       title: _('Language'),
