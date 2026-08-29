@@ -633,29 +633,28 @@ async function verifyWithScreenshot(
     return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
   }
   
-  // Check visual regression (if reference exists)
+  // Check visual regression (reference is mandatory unless --update populates it)
   const referencePath = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
-  if (existsSync(referencePath) && screenshot) {
-    try {
-      const diffPath = join(run.outputDir, "test-cases", testCase, "diff.png");
-      const diffDir = require("node:path").dirname(diffPath);
-      require("node:fs").mkdirSync(diffDir, { recursive: true });
-      
-      const result = execSync(
-        `compare -metric MSE "${referencePath}" "${screenshot}" "${diffPath}" 2>&1 || true`,
-        { encoding: "utf-8", timeout: 10000 }
-      ).trim();
-      
-      const mse = parseFloat(result);
-      if (!Number.isFinite(mse) || mse >= 100) {
-        return { passed: false, message: `Visual regression: MSE=${result} (threshold=100)`, screenshot };
+  if (UPDATE_MODE) {
+    if (!existsSync(referencePath)) {
+      console.log(`  No reference image yet (will be created by --update): ${referencePath}`);
+    } else if (screenshot) {
+      try {
+        assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
+      } catch (err) {
+        return { passed: false, message: (err as Error).message, screenshot };
       }
-      console.log(`  Visual regression: MSE=${mse} (pass)`);
-    } catch (err) {
-      console.log(`  Visual regression check failed: ${err}`);
     }
+  } else if (!screenshot) {
+    return { passed: false, message: "Screenshot capture failed — cannot run visual regression", screenshot };
   } else if (!existsSync(referencePath)) {
-    console.log(`  No reference image for visual regression: ${referencePath}`);
+    return { passed: false, message: `No reference image for visual regression: ${referencePath} (run with --update to create)`, screenshot };
+  } else {
+    try {
+      assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
+    } catch (err) {
+      return { passed: false, message: (err as Error).message, screenshot };
+    }
   }
   
   return { passed: true, message: "Text matches expected output", screenshot };
@@ -706,6 +705,26 @@ function updateReferenceImages(run: RunContext): void {
     }
   }
 }
+/**
+ * Compare a captured screenshot against its reference.
+ * Throws if MSE >= threshold or reference/capture missing.
+ */
+function assertScreenshotMatches(referencePath: string, captured: string, run: RunContext, label: string): void {
+  if (!existsSync(referencePath)) throw new Error(`No reference image for ${label}: ${referencePath} (run with --update to create)`);
+  if (!captured) throw new Error(`${label} capture missing — cannot compare`);
+  const diffPath = join(run.outputDir, "test-cases", getTestCaseName(), `diff-${label}.png`);
+  require("node:fs").mkdirSync(require("node:path").dirname(diffPath), { recursive: true });
+  const result = execSync(
+    `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1 || true`,
+    { encoding: "utf-8", timeout: 10000 }
+  ).trim();
+  const mse = parseFloat(result);
+  if (!Number.isFinite(mse) || mse >= 100) {
+    throw new Error(`${label}: MSE=${result} (threshold=100), diff: ${diffPath}`);
+  }
+  console.log(`  ${label}: MSE=${mse} (pass)`);
+}
+
 /**
  * Compare a captured screenshot against its reference in expected-qemu/preferences/.
  * Fails if MSE >= threshold. Skips (logs) when no reference exists yet.
