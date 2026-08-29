@@ -79,8 +79,11 @@ process.on("unhandledRejection", (err) => {
 // snapshot mode can be re-enabled by flipping this to !NO_SNAPSHOT once
 // savevm/loadvm are verified against the current display config.
 const NO_SNAPSHOT = args.includes("--no-snapshot");
+// --no-save-snapshot: restore an existing snapshot but never save/update it
+// (default for routine runs — snapshot saving is opt-in via --save-snapshot).
+const NO_SAVE_SNAPSHOT = args.includes("--no-save-snapshot") || !args.includes("--save-snapshot");
 // ponytail: snapshots disabled pending savevm/loadvm verification on non-GL display — flip to !NO_SNAPSHOT after verifying, remove stale comment
-const SNAPSHOT_MODE = true; // TEMP: Phase 1 verification of savevm/loadvm on non-GL gtk display — revert or replace with !NO_SNAPSHOT after verifying (plan: thoughts/shared/plans/re-enable-e2e-snapshots.md)
+const SNAPSHOT_MODE = !NO_SNAPSHOT; // TEMP: Phase 1 verification of savevm/loadvm on non-GL gtk display — revert or replace with !NO_SNAPSHOT after verifying (plan: thoughts/shared/plans/re-enable-e2e-snapshots.md)
 const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
@@ -1000,7 +1003,9 @@ async function main(): Promise<void> {
           { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
           { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
           { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
-          { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
+          ...(NO_SAVE_SNAPSHOT
+            ? []
+            : [{ name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") }]),
         ]);
         timing("deploy-and-save-snapshot", t);
       } else {
