@@ -154,6 +154,12 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             1,
             'stop-timeout-seconds'
         );
+        addSwitchRow(
+            _('Inhibit Sleep During Recording'),
+            _('Prevent the system from sleeping while recording'),
+            'inhibit-sleep'
+        );
+
         addSpinRow(
             _('Decrease Speaker Volume'),
             _(
@@ -163,12 +169,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             100,
             5,
             'decrease-speaker-volume'
-        );
-
-        addSwitchRow(
-            _('Inhibit Sleep During Recording'),
-            _('Prevent the system from sleeping while recording'),
-            'inhibit-sleep'
         );
 
         const languageRow = new Adw.ActionRow({
