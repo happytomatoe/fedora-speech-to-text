@@ -31,9 +31,7 @@ export class TypeTextService {
             if (this._virtualKeyboard) {
                 console.log('[VoiceToText] TypeText virtual keyboard obtained');
             } else {
-                console.log(
-                    '[VoiceToText] TypeText virtual keyboard not available'
-                );
+                console.log('[VoiceToText] TypeText virtual keyboard not available')
             }
         } catch (e) {
             console.error(
