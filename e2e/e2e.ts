@@ -123,61 +123,24 @@ const PREFS_SOURCES = [
   "install.sh",
 ];
 
-/** Run a git command in the project root; empty string on failure (not a repo). */
-function git(cmd: string): string {
-  try {
-    return execSync(cmd, { cwd: PROJECT_ROOT, encoding: "utf-8" }).trim();
-  } catch {
-    return ""; // not a git repo — treat as changed
-  }
-}
-
 /**
- * Changed files vs merge-base(main, HEAD), plus staged, unstaged, untracked.
- */
-function prefsAffectingFiles(): Set<string> {
-  const files = new Set<string>();
-  const mergeBase = git("git merge-base main HEAD 2>/dev/null");
-  for (const line of [
-    mergeBase ? git(`git diff --name-only ${mergeBase} HEAD`) : "",
-    git("git diff --name-only"),
-    git("git diff --cached --name-only"),
-    git("git ls-files --others --exclude-standard"),
-  ]) {
-    for (const f of line.split("\n")) if (f.trim()) files.add(f.trim());
-  }
-  return files;
-}
-
-/**
- * Whether any prefs-affecting file changed. On main (empty diff by
- * definition) falls back to an mtime hash so a change landed directly on
- * main still runs the screenshots once.
+ * Content hash of all prefs-affecting files, compared against the hash stored
+ * after the last run. Stable across worktree checkouts (git-tracked content is
+ * identical, and per-file hashes ignore mtime), so only real content changes
+ * re-run the screenshots.
  */
 function prefsUiChanged(): boolean {
-  const changed = prefsAffectingFiles();
-  const matches = PREFS_SOURCES.some((src) =>
-    changed.has(src) || statSync(join(PROJECT_ROOT, src)).isDirectory() &&
-    [...changed].some((f) => f.startsWith(src + "/"))
-  );
-  if (matches) return true;
-  if (git("git rev-parse main") === git("git rev-parse HEAD")) return prefsUiHashChanged();
-  return false;
-}
-
-/**
- * Mtime-hash fallback for runs on main, where the diff is empty.
- */
-function prefsUiHashChanged(): boolean {
   const { createHash } = require("node:crypto");
   const hash = createHash("sha256");
   for (const p of PREFS_SOURCES) {
     const abs = join(PROJECT_ROOT, p);
     if (!existsSync(abs)) continue;
     if (statSync(abs).isDirectory()) {
-      for (const f of readdirSync(abs).sort()) hash.update(p + "/" + f + statSync(join(abs, f)).mtimeMs);
+      for (const f of readdirSync(abs).sort()) {
+        hash.update(p + "/" + f + Bun.hash(readFileSync(join(abs, f))));
+      }
     } else {
-      hash.update(p + statSync(abs).mtimeMs);
+      hash.update(p + Bun.hash(readFileSync(abs)));
     }
   }
   const current = hash.digest("hex");
