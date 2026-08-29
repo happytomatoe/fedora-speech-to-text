@@ -7,10 +7,12 @@ import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 
 // --- SSH exec helpers (sync, for quick one-off commands) ---
 
+/** Common ssh options: no host-key prompts, no log noise. */
 function sshOpts(sshKey: string, sshPort: number): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
 }
 
+/** One-shot ssh exec with retries; throws after the last attempt fails. */
 function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
   if (retries < 1) retries = 1;
   const host = `${sshUser}@localhost`;
@@ -37,11 +39,13 @@ export async function sshExecAsync(command: string, sshKey: string, sshPort: num
   }
 }
 
+/** Rsync a directory into the VM (exact mirror, deletes extras). */
 function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
 }
 
+/** Copy a single file into the VM. */
 function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   const scpOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${sshKey} -P ${sshPort}`;
@@ -72,6 +76,7 @@ const GDM_READY_TIMEOUT_MS = 240_000;
 // greeter crash-loops (glib int3 traps) and no user session ever appears,
 // so waitForGdmLogin would burn its full timeout. Writing custom.conf and
 // restarting GDM here gets autologin running before we poll.
+/** Write custom.conf for autologin and restart GDM before we poll. */
 export async function ensureGdmAutologin(deployer: Deployer, sshUser: string): Promise<void> {
   const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
   try {
@@ -97,6 +102,7 @@ export async function ensureGdmAutologin(deployer: Deployer, sshUser: string): P
   }
 }
 
+/** Wait until the GDM auto-login session reaches a login prompt state. */
 export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
   console.log("Waiting for GNOME Shell to register on D-Bus...");
@@ -139,6 +145,7 @@ export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   }
 }
 
+/** Install VM-side test dependencies (packages, tools) via SSH. */
 export async function installDependencies(
   _sshKey: string,
   _sshPort: number,
@@ -182,6 +189,7 @@ export async function installDependencies(
 
 // extractDbusAddress removed — callers use getShellDbusAddr() in shell.ts instead
 
+/** Upload gnome-ext/ + install.sh to the VM and install the extension. */
 export async function deployExtension(
   shell: ShellHelper,
   cfg: DeployConfig,
@@ -433,6 +441,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   );
 }
 
+/** Sync Python source into the VM. */
 export function deployPythonSource(cfg: DeployConfig): void {
   if (!existsSync(cfg.pythonSrc)) return;
   console.log("Deploying Python source...");
@@ -440,6 +449,7 @@ export function deployPythonSource(cfg: DeployConfig): void {
   rsyncToVm(cfg.pythonSrc, "~/voice_to_text/src/voice_to_text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
 }
 
+/** Copy the current run's audio fixture into the VM. */
 export function deployTestAudio(cfg: DeployConfig): void {
   const testAudio = cfg.testAudioFile;
   if (!existsSync(testAudio)) return;
@@ -447,6 +457,7 @@ export function deployTestAudio(cfg: DeployConfig): void {
   scpToVm(testAudio, "/tmp/test-audio.wav", cfg.sshKey, cfg.sshPort, cfg.sshUser);
 }
 
+/** Launch the voice-to-text service in the VM and wait until it's ready. */
 export async function startVoiceService(
   shell: ShellHelper,
   cfg: DeployConfig,

@@ -1041,7 +1041,7 @@ e2e *ARGS:
     cd e2e
     LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
     : > "$LOG"
-    bun run e2e.ts {{ ARGS }} 2>&1 | tee "$LOG"
+    bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
     exit ${PIPESTATUS[0]}
 
 # @category e2e-qemu
@@ -1060,6 +1060,12 @@ e2e-all *ARGS:
     cd e2e && bun run e2e.ts --parallel 2 {{ ARGS }}
 
 # @category e2e-qemu
+# @category e2e-qemu
+# Ensure 'ready' snapshot exists (saves it if missing), then run tests
+# Usage: just e2e-snapshot [extra args, e.g. -- --save-snapshot]
+e2e-snapshot *ARGS:
+    cd e2e && bun run e2e.ts --save-snapshot {{ ARGS }}
+
 # Run E2E tests without snapshots (full boot, ~75s)
 e2e-no-snapshot:
     cd e2e && bun run e2e.ts --no-snapshot
