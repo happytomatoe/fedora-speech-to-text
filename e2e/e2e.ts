@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
-import { deployTestAudio, deployExtension } from "./lib/deploy-steps.js";
+import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
+import { pollForCommandOutput } from "./lib/poll.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -1017,6 +1018,29 @@ async function main(): Promise<void> {
         // idempotent and cheap); otherwise any code change after the snapshot
         // save is invisible to e2e.
         await deployExtension(vm.shell, vm.deployCfg, vm.pollUntil, vm.deployer);
+        // The service process thawed from the snapshot is a zombie: its threads
+        // do not survive -loadvm (bus name answers, transcription never runs).
+        // Kill it and start a fresh one with current code + env, mirroring the
+        // fresh-deploy path so a restored VM runs current code in EVERY
+        // component, not just the extension.
+        await vm.shell.exec("killall -9 python3 2>/dev/null; true");
+        // Poll until the zombie is actually dead before restarting — a fixed
+        // sleep races a dying process (same pattern as waitQemuGone).
+        await vm.pollUntil(
+          "old voice service dead",
+          async () => {
+            try {
+              const out = await vm.shell.exec("pgrep -f 'python3 -m voice_to_text'; true");
+              return out.trim().length === 0;
+            } catch {
+              return false; // ssh hiccup — retry
+            }
+          },
+          10000,
+        );
+        await startVoiceService(
+          vm.shell, vm.deployCfg, vm.pollUntil, vm.pollForCommandOutput, true,
+        );
       }
       
       // Run test
