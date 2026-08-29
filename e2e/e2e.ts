@@ -1026,7 +1026,9 @@ async function main(): Promise<void> {
         // kill+wait-for-bus-gone logic via skipDeps=true (deps already baked
         // into the snapshot).
         await startVoiceService(
-          vm.shell, vm.deployCfg, vm.pollUntil, vm.pollForCommandOutput, true,
+          vm.shell, vm.deployCfg, vm.pollUntil,
+          (exec, cmd, expected, timeoutMs) => pollForCommandOutput(exec, cmd, expected, timeoutMs),
+          true,
         );
       }
       

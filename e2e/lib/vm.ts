@@ -41,10 +41,12 @@ export class VmManager {
   deployer: Deployer;
   shell: ShellHelper;
   frameCount = 0;
+  config!: VmConfig;
 
   private deployCfg: DeployConfig;
 
-  constructor(private config: VmConfig) {
+  constructor(config: VmConfig) {
+    this.config = config;
     this.qemu = new QemuMonitor(config.run.socketPath);
     this.deployer = new Deployer({
       host: "localhost",
