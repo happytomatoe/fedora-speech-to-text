@@ -80,7 +80,7 @@ export default class VoiceToTextExtension extends Extension {
         this._indicator.onConfigure = () => this._openPreferences();
 
         // @ts-expect-error
-        Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
+        Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right'); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         this._registerHotkey();
 
         this._hotkeySignalId = this._settings.connect('changed::hotkey', () => {
@@ -206,13 +206,17 @@ export default class VoiceToTextExtension extends Extension {
                         ? Date.now() - this._startTime
                         : 0;
                     if (this._profiling) {
-                        console.log(`[VoiceToText] [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`);
+                        console.log(
+                            `[VoiceToText] [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`
+                        );
                     }
                     if (state === 'recording') {
                         this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
                         if (this._profiling) {
-                            console.log(`[VoiceToText] [PROFIL] user can speak now, total elapsed: ${elapsed}ms`);
+                            console.log(
+                                `[VoiceToText] [PROFIL] user can speak now, total elapsed: ${elapsed}ms`
+                            );
                         }
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
@@ -322,7 +326,9 @@ export default class VoiceToTextExtension extends Extension {
             .StartRecordingAsync(JSON.stringify(config))
             .then(() => {
                 if (this._profiling) {
-                    console.log(`[VoiceToText] [PROFIL] StartRecording sent via D-Bus, elapsed: ${Date.now() - this._startTime}ms`);
+                    console.log(
+                        `[VoiceToText] [PROFIL] StartRecording sent via D-Bus, elapsed: ${Date.now() - this._startTime}ms`
+                    );
                 }
             })
             .catch(e => {
@@ -414,7 +420,9 @@ export default class VoiceToTextExtension extends Extension {
         this._sessionManager
             .UninhibitAsync(this._inhibitCookie)
             .then(() =>
-                console.log(`[VoiceToText] sleep inhibitor released, cookie=${this._inhibitCookie}`)
+                console.log(
+                    `[VoiceToText] sleep inhibitor released, cookie=${this._inhibitCookie}`
+                )
             )
             .catch(e => {
                 console.error(
@@ -444,8 +452,9 @@ export default class VoiceToTextExtension extends Extension {
     }
     //TODO: Move into utils file.
     _showNotification(message) {
-        const systemSource = MessageTray.getSystemSource();
+        const systemSource = MessageTray.getSystemSource(); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         const notification = new MessageTray.Notification({
+            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             source: systemSource,
             title: 'Voice to Text',
             body: message,

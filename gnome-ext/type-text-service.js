@@ -31,7 +31,9 @@ export class TypeTextService {
             if (this._virtualKeyboard) {
                 console.log('[VoiceToText] TypeText virtual keyboard obtained');
             } else {
-                console.log('[VoiceToText] TypeText virtual keyboard not available');
+                console.log(
+                    '[VoiceToText] TypeText virtual keyboard not available'
+                );
             }
         } catch (e) {
             console.error(
@@ -145,13 +147,14 @@ export class TypeTextService {
 
     CommitText(text) {
         if (!Main.inputMethod.currentFocus) {
+            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             console.error(
                 'VoiceToText: CommitText failed: no focused input context'
             );
             throw new Error('No focused input context');
         }
         try {
-            Main.inputMethod.commit(text);
+            Main.inputMethod.commit(text); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         } catch (e) {
             console.error('VoiceToText: CommitText failed:', e);
             throw e;
