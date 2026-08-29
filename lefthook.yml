@@ -7,6 +7,9 @@ pre-commit:
     knip:
       run: bunx knip
       glob: "*.{ts,js,json}"
+    aislop:
+      run: bunx aislop scan --staged
+      glob: "*.{py,js,ts,json}"
     check-dbus-service-name:
       run: uv run pytest tests/test_dbus_service_name.py -q
       glob: "*.{py,js,xml}"

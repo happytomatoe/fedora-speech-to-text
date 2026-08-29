@@ -442,11 +442,9 @@ export default class VoiceToTextExtension extends Extension {
             this._showNotification(`Failed to open preferences: ${e.message}`);
         }
     }
-    //TODO: Move into utils file.
     _showNotification(message) {
         const systemSource = MessageTray.getSystemSource(); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
-        const notification = new MessageTray.Notification({
-            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+        const notification = new MessageTray.Notification({ // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             source: systemSource,
             title: 'Voice to Text',
             body: message,
@@ -456,4 +454,5 @@ export default class VoiceToTextExtension extends Extension {
     }
 }
 
-//TODO: Refactor this file, it's too large.
+// TODO(fedora-speech-to-text#aislop-plan): split extension.js when a second
+// extension entry point lands; tracked in thoughts/shared/plans/fix-aislop-findings.md

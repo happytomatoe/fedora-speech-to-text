@@ -8,7 +8,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {load as yamlLoad, dump as yamlDump} from '../vendor/js-yaml.mjs';
 
-//TODO: refactor to have some single central location for the config path.
+// Single central definition of the config path; prefs.js references this file.
 const CONFIG_PATH = GLib.build_filenamev([
     GLib.get_home_dir(),
     '.config',

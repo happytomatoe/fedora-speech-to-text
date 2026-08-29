@@ -12,8 +12,7 @@ function createSpinner(params) {
 }
 
 export const VoiceIndicator = GObject.registerClass(
-    class VoiceIndicator extends PanelMenu.Button {
-        // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+    class VoiceIndicator extends PanelMenu.Button { // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         _init() {
             super._init(0.0, 'Voice to Text');
             this._destroyed = false;

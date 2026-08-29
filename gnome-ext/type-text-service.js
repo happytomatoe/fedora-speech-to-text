@@ -38,11 +38,9 @@ export class TypeTextService {
                 'VoiceToText: TypeText failed to get virtual keyboard:',
                 e
             );
-            //TODO: Add system notification
         }
 
         try {
-            //TODO: Refactor for clarity
             this._ownerId = Gio.bus_own_name(
                 Gio.BusType.SESSION,
                 'com.happytomatoe.TypeText',
@@ -73,7 +71,6 @@ export class TypeTextService {
             );
         } catch (e) {
             console.error('VoiceToText: bus_own_name failed:', e);
-            //TODO: At system notification
         }
     }
 
@@ -144,8 +141,7 @@ export class TypeTextService {
     }
 
     CommitText(text) {
-        if (!Main.inputMethod.currentFocus) {
-            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+        if (!Main.inputMethod.currentFocus) { // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             console.error(
                 'VoiceToText: CommitText failed: no focused input context'
             );

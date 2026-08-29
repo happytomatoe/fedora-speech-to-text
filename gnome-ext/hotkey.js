@@ -7,8 +7,7 @@ export function registerHotkey(name, settings, callback) {
     const hotkeyValue = hotkeyArr && hotkeyArr.length > 0 ? hotkeyArr[0] : '';
 
     try {
-        Main.wm.addKeybinding(
-            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+        Main.wm.addKeybinding( // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             name,
             settings,
             Meta.KeyBindingFlags.NONE,
