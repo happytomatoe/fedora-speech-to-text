@@ -379,7 +379,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         }
         return false;
       },
-      20000,
+      45000,
       500
     );
     // If log didn't have it, try tmux capture as fallback
@@ -401,6 +401,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     }
   } catch {
     console.log("  Transcription polling timed out");
+    try {
+      const logTail = await shell.exec("tail -n 25 /tmp/voice-service.log 2>/dev/null || echo '(no voice-service log)'");
+      console.log("  voice-service log tail:\n" + logTail.trim().split("\n").map((l) => "    " + l).join("\n"));
+    } catch {
+      // diagnostics are best-effort
+    }
   }
   timing("transcription", t);
 
