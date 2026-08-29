@@ -21,22 +21,25 @@ import { createCustomWordsGroup } from './prefs/custom-words-row.js';
 /**
  * Create a bound Adw.SpinRow, add it to `group`, and trigger `onSync` on change.
  */
-function makeSpinRow({ title, subtitle, lower, upper, step, key, settings, group, onSync }) {
-  const row = new Adw.SpinRow({
-    title,
-    subtitle,
-    adjustment: new Gtk.Adjustment({
-      lower,
-      upper,
-      step_increment: step,
-      page_increment: 10,
-    }),
-  });
+function makeSpinRow(spec) {
+  const { title, subtitle, lower, upper, step, key, settings, group, onSync } = spec;
+  const adjustment = new Gtk.Adjustment({ lower, upper, step_increment: step, page_increment: 10 });
+  const row = new Adw.SpinRow({ title, subtitle, adjustment });
   settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);
   group.add(row);
   row.connect('notify::value', () => {
     onSync().catch(e => console.error('VoiceToText: sync failed:', e));
   });
+  return row;
+}
+
+/**
+ * Create a bound Adw.SwitchRow, add it to `group`.
+ */
+function makeSwitchRow({ title, subtitle, key, settings, group }) {
+  const row = new Adw.SwitchRow({ title, subtitle });
+  settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+  group.add(row);
   return row;
 }
 
@@ -105,62 +108,37 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
     recordingGroup.add(createOutputMethodRow(settings, _syncAllToConfig));
 
-    const showAudioLevelRow = new Adw.SwitchRow({
+    makeSwitchRow({
       title: _('Show Audio Level Widget'),
       subtitle: _(
         'Display a floating audio level bar at the bottom of the screen during recording'
       ),
+      key: 'show-audio-level-widget',
+      settings,
+      group: recordingGroup,
     });
-    settings.bind(
-      'show-audio-level-widget',
-      showAudioLevelRow,
-      'active',
-      Gio.SettingsBindFlags.DEFAULT
-    );
-    recordingGroup.add(showAudioLevelRow);
 
-    const inhibitSleepRow = new Adw.SwitchRow({
+    makeSwitchRow({
       title: _('Inhibit Sleep During Recording'),
       subtitle: _('Prevent the system from sleeping while recording'),
+      key: 'inhibit-sleep',
+      settings,
+      group: recordingGroup,
     });
-    settings.bind(
-      'inhibit-sleep',
-      inhibitSleepRow,
-      'active',
-      Gio.SettingsBindFlags.DEFAULT
-    );
-    recordingGroup.add(inhibitSleepRow);
 
-    const spinSpecs = [
-      {
-        title: _('Stop Timeout'),
-        subtitle: _(
-          'Seconds to wait for recording process to stop before forcing it'
-        ),
-        lower: 1,
-        upper: 120,
-        step: 1,
-        key: 'stop-timeout-seconds',
-      },
-      {
-        title: _('Decrease Speaker Volume'),
-        subtitle: _(
-          'Reduce speaker output volume during recording (0=no change, 100=mute)'
-        ),
-        lower: 0,
-        upper: 100,
-        step: 5,
-        key: 'decrease-speaker-volume',
-      },
-    ];
-    for (const spec of spinSpecs) {
-      makeSpinRow({
-        ...spec,
-        settings,
-        group: recordingGroup,
-        onSync: _syncAllToConfig,
-      });
-    }
+    makeSpinRow({
+      title: _('Stop Timeout'),
+      subtitle: _('Seconds to wait for the recording process to stop before forcing it'),
+      lower: 1, upper: 120, step: 1, key: 'stop-timeout-seconds',
+      settings, group: recordingGroup, onSync: _syncAllToConfig,
+    });
+
+    makeSpinRow({
+      title: _('Decrease Speaker Volume'),
+      subtitle: _('Reduce speaker output volume while recording (0 = no change, 100 = mute)'),
+      lower: 0, upper: 100, step: 5, key: 'decrease-speaker-volume',
+      settings, group: recordingGroup, onSync: _syncAllToConfig,
+    });
 
     const languageRow = new Adw.ActionRow({
       title: _('Language'),
