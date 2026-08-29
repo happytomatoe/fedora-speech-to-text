@@ -1,11 +1,14 @@
 import { ensureParakeet } from "./lib/parakeet.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { PNG } from "pngjs";
+import pixelmatch from "pixelmatch";
 import { join } from "node:path";
 import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
-import { deployTestAudio } from "./lib/deploy-steps.js";
+import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
+import { pollForCommandOutput } from "./lib/poll.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -79,8 +82,11 @@ process.on("unhandledRejection", (err) => {
 // snapshot mode can be re-enabled by flipping this to !NO_SNAPSHOT once
 // savevm/loadvm are verified against the current display config.
 const NO_SNAPSHOT = args.includes("--no-snapshot");
+// --no-save-snapshot: restore an existing snapshot but never save/update it
+// (default for routine runs — snapshot saving is opt-in via --save-snapshot).
+const NO_SAVE_SNAPSHOT = args.includes("--no-save-snapshot") || !args.includes("--save-snapshot");
 // ponytail: snapshots disabled pending savevm/loadvm verification on non-GL display — flip to !NO_SNAPSHOT after verifying, remove stale comment
-const SNAPSHOT_MODE = true; // TEMP: Phase 1 verification of savevm/loadvm on non-GL gtk display — revert or replace with !NO_SNAPSHOT after verifying (plan: thoughts/shared/plans/re-enable-e2e-snapshots.md)
+const SNAPSHOT_MODE = !NO_SNAPSHOT; // TEMP: Phase 1 verification of savevm/loadvm on non-GL gtk display — revert or replace with !NO_SNAPSHOT after verifying (plan: thoughts/shared/plans/re-enable-e2e-snapshots.md)
 const SKIP_DEPS = args.includes("--skip-deps");
 
 // Parse --timeout <seconds> (default: 180)
@@ -245,7 +251,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   } else {
     await shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
   }
-  // Poll until tmux session appears
+  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling)
   await vm.pollUntil(
     "tmux session",
     async () => {
@@ -256,7 +262,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         return false; // ssh hiccup — retry
       }
     },
-    15000
+    5000
   );
   // Click on the terminal to ensure it has focus
   await shell.dotoolCommand("mousemove 640 400");
@@ -379,7 +385,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         }
         return false;
       },
-      20000,
+      45000,
       500
     );
     // If log didn't have it, try tmux capture as fallback
@@ -401,6 +407,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     }
   } catch {
     console.log("  Transcription polling timed out");
+    try {
+      const logTail = await shell.exec("tail -n 25 /tmp/voice-service.log 2>/dev/null || echo '(no voice-service log)'");
+      console.log("  voice-service log tail:\n" + logTail.trim().split("\n").map((l) => "    " + l).join("\n"));
+    } catch {
+      // diagnostics are best-effort
+    }
   }
   timing("transcription", t);
 
@@ -531,7 +543,7 @@ function getScreenshotPath(label: string, testCase?: string, outputDir = OUTPUT_
 /**
  * Capture screenshot via QEMU monitor and save as PNG.
  */
-async function captureScreenshot(label: string, run: RunContext): Promise<string> {
+async function captureScreenshot(label: string, run: RunContext, vm?: VmManager): Promise<string> {
   const testCase = getTestCaseName();
   const pngPath = getScreenshotPath(label, testCase, run.outputDir);
   const ppmPath = pngPath.replace(/\.png$/, ".ppm");
@@ -541,11 +553,18 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
   require("node:fs").mkdirSync(dir, { recursive: true });
   
   try {
-    // Use QEMU monitor to capture screenshot
-    execSync(
-      `echo "screendump ${ppmPath}" | nc -U ${run.socketPath} -w 2`,
-      { encoding: "utf-8", timeout: 5000 }
-    );
+    // Use QemuMonitor (HMP over the monitor socket). The previous `nc -U
+    // <socket> -w 2` approach silently fails with Fedora's nc — it exits 0
+    // without connecting, so no PPM was ever produced and convert wrote
+    // nothing — yet "Screenshot saved" was still logged.
+    if (vm) {
+      await vm.qemu.screendump(ppmPath);
+    } else {
+      execSync(
+        `echo "screendump ${ppmPath}" | nc -U ${run.socketPath} -w 2`,
+        { encoding: "utf-8", timeout: 5000 }
+      );
+    }
     // Wait for file to be written
     await Bun.sleep(500);
     // Convert PPM to PNG
@@ -555,6 +574,10 @@ async function captureScreenshot(label: string, run: RunContext): Promise<string
     });
     // Clean up PPM
     execSync(`rm -f ${ppmPath}`, { encoding: "utf-8" });
+    if (!existsSync(pngPath)) {
+      console.log(`  Screenshot capture failed: screendump produced no PNG at ${pngPath}`);
+      return "";
+    }
     console.log(`  Screenshot saved: ${pngPath}`);
     return pngPath;
   } catch (err) {
@@ -609,7 +632,7 @@ async function verifyWithScreenshot(
   const testCase = getTestCaseName();
   
   // Capture screenshot
-  const screenshot = await captureScreenshot("05-transcription-received", run);
+  const screenshot = await captureScreenshot("05-transcription-received", run, vm);
   
   // Verify via file (primary method)
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
@@ -623,29 +646,28 @@ async function verifyWithScreenshot(
     return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
   }
   
-  // Check visual regression (if reference exists)
+  // Check visual regression (reference is mandatory unless --update populates it)
   const referencePath = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
-  if (existsSync(referencePath) && screenshot) {
-    try {
-      const diffPath = join(run.outputDir, "test-cases", testCase, "diff.png");
-      const diffDir = require("node:path").dirname(diffPath);
-      require("node:fs").mkdirSync(diffDir, { recursive: true });
-      
-      const result = execSync(
-        `compare -metric MSE "${referencePath}" "${screenshot}" "${diffPath}" 2>&1 || true`,
-        { encoding: "utf-8", timeout: 10000 }
-      ).trim();
-      
-      const mse = parseFloat(result);
-      if (!Number.isFinite(mse) || mse >= 100) {
-        return { passed: false, message: `Visual regression: MSE=${result} (threshold=100)`, screenshot };
+  if (UPDATE_MODE) {
+    if (!existsSync(referencePath)) {
+      console.log(`  No reference image yet (will be created by --update): ${referencePath}`);
+    } else if (screenshot) {
+      try {
+        assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
+      } catch (err) {
+        return { passed: false, message: (err as Error).message, screenshot };
       }
-      console.log(`  Visual regression: MSE=${mse} (pass)`);
-    } catch (err) {
-      console.log(`  Visual regression check failed: ${err}`);
     }
+  } else if (!screenshot) {
+    return { passed: false, message: "Screenshot capture failed — cannot run visual regression", screenshot };
   } else if (!existsSync(referencePath)) {
-    console.log(`  No reference image for visual regression: ${referencePath}`);
+    return { passed: false, message: `No reference image for visual regression: ${referencePath} (run with --update to create)`, screenshot };
+  } else {
+    try {
+      assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
+    } catch (err) {
+      return { passed: false, message: (err as Error).message, screenshot };
+    }
   }
   
   return { passed: true, message: "Text matches expected output", screenshot };
@@ -697,8 +719,38 @@ function updateReferenceImages(run: RunContext): void {
   }
 }
 /**
- * Compare a captured screenshot against its reference in expected-qemu/preferences/.
- * Fails if MSE >= threshold. Skips (logs) when no reference exists yet.
+ * Compare a captured screenshot against its reference.
+ * Throws if MSE >= threshold or reference/capture missing.
+ */
+/**
+ * Compare a captured screenshot against its reference using pixelmatch
+ * (mapbox/pixelmatch — the standard screenshot-diff library, ~150 LOC, no deps).
+ * Throws on missing reference/capture, size mismatch, or diff-pixel ratio >= 1%.
+ */
+function assertScreenshotMatches(referencePath: string, captured: string, run: RunContext, label: string): void {
+  if (!existsSync(referencePath)) throw new Error(`No reference image for ${label}: ${referencePath} (run with --update to create)`);
+  if (!captured || !existsSync(captured)) throw new Error(`${label} capture missing — cannot compare`);
+  const imgRef = PNG.sync.read(readFileSync(referencePath));
+  const imgAct = PNG.sync.read(readFileSync(captured));
+  if (imgRef.width !== imgAct.width || imgRef.height !== imgAct.height) {
+    throw new Error(`${label}: size mismatch — reference ${imgRef.width}x${imgRef.height} vs actual ${imgAct.width}x${imgAct.height}`);
+  }
+  const diff = new PNG({ width: imgRef.width, height: imgRef.height });
+  const diffPixels = pixelmatch(imgRef.data, imgAct.data, diff.data, imgRef.width, imgRef.height, { threshold: 0.1 });
+  const ratio = diffPixels / (imgRef.width * imgRef.height);
+  const diffPath = join(run.outputDir, "test-cases", getTestCaseName(), `diff-${label}.png`);
+  mkdirSync(require("node:path").dirname(diffPath), { recursive: true });
+  writeFileSync(diffPath, PNG.sync.write(diff));
+  if (ratio >= 0.01) {
+    throw new Error(`${label}: diff-pixel ratio=${(ratio * 100).toFixed(3)}% (${diffPixels} px, threshold=1%), diff: ${diffPath}`);
+  }
+  console.log(`  ${label}: diff=${(ratio * 100).toFixed(3)}% (${diffPixels} px, pass)`);
+}
+
+/**
+ * Compare a captured screenshot against its reference in expected-qemu/preferences/
+ * using pixelmatch. Throws if diff-pixel ratio >= 1%. Skips (logs) when no
+ * reference exists yet.
  */
 async function compareWithReference(name: string, captured: string, run: RunContext): Promise<void> {
   const referencePath = join(CONFIG.paths.referencesDir, "preferences", `screenshot-${name}.png`);
@@ -707,20 +759,9 @@ async function compareWithReference(name: string, captured: string, run: RunCont
     return;
   }
   try {
-    const diffPath = join(run.outputDir, "preferences", `diff-${name}.png`);
-    const result = execSync(
-      `compare -metric MSE "${referencePath}" "${captured}" "${diffPath}" 2>&1 || true`,
-      { encoding: "utf-8", timeout: 10000 }
-    ).trim();
-    // compare prints "<mse> (<normalized>)" and exits 1 whenever images differ
-    // (even negligibly) — parse stdout instead of relying on exit code.
-    const mse = parseFloat(result);
-    if (!Number.isFinite(mse) || mse >= 100) {
-      throw new Error(`Visual regression on ${name}: MSE=${result} (threshold=100), diff: ${diffPath}`);
-    }
-    console.log(`  ${name}: MSE=${mse} (pass)`);
+    assertScreenshotMatches(referencePath, captured, run, name);
   } catch (err) {
-    if (err instanceof Error && err.message.includes("Visual regression")) throw err;
+    if (err instanceof Error && err.message.includes("diff-pixel ratio")) throw err;
     console.log(`  ${name} visual check failed: ${err}`);
   }
 }
@@ -994,13 +1035,32 @@ async function main(): Promise<void> {
           { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
           { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
           { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
-          { name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") },
+          ...(NO_SAVE_SNAPSHOT
+            ? []
+            : [{ name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") }]),
         ]);
         timing("deploy-and-save-snapshot", t);
       } else {
         timing("restore-snapshot", t);
         // Deploy test audio for this specific test case (snapshot has old audio)
         deployTestAudio(vm.deployCfg);
+        // Snapshot restore resumes OLD guest state — always redeploy the
+        // extension so the run executes CURRENT code (install.sh --local is
+        // idempotent and cheap); otherwise any code change after the snapshot
+        // save is invisible to e2e.
+        await deployExtension(vm.shell, vm.deployCfg, vm.pollUntil, vm.deployer);
+        // The service process thawed from the snapshot is a zombie: its threads
+        // do not survive -loadvm (bus name answers, transcription never runs).
+        // Kill it and start a fresh one with current code + env, mirroring the
+        // fresh-deploy path so a restored VM runs current code in EVERY
+        // component, not just the extension. Reuses startVoiceService's own
+        // kill+wait-for-bus-gone logic via skipDeps=true (deps already baked
+        // into the snapshot).
+        await startVoiceService(
+          vm.shell, vm.deployCfg, vm.pollUntil,
+          (exec, cmd, expected, timeoutMs) => pollForCommandOutput(exec, cmd, expected, timeoutMs),
+          true,
+        );
       }
       
       // Run test

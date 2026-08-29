@@ -85,13 +85,19 @@ class ConfigManager:
 
         return merged
 
+    def _section(self, name: str) -> dict[str, Any]:
+        """Return a top-level config section, or an empty dict if absent."""
+        section = self.config.get(name)
+        return section if isinstance(section, dict) else {}
+
     def get_selected_provider(self) -> str:
         """Get the selected transcription provider."""
-        return self.config.get("transcription", {}).get("provider", "voxtral")
+        provider = self._section("transcription").get("provider")
+        return provider if isinstance(provider, str) and provider else "voxtral"
 
     def get_audio_config(self) -> dict[str, Any]:
         """Get audio configuration."""
-        return self.config.get("audio", {})
+        return self._section("audio")
 
     def get_speaker_config(self) -> dict[str, Any]:
         """Get speaker volume configuration."""

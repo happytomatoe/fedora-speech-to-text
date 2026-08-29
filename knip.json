@@ -1,0 +1,39 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "e2e/e2e.ts",
+    "gnome-ext/extension.js",
+    "gnome-ext/prefs.js",
+    "gnome-ext/type-text-service.js"
+  ],
+  "ignoreDependencies": [
+    "aislop",
+    "jscpd",
+    "@girs/adw-1",
+    "@girs/cairo-1.0",
+    "@girs/clutter-18",
+    "@girs/gdk-4.0",
+    "@girs/gdkpixbuf-2.0",
+    "@girs/gio-2.0",
+    "@girs/glib-2.0",
+    "@girs/gobject-2.0",
+    "@girs/gtk-4.0",
+    "@girs/meta-18",
+    "@girs/pango-1.0",
+    "@girs/shell-18",
+    "@girs/st-18",
+    "ssh2"
+  ],
+  "ignoreBinaries": [
+    "convert",
+    "ffmpeg",
+    "compare",
+    "podman",
+    "ss"
+  ],
+  "ignore": [
+    "gnome-ext/vendor/**",
+    "gnome-ext/**"
+  ],
+  "ignoreExportsUsedInFile": true
+}

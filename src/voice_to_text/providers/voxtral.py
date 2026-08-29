@@ -106,8 +106,8 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
                     body = e.response.json()
                     logger.error("Voxtral response body: %s", body)
                     api_msg = body.get("message")
-                except ValueError:
-                    logger.error("Voxtral response text: %s", e.response.text[:500])
+                except ValueError as ve:
+                    logger.error("Voxtral response parse failed (%s), raw text: %s", ve, e.response.text[:500])
                 if status == _HTTP_UNAUTHORIZED:
                     key_len = len(self.api_key)
                     fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
@@ -193,8 +193,8 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
                 self._emit(event)
                 if getattr(event, "type", None) == "transcription.done":
                     break
-        except asyncio.CancelledError:
-            logger.info("Voxtral realtime stream cancelled")
+        except asyncio.CancelledError as e:
+            logger.info("Voxtral realtime stream cancelled: %s", e)
         except Exception as exc:
             logger.exception("Voxtral realtime stream error")
             raise RuntimeError(f"Streaming connection lost: {exc}") from exc
@@ -209,8 +209,8 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
             return
         try:
             self._audio_queue.put_nowait(chunk)
-        except asyncio.QueueFull:
-            logger.warning("Audio queue full, dropping chunk")
+        except asyncio.QueueFull as e:
+            logger.warning("Audio queue full, dropping chunk: %s", e)
 
     async def send_audio(self, audio_chunk: bytes) -> None:
         """Send an audio chunk for processing - queues it for the async stream."""
@@ -228,14 +228,14 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
             try:
                 fut = asyncio.run_coroutine_threadsafe(self._audio_queue.put(None), self._loop)
                 await asyncio.wait_for(asyncio.wrap_future(fut), timeout=1.0)
-            except Exception:
-                logger.debug("Failed to signal stream shutdown", exc_info=True)
+            except Exception as e:
+                logger.debug("Failed to signal stream shutdown: %s", e)
 
         if self._stream_task is not None:
             try:
                 await asyncio.wait_for(asyncio.wrap_future(self._stream_task), timeout=5.0)
-            except Exception:
-                logger.debug("Stream task did not exit cleanly", exc_info=True)
+            except Exception as e:
+                logger.debug("Stream task did not exit cleanly: %s", e)
             self._stream_task = None
 
         result = self._partial_result or ""
@@ -245,39 +245,39 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
     def _emit(self, event) -> None:
         kind = getattr(event, "type", None)
         logger.info("Voxtral realtime event: type=%s", kind)
-
-        if kind == "transcription.language":
-            lang = getattr(event, "audio_language", "?")
-            logger.info("Language detected: %s", lang)
-
-        elif kind == "transcription.text.delta":
-            token = event.text
-            self._partial_tokens.append(token)
-            self._partial_result = "".join(self._partial_tokens)
-            logger.info("Partial result: %s", self._partial_result[:80])
-
-        elif kind == "transcription.segment":
-            sid = getattr(event, "speaker_id", None)
-            tag = f"[{sid}]" if sid else ""
-            text = f"{tag}{event.text}"
-            self._partial_result = text
-            self._partial_tokens = [text]
-            logger.info("Segment: %s", text[:50])
-
-        elif kind == "transcription.done":
-            if getattr(event, "text", None):
-                self._partial_result = event.text
-            usage = getattr(event, "usage", None)
-            if usage:
-                logger.info("transcription.done usage: %s", usage)
-
-        elif kind == "error":
-            detail = getattr(getattr(event, "error", None), "message", str(event))
-            logger.error("Voxtral realtime error: %s", detail)
-            raise RuntimeError(detail)
-
+        handler = getattr(self, f"_on_{kind.replace('.', '_')}", None) if kind else None
+        if handler is not None:
+            handler(event)
         else:
             logger.debug("Unknown realtime event: %s", getattr(event, "content", event))
+
+    def _on_transcription_language(self, event) -> None:
+        logger.info("Language detected: %s", getattr(event, "audio_language", "?"))
+
+    def _on_transcription_text_delta(self, event) -> None:
+        self._partial_tokens.append(event.text)
+        self._partial_result = "".join(self._partial_tokens)
+        logger.info("Partial result: %s", self._partial_result[:80])
+
+    def _on_transcription_segment(self, event) -> None:
+        sid = getattr(event, "speaker_id", None)
+        tag = f"[{sid}]" if sid else ""
+        text = f"{tag}{event.text}"
+        self._partial_result = text
+        self._partial_tokens = [text]
+        logger.info("Segment: %s", text[:50])
+
+    def _on_transcription_done(self, event) -> None:
+        if getattr(event, "text", None):
+            self._partial_result = event.text
+        usage = getattr(event, "usage", None)
+        if usage:
+            logger.info("transcription.done usage: %s", usage)
+
+    def _on_error(self, event) -> None:
+        detail = getattr(getattr(event, "error", None), "message", str(event))
+        logger.error("Voxtral realtime error: %s", detail)
+        raise RuntimeError(detail)
 
     @property
     def name(self) -> str:

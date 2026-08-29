@@ -69,8 +69,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
             )
             logger.info("Moonshine model loaded: %s (%s)", model_path, model_arch)
 
-    # --- StreamingProvider interface ---
-
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Start a streaming transcription session."""
         self._sample_rate = sample_rate
@@ -109,16 +107,14 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         if self._transcriber is not None:
             try:
                 self._transcriber.stop()
-            except Exception:
-                logger.warning("Error stopping Moonshine transcriber", exc_info=True)
+            except Exception as e:
+                logger.warning("Error stopping Moonshine transcriber: %s", e)
         result = self._finalized_text
         if self._partial_result:
             result = (result + " " + self._partial_result).strip()
         self._partial_result = None
         self._finalized_text = ""
         return result
-
-    # --- BatchProvider interface ---
 
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
@@ -131,8 +127,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         logger.info("Moonshine batch result: %s", text[:100])
         return text
 
-    # --- Common ---
-
     @property
     def name(self) -> str:
         """Return the provider name."""
@@ -143,7 +137,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         if self._transcriber is not None:
             try:
                 self._transcriber.stop()
-            except Exception:
-                logger.warning("Error stopping Moonshine transcriber during close", exc_info=True)
+            except Exception as e:
+                logger.warning("Error stopping Moonshine transcriber during close: %s", e)
             finally:
                 self._transcriber = None

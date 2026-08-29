@@ -105,7 +105,7 @@ class SpeakerVolumeManager:
         """Enter the context manager."""
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *_args):
         """Exit the context manager."""
         self.restore()
 

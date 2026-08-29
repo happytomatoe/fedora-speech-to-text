@@ -76,7 +76,7 @@ export class AudioLevelWidget {
         });
         this._widget.add_child(this._cancelButton);
 
-        Main.layoutManager.addTopChrome(this._widget);
+        Main.layoutManager.addTopChrome(this._widget); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         this._positionWidget();
         this._visible = true;
     }
@@ -90,7 +90,7 @@ export class AudioLevelWidget {
 
         if (!this._widget) return;
 
-        Main.layoutManager.removeChrome(this._widget);
+        Main.layoutManager.removeChrome(this._widget); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         this._widget.destroy();
         this._widget = null;
         this._segments = [];
@@ -124,10 +124,13 @@ export class AudioLevelWidget {
 
             // Only update if class changed
             let currentClass = 'idle';
-            if (seg.has_style_class_name('green')) currentClass = 'green';
-            else if (seg.has_style_class_name('yellow'))
+            if (seg.has_style_class_name('green')) {
+                currentClass = 'green';
+            } else if (seg.has_style_class_name('yellow')) {
                 currentClass = 'yellow';
-            else if (seg.has_style_class_name('red')) currentClass = 'red';
+            } else if (seg.has_style_class_name('red')) {
+                currentClass = 'red';
+            }
 
             if (targetClass !== currentClass) {
                 seg.remove_style_class_name(currentClass);
@@ -139,7 +142,7 @@ export class AudioLevelWidget {
     _positionWidget() {
         if (!this._widget) return;
 
-        const monitor = Main.layoutManager.primaryMonitor;
+        const monitor = Main.layoutManager.primaryMonitor; // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         if (!monitor) return;
 
         const [, widgetWidth] = this._widget.get_preferred_width(-1);

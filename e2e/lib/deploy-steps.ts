@@ -11,7 +11,7 @@ function sshOpts(sshKey: string, sshPort: number): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
 }
 
-export function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
+function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
   if (retries < 1) retries = 1;
   const host = `${sshUser}@localhost`;
   let lastErr: Error | null = null;
@@ -37,12 +37,12 @@ export async function sshExecAsync(command: string, sshKey: string, sshPort: num
   }
 }
 
-export function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
+function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
 }
 
-export function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
+function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   const scpOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${sshKey} -P ${sshPort}`;
   execSync(`scp ${scpOpts} ${src} ${host}:${dest}`, { stdio: "pipe" });
@@ -66,6 +66,36 @@ export interface DeployConfig {
 
 // Max wait for GDM/GNOME Shell to register on the session bus after boot/restart
 const GDM_READY_TIMEOUT_MS = 240_000;
+
+// Ensure GDM auto-login is configured before waiting for a session.
+// The base image ships gdm enabled in greeter mode; on a fresh boot the
+// greeter crash-loops (glib int3 traps) and no user session ever appears,
+// so waitForGdmLogin would burn its full timeout. Writing custom.conf and
+// restarting GDM here gets autologin running before we poll.
+export async function ensureGdmAutologin(deployer: Deployer, sshUser: string): Promise<void> {
+  const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
+  try {
+    const current = await deployer.exec("cat /etc/gdm/custom.conf 2>/dev/null || true");
+    // WaylandEnable=true is required too: gdm 48 on Fedora 42 dropped X11
+    // support, and with WaylandEnable=false it finds no X11 session desktop
+    // files and SIGTRAPs in get_fallback_session_name (crash-loop).
+    if (current.stdout.includes(`AutomaticLogin=${sshUser}`) && !current.stdout.includes("WaylandEnable=false")) return;
+    await deployer.exec(`echo '${gdmConf}' | sudo tee /etc/gdm/custom.conf > /dev/null`);
+    try {
+      await deployer.exec("sudo systemctl restart gdm");
+    } catch {
+      // Expected: GDM restart may drop the connection mid-command
+    }
+    // Wait for GDM to come back up
+    for (let i = 0; i < 30; i++) {
+      const r = await deployer.exec("systemctl is-active gdm 2>/dev/null || true");
+      if (r.stdout.trim() === "active") return;
+      await Bun.sleep(1000);
+    }
+  } catch (e) {
+    console.error(`  ensureGdmAutologin failed (continuing): ${e}`);
+  }
+}
 
 export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
@@ -200,6 +230,9 @@ export async function deployExtension(
 #!/bin/bash
 dconf write /org/gnome/shell/extensions/voice-to-text/provider "'parakeet'"
 dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'command', 'PR']"
+dconf write /org/gnome/shell/extensions/voice-to-text/show-audio-level-widget "true"
+dconf write /org/gnome/shell/extensions/voice-to-text/inhibit-sleep "true"
+dconf write /org/gnome/shell/extensions/voice-to-text/stop-timeout-seconds "120"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
@@ -385,7 +418,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   } catch {
     // Ignore — may not be running
   }
-  execSync(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; dotoold &>/tmp/dotoold.log &"`, { timeout: 10000 });
+  await shell.exec("export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; nohup dotoold &>/tmp/dotoold.log &", 10000).catch(() => {});
   await pollUntilFn(
     "dotool pipe",
     async () => {

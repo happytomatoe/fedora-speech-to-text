@@ -2,8 +2,7 @@ import http from "node:http";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 
-export const PORT = 5092;
-export const ENDPOINT = "http://10.0.2.2:5092";
+const PORT = 5092;
 
 function checkHealth(): Promise<boolean> {
   return new Promise((resolve) => {

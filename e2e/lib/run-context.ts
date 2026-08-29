@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { rmSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
@@ -30,14 +30,14 @@ export class RunContext {
     // Parallel workers get unique IDs to avoid socket/port conflicts.
     this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : "main");
     
-    // In update mode, use a temp directory; otherwise use persistent directory for snapshots
-    if (config.updateMode) {
-      this.runDir = mkdtempSync(`/tmp/e2e-run-${this.id}-`);
-    } else {
-      // Each parallel worker gets its own subdirectory to avoid socket conflicts
-      this.runDir = join(config.projectRoot, "e2e", "qemu-images", "persistent-run", this.id);
-      mkdirSync(this.runDir, { recursive: true });
-    }
+    // Always use the persistent directory: update mode only changes whether
+    // reference images get written (verifyWithScreenshot/updateReferenceImages),
+    // never how the VM boots. Snapshot-first boot works and redeploys current
+    // code, so refs generated from a restored run are legitimate; forcing a
+    // fresh boot here made --update runs hang on GNOME Shell registration.
+    // Each parallel worker gets its own subdirectory to avoid socket conflicts.
+    this.runDir = join(config.projectRoot, "e2e", "qemu-images", "persistent-run", this.id);
+    mkdirSync(this.runDir, { recursive: true });
     
     this.overlayImage = join(this.runDir, "overlay.qcow2");
     this.socketPath = `/tmp/qemu-monitor-${this.id}.sock`;  // Short path (UNIX socket limit: 108 bytes)

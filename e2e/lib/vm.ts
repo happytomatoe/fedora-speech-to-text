@@ -8,6 +8,7 @@ import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import {
   DeployConfig,
   waitForGdmLogin,
+  ensureGdmAutologin,
   installDependencies,
   deployExtension,
   deployPythonSource,
@@ -41,10 +42,12 @@ export class VmManager {
   deployer: Deployer;
   shell: ShellHelper;
   frameCount = 0;
+  config!: VmConfig;
 
   private deployCfg: DeployConfig;
 
-  constructor(private config: VmConfig) {
+  constructor(config: VmConfig) {
+    this.config = config;
     this.qemu = new QemuMonitor(config.run.socketPath);
     this.deployer = new Deployer({
       host: "localhost",
@@ -87,20 +90,23 @@ export class VmManager {
 
     if (await this.isVmRunning()) {
       console.log("VM already running, shutting down for clean restart...");
-      await this.qemu.connect();
       try {
+        await this.qemu.connect();
         await this.qemu.systemPowerdown();
-        await Bun.sleep(3000);
       } catch {
         // Force kill if powerdown fails
       }
-      // Force kill QEMU process if still running
+      // Wait for QEMU to actually exit (poll, not fixed sleep) before any
+      // pkill — the fallback fresh boot must never race a dying QEMU for the
+      // monitor socket (observed flake: ECONNREFUSED on stale socket).
+      await this.waitQemuGone(20000);
+      // Force kill QEMU process if still running, then confirm it is gone.
       try {
         Bun.spawnSync(["pkill", "-f", `qemu-system.*${overlayImage}`]);
-        await Bun.sleep(1000);
       } catch {
         // Ignore
       }
+      await this.waitQemuGone(10000);
     }
 
     // Check if overlay is corrupted by verifying its backing file chain
@@ -118,6 +124,10 @@ export class VmManager {
     })();
 
     Bun.spawnSync(["rm", "-f", socketPath]);
+    // The socket must be gone before spawn: QEMU with server,nowait unlinks
+    // and recreates it, but a socket left by an already-dead QEMU would make
+    // the boot-time monitor connect race the new QEMU's socket creation.
+    for (let i = 0; i < 20 && existsSync(socketPath); i++) await Bun.sleep(250);
 
     if (updateMode || staleOverlay || !existsSync(overlayImage)) {
       console.log("Creating fresh VM overlay...");
@@ -194,6 +204,17 @@ export class VmManager {
     await this.qemu.connect();
     await this.resizeQemuWindow();
   }
+  /** Poll until no qemu-system process for this overlay remains. */
+  private async waitQemuGone(timeoutMs: number): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const out = Bun.spawnSync(["pgrep", "-f", `qemu-system.*${this.config.run.overlayImage}`]).stdout.toString().trim();
+      if (!out) return;
+      await Bun.sleep(500);
+    }
+    console.log("  [boot] warning: QEMU still running after shutdown wait");
+  }
+
   async waitForSsh(): Promise<void> {
     // Wait for a full SSH handshake, not just an open port — sshd may accept
     // the TCP connection but reset during the handshake on a fresh boot under
@@ -236,6 +257,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
+      await ensureGdmAutologin(this.deployer, this.config.sshUser);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
@@ -284,6 +306,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
+      await ensureGdmAutologin(this.deployer, this.config.sshUser);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
@@ -528,7 +551,9 @@ export class VmManager {
     
     try {
       await this.qemu.systemPowerdown();
-      await Bun.sleep(5000);
+      // Poll for actual QEMU exit instead of a fixed sleep — a timed-out
+      // powerdown previously left the process alive and the socket stale.
+      await this.waitQemuGone(30000);
     } finally {
       if (this.qemuProcessPid) {
         try { Bun.spawnSync(["kill", "-9", String(this.qemuProcessPid)]); } catch { /* already gone */ }
