@@ -131,35 +131,39 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
             'show-audio-level-widget'
         );
 
-        for (const spinSpec of [
-            {
-                title: _('Stop Timeout'),
-                subtitle: _(
-                    'Seconds to wait for the recording process to stop before forcing it'
-                ),
-                lower: 1,
-                upper: 120,
-                step: 1,
-                key: 'stop-timeout-seconds',
-            },
-            {
-                title: _('Decrease Speaker Volume'),
-                subtitle: _(
-                    'Reduce speaker output volume during recording (0=no change, 100=mute)'
-                ),
-                lower: 0,
-                upper: 100,
-                step: 5,
-                key: 'decrease-speaker-volume',
-            },
-        ]) {
+        const addSpinRow = (title, subtitle, lower, upper, step, key) =>
             makeSpinRow({
-                ...spinSpec,
+                title,
+                subtitle,
+                lower,
+                upper,
+                step,
+                key,
                 settings,
                 group: recordingGroup,
                 onSync: _syncAllToConfig,
             });
-        }
+
+        addSpinRow(
+            _('Stop Timeout'),
+            _(
+                'Seconds to wait for the recording process to stop before forcing it'
+            ),
+            1,
+            120,
+            1,
+            'stop-timeout-seconds'
+        );
+        addSpinRow(
+            _('Decrease Speaker Volume'),
+            _(
+                'Reduce speaker output volume during recording (0=no change, 100=mute)'
+            ),
+            0,
+            100,
+            5,
+            'decrease-speaker-volume'
+        );
 
         addSwitchRow(
             _('Inhibit Sleep During Recording'),
