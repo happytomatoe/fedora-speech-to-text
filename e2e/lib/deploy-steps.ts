@@ -67,6 +67,36 @@ export interface DeployConfig {
 // Max wait for GDM/GNOME Shell to register on the session bus after boot/restart
 const GDM_READY_TIMEOUT_MS = 240_000;
 
+// Ensure GDM auto-login is configured before waiting for a session.
+// The base image ships gdm enabled in greeter mode; on a fresh boot the
+// greeter crash-loops (glib int3 traps) and no user session ever appears,
+// so waitForGdmLogin would burn its full timeout. Writing custom.conf and
+// restarting GDM here gets autologin running before we poll.
+export async function ensureGdmAutologin(deployer: Deployer, sshUser: string): Promise<void> {
+  const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
+  try {
+    const current = await deployer.exec("cat /etc/gdm/custom.conf 2>/dev/null || true");
+    // WaylandEnable=true is required too: gdm 48 on Fedora 42 dropped X11
+    // support, and with WaylandEnable=false it finds no X11 session desktop
+    // files and SIGTRAPs in get_fallback_session_name (crash-loop).
+    if (current.stdout.includes(`AutomaticLogin=${sshUser}`) && !current.stdout.includes("WaylandEnable=false")) return;
+    await deployer.exec(`echo '${gdmConf}' | sudo tee /etc/gdm/custom.conf > /dev/null`);
+    try {
+      await deployer.exec("sudo systemctl restart gdm");
+    } catch {
+      // Expected: GDM restart may drop the connection mid-command
+    }
+    // Wait for GDM to come back up
+    for (let i = 0; i < 30; i++) {
+      const r = await deployer.exec("systemctl is-active gdm 2>/dev/null || true");
+      if (r.stdout.trim() === "active") return;
+      await Bun.sleep(1000);
+    }
+  } catch (e) {
+    console.error(`  ensureGdmAutologin failed (continuing): ${e}`);
+  }
+}
+
 export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
   const t0 = Date.now();
   console.log("Waiting for GNOME Shell to register on D-Bus...");
