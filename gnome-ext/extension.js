@@ -206,13 +206,13 @@ export default class VoiceToTextExtension extends Extension {
                         ? Date.now() - this._startTime
                         : 0;
                     if (this._profiling) {
-                        console.log(`[VoiceToText] [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`)
+                        console.debug(`[VoiceToText] [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`)
                     }
                     if (state === 'recording') {
                         this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
                         if (this._profiling) {
-                            console.log(`[VoiceToText] [PROFIL] user can speak now, total elapsed: ${elapsed}ms`)
+                            console.debug(`[VoiceToText] [PROFIL] user can speak now, total elapsed: ${elapsed}ms`)
                         }
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
@@ -322,7 +322,7 @@ export default class VoiceToTextExtension extends Extension {
             .StartRecordingAsync(JSON.stringify(config))
             .then(() => {
                 if (this._profiling) {
-                    console.log(`[VoiceToText] [PROFIL] StartRecording sent via D-Bus, elapsed: ${Date.now() - this._startTime}ms`)
+                    console.debug(`[VoiceToText] [PROFIL] StartRecording sent via D-Bus, elapsed: ${Date.now() - this._startTime}ms`)
                 }
             })
             .catch(e => {
@@ -414,7 +414,7 @@ export default class VoiceToTextExtension extends Extension {
         this._sessionManager
             .UninhibitAsync(this._inhibitCookie)
             .then(() =>
-                console.log(`[VoiceToText] sleep inhibitor released, cookie=${this._inhibitCookie}`)
+                console.debug(`[VoiceToText] sleep inhibitor released, cookie=${this._inhibitCookie}`)
             )
             .catch(e => {
                 console.error(

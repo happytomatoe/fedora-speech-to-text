@@ -29,9 +29,9 @@ export class TypeTextService {
                 Clutter.InputDeviceType.KEYBOARD_DEVICE
             );
             if (this._virtualKeyboard) {
-                console.log('[VoiceToText] TypeText virtual keyboard obtained');
+                console.debug('[VoiceToText] TypeText virtual keyboard obtained');
             } else {
-                console.log('[VoiceToText] TypeText virtual keyboard not available')
+                console.debug('[VoiceToText] TypeText virtual keyboard not available')
             }
         } catch (e) {
             console.error(
@@ -63,7 +63,7 @@ export class TypeTextService {
                     }
                 },
                 (connection, name) => {
-                    console.log(`[VoiceToText] bus name acquired: ${name}`);
+                    console.debug(`[VoiceToText] bus name acquired: ${name}`);
                 },
                 (connection, _name) => {
                     console.error(`VoiceToText: bus name lost: ${_name}`);
