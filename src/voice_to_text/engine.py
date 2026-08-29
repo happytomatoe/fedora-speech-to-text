@@ -22,13 +22,13 @@ from typing import Any
 
 from voice_to_text.audio import SpeakerVolumeManager
 from voice_to_text.config import ConfigManager
+from voice_to_text.dotool_typer import DotoolcNotFoundError, DotoolTyper
 from voice_to_text.hybrid import HybridTranscriber
 from voice_to_text.mutter_virtual_paster import MutterVirtualPaster
 from voice_to_text.mutter_virtual_typer import MutterVirtualTyper
 from voice_to_text.postprocess import postprocess
 from voice_to_text.providers import get_batch_provider, get_streaming_provider
 from voice_to_text.recorder import AsyncAudioRecorder
-from voice_to_text.typer import DotoolcNotFoundError, DotoolTyper
 
 logger = logging.getLogger(__name__)
 

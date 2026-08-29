@@ -86,7 +86,7 @@ sequenceDiagram
      default source before recording (`bluetooth.activate_headset_mic`).
    - Speaker volume is lowered during recording (`audio.SpeakerVolumeManager`).
 5. Audio is transcribed by a provider (see Modes below).
-6. The result is output: typed via `dotoolc` (`typer.DotoolTyper`),
+6. The result is output: typed via `dotoolc` (`dotool_typer.DotoolTyper`),
    copied to the clipboard, or discarded (`output_method` in config).
 7. Pressing the hotkey again calls `StopRecording`; the engine transitions to
    `processing`, finishes transcription, emits output, then returns to `idle`.
@@ -107,7 +107,7 @@ and `Error`.
 | Bluetooth | `src/voice_to_text/bluetooth.py` | Switches headset to hands-free mic before recording. |
 | Providers | `src/voice_to_text/providers/*.py` | Cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and local (Parakeet) transcription. |
 | Hybrid | `src/voice_to_text/hybrid.py` | Mixes a streaming provider (live partials) with a batch provider (final pass). |
-| Output | `src/voice_to_text/typer.py` | Incremental typing via `dotoolc`; clipboard fallback. |
+| Output | `src/voice_to_text/dotool_typer.py` | Incremental typing via `dotoolc`; clipboard fallback. |
 | Config | `src/voice_to_text/config.py`, `config.yaml` | Loads/resolves provider config and secrets. |
 
 ## Transcription modes

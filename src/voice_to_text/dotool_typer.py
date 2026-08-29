@@ -27,8 +27,6 @@ class DotoolcNotFoundError(RuntimeError):
     """Raised when ``dotoolc`` is not found in PATH."""
 
 
-# Kept as ``typer``/``DotoolTyper``: engine.py and the output-method docs
-# reference this name; renaming is a breaking config-surface change.
 class DotoolTyper:
     """Types text via a persistent pipe to the ``dotoolc`` binary.
 

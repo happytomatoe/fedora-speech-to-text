@@ -1,11 +1,9 @@
 version: 1
 
 quality:
-  # engine.py RecordingEngine._run and preroll.select_preroll_frames are
-  # documented, linear pipelines; extension.js/prefs JS rows build UI dialogs.
-  # Tracked for gradual extraction; do not block the gate on them.
-  maxFunctionLoc: 300
-  maxFileLoc: 800
+  # Defaults (maxFunctionLoc: 80, maxFileLoc: 400) per PR review — remaining
+  # over-limit functions are tracked for gradual extraction.
+  maxFileLoc: 400
 
 rules:
   # GNOME Shell extension logs to the Shell journal via console.* — that IS the

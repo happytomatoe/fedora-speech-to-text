@@ -55,7 +55,6 @@ const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);
 
 export default class VoiceToTextExtension extends Extension {
     enable() {
-        this._showNotification('VoiceToText: enable() called');
         this._settings = this.getSettings(
             'org.gnome.shell.extensions.voice-to-text'
         );
@@ -171,7 +170,7 @@ export default class VoiceToTextExtension extends Extension {
         try {
             registerHotkey('hotkey', this._settings, () => this._toggle());
         } catch (e) {
-            this._showNotification('Voice-to-Text failed to register hotkey');
+            this._showNotification('VoiceToText: failed to register hotkey');
             console.error('VoiceToText: failed to register hotkey:', e.message);
         }
     }
@@ -180,9 +179,9 @@ export default class VoiceToTextExtension extends Extension {
         try {
             unregisterHotkey('hotkey');
         } catch (e) {
-            this._showNotification('Voice-to-Text failed to register hotkey');
+            this._showNotification('VoiceToText: failed to unregister hotkey');
             console.error(
-                'voicetotext: failed to unregister hotkey:',
+                'VoiceToText: failed to unregister hotkey:',
                 e.message
             );
         }
