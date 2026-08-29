@@ -245,7 +245,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   } else {
     await shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
   }
-  // Poll until tmux session appears
+  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling)
   await vm.pollUntil(
     "tmux session",
     async () => {
@@ -256,7 +256,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         return false; // ssh hiccup — retry
       }
     },
-    15000
+    5000
   );
   // Click on the terminal to ensure it has focus
   await shell.dotoolCommand("mousemove 640 400");

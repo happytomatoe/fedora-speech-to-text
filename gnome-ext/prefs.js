@@ -135,7 +135,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
     makeSpinRow({
       title: _('Decrease Speaker Volume'),
-      subtitle: _('Reduce speaker output volume while recording (0 = no change, 100 = mute)'),
+      subtitle: _('Reduce speaker output volume during recording (0 = no change, 100 = mute)'),
       lower: 0, upper: 100, step: 5, key: 'decrease-speaker-volume',
       settings, group: recordingGroup, onSync: _syncAllToConfig,
     });
