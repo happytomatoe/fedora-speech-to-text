@@ -5,7 +5,7 @@ pre-commit:
   parallel: true
   commands:
     knip:
-      run: bunx knip
+      run: npx knip
       glob: "*.{ts,js,json}"
     check-dbus-service-name:
       run: uv run pytest tests/test_dbus_service_name.py -q
