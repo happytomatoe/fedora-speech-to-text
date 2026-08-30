@@ -272,9 +272,11 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // Expected: GDM restart drops the SSH connection mid-command
     }
 
-    // Wait for GDM to fully restart and create a new user session
+    // Wait for GDM to restart. Best-effort: if restart-command output has
+    // flushed and SSH answered once, teardown has begun. The real readiness
+    // gates are the polls below (GDM active -> user session -> gnome-shell ->
+    // extension ACTIVE). No fixed sleep needed.
     console.log("  waiting for GDM to stabilize...");
-    await Bun.sleep(5000);
 
     // Poll for GDM to be active (new session created)
     await pollUntilFn(
