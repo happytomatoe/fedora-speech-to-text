@@ -304,8 +304,8 @@ openqa-transcribe:
     # Make sure voice is baked and autologin image is current
     just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" bake-voice
     just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" prepare-img
-    # Run the test
-    TEST=transcribe "${poc_dir}/run-host.sh"
+    # Run the test. run-host.sh honors the TEST_OVERRIDE env var.
+    TEST_OVERRIDE=transcribe "${poc_dir}/run-host.sh"
 
 # Run the POC test on the host (no podman).
 # Boots the golden image, logs in as testuser via GDM, captures a desktop screenshot.

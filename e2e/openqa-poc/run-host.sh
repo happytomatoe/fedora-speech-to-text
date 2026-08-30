@@ -51,6 +51,7 @@ fi
 # Generate vars.json from template with absolute paths to this checkout
 python3 - <<EOF
 import json
+import os
 with open("${POC_DIR}/vars.template.json") as f:
     vars = json.load(f)
 vars["CASEDIR"]    = "${POC_DIR}"
@@ -59,6 +60,9 @@ vars["HDD_1"]      = "${GOLDEN_DIR}/golden-gnome-deps-autologin.qcow2"
 # ISO slot is required by some backends even when empty
 vars["ISO_1"]      = ""
 vars["ISO_MAXSIZE"] = 20000000000
+# Allow the caller to override which test to run (default: from the template)
+if 'TEST_OVERRIDE' in os.environ:
+    vars["TEST"] = os.environ["TEST_OVERRIDE"]
 with open("${POC_DIR}/vars.json", "w") as f:
     json.dump(vars, f, indent=3)
 EOF
