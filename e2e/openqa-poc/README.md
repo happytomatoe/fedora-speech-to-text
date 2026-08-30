@@ -52,8 +52,22 @@ ls ../qemu-images/golden-gnome-deps-autologin.qcow2
 just openqa-test
 ```
 
-`just` with no arguments prints the available recipes.
+To automate the whole flow (clone the branch, stage the golden image, run the
+test) into a fresh directory, use one of the helper scripts:
 
+```bash
+# Cold-test the current branch (feat/openqa)
+scripts/cold-test.sh /tmp/clone-test
+
+# Cold-test any branch (prompts to bake the golden image if missing)
+scripts/checkout-and-test.sh feat/openqa /tmp/clone-test
+```
+
+Both scripts clone the branch into a fresh directory, copy in a pre-baked
+golden image, and run the test end-to-end. Useful for CI smoke tests and for
+verifying that a new contributor can actually follow the instructions.
+
+`just` with no arguments prints the available recipes.
 ## Golden image
 
 The test boots `../qemu-images/golden-gnome-deps-autologin.qcow2` (relative to this
@@ -142,6 +156,8 @@ label is still shown above the box.
 | `tests/boot_desktop.pm`, `tests/autologin.pm`, `tests/find_password.pm` | Earlier test attempts, kept for reference |
 | `needles/{login-screen,password-prompt,desktop}.{json,png}` | Visual references for openQA |
 | `run-host.sh` | Boots the test: starts Xvfb, generates vars.json, runs isotovideo, cleans up |
+| `scripts/cold-test.sh` | One-shot: clones `feat/openqa` into a fresh dir, stages the golden image, runs the test |
+| `scripts/checkout-and-test.sh` | Same, but takes any branch as an argument; prompts to bake the golden image if missing |
 | `Containerfile` | Optional podman image (alternative to host packages) |
 | `justfile` | `just openqa-test`, `just prepare-img`, `just clean`, `just build` |
 
