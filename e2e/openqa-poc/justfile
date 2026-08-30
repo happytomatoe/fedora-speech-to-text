@@ -2,9 +2,10 @@
 #
 # Usage:
 #   just setup-deps        # one-time: install host packages + clone the distri
-#   just provision-base    # one-time: download Fedora 42 cloud image and bake GNOME+GDM
+#   just provision-base    # one-time: pick the fastest cloud-image mirror, download, bake
 #   just prepare-img       # one-time: bake the testuser password into the autologin copy
 #   just openqa-test       # run the test
+#   just select-mirror     # race candidate mirrors and save the fastest (one-time)
 #   just build             # build the optional podman image (alternative to host packages)
 #   just clean             # remove test results and runtime artefacts
 #
@@ -19,11 +20,7 @@ poc_dir := justfile_directory()
 # doesn't run shell backticks at interpolation time — it would treat the
 # backtick expression as a literal string.
 distri_dir := "/tmp/os-autoinst-distri-fedora"
-# Princeton's US mirror is the fastest reliable source for Fedora cloud
-# images (~15 MB/s from typical US hosts). The canonical Fedora URL
-# (download.fedoraproject.org) load-balances to random European mirrors
-# that often run at <1 MB/s.
-fedora_cloud_url := "https://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
+fedora_cloud_filename := "Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
 fedora_cloud_tmp := "/tmp/Fedora-Cloud-Base-Generic-42.qcow2"
 
 # Default recipe: print usage
@@ -59,24 +56,107 @@ setup-deps:
     @echo
     @echo "Done. Next: just provision-base   (downloads Fedora 42 cloud image)"
 
-# One-time: download the Fedora 42 cloud image and bake GNOME + GDM + testuser
-# into it. Idempotent: skips the download if the base image exists, and skips
-# the bake if a .provisioned marker file exists.
+# Race a small list of candidate mirrors by downloading 20 MB from each
+# and timing it. Writes the winner to qemu-images/.mirror so the next
+# provision-base skips the race. Override the list with the
+# FEDORA_MIRRORS env var (space-separated URLs) or the winner with
+# FEDORA_CLOUD_URL.
+#
+# Takes ~10-15 seconds (6 candidates x 20 MB at typical 5-15 MB/s).
+select-mirror:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    qemu_images_dir="$(cd '{{poc_dir}}/..' && pwd)/qemu-images"
+    mirror_marker="${qemu_images_dir}/.mirror"
+    mkdir -p "${qemu_images_dir}"
+
+    if [ -n "${FEDORA_CLOUD_URL:-}" ]; then
+        echo "using FEDORA_CLOUD_URL=${FEDORA_CLOUD_URL}"
+        echo "${FEDORA_CLOUD_URL}" > "${mirror_marker}"
+        exit 0
+    fi
+
+    # Default candidate list. Mix of US, EU, and the canonical balancer.
+    # The canonical URL is the load-balanced fallback (random European
+    # mirror per request, usually slow from US hosts).
+    if [ -n "${FEDORA_MIRRORS:-}" ]; then
+        # shellcheck disable=SC2206
+        MIRRORS=(${FEDORA_MIRRORS})
+    else
+        MIRRORS=(
+            "https://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"
+            "https://mirrors.kernel.org/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"
+            "https://mirrors.mit.edu/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"
+            "https://mirror.linux.ncsu.edu/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"
+            "https://ftp-stud.hs-esslingen.de/pub/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"
+        )
+    fi
+    # Drop mirrors that 404 on HEAD (saves the race time).
+    PROBE_BYTES=20971519  # 20 MiB - 1
+    echo "=== racing $(echo "${MIRRORS[@]}" | wc -w) mirrors ==="
+    echo "  (20 MB probe each; total ~120 MB, takes ~10-15 s)"
+    best_url=""
+    best_speed=0
+    best_host=""
+    for url in "${MIRRORS[@]}"; do
+        host=$(echo "${url}" | sed -E 's|https?://([^/]+)/.*|\1|')
+        out=$(curl -sLo /dev/null -w "%{http_code} %{time_total} %{speed_download}" \
+              --max-time 10 --range "0-${PROBE_BYTES}" "${url}" 2>&1) || continue
+        code=$(echo "${out}" | awk '{print $1}')
+        if [ "${code}" != "206" ]; then
+            printf "  %-40s  HTTP %s  (skipped)\n" "${host}" "${code}"
+            continue
+        fi
+        sp=$(echo "${out}" | awk '{print $3}')
+        sp_mb=$(awk "BEGIN { printf \"%.1f\", ${sp} / 1024 / 1024 }")
+        printf "  %-40s  %s MB/s\n" "${host}" "${sp_mb}"
+        # Compare as integer (bytes/sec) using awk
+        if awk "BEGIN { exit !(${sp} > ${best_speed}) }"; then
+            best_speed="${sp}"
+            best_url="${url}"
+            best_host="${host}"
+        fi
+    done
+    if [ -z "${best_url}" ]; then
+        echo "ERROR: no mirror responded to the probe."
+        exit 1
+    fi
+    echo
+    echo "winner: ${best_host}  (${best_speed} bytes/s)"
+    echo "${best_url}" > "${mirror_marker}"
+    echo "saved to ${mirror_marker} (delete it to re-race)"
+
+# One-time: pick the fastest mirror (if not already picked), download the
+# Fedora 42 cloud image, and bake GNOME + GDM + testuser into it.
+# Idempotent: skips download if the base image exists, skips bake if a
+# .provisioned marker file exists, skips mirror race if a .mirror marker
+# exists.
 provision-base:
     #!/usr/bin/env bash
     set -euo pipefail
     qemu_images_dir="$(cd '{{poc_dir}}/..' && pwd)/qemu-images"
+    mirror_marker="${qemu_images_dir}/.mirror"
     base_golden_img="${qemu_images_dir}/golden-gnome-deps.qcow2"
     provisioned_marker="${qemu_images_dir}/.provisioned"
     mkdir -p "${qemu_images_dir}"
+    if [ ! -f "${mirror_marker}" ] && [ -z "${FEDORA_CLOUD_URL:-}" ]; then
+        echo "=== picking the fastest mirror (one-time) ==="
+        just --justfile '{{poc_dir}}/justfile' --working-directory '{{poc_dir}}' select-mirror
+    fi
+    fedora_cloud_url="$(cat "${mirror_marker}" 2>/dev/null || true)"
+    if [ -z "${fedora_cloud_url}" ]; then
+        fedora_cloud_url="${FEDORA_CLOUD_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}}"
+    fi
     if [ -f "${base_golden_img}" ]; then
         echo "base image already at ${base_golden_img}."
     else
-        echo "downloading Fedora 42 cloud image (~530 MB) from US mirror..."
-        if ! curl -L -f -o "{{fedora_cloud_tmp}}" "{{fedora_cloud_url}}"; then
-            echo "  primary mirror failed; falling back to download.fedoraproject.org..."
-            if ! curl -L -f -o "{{fedora_cloud_tmp}}" "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"; then
-                echo "ERROR: download failed. Check your network or set fedora_cloud_url in the justfile."
+        echo "downloading Fedora 42 cloud image (~530 MB) from ${fedora_cloud_url}..."
+        if ! curl -L -f -o "{{fedora_cloud_tmp}}" "${fedora_cloud_url}"; then
+            echo "  selected mirror failed; falling back to canonical URL..."
+            rm -f "{{fedora_cloud_tmp}}"
+            if ! curl -L -f -o "{{fedora_cloud_tmp}}" "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/{{fedora_cloud_filename}}"; then
+                echo "ERROR: download failed. Check your network."
                 rm -f "{{fedora_cloud_tmp}}"
                 exit 1
             fi
