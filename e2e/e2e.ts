@@ -120,7 +120,6 @@ const PREFS_SOURCES = [
   "gnome-ext/metadata.json",
   "gnome-ext/vendor/js-yaml.mjs",
   "e2e/fixtures/voice-to-text-config.yaml",
-  "e2e/lib/deploy-steps.ts",
   "install.sh",
 ];
 
@@ -315,24 +314,36 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
   const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
-  if (hasGhostty) {
-    await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
-  } else {
-    await shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
+  const spawnTerminal = () =>
+    hasGhostty
+      ? shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`)
+      : shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
+  await spawnTerminal();
+  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling).
+  // If it never appears, the terminal emulator likely died on spawn — respawn
+  // once before failing (flake: gnome-terminal sometimes crashes right after
+  // snapshot restore under load).
+  const waitTmux = () =>
+    vm.pollUntil(
+      "tmux session",
+      async () => {
+        try {
+          const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
+          return output.trim().length > 0;
+        } catch {
+          return false; // ssh hiccup — retry
+        }
+      },
+      15000
+    );
+  try {
+    await waitTmux();
+  } catch {
+    console.log("  tmux session did not appear — respawning terminal once");
+    await tmux.killSession(tmuxCfg);
+    await spawnTerminal();
+    await waitTmux();
   }
-  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling)
-  await vm.pollUntil(
-    "tmux session",
-    async () => {
-      try {
-        const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
-        return output.trim().length > 0;
-      } catch {
-        return false; // ssh hiccup — retry
-      }
-    },
-    5000
-  );
   // Click on the terminal to ensure it has focus
   await shell.dotoolCommand("mousemove 640 400");
   await shell.dotoolCommand("buttondown 1");

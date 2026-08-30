@@ -550,10 +550,10 @@ export class VmManager {
     }
     
     try {
-      await this.qemu.systemPowerdown();
-      // Poll for actual QEMU exit instead of a fixed sleep — a timed-out
-      // powerdown previously left the process alive and the socket stale.
-      await this.waitQemuGone(30000);
+      // Monitor `quit` terminates immediately — throwaway VM, graceful ACPI
+      // powerdown cost ~5s of waitQemuGone polling for nothing.
+      await this.qemu.quit();
+      await this.waitQemuGone(5000);
     } finally {
       if (this.qemuProcessPid) {
         try { Bun.spawnSync(["kill", "-9", String(this.qemuProcessPid)]); } catch { /* already gone */ }
