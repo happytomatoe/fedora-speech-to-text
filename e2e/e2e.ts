@@ -120,7 +120,6 @@ const PREFS_SOURCES = [
   "gnome-ext/metadata.json",
   "gnome-ext/vendor/js-yaml.mjs",
   "e2e/fixtures/voice-to-text-config.yaml",
-  "e2e/lib/deploy-steps.ts",
   "install.sh",
 ];
 
@@ -170,12 +169,6 @@ function prefsSourceMatch(file: string): boolean {
   return PREFS_SOURCES.some(
     (src) => file === src || (statSync(join(PROJECT_ROOT, src)).isDirectory() && file.startsWith(src + "/")),
   );
-}
-
-/** Print an elapsed-time line for a labeled phase. */
-function timing(label: string, startMs: number): void {
-  const ms = Date.now() - startMs;
-  console.log(`  [time] ${label}: ${ms}ms`);
 }
 
 // Configuration
@@ -314,25 +307,30 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
-  const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
-  if (hasGhostty) {
+  await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
+  // If the tmux session never appears, respawn the terminal once before
+  // failing (flake: terminal sometimes crashes right after snapshot restore).
+  const waitTmux = () =>
+    vm.pollUntil(
+      "tmux session",
+      async () => {
+        try {
+          const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
+          return output.trim().length > 0;
+        } catch {
+          return false; // ssh hiccup — retry
+        }
+      },
+      15000
+    );
+  try {
+    await waitTmux();
+  } catch {
+    console.log("  tmux session did not appear — respawning terminal once");
+    await tmux.killSession(tmuxCfg);
     await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
-  } else {
-    await shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
+    await waitTmux();
   }
-  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling)
-  await vm.pollUntil(
-    "tmux session",
-    async () => {
-      try {
-        const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
-        return output.trim().length > 0;
-      } catch {
-        return false; // ssh hiccup — retry
-      }
-    },
-    5000
-  );
   // Click on the terminal to ensure it has focus
   await shell.dotoolCommand("mousemove 640 400");
   await shell.dotoolCommand("buttondown 1");
@@ -500,18 +498,15 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.
   console.log("Closing terminal before preferences tests...");
   await tmux.killSession(tmuxCfg);
-  await shell.exec("pkill -f ghostty 2>/dev/null; pkill -f gnome-terminal 2>/dev/null; true");
+  await shell.exec("pkill -f ghostty 2>/dev/null; true");
   // Poll until the terminal emulator has actually exited (no blind sleep).
-  // Use one-shot ssh with swallow-on-error: shell.exec can throw if the
-  // persistent connection hiccups right after tmux kill, and pgrep matching
-  // nothing returns empty via `; true`.
   await vm.pollUntil(
     "terminal closed",
     async () => {
       try {
         // [g]hostty bracket trick: prevents pgrep from matching this very
         // ssh command's own cmdline (sh -c "...ghostty...").
-        const out = await shell.exec("pgrep -f '[g]hostty'; pgrep -f '[g]nome-terminal'; true");
+        const out = await shell.exec("pgrep -f '[g]hostty'; true");
         return out.trim().length === 0;
       } catch {
         return false;
@@ -576,7 +571,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     if (!/^\/tmp\/e2e-screencast[^']*\.webm$/.test(screencastFile)) {
       console.log(`  Screencast file path rejected: ${screencastFile}`);
     } else {
-      t = Date.now();
+      beginSpan("retrieve-screencast");
       const localPath = join(screencastDir, "test-recording.webm");
       try {
         execSync(
@@ -588,7 +583,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       } catch (e) {
         console.log(`  Screencast retrieval failed: ${e}`);
       }
-      timing("retrieve-screencast", t);
+      endSpan();
     }
   }
 }

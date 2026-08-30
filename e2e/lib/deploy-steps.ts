@@ -418,13 +418,13 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log("Restarting dotoold...");
   // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
   try {
-    sshExec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    await shell.exec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true");
   } catch {
     // Best effort — may fail if udev rule already set permissions
   }
   // Kill existing dotoold and remove stale pipe before starting fresh
   try {
-    sshExec("pkill -f dotoold; rm -f /run/user/$(id -u)/dotool-pipe; sleep 0.5", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    await shell.exec("pkill -f dotoold; rm -f /run/user/$(id -u)/dotool-pipe; sleep 0.5");
   } catch {
     // Ignore — may not be running
   }
