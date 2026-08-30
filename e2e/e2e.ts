@@ -124,10 +124,10 @@ const PREFS_SOURCES = [
 ];
 
 /**
- * Content hash of all prefs-affecting files, compared against the hash stored
- * after the last run. Stable across worktree checkouts (git-tracked content is
- * identical, and per-file hashes ignore mtime), so only real content changes
- * re-run the screenshots.
+ * Whether prefs screenshots should run. Compares the content hash of all
+ * prefs-affecting files against the hash stored after the last run. On the
+ * first run in a worktree (no stored hash) the decision comes from git diff
+ * vs main instead, so a clean branch skips the screenshots immediately.
  */
 function prefsUiChanged(): boolean {
   const { createHash } = require("node:crypto");
@@ -145,14 +145,30 @@ function prefsUiChanged(): boolean {
   }
   const current = hash.digest("hex");
   const statePath = join(OUTPUT_DIR, ".prefs-ui-hash");
+  let stored: string | null = null;
   try {
-    if (readFileSync(statePath, "utf-8").trim() === current) return false;
+    stored = readFileSync(statePath, "utf-8").trim();
   } catch {
-    // no state file = first run = changed
+    // no state file = first run in this worktree
   }
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(statePath, current);
-  return true;
+  if (stored === null) {
+    const diff = execSync(
+      "git diff --name-only main...HEAD; git diff --name-only; git ls-files --others --exclude-standard",
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    return diff.split("\n").some((f) => prefsSourceMatch(f.trim()));
+  }
+  return stored !== current;
+}
+
+/** Whether a changed path is a prefs source (file or inside a source dir). */
+function prefsSourceMatch(file: string): boolean {
+  if (!file) return false;
+  return PREFS_SOURCES.some(
+    (src) => file === src || (statSync(join(PROJECT_ROOT, src)).isDirectory() && file.startsWith(src + "/")),
+  );
 }
 
 /** Print an elapsed-time line for a labeled phase. */
