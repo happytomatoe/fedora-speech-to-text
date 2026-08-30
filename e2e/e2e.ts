@@ -8,7 +8,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { pollForCommandOutput } from "./lib/poll.js";
+import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
@@ -651,8 +651,9 @@ async function captureScreenshot(label: string, run: RunContext, vm?: VmManager)
         { encoding: "utf-8", timeout: 5000 }
       );
     }
-    // Wait for file to be written
-    await Bun.sleep(500);
+    // screendump is synchronous (monitor waits for the (qemu) prompt), but the file
+    // write is async on QEMU's side — poll briefly as belt-and-suspenders
+    await pollFileExists(ppmPath);
     // Convert PPM to PNG
     execSync(`convert ${ppmPath} ${pngPath} 2>/dev/null || true`, {
       encoding: "utf-8",
@@ -891,7 +892,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     const png = join(prefsDir, `${name}.png`);
     const ppm = join(prefsDir, `${name}.ppm`);
     await vm.qemu.screendump(ppm);
-    await Bun.sleep(500);
+    await pollFileExists(ppm);
     execSync(`convert "${ppm}" "${png}" 2>/dev/null || true`, { encoding: "utf-8" });
     execSync(`rm -f "${ppm}"`, { encoding: "utf-8" });
     console.log(`  📷 Captured: ${name}.png`);

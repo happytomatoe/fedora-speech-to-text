@@ -1,3 +1,5 @@
+import { existsSync, statSync } from "node:fs";
+
 /** Poll until `check()` returns true, or throw after timeoutMs. */
 export async function pollUntil(
   desc: string,
@@ -25,6 +27,15 @@ export async function pollUntil(
     if (err instanceof Error && err.message.startsWith("Timeout")) throw err;
     if (!quiet) process.stdout.write("\n");
     throw err;
+  }
+}
+
+/** Poll until a local file exists and is non-empty, or throw after timeoutMs. */
+export async function pollFileExists(path: string, timeoutMs = 2000, intervalMs = 25): Promise<void> {
+  const start = Date.now();
+  while (!existsSync(path) || statSync(path).size === 0) {
+    if (Date.now() - start > timeoutMs) throw new Error(`Timeout waiting for file: ${path}`);
+    await Bun.sleep(intervalMs);
   }
 }
 
