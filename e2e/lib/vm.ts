@@ -552,7 +552,7 @@ export class VmManager {
     try {
       // Monitor `quit` terminates immediately — throwaway VM, graceful ACPI
       // powerdown cost ~5s of waitQemuGone polling for nothing.
-      await this.qemu.quit();
+      await this.qemu.execute("quit");
       await this.waitQemuGone(5000);
     } finally {
       if (this.qemuProcessPid) {

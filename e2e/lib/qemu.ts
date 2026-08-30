@@ -245,11 +245,6 @@ export class QemuMonitor extends EventEmitter {
     await this.execute("system_powerdown");
   }
 
-  /** Immediate VM termination — throwaway test VM, no graceful shutdown needed. */
-  async quit(): Promise<void> {
-    await this.execute("quit");
-  }
-
   async queryStatus(): Promise<string> {
     return await this.execute("info status");
   }
