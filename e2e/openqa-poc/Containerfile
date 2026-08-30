@@ -1,0 +1,4 @@
+FROM fedora:44
+RUN dnf install -y os-autoinst xorg-x11-server-Xvfb qemu-kvm git libguestfs-tools-c && dnf clean all
+ENV PERL5LIB="/usr/lib/os-autoinst:/tmp/os-autoinst-distri-fedora/lib"
+WORKDIR /workspace

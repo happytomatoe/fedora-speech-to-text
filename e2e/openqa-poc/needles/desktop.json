@@ -1,0 +1,31 @@
+{
+  "area": [
+    {
+      "xpos": 0,
+      "ypos": 0,
+      "width": 200,
+      "height": 40,
+      "type": "match",
+      "match": 90
+    },
+    {
+      "xpos": 512,
+      "ypos": 0,
+      "width": 200,
+      "height": 40,
+      "type": "match",
+      "match": 90
+    },
+    {
+      "xpos": 824,
+      "ypos": 0,
+      "width": 200,
+      "height": 40,
+      "type": "match",
+      "match": 90
+    }
+  ],
+  "description": "Fedora GNOME desktop top bar - Activities, clock, system menu",
+  "tags": ["desktop"],
+  "properties": []
+}

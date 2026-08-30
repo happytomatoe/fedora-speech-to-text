@@ -1,0 +1,26 @@
+# Generated files
+testresults/
+raid/
+serial0
+video.webm
+video_time.vtt
+qemu_state.json
+autoinst-status.json
+backend.run
+os-autoinst.pid
+qemu.pid
+qmp_socket
+qmp_socket.log
+virtio_console.in
+virtio_console.out
+virtio_console.log
+virtio_console_user.in
+virtio_console_user.out
+virtio_console_user.log
+command-server-tmp/
+qemuscreenshot/
+.pi-glla/
+*.pid
+*.log
+*.run
+*.status

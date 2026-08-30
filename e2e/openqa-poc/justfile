@@ -1,0 +1,64 @@
+# openQA POC justfile — run the boot + login test.
+#
+# Usage:
+#   just openqa-test        # run login_with_password test against the golden image
+#   just prepare-img        # bake the testuser password into the golden image (one-time)
+#   just build              # build the optional podman image (alternative to host)
+#   just clean              # remove test results and runtime artefacts
+#
+# Requirements (host runner):
+#   - os-autoinst, xorg-x11-server-Xvfb, qemu-kvm, guestfs-tools (or libguestfs-tools-c)
+#   - /dev/kvm accessible to the current user
+#   - Golden image at ../qemu-images/golden-gnome-deps-autologin.qcow2
+#     (run `just prepare-img` to bake the testuser password in)
+#   - The cloned os-autoinst-distri-fedora at /tmp/os-autoinst-distri-fedora (optional)
+
+set shell := ["bash", "-uc"]
+
+poc_dir := justfile_directory()
+golden_img := poc_dir / ".." / "qemu-images" / "golden-gnome-deps-autologin.qcow2"
+base_golden_img := poc_dir / ".." / "qemu-images" / "golden-gnome-deps.qcow2"
+
+# Default recipe: print usage
+default:
+    @just --list
+
+# Run the POC test on the host (no podman).
+# Boots the golden image, logs in as testuser via GDM, captures a desktop screenshot.
+# Result JSON and screenshots land in testresults/.
+openqa-test:
+    {{poc_dir}}/run-host.sh
+
+# Bake the testuser password into a copy of the golden image.
+# One-time operation: produces golden-gnome-deps-autologin.qcow2 from the base.
+# Idempotent: re-running overwrites the autologin image but does not touch the base.
+prepare-img:
+    @if [ ! -f "{{base_golden_img}}" ]; then \
+        echo "ERROR: base golden image not found at {{base_golden_img}}"; \
+        echo "See README.md for how to provision it."; \
+        exit 1; \
+    fi
+    cp -f "{{base_golden_img}}" "{{golden_img}}"
+    echo "Baking testuser password into {{golden_img}}..."
+    sudo LIBGUESTFS_BACKEND=direct virt-customize \
+        -a "{{golden_img}}" \
+        --password "testuser:password:testuser" \
+        --run-command "echo testuser ALL=\\(ALL\\) NOPASSWD:ALL >/etc/sudoers.d/testuser" \
+        --selinux-relabel
+    @echo "Done. Run: just openqa-test"
+
+# Clean test results and runtime artefacts.
+clean:
+    rm -rf {{poc_dir}}/testresults
+    rm -f {{poc_dir}}/serial0
+    rm -f {{poc_dir}}/virtio_console.in {{poc_dir}}/virtio_console.out {{poc_dir}}/virtio_console.log
+    rm -f {{poc_dir}}/virtio_console_user.in {{poc_dir}}/virtio_console_user.out {{poc_dir}}/virtio_console_user.log
+    rm -f {{poc_dir}}/os-autoinst.pid {{poc_dir}}/qemu.pid
+    rm -rf {{poc_dir}}/raid {{poc_dir}}/qemuscreenshot {{poc_dir}}/command-server-tmp
+    rm -f {{poc_dir}}/video.webm {{poc_dir}}/video_time.vtt
+    @echo "Cleaned."
+
+# Build the podman image (alternative to installing host packages).
+# Skips the host's guestfs-tools dependency; useful when /tmp/ is not the distri path.
+build:
+    cd {{poc_dir}} && podman build -t openqa-poc-worker -f Containerfile .
