@@ -263,6 +263,24 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     // May fail if already configured — continue
   }
   
+  // Install dotool concurrently with the GDM restart loop: it uses one-shot
+  // sshExec connections that survive a GDM restart, unlike the persistent
+  // shell session. The dotoold *start* below must stay after (needs the
+  // recreated user session for XDG_RUNTIME_DIR).
+  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
+  const dotoolInstallP: Promise<void> = (async () => {
+    if (isGoldenDepsImage) return;
+    try {
+      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (dotoolCheck.includes("missing")) {
+        console.log("  Installing dotool...");
+        sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      }
+    } catch {
+      // Continue — dotoold start may fail with clear error
+    }
+  })();
+
   let extensionFound = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     console.log(`  attempt ${attempt + 1}...`);
@@ -401,21 +419,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     console.log("WARNING: Extension state:", extState.trim());
   }
 
-  // Restart dotoold
-  // Install dotool if not present (not in base image)
-  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
-  if (!isGoldenDepsImage) {
-    try {
-      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      if (dotoolCheck.includes("missing")) {
-        console.log("  Installing dotool...");
-        sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      }
-    } catch {
-      // Continue — dotoold start may fail with clear error
-    }
-  }
-  console.log("Restarting dotoold...");
+  // Restart dotoold (dotool install ran in parallel with the GDM restart loop)
+  await dotoolInstallP;
   // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
   try {
     await shell.exec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true");
