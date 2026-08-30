@@ -28,6 +28,6 @@ qemuscreenshot/
 # Generated from vars.template.json with absolute paths substituted
 vars.json
 # Marker written by `just provision-base` to skip the ~10 min bake on reruns
-.provisioned
+.resized
 # Marker written by `just select-mirror` to remember the fastest mirror
 .mirror

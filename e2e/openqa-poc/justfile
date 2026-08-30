@@ -162,6 +162,11 @@ provision-base:
             fi
         fi
         mv "{{fedora_cloud_tmp}}" "${base_golden_img}"
+    fi
+    if [ -f "${qemu_images_dir}/.resized" ]; then
+        echo "base image already resized (marker: ${qemu_images_dir}/.resized)."
+        echo "  delete it to re-resize: rm ${qemu_images_dir}/.resized"
+    else
         # The cloud image's btrfs root is ~4 GB, which is not enough for
         # the @gnome-desktop install (~2.5 GB more). virt-resize grows
         # both the qcow2 container and the btrfs filesystem inside, in
@@ -171,6 +176,7 @@ provision-base:
         qemu-img create -f qcow2 "${_resized}" 12G
         LIBGUESTFS_BACKEND=direct virt-resize --expand /dev/sda4 "${base_golden_img}" "${_resized}"
         mv "${_resized}" "${base_golden_img}"
+        date -Iseconds > "${qemu_images_dir}/.resized"
     fi
     if [ -f "${provisioned_marker}" ]; then
         echo "base image already provisioned (marker: ${provisioned_marker})."
