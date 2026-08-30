@@ -8,6 +8,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
+import { doAtspiAction, findAtspiExtents, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
@@ -863,26 +864,22 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   const prefsDir = join(run.outputDir, "preferences");
   mkdirSync(prefsDir, { recursive: true });
   
+  // GNOME 50's gnome-extensions client has no --gsettings flag; also the
+  // dconf seed above only lands at deploy time. Belt-and-suspenders: set it
+  // again right before prefs launches (idempotent).
+  await vm.deployer.exec(
+    `gsettings set org.gnome.desktop.interface toolkit-accessibility true`
+  );
+
   // Open preferences window using gnome-extensions prefs command
   console.log("  Opening preferences window...");
   await vm.deployer.exec(
     `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); gnome-extensions prefs voice-to-text@happytomatoe.com &`
   );
   
-  // Wait for window to appear
-  await Bun.sleep(3000);
-  
-  // Dismiss any welcome/tour dialogs that may appear
-  console.log("  Dismissing welcome dialogs...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key Escape" | dotool`
-  );
-  await Bun.sleep(500);
-  // Click Skip button if tour dialog appears
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
+  // Wait for the prefs window node to appear in the a11y tree
+  await waitForAtspiNode(vm.deployer, { name: "Voice to Text", role: "frame" });
+  console.log("  Prefs window visible (AT-SPI)");
   
   // Capture a prefs screenshot via QEMU monitor screendump (full display).
   // CodeRabbit suggested portal/Shell.Screenshot here, but Eval is disabled
@@ -902,57 +899,31 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Take screenshot of main preferences window
   const mainPng = await capturePrefs("prefs-main");
   
-  // Scroll down to see more settings using dotool (works on Wayland)
-  console.log("  Scrolling down to see more settings...");
-  // First click on the preferences window to focus it
+  // Scroll to page bottom in one go, wait for the last row to show
+  console.log("  Scrolling to bottom...");
+  const addWordExt = await findAtspiExtents(vm.deployer, "Add Word…");
   await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto ${(addWordExt.x + addWordExt.width / 2) / 1920} ${(addWordExt.y + addWordExt.height / 2) / 1080}\nwheel -50" | dotool`
   );
-  await Bun.sleep(500);
-  // Then scroll down using dotool wheel (negative = scroll down)
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
+  await waitForAtspiNode(vm.deployer, { name: "Edit Configuration File", role: "list item" });
   
-  const scroll1Png = await capturePrefs("prefs-scrolled-1");
+  const bottomPng = await capturePrefs("prefs-bottom");
   
-  // Scroll down more
-  console.log("  Scrolling down more...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll2Png = await capturePrefs("prefs-scrolled-2");
-  
-  // Scroll down even more
-  console.log("  Scrolling down even more...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll3Png = await capturePrefs("prefs-scrolled-3");
-  
-  // Test adding a new word via the Add Word button
+  // Test adding a new word via the Add Word row
   console.log("  Testing Add Word functionality...");
-  // Click on "Add Word..." button (it's at the top of the custom words list)
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.39 0.43\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
+  await doAtspiAction(vm.deployer, "Add Word…", "press");
   
-  // Type a new word in the dialog
+  // The Add Word dialog exposes an entry — wait for it, set text via AT-SPI,
+  // then click Add (button actions verified during recon)
+  await waitForAtspiNode(vm.deployer, { name: "Enter a word or phrase:" });
   await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "type E2E" | dotool`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); python3 - <<'ATSPIEOF'\nimport gi\ngi.require_version("Atspi","2.0")\nfrom gi.repository import Atspi\nd = Atspi.get_desktop(0)\ndef walk(node, depth=0):\n    if node is None or depth > 25: return None\n    try:\n        if (node.get_name() or "").strip() == "Enter a word or phrase:":\n            t = node.query_text()\n            t.set_text_contents("E2E")\n            return True\n    except Exception: pass\n    try: n = node.get_child_count()\n    except Exception: return None\n    for i in range(n):\n        if walk(node.get_child_at_index(i), depth+1): return True\n    return None\nfor i in range(d.get_child_count()):\n    if walk(d.get_child_at_index(i)): break\nATSPIEOF`
   );
-  await Bun.sleep(500);
+  await waitForAtspiText(vm.deployer, "Enter a word or phrase:", "E2E");
   // Click the Add button
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.62 0.58\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
+  await doAtspiAction(vm.deployer, "Add", "click");
+  // Wait for the new word row to appear in the list
+  await waitForAtspiNode(vm.deployer, { name: "E2E", role: "list item" });
   
   const afterAddPng = await capturePrefs("prefs-after-add");
   
@@ -970,9 +941,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Visual regression: compare each capture against its reference (if one exists)
   const captures: Array<[string, string]> = [
     ["prefs-main", mainPng],
-    ["prefs-scrolled-1", scroll1Png],
-    ["prefs-scrolled-2", scroll2Png],
-    ["prefs-scrolled-3", scroll3Png],
+    ["prefs-bottom", bottomPng],
     ["prefs-after-add", afterAddPng],
   ];
   for (const [name, captured] of captures) {

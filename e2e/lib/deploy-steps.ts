@@ -241,6 +241,9 @@ dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'c
 dconf write /org/gnome/shell/extensions/voice-to-text/show-audio-level-widget "true"
 dconf write /org/gnome/shell/extensions/voice-to-text/inhibit-sleep "true"
 dconf write /org/gnome/shell/extensions/voice-to-text/stop-timeout-seconds "120"
+# GTK apps expose their widget tree on the a11y bus only when this is on
+# (and only at app startup — must be set before prefs launches)
+dconf write /org/gnome/desktop/interface/toolkit-accessibility "true"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
