@@ -328,7 +328,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   } catch {
     console.log("  tmux session did not appear — respawning terminal once");
     await tmux.killSession(tmuxCfg);
-    await spawnTerminal();
+    await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
     await waitTmux();
   }
   // Click on the terminal to ensure it has focus
