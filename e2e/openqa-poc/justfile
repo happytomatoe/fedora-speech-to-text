@@ -269,13 +269,7 @@ bake-voice:
         --upload "${repo_root}/gnome-ext/stylesheet.css:${_tmp_local}/stylesheet.css" \
         --upload "${repo_root}/e2e/fixtures/voice-to-text-config.yaml:/etc/voice-to-text-config.yaml" \
         --upload "${debug_audio}:${_tmp_audio}" \
-        --run-command "id testuser >/dev/null 2>&1 || useradd -m -G wheel -s /bin/bash testuser" \
-        --run-command "echo 'testuser:testuser' | chpasswd" \
-        --run-command "chown -R testuser:testuser ${_tmp_local} ${_tmp_audio}" \
-        --run-command "sudo -u testuser bash -c 'cd ${_tmp_local} && NONINTERACTIVE=1 LOCAL_DIR=${_tmp_local} LOCAL_SERVICE_DIR=${repo_root}/service bash ./install.sh'" \
-        --run-command "mkdir -p /home/testuser/.config/voice-to-text && cp /etc/voice-to-text-config.yaml /home/testuser/.config/voice-to-text/config.yaml && chown -R testuser:testuser /home/testuser/.config/voice-to-text" \
-        --run-command "chmod 644 /home/testuser/.config/voice-to-text/config.yaml" \
-        --run-command "echo 'testuser:testuser' | chpasswd" \
+        --run-command "id testuser >/dev/null 2>&1 || useradd -m -G wheel -s /bin/bash testuser; echo 'testuser:testuser' | chpasswd; chown -R testuser:testuser ${_tmp_local} ${_tmp_audio}; sudo -u testuser bash -c 'cd ${_tmp_local} && E2E=1 LOCAL_DIR=${_tmp_local} bash ./install.sh'; mkdir -p /home/testuser/.config/voice-to-text && cp /etc/voice-to-text-config.yaml /home/testuser/.config/voice-to-text/config.yaml && chown -R testuser:testuser /home/testuser/.config/voice-to-text && chmod 644 /home/testuser/.config/voice-to-text/config.yaml" \
         --run-command "systemctl enable sshd || true" \
         --selinux-relabel
     date -Iseconds > "${voice_marker}"
