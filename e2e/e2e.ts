@@ -9,6 +9,7 @@ import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
 import { pollForCommandOutput } from "./lib/poll.js";
+import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
 
@@ -295,21 +296,21 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     deployer: vm.deployer,
   };
 
-  t = Date.now();
+  beginSpan("capture-frame");
   await vm.captureFrame("01-desktop");
-  timing("capture-frame", t);
+  endSpan();
 
   // Step 1: Dismiss Activities overview (D-Bus Set is idempotent)
-  t = Date.now();
+  beginSpan("dismiss-activities");
   console.log("Dismissing Activities...");
   await shell.dismissActivities();
   const activitiesOpen = await shell.isActivitiesOpen();
   console.log(`  Activities after dismiss: ${activitiesOpen ? 'STILL OPEN' : 'closed'}`);
   await shell.waitActivitiesDismissed();
-  timing("dismiss-activities", t);
+  endSpan();
 
   // Step 2: Open terminal with tmux inside (dotool needs a focused window)
-  t = Date.now();
+  beginSpan("open-terminal");
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
@@ -352,24 +353,24 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     await shell.dotoolCommand("buttonup 1");
     await Bun.sleep(500);
   }
-  timing("open-terminal", t);
+  endSpan();
 
-  t = Date.now();
+  beginSpan("capture-frame");
   await vm.captureFrame("02-tmux-started");
-  timing("capture-frame", t);
+  endSpan();
 
   // Step 3: Snapshot pane content before recording (for transcription detection)
-  t = Date.now();
+  beginSpan("snapshot-pane");
   const preRecordingPane = await tmux.capturePane(tmuxCfg);
   console.log("Pre-recording pane captured.");
-  timing("snapshot-pane", t);
+  endSpan();
 
-  t = Date.now();
+  beginSpan("capture-frame");
   await vm.captureFrame("03-pre-recording");
-  timing("capture-frame", t);
+  endSpan();
 
   // Start screen recording now so the basic test AND the preferences window are both captured
-  t = Date.now();
+  beginSpan("start-screencast");
   const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
   mkdirSync(screencastDir, { recursive: true });
   let screencastFile = "";
@@ -392,7 +393,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log(`  Screencast start failed: ${e2}`);
     }
   }
-  timing("start-screencast", t);
+  endSpan();
 
   // Ensure Activities is dismissed and terminal focused before the hotkey
   // (may re-open after initial dismiss or from gnome-shell restart)
@@ -419,18 +420,18 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     console.log("  WARNING: Terminal may not be focused");
   }
   // Step 4: Start recording via hotkey (D-Bus call to GNOME extension)
-  t = Date.now();
+  beginSpan("start-recording");
   console.log("Starting recording via hotkey...");
   await shell.sendHotkey();
   await shell.waitForRecordingStart();
-  timing("start-recording", t);
+  endSpan();
 
-  t = Date.now();
+  beginSpan("capture-frame");
   await vm.captureFrame("04-recording-started");
-  timing("capture-frame", t);
+  endSpan();
 
   // Step 5: Wait for transcription (voice service types via dotool into tmux)
-  t = Date.now();
+  beginSpan("transcription");
   console.log("Waiting for transcription...");
   let transcription = "";
   try {
@@ -482,19 +483,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       // diagnostics are best-effort
     }
   }
-  timing("transcription", t);
+  endSpan();
 
-  t = Date.now();
+  beginSpan("capture-frame");
   await vm.captureFrame("05-transcription-received");
-  timing("capture-frame", t);
+  endSpan();
 
   // Step 6: Stop recording
-  t = Date.now();
+  beginSpan("stop-recording");
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
   // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
   await Bun.sleep(200); // Brief settle for D-Bus round-trip
-  timing("stop-recording", t);
+  endSpan();
 
   // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.
   console.log("Closing terminal before preferences tests...");
@@ -520,16 +521,16 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   );
 
   // Open preferences window (still inside the screen recording).
-  t = Date.now();
+  beginSpan("preferences-screenshots");
   if (SKIP_PREFS_GATE && !prefsUiChanged()) {
     console.log("\n⏭  Prefs UI unchanged since last run — skipping preferences screenshots (use --no-skip-prefs to force)");
   } else {
     await runPreferencesTests(vm, run);
   }
-  timing("preferences-screenshots", t);
+  endSpan();
 
   // Stop screen recording
-  t = Date.now();
+  beginSpan("stop-screencast");
   if (useXvfbRecording) {
     await vm.stopRecording();
   } else if (screencastFile) {
@@ -540,14 +541,14 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log(`  Screencast stop failed: ${e}`);
     }
   }
-  timing("stop-screencast", t);
+  endSpan();
 
-  t = Date.now();
+  beginSpan("capture-frame");
   await vm.captureFrame("06-recording-stopped");
-  timing("capture-frame", t);
+  endSpan();
 
   // Step 7: Write result to file
-  t = Date.now();
+  beginSpan("write-result");
   console.log("Writing result to file...");
   if (transcription) {
     const encoded = Buffer.from(transcription).toString('base64');
@@ -563,7 +564,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     5000,
     300
   );
-  timing("write-result", t);
+  endSpan();
 
   // Cleanup: kill tmux session
   await tmux.killSession(tmuxCfg);
@@ -1085,12 +1086,14 @@ async function main(): Promise<void> {
       // Snapshot mode: restore if exists, otherwise deploy and save
       // Check snapshot BEFORE boot — with -loadvm the guest resumes directly
       // from the snapshot instead of doing a full boot.
-      let t = Date.now();
+      beginSpan("preflight");
       await preflight();
+      endSpan();
       const hasSnap = await vm.hasSnapshot("ready");
       let restored = false;
       
       if (hasSnap) {
+        beginSpan("restore-snapshot");
         console.log("\n--- Snapshot 'ready' found, booting with -loadvm ---");
         try {
           await vm.boot("ready");
@@ -1101,9 +1104,11 @@ async function main(): Promise<void> {
         } catch (e) {
           console.log(`-loadvm boot failed (${e}), falling back to fresh boot`);
         }
+        endSpan(!restored);
       }
       
       if (!restored) {
+        beginSpan("deploy-and-save-snapshot");
         console.log("\n--- No snapshot restore, deploying fresh ---");
         await new StepRunner().run([
           { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
@@ -1113,16 +1118,20 @@ async function main(): Promise<void> {
             ? []
             : [{ name: "save-snapshot", fn: () => vm.saveCleanSnapshot("ready") }]),
         ]);
-        timing("deploy-and-save-snapshot", t);
+        endSpan(); // deploy-and-save-snapshot
       } else {
-        timing("restore-snapshot", t);
         // Deploy test audio for this specific test case (snapshot has old audio)
+        beginSpan("deploy-test-audio");
         deployTestAudio(vm.deployCfg);
+        endSpan();
         // Snapshot restore resumes OLD guest state — always redeploy the
         // extension so the run executes CURRENT code (install.sh --local is
         // idempotent and cheap); otherwise any code change after the snapshot
         // save is invisible to e2e.
+        beginSpan("deploy-extension");
         await deployExtension(vm.shell, vm.deployCfg, vm.pollUntil, vm.deployer);
+        endSpan();
+        beginSpan("start-voice-service");
         // The service process thawed from the snapshot is a zombie: its threads
         // do not survive -loadvm (bus name answers, transcription never runs).
         // Kill it and start a fresh one with current code + env, mirroring the
@@ -1135,11 +1144,14 @@ async function main(): Promise<void> {
           (exec, cmd, expected, timeoutMs) => pollForCommandOutput(exec, cmd, expected, timeoutMs),
           true,
         );
+        endSpan(); // start-voice-service
       }
       
       // Run test
+      beginSpan("test-flow");
       await runTestFlow(vm, run);
       const result = await verifyWithScreenshot(vm, EXPECTED_TEXT, run);
+      endSpan(); // test-flow
       
       if (result.passed) {
         console.log(`  PASS: ${result.message}`);
@@ -1179,15 +1191,20 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error("\nFATAL:", err);
     testsFailed++;
+    // Close any spans still open when the failure happened, so the tree shows
+    // which phase died (and how long it hung before dying).
+    printTimingTree();
   } finally {
     if (!KEEP_VM) {
       // Hard cap on shutdown: QEMU monitor / ssh2 teardown can hang forever on
       // a dead socket. Never let cleanup block the exit code.
+    beginSpan("vm-shutdown");
       await Promise.race([
         vm.shutdown().catch((err) => console.log(`  shutdown warning: ${err instanceof Error ? err.message : err}`)),
         Bun.sleep(20000).then(() => console.log("  shutdown timed out after 20s — killing VM process")),
       ]);
       run.cleanup();
+      endSpan(); // vm-shutdown
       console.log("\nVM shut down.");
     } else {
       console.log("\nVM kept running (pass --keep-vm to leave it up)");
@@ -1200,6 +1217,7 @@ async function main(): Promise<void> {
   console.log("\n=== Timing Summary ===");
   console.log(`  Total: ${(elapsed / 1000).toFixed(1)}s`);
   console.log("");
+  printTimingTree();
 
   // Clear the timeout timer
   clearTimeout(timeoutTimer);
