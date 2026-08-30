@@ -301,9 +301,10 @@ openqa-transcribe:
             sleep 2
         done
     fi
-    # Make sure voice is baked and autologin image is current
-    just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" bake-voice
+    # Make sure the autologin image is current BEFORE we bake voice into
+    # it (prepare-img cp -f's the base, which would wipe our bake).
     just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" prepare-img
+    just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" bake-voice
     # Run the test. run-host.sh honors the TEST_OVERRIDE env var.
     TEST_OVERRIDE=transcribe "${poc_dir}/run-host.sh"
 
