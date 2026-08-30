@@ -11,6 +11,7 @@
    "NICMAC" : "52:54:00:12:34:56",
    "NICMODEL" : "virtio-net",
    "NICTYPE" : "user",
+   "NICTYPE_USER_OPTIONS" : "hostfwd=tcp::2299-:22",
    "NICVLAN" : "0",
    "NUMDISKS" : "1",
    "OS_AUTOINST_STORAGE_KEEP_FREE_GB" : "1",

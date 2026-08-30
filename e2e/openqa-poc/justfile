@@ -254,6 +254,7 @@ bake-voice:
     # and run install.sh.
     _tmp_local="/var/tmp/voice-bake-src"
     _tmp_audio="/tmp/test-audio.wav"
+    _voice_src_dir="/home/testuser/voice_to_text/src"
     LIBGUESTFS_BACKEND=direct virt-customize \
         -a "${golden_img}" \
         --mkdir "${_tmp_local}" \
@@ -269,9 +270,32 @@ bake-voice:
         --upload "${repo_root}/gnome-ext/stylesheet.css:${_tmp_local}/stylesheet.css" \
         --upload "${repo_root}/e2e/fixtures/voice-to-text-config.yaml:/etc/voice-to-text-config.yaml" \
         --upload "${debug_audio}:${_tmp_audio}" \
+        --mkdir "${_voice_src_dir}" \
+        --upload "${repo_root}/src/voice_to_text/audio.py:${_voice_src_dir}/audio.py" \
+        --upload "${repo_root}/src/voice_to_text/config.py:${_voice_src_dir}/config.py" \
+        --upload "${repo_root}/src/voice_to_text/dbus_service.py:${_voice_src_dir}/dbus_service.py" \
+        --upload "${repo_root}/src/voice_to_text/debug.py:${_voice_src_dir}/debug.py" \
+        --upload "${repo_root}/src/voice_to_text/dotool_typer.py:${_voice_src_dir}/dotool_typer.py" \
+        --upload "${repo_root}/src/voice_to_text/engine.py:${_voice_src_dir}/engine.py" \
+        --upload "${repo_root}/src/voice_to_text/hybrid.py:${_voice_src_dir}/hybrid.py" \
+        --upload "${repo_root}/src/voice_to_text/__init__.py:${_voice_src_dir}/__init__.py" \
+        --upload "${repo_root}/src/voice_to_text/__main__.py:${_voice_src_dir}/__main__.py" \
+        --upload "${repo_root}/src/voice_to_text/mutter_virtual_paster.py:${_voice_src_dir}/mutter_virtual_paster.py" \
+        --upload "${repo_root}/src/voice_to_text/mutter_virtual_typer.py:${_voice_src_dir}/mutter_virtual_typer.py" \
+        --upload "${repo_root}/src/voice_to_text/postprocess.py:${_voice_src_dir}/postprocess.py" \
+        --upload "${repo_root}/src/voice_to_text/preroll.py:${_voice_src_dir}/preroll.py" \
+        --upload "${repo_root}/src/voice_to_text/recorder.py:${_voice_src_dir}/recorder.py" \
+        --upload "${repo_root}/src/voice_to_text/vad.py:${_voice_src_dir}/vad.py" \
+        --upload "${repo_root}/pyproject.toml:${_voice_src_dir}/../pyproject.toml" \
+        --mkdir "${_voice_src_dir}/../service" \
+        --upload "${repo_root}/service/com.happytomatoe.VoiceToText.service:${_voice_src_dir}/../service/com.happytomatoe.VoiceToText.service" \
+        --upload "${repo_root}/service/com.happytomatoe.VoiceToText.user.service:${_voice_src_dir}/../service/com.happytomatoe.VoiceToText.user.service" \
+        --upload "{{poc_dir}}/files/gdm-custom.conf:/etc/gdm/custom.conf" \
         --run-command "id testuser >/dev/null 2>&1 || useradd -m -G wheel -s /bin/bash testuser; echo 'testuser:testuser' | chpasswd; chown -R testuser:testuser ${_tmp_local} ${_tmp_audio}; sudo -u testuser bash -c 'cd ${_tmp_local} && E2E=1 LOCAL_DIR=${_tmp_local} bash ./install.sh'; mkdir -p /home/testuser/.config/voice-to-text && cp /etc/voice-to-text-config.yaml /home/testuser/.config/voice-to-text/config.yaml && chown -R testuser:testuser /home/testuser/.config/voice-to-text && chmod 644 /home/testuser/.config/voice-to-text/config.yaml" \
         --run-command "systemctl enable sshd || true" \
         --run-command "mkdir -p /etc/dconf/profile /etc/dconf/db/local.d && echo 'user-db:user' > /etc/dconf/profile/user && echo -e '\\n[org/gnome/shell]\\nwelcome-dialog-last-shown-version=999\\n' > /etc/dconf/db/local.d/00-welcome-disable && dconf update" \
+        --run-command "chown -R testuser:testuser /home/testuser/voice_to_text; sudo -u testuser bash -c 'command -v uv >/dev/null || (curl -LsSf https://astral.sh/uv/install.sh | sh); export PATH=$HOME/.local/bin:$PATH; cd $HOME/voice_to_text; uv pip install --system --quiet -e . 2>&1 | tail -5 || pip install --user --break-system-packages --quiet -e . 2>&1 | tail -5'" \
+        --run-command "mkdir -p /home/testuser/.local/share/dbus-1/services; cp /home/testuser/voice_to_text/../service/com.happytomatoe.VoiceToText.service /home/testuser/.local/share/dbus-1/services/ 2>/dev/null; cp /home/testuser/voice_to_text/../service/com.happytomatoe.VoiceToText.user.service /home/testuser/.local/share/dbus-1/services/ 2>/dev/null; chown -R testuser:testuser /home/testuser/.local/share/dbus-1; touch /var/tmp/voice-bake-src/.baked-marker" \
         --selinux-relabel
     date -Iseconds > "${voice_marker}"
     echo
