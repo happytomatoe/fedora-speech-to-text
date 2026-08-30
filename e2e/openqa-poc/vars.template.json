@@ -25,6 +25,8 @@
    "QEMU_GFX_OPTS" : "-display gtk,gl=off",
    "SERIAL_CONSOLE" : "1",
    "TEST" : "login_with_password",
+   "TEST_EXPECTED_TEXT" : "good morning, how are you today?",
+   "TEST_VOICE_DEBUG_FILE" : "/tmp/test-audio.wav",
    "UEFI" : "0",
    "VERSION" : "poc",
    "VIRTIO_CONSOLE" : 1,

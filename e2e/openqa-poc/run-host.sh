@@ -106,7 +106,9 @@ echo "=== Test Results ==="
 # isotovideo writes its result JSON into the workdir, not RESULTS_DIR.
 # Prefer that, fall back to RESULTS_DIR.
 RESULT_FILE=""
-for candidate in "${WORKDIR}/testresults/result-login_with_password.json" "${RESULTS_DIR}/result-login_with_password.json"; do
+# Test name comes from vars.json's TEST field
+TEST_NAME=$(python3 -c "import json; print(json.load(open('${POC_DIR}/vars.json')).get('TEST', 'login_with_password'))")
+for candidate in "${WORKDIR}/testresults/result-${TEST_NAME}.json" "${RESULTS_DIR}/result-${TEST_NAME}.json"; do
     if [ -f "${candidate}" ]; then
         RESULT_FILE="${candidate}"
         break

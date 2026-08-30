@@ -222,6 +222,96 @@ prepare-img:
         --selinux-relabel
     echo "Done. Run: just openqa-test"
 
+# Bake the voice-to-text extension + service into the *autologin* image.
+# This is the migration target: once baked, the openqa test can run a real
+# transcription without any per-run deployment. Re-bake is gated by a
+# .voice-baked marker; delete the marker to force a re-bake.
+#
+# Runs as the testuser (HOME=/home/testuser) inside virt-customize so the
+# extension lands in the right place and dotool's user-level d-bus
+# activator paths work.
+bake-voice:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    qemu_images_dir="$(cd '{{poc_dir}}/..' && pwd)/qemu-images"
+    golden_img="${qemu_images_dir}/golden-gnome-deps-autologin.qcow2"
+    voice_marker="${qemu_images_dir}/.voice-baked"
+    repo_root="$(cd '{{poc_dir}}/../..' && pwd)"
+    debug_audio="${repo_root}/e2e/fixtures/test-03-hello.wav"
+    if [ ! -f "${golden_img}" ]; then
+        echo "ERROR: autologin image not found at ${golden_img}"
+        echo "Run: just provision-base prepare-img"
+        exit 1
+    fi
+    if [ -f "${voice_marker}" ]; then
+        echo "voice-to-text already baked (marker: ${voice_marker})."
+        echo "  delete it to re-bake: rm ${voice_marker}"
+        exit 0
+    fi
+    echo "=== baking voice-to-text into ${golden_img} (~3-5 min) ==="
+    # Use a temp dir inside the image for the local source. virt-customize's
+    # --upload writes from host into guest, then --run-command can chmod
+    # and run install.sh.
+    _tmp_local="/var/tmp/voice-bake-src"
+    _tmp_audio="/tmp/test-audio.wav"
+    LIBGUESTFS_BACKEND=direct virt-customize \
+        -a "${golden_img}" \
+        --mkdir "${_tmp_local}" \
+        --mkdir "${_tmp_local}/prefs" \
+        --mkdir "${_tmp_local}/schemas" \
+        --mkdir "$(dirname ${_tmp_audio})" \
+        --upload "${repo_root}/install.sh:${_tmp_local}/install.sh" \
+        --upload "${repo_root}/gnome-ext/extension.js:${_tmp_local}/extension.js" \
+        --upload "${repo_root}/gnome-ext/audio-level-widget.js:${_tmp_local}/audio-level-widget.js" \
+        --upload "${repo_root}/gnome-ext/indicator.js:${_tmp_local}/indicator.js" \
+        --upload "${repo_root}/gnome-ext/hotkey.js:${_tmp_local}/hotkey.js" \
+        --upload "${repo_root}/gnome-ext/metadata.json:${_tmp_local}/metadata.json" \
+        --upload "${repo_root}/gnome-ext/stylesheet.css:${_tmp_local}/stylesheet.css" \
+        --upload "${repo_root}/e2e/fixtures/voice-to-text-config.yaml:/etc/voice-to-text-config.yaml" \
+        --upload "${debug_audio}:${_tmp_audio}" \
+        --run-command "chmod +x ${_tmp_local}/install.sh" \
+        --run-command "chown -R testuser:testuser ${_tmp_local} ${_tmp_audio}" \
+        --run-command "sudo -u testuser bash -c 'cd ${_tmp_local} && NONINTERACTIVE=1 LOCAL_DIR=${_tmp_local} LOCAL_SERVICE_DIR=${repo_root}/service bash ./install.sh'" \
+        --run-command "mkdir -p /home/testuser/.config/voice-to-text && cp /etc/voice-to-text-config.yaml /home/testuser/.config/voice-to-text/config.yaml && chown -R testuser:testuser /home/testuser/.config/voice-to-text" \
+        --run-command "chmod 644 /home/testuser/.config/voice-to-text/config.yaml" \
+        --run-command "touch ${_tmp_local}/.baked-marker && chown testuser:testuser ${_tmp_local}/.baked-marker" \
+        --run-command "systemctl enable sshd || true" \
+        --selinux-relabel
+    date -Iseconds > "${voice_marker}"
+    echo
+    echo "Done. Next: just openqa-transcribe"
+
+# Run the full voice-to-text test on the host.
+# Pre-req: parakeet container running on 127.0.0.1:5092.
+# Steps: parakeet up -> bake-voice -> prepare-img -> run openqa-transcribe test.
+openqa-transcribe:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    poc_dir="{{poc_dir}}"
+    # Make sure parakeet is up
+    if ! curl -sf http://127.0.0.1:5092/health >/dev/null 2>&1; then
+        echo "=== starting parakeet container ==="
+        models_dir="$HOME/parakeet/models"
+        mkdir -p "${models_dir}"
+        if ! podman inspect parakeet-v2 >/dev/null 2>&1; then
+            podman run -d --name parakeet-v2 -p 5092:5092 -v "${models_dir}":/models:Z ghcr.io/achetronic/parakeet:latest
+        else
+            podman start parakeet-v2
+        fi
+        for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5092/health >/dev/null 2>&1; then
+                echo "  parakeet ready"
+                break
+            fi
+            sleep 2
+        done
+    fi
+    # Make sure voice is baked and autologin image is current
+    just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" bake-voice
+    just --justfile "${poc_dir}/justfile" --working-directory "${poc_dir}" prepare-img
+    # Run the test
+    TEST=transcribe "${poc_dir}/run-host.sh"
+
 # Run the POC test on the host (no podman).
 # Boots the golden image, logs in as testuser via GDM, captures a desktop screenshot.
 # Result JSON and screenshots land in testresults/.
