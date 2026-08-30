@@ -19,7 +19,11 @@ poc_dir := justfile_directory()
 # doesn't run shell backticks at interpolation time — it would treat the
 # backtick expression as a literal string.
 distri_dir := "/tmp/os-autoinst-distri-fedora"
-fedora_cloud_url := "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
+# Princeton's US mirror is the fastest reliable source for Fedora cloud
+# images (~15 MB/s from typical US hosts). The canonical Fedora URL
+# (download.fedoraproject.org) load-balances to random European mirrors
+# that often run at <1 MB/s.
+fedora_cloud_url := "https://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
 fedora_cloud_tmp := "/tmp/Fedora-Cloud-Base-Generic-42.qcow2"
 
 # Default recipe: print usage
@@ -68,11 +72,14 @@ provision-base:
     if [ -f "${base_golden_img}" ]; then
         echo "base image already at ${base_golden_img}."
     else
-        echo "downloading Fedora 42 cloud image (~530 MB)..."
+        echo "downloading Fedora 42 cloud image (~530 MB) from US mirror..."
         if ! curl -L -f -o "{{fedora_cloud_tmp}}" "{{fedora_cloud_url}}"; then
-            echo "ERROR: download failed. Check your network or pick a mirror."
-            rm -f "{{fedora_cloud_tmp}}"
-            exit 1
+            echo "  primary mirror failed; falling back to download.fedoraproject.org..."
+            if ! curl -L -f -o "{{fedora_cloud_tmp}}" "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"; then
+                echo "ERROR: download failed. Check your network or set fedora_cloud_url in the justfile."
+                rm -f "{{fedora_cloud_tmp}}"
+                exit 1
+            fi
         fi
         mv "{{fedora_cloud_tmp}}" "${base_golden_img}"
         qemu-img resize "${base_golden_img}" +5G
