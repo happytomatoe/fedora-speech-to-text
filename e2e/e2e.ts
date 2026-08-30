@@ -348,21 +348,23 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await shell.dotoolCommand("mousemove 640 400");
   await shell.dotoolCommand("buttondown 1");
   await shell.dotoolCommand("buttonup 1");
-  // Brief wait for window manager to settle after click
-  await Bun.sleep(500);
-
-  // Verify terminal is focused by typing a test character and checking tmux
+  // Verify terminal is focused by typing a test character and checking tmux.
+  // Poll pane content instead of a fixed settle sleep — same signal, less waiting.
   const paneBefore = await tmux.capturePane(tmuxCfg);
   await shell.dotoolCommand("key shift+space"); // type space to confirm dotool works
-  await Bun.sleep(200);
-  const paneAfter = await tmux.capturePane(tmuxCfg);
-  if (paneBefore === paneAfter) {
+  let paneAfter = "";
+  for (let i = 0; i < 10; i++) {
+    await Bun.sleep(100);
+    paneAfter = await tmux.capturePane(tmuxCfg);
+    if (paneAfter !== paneBefore) break;
+  }
+  if (paneAfter === paneBefore) {
     // Terminal might not be focused, try clicking again
     console.log("  Retrying terminal focus...");
     await shell.dotoolCommand("mousemove 640 400");
     await shell.dotoolCommand("buttondown 1");
     await shell.dotoolCommand("buttonup 1");
-    await Bun.sleep(500);
+    await Bun.sleep(300);
   }
   endSpan();
 
