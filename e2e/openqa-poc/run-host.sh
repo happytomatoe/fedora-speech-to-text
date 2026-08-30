@@ -21,12 +21,39 @@ if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
     exit 1
 fi
 
-if [ ! -f "${POC_DIR}/qemu-images/golden-gnome-deps.qcow2" ] && [ ! -f "${POC_DIR}/../qemu-images/golden-gnome-deps.qcow2" ]; then
-    echo "ERROR: golden image not found (looked in qemu-images/ and ../qemu-images/)"
+# Find the golden image (autologin variant) and the corresponding base image
+GOLDEN_DIR=""
+for candidate in "${POC_DIR}/../qemu-images" "${POC_DIR}/qemu-images"; do
+    if [ -f "${candidate}/golden-gnome-deps-autologin.qcow2" ]; then
+        GOLDEN_DIR="${candidate}"
+        break
+    fi
+done
+
+if [ -z "${GOLDEN_DIR}" ]; then
+    echo "ERROR: golden-gnome-deps-autologin.qcow2 not found in qemu-images/ or ../qemu-images/"
+    echo "Run: just prepare-img   (or copy an existing one from another machine)"
     exit 1
 fi
 
+# Generate vars.json from template with absolute paths to this checkout
+python3 - <<EOF
+import json
+with open("${POC_DIR}/vars.template.json") as f:
+    vars = json.load(f)
+vars["CASEDIR"]    = "${POC_DIR}"
+vars["PRODUCTDIR"] = "${POC_DIR}"
+vars["HDD_1"]      = "${GOLDEN_DIR}/golden-gnome-deps-autologin.qcow2"
+# ISO slot is required by some backends even when empty
+vars["ISO_1"]      = ""
+vars["ISO_MAXSIZE"] = 20000000000
+with open("${POC_DIR}/vars.json", "w") as f:
+    json.dump(vars, f, indent=3)
+EOF
+
 echo "=== openQA POC: Boot to GNOME Desktop (host) ==="
+echo "    CASEDIR: ${POC_DIR}"
+echo "    HDD_1:   ${GOLDEN_DIR}/golden-gnome-deps-autologin.qcow2"
 rm -rf "${RESULTS_DIR}"
 mkdir -p "${RESULTS_DIR}"
 

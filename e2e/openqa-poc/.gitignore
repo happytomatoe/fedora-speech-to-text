@@ -24,3 +24,5 @@ qemuscreenshot/
 *.log
 *.run
 *.status
+# Generated from vars.template.json with absolute paths substituted
+vars.json
