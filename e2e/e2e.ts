@@ -1,6 +1,6 @@
 import { ensureParakeet } from "./lib/parakeet.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
-import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, readdirSync, statSync } from "node:fs";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { join } from "node:path";
@@ -24,6 +24,7 @@ const origError = console.error;
 
 // In timing mode, only show timing-related output on stdout.
 // Everything still goes to the log file.
+/** Detect timing-mode output lines (filtered from normal stdout). */
 function isTimingOutput(msg: string): boolean {
   return msg.includes("[time]") || msg.includes("Total:") || msg.includes("=== Timing");
 }
@@ -82,9 +83,9 @@ process.on("unhandledRejection", (err) => {
 // snapshot mode can be re-enabled by flipping this to !NO_SNAPSHOT once
 // savevm/loadvm are verified against the current display config.
 const NO_SNAPSHOT = args.includes("--no-snapshot");
-// --no-save-snapshot: restore an existing snapshot but never save/update it
-// (default for routine runs — snapshot saving is opt-in via --save-snapshot).
-const NO_SAVE_SNAPSHOT = args.includes("--no-save-snapshot") || !args.includes("--save-snapshot");
+// --no-save-snapshot: restore an existing snapshot but never save/update it.
+// Saving requires --save-snapshot (just e2e passes it); explicit opt-out wins.
+const NO_SAVE_SNAPSHOT = args.includes("--no-save-snapshot");
 // ponytail: snapshots disabled pending savevm/loadvm verification on non-GL display — flip to !NO_SNAPSHOT after verifying, remove stale comment
 const SNAPSHOT_MODE = !NO_SNAPSHOT; // TEMP: Phase 1 verification of savevm/loadvm on non-GL gtk display — revert or replace with !NO_SNAPSHOT after verifying (plan: thoughts/shared/plans/re-enable-e2e-snapshots.md)
 const SKIP_DEPS = args.includes("--skip-deps");
@@ -107,7 +108,70 @@ const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
+const SKIP_PREFS_GATE = !TEST_PREFS && !args.includes("--no-skip-prefs");
+// Anything whose change affects the prefs screenshots: rendered UI, deployed
+// values (config fixture, dconf seeds), deploy pipeline.
+const PREFS_SOURCES = [
+  "gnome-ext/prefs.js",
+  "gnome-ext/prefs",
+  "gnome-ext/schemas",
+  "gnome-ext/stylesheet.css",
+  "gnome-ext/metadata.json",
+  "gnome-ext/vendor/js-yaml.mjs",
+  "e2e/fixtures/voice-to-text-config.yaml",
+  "e2e/lib/deploy-steps.ts",
+  "install.sh",
+];
 
+/**
+ * Whether prefs screenshots should run. Compares the content hash of all
+ * prefs-affecting files against the hash stored after the last run. On the
+ * first run in a worktree (no stored hash) the decision comes from git diff
+ * vs main instead, so a clean branch skips the screenshots immediately.
+ */
+function prefsUiChanged(): boolean {
+  const { createHash } = require("node:crypto");
+  const hash = createHash("sha256");
+  for (const p of PREFS_SOURCES) {
+    const abs = join(PROJECT_ROOT, p);
+    if (!existsSync(abs)) continue;
+    if (statSync(abs).isDirectory()) {
+      for (const f of readdirSync(abs).sort()) {
+        hash.update(p + "/" + f + Bun.hash(readFileSync(join(abs, f))));
+      }
+    } else {
+      hash.update(p + Bun.hash(readFileSync(abs)));
+    }
+  }
+  const current = hash.digest("hex");
+  const statePath = join(OUTPUT_DIR, ".prefs-ui-hash");
+  let stored: string | null = null;
+  try {
+    stored = readFileSync(statePath, "utf-8").trim();
+  } catch {
+    // no state file = first run in this worktree
+  }
+  mkdirSync(OUTPUT_DIR, { recursive: true });
+  writeFileSync(statePath, current);
+  if (stored === null) {
+    const diff = execSync(
+      "git diff --name-only main...HEAD; git diff --name-only; git ls-files --others --exclude-standard",
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    return diff.split("\n").some((f) => prefsSourceMatch(f.trim()));
+  }
+  return stored !== current;
+}
+
+/** Whether a changed path is a prefs source (file or inside a source dir). */
+function prefsSourceMatch(file: string): boolean {
+  if (!file) return false;
+  return PREFS_SOURCES.some(
+    (src) => file === src || (statSync(join(PROJECT_ROOT, src)).isDirectory() && file.startsWith(src + "/")),
+  );
+}
+
+/** Print an elapsed-time line for a labeled phase. */
 function timing(label: string, startMs: number): void {
   const ms = Date.now() - startMs;
   console.log(`  [time] ${label}: ${ms}ms`);
@@ -168,6 +232,7 @@ interface TestCaseFile {
 
 // Load test matrix (only needed for parallel mode)
 let testMatrix: any = undefined;
+/** Lazy-loaded test matrix for parallel mode. */
 function loadTestMatrix(): any {
   if (!testMatrix) {
     const testMatrixPath = join(import.meta.dir, "fixtures/test-matrix.json");
@@ -179,6 +244,7 @@ function loadTestMatrix(): any {
   return testMatrix;
 }
 
+/** Pick which fixture audio case this run transcribes. */
 function pickRandomTestCase(): TestCase {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
   const cases: TestCase[] = data["test-cases"];
@@ -199,6 +265,7 @@ function pickRandomTestCase(): TestCase {
 const CURRENT_TEST = pickRandomTestCase();
 const EXPECTED_TEXT = CURRENT_TEST.expected;
 
+/** Fail fast when the VM base image is missing. */
 async function preflight(): Promise<void> {
   if (!existsSync(BASE_IMAGE)) {
     throw new Error(`Base VM image not found: ${BASE_IMAGE}\nRun 'just qemu-e2e-setup' first.`);
@@ -212,6 +279,7 @@ async function preflight(): Promise<void> {
   await ensureParakeet();
 }
 
+/** Full single-VM test flow: terminal, recording, transcription, prefs screenshots. */
 async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   const shell = vm.shell;
   let t: number;
@@ -453,7 +521,11 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
 
   // Open preferences window (still inside the screen recording).
   t = Date.now();
-  await runPreferencesTests(vm, run);
+  if (SKIP_PREFS_GATE && !prefsUiChanged()) {
+    console.log("\n⏭  Prefs UI unchanged since last run — skipping preferences screenshots (use --no-skip-prefs to force)");
+  } else {
+    await runPreferencesTests(vm, run);
+  }
   timing("preferences-screenshots", t);
 
   // Stop screen recording
@@ -902,6 +974,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   console.log("  ✅ Preferences tests completed");
 }
 
+/** Entry point: parse flags, boot VM, run flow or prefs tests. */
 async function main(): Promise<void> {
   const run = new RunContext({
     baseImage: BASE_IMAGE,
@@ -1001,10 +1074,11 @@ async function main(): Promise<void> {
       { name: "setup", fn: () => vm.setupForPrefs(), timeout: 600_000 },
     ]);
     
+    if (SKIP_PREFS_GATE && !prefsUiChanged()) {
+      console.log("\n⏭  Prefs UI unchanged — skipping preferences test run (use --no-skip-prefs to force)");
+      process.exit(0);
+    }
     await runPreferencesTests(vm, run);
-    
-    console.log("\n✅ Preferences tests completed");
-    process.exit(0);
   }
   try {
     if (SNAPSHOT_MODE) {

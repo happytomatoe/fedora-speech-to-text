@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const PORT = 5092;
 
+/** Check Parakeet server health endpoint. */
 function checkHealth(): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get(`http://localhost:${PORT}/health`, (res) => {

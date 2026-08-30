@@ -1,3 +1,4 @@
+/** Poll until `check()` returns true, or throw after timeoutMs. */
 export async function pollUntil(
   desc: string,
   check: () => Promise<boolean>,
@@ -27,6 +28,7 @@ export async function pollUntil(
   }
 }
 
+/** Poll via `shellExec` until the given process name is gone. */
 export async function pollForProcess(
   shellExec: (cmd: string) => Promise<string>,
   processName: string,
@@ -46,6 +48,7 @@ export async function pollForProcess(
   );
 }
 
+/** Poll via `shellExec` until the command output contains `expected`. */
 export async function pollForCommandOutput(
   shellExec: (cmd: string) => Promise<string>,
   command: string,

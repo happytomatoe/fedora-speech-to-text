@@ -17,6 +17,7 @@
     "@girs/st-18": "^4.1.0",
     "@types/pngjs": "^6.0.5",
     "aislop": "0.15.0",
+    "eslint-plugin-jsdoc": "^64.2.1",
     "jscpd": "^5.0.16",
     "knip": "^6.33.0",
     "lefthook": "^1.11.0",

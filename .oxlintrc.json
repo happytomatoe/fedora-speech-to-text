@@ -156,6 +156,25 @@
         "promise",
         "typescript"
       ]
+    },
+    {
+      "files": [
+        "e2e/**/*.ts"
+      ],
+      "jsPlugins": [
+        { "name": "jsdoc-js", "specifier": "eslint-plugin-jsdoc" }
+      ],
+      "rules": {
+        "jsdoc-js/require-jsdoc": [
+          "error",
+          {
+            "require": {
+              "FunctionDeclaration": true
+            }
+          }
+        ],
+        "jsdoc-js/require-description": "error"
+      }
     }
   ]
 }

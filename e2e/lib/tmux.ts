@@ -9,6 +9,7 @@ export interface TmuxHelper {
   deployer?: Deployer;
 }
 
+/** Run a tmux command inside the VM and return its output. */
 async function tmuxCmd(t: TmuxHelper, ...args: string[]): Promise<string> {
   const escaped = args.map(a => a.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
   const cmd = `tmux ${escaped.join(' ')}`;
