@@ -1,51 +1,109 @@
 # openQA POC justfile — run the boot + login test.
 #
 # Usage:
-#   just openqa-test        # run login_with_password test against the golden image
-#   just prepare-img        # bake the testuser password into the golden image (one-time)
-#   just build              # build the optional podman image (alternative to host)
-#   just clean              # remove test results and runtime artefacts
+#   just setup-deps        # one-time: install host packages + clone the distri
+#   just provision-base    # one-time: download Fedora 42 cloud image as the base
+#   just prepare-img       # one-time: bake the testuser password into the golden image
+#   just openqa-test       # run the test (uses ../qemu-images/golden-gnome-deps-autologin.qcow2)
+#   just build             # build the optional podman image (alternative to host packages)
+#   just clean             # remove test results and runtime artefacts
 #
-# Requirements (host runner):
-#   - os-autoinst, xorg-x11-server-Xvfb, qemu-kvm, guestfs-tools (or libguestfs-tools-c)
-#   - /dev/kvm accessible to the current user
-#   - Golden image at ../qemu-images/golden-gnome-deps-autologin.qcow2
-#     (run `just prepare-img` to bake the testuser password in)
-#   - The cloned os-autoinst-distri-fedora at /tmp/os-autoinst-distri-fedora (optional)
+# After `just setup-deps provision-base prepare-img openqa-test`, the loop
+# reduces to a single `just openqa-test` on subsequent runs.
 
 set shell := ["bash", "-uc"]
 
 poc_dir := justfile_directory()
-golden_img := poc_dir / ".." / "qemu-images" / "golden-gnome-deps-autologin.qcow2"
-base_golden_img := poc_dir / ".." / "qemu-images" / "golden-gnome-deps.qcow2"
+qemu_images_dir := poc_dir / ".." / "qemu-images"
+golden_img := qemu_images_dir / "golden-gnome-deps-autologin.qcow2"
+base_golden_img := qemu_images_dir / "golden-gnome-deps.qcow2"
+distri_dir := "/tmp/os-autoinst-distri-fedora"
+fedora_cloud_url := "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-42-1.14.x86_64.qcow2.xz"
+fedora_cloud_tmp := "/tmp/Fedora-Cloud-Base-42.qcow2.xz"
 
 # Default recipe: print usage
 default:
     @just --list
 
-# Run the POC test on the host (no podman).
-# Boots the golden image, logs in as testuser via GDM, captures a desktop screenshot.
-# Result JSON and screenshots land in testresults/.
-openqa-test:
-    {{poc_dir}}/run-host.sh
+# One-time: install host packages and clone the os-autoinst distri reference tree.
+# Idempotent: skips anything that's already present.
+setup-deps:
+    @echo "=== installing host packages ==="
+    @if rpm -q os-autoinst xorg-x11-server-Xvfb qemu-kvm guestfs-tools >/dev/null 2>&1; then \
+        echo "  packages already installed."; \
+    else \
+        sudo dnf install -y os-autoinst xorg-x11-server-Xvfb qemu-kvm guestfs-tools; \
+    fi
+    @echo
+    @echo "=== checking /dev/kvm ==="
+    @if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then \
+        echo "  ERROR: /dev/kvm not accessible."; \
+        echo "  Run: sudo usermod -aG kvm \$\$USER  (then re-login)"; \
+        exit 1; \
+    else \
+        echo "  OK."; \
+    fi
+    @echo
+    @echo "=== cloning os-autoinst-distri-fedora ==="
+    @if [ -d "{{distri_dir}}/lib" ]; then \
+        echo "  already at {{distri_dir}}."; \
+    else \
+        sudo rm -rf {{distri_dir}}; \
+        sudo git clone --depth 1 https://github.com/os-autoinst/os-autoinst-distri-fedora {{distri_dir}}; \
+    fi
+    @echo
+    @echo "Done. Next: just provision-base   (downloads Fedora 42 cloud image)"
 
-# Bake the testuser password into a copy of the golden image.
-# One-time operation: produces golden-gnome-deps-autologin.qcow2 from the base.
-# Idempotent: re-running overwrites the autologin image but does not touch the base.
+# One-time: download the Fedora 42 cloud image and save it as the base golden image.
+# Idempotent: skips the download if the base already exists.
+provision-base:
+    @mkdir -p {{qemu_images_dir}}
+    @if [ -f "{{base_golden_img}}" ]; then \
+        echo "base image already at {{base_golden_img}}."; \
+    else \
+        echo "downloading Fedora 42 cloud image..."; \
+        curl -L -o "{{fedora_cloud_tmp}}" "{{fedora_cloud_url}}"; \
+        unxz -f "{{fedora_cloud_tmp}}"; \
+        mv /tmp/Fedora-Cloud-Base-42.qcow2 "{{base_golden_img}}"; \
+        qemu-img resize "{{base_golden_img}}" +5G; \
+    fi
+    @echo
+    @echo "=== baking GNOME + GDM + testuser into base image (one-time, ~5-10 min) ==="
+    sudo virt-customize \
+        -a "{{base_golden_img}}" \
+        --root-password password:testuser \
+        --password testuser:password:testuser \
+        --install @gnome-desktop,gdm,NetworkManager,systemd-resolved,virtio-tools,spice-vdagent,glx-utils,libglvnd-glx,mesa-dri-drivers,plymouth \
+        --run-command "echo 'testuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/testuser" \
+        --run-command "systemctl enable gdm NetworkManager" \
+        --run-command "systemctl set-default graphical.target" \
+        --selinux-relabel
+    @echo
+    @echo "Done. Next: just prepare-img   (creates the autologin copy)"
+
+# Bake the testuser password into a copy of the base image, producing the
+# *autologin* image that the test boots. Idempotent: re-running overwrites
+# the autologin image but does not touch the base.
 prepare-img:
     @if [ ! -f "{{base_golden_img}}" ]; then \
         echo "ERROR: base golden image not found at {{base_golden_img}}"; \
-        echo "See README.md for how to provision it."; \
+        echo "Run: just provision-base"; \
         exit 1; \
     fi
     cp -f "{{base_golden_img}}" "{{golden_img}}"
-    echo "Baking testuser password into {{golden_img}}..."
+    @echo "Baking testuser password into {{golden_img}}..."
     sudo LIBGUESTFS_BACKEND=direct virt-customize \
         -a "{{golden_img}}" \
         --password "testuser:password:testuser" \
         --run-command "echo testuser ALL=\\(ALL\\) NOPASSWD:ALL >/etc/sudoers.d/testuser" \
         --selinux-relabel
     @echo "Done. Run: just openqa-test"
+
+# Run the POC test on the host (no podman).
+# Boots the golden image, logs in as testuser via GDM, captures a desktop screenshot.
+# Result JSON and screenshots land in testresults/.
+openqa-test:
+    {{poc_dir}}/run-host.sh
 
 # Clean test results and runtime artefacts.
 clean:

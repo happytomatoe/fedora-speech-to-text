@@ -20,103 +20,34 @@ Final screenshot: `testresults/login_with_password-4.png`
 
 End-to-end time: ~35 seconds on a host with KVM and the golden image cached.
 
-## Requirements
-
-- Fedora 41+ host with `/dev/kvm` accessible to the running user
-- Packages:
-  ```bash
-  sudo dnf install os-autoinst xorg-x11-server-Xvfb qemu-kvm guestfs-tools
-  ```
-  (`guestfs-tools` provides `virt-customize`. On older releases use `libguestfs-tools-c`.)
-- The os-autoinst distri reference tree, cloned to `/tmp/os-autoinst-distri-fedora`:
-  ```bash
-  sudo git clone --depth 1 https://github.com/os-autoinst/os-autoinst-distri-fedora /tmp/os-autoinst-distri-fedora
-  ```
-  (Required for some shared utilities; you can also point the loader elsewhere via `PERL5LIB`.)
-- A golden QCOW2 image with a `testuser` account whose password is `testuser`.
-  See [Golden image](#golden-image) below for how to provision it from scratch.
-
 ## Quick start
 
 ```bash
-# 0. one-time, from a clean clone of the repo:
-#    - clone the distri (see Requirements)
-#    - provision the golden image (see Golden image)
-#      OR copy an existing baked image from another machine.
+# One-time setup, in order:
+just setup-deps      # install host packages, clone os-autoinst-distri-fedora
+just provision-base  # download Fedora 42 cloud image and bake GNOME+GDM+testuser
+just prepare-img     # make a copy with the testuser password baked in
+                     # (only needed if you don't already have the autologin image)
 
-# 1. (every fresh checkout) make sure the golden image is in place
-ls ../qemu-images/golden-gnome-deps-autologin.qcow2
-#    if not: just prepare-img    (bakes the password into a copy of the base image)
-
-# 2. run the test
+# Every run after that:
 just openqa-test
 ```
 
-To automate the whole flow (clone the branch, stage the golden image, run the
-test) into a fresh directory, use one of the helper scripts:
+`just` with no arguments prints the available recipes. All three `setup-deps`,
+`provision-base`, and `prepare-img` recipes are idempotent — re-running them on
+a machine that already has the dependencies and images is a no-op.
 
-```bash
-# Cold-test the current branch (feat/openqa)
-scripts/cold-test.sh /tmp/clone-test
+### Requirements (what `just setup-deps` assumes)
 
-# Cold-test any branch (prompts to bake the golden image if missing)
-scripts/checkout-and-test.sh feat/openqa /tmp/clone-test
-```
+- Fedora 41+ host
+- A user that can `sudo dnf install` and `sudo git clone` (passwordless sudo
+  is **not** required, but interactive `sudo` access is)
+- `/dev/kvm` accessible to the running user (the recipe checks this and tells
+  you to `sudo usermod -aG kvm $USER` if not)
+- Internet access (to download the Fedora 42 cloud image and the distri repo)
 
-Both scripts clone the branch into a fresh directory, copy in a pre-baked
-golden image, and run the test end-to-end. Useful for CI smoke tests and for
-verifying that a new contributor can actually follow the instructions.
-
-`just` with no arguments prints the available recipes.
-## Golden image
-
-The test boots `../qemu-images/golden-gnome-deps-autologin.qcow2` (relative to this
-directory). The `*autologin*` image is a copy of `golden-gnome-deps.qcow2` with the
-`testuser` password baked in via `virt-customize`.
-
-The base image (`golden-gnome-deps.qcow2`, ~1.8 GB) is **not** stored in git. Provision
-it once on each machine, or copy the autologin image directly from another machine
-that already has it.
-
-### Provision from scratch (offline-friendly, single `virt-customize` invocation)
-
-```bash
-# Download the official Fedora 42 cloud image (one time)
-curl -L -o /tmp/Fedora-Cloud-Base-42.qcow2.xz \
-  https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-42-1.14.x86_64.qcow2.xz
-unxz /tmp/Fedora-Cloud-Base-42.qcow2.xz
-mv /tmp/Fedora-Cloud-Base-42.qcow2 e2e/qemu-images/golden-gnome-deps.qcow2
-
-# Resize to leave headroom for package install
-qemu-img resize e2e/qemu-images/golden-gnome-deps.qcow2 +5G
-
-# Install everything the test expects (GNOME, GDM, testuser, sudo, virtio drivers).
-# This single virt-customize invocation replaces the manual boot+install+sysprep dance.
-# --root-password and --password set the credentials; --run-command enables
-# passwordless sudo and ensures virtio-serial is loaded at boot.
-sudo virt-customize \
-    -a e2e/qemu-images/golden-gnome-deps.qcow2 \
-    --root-password password:testuser \
-    --password testuser:password:testuser \
-    --install @gnome-desktop,gdm,NetworkManager,systemd-resolved,virtio-tools,spice-vdagent,glx-utils,libglvnd-glx,mesa-dri-drivers,plymouth \
-    --run-command "echo 'testuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/testuser" \
-    --run-command "systemctl enable gdm NetworkManager" \
-    --run-command "sed -i 's/^#*AutomaticLoginEnable=.*/AutomaticLoginEnable=true/' /etc/gdm/custom.conf" \
-    --run-command "sed -i 's/^#*AutomaticLogin=.*/AutomaticUser=testuser/' /etc/gdm/custom.conf" \
-    --run-command "systemctl set-default graphical.target" \
-    --selinux-relabel
-
-# Bake the testuser password into a working copy
-just prepare-img
-```
-
-### Or copy an already-baked image from another machine
-
-If a teammate has the working image, just rsync it:
-
-```bash
-rsync -avP other-host:/path/to/golden-gnome-deps-autologin.qcow2 e2e/qemu-images/
-```
+If you already have the golden image from another machine, skip `provision-base`
+and `prepare-img` and just `rsync` it to `../qemu-images/`.
 
 ## How the test works (in detail)
 
@@ -156,10 +87,10 @@ label is still shown above the box.
 | `tests/boot_desktop.pm`, `tests/autologin.pm`, `tests/find_password.pm` | Earlier test attempts, kept for reference |
 | `needles/{login-screen,password-prompt,desktop}.{json,png}` | Visual references for openQA |
 | `run-host.sh` | Boots the test: starts Xvfb, generates vars.json, runs isotovideo, cleans up |
-| `scripts/cold-test.sh` | One-shot: clones `feat/openqa` into a fresh dir, stages the golden image, runs the test |
+| `scripts/cold-test.sh` | One-shot: clones `feat/openqa` into a fresh dir, runs the test |
 | `scripts/checkout-and-test.sh` | Same, but takes any branch as an argument; prompts to bake the golden image if missing |
 | `Containerfile` | Optional podman image (alternative to host packages) |
-| `justfile` | `just openqa-test`, `just prepare-img`, `just clean`, `just build` |
+| `justfile` | `just openqa-test`, `just prepare-img`, `just clean`, `just build` + `setup-deps`, `provision-base` |
 
 ## Running in podman instead
 
@@ -176,13 +107,13 @@ self-hosted runner.
 
 ## Troubleshooting
 
-- **"isotovideo: command not found"** — install `os-autoinst`.
+- **"isotovideo: command not found"** — run `just setup-deps`.
 - **"/dev/kvm: permission denied"** — your user is not in the `kvm` group
   (or `/dev/kvm` is not world-writable). `sudo usermod -aG kvm $USER` and log
   back in.
 - **"golden-gnome-deps-autologin.qcow2 not found"** — you haven't run
   `just prepare-img` yet, or you haven't rsynced an already-baked image from
-  another machine. See [Golden image](#golden-image).
+  another machine.
 - **"no candidate needle with tag 'login-screen' matched"** — the GDM layout
   changed in a Fedora update. Re-capture the needle by booting the image
   manually, taking a screenshot, and replacing `needles/login-screen.png` (and
