@@ -1,15 +1,15 @@
 {
   "area": [
     {
-      "xpos": 350,
-      "ypos": 130,
-      "width": 330,
-      "height": 430,
+      "xpos": 390,
+      "ypos": 150,
+      "width": 270,
+      "height": 270,
       "type": "match",
-      "match": 90
+      "match": 80
     }
   ],
-  "description": "GNOME 40+ first-login welcome tour dialog: 'Welcome to Fedora Linux 42' with Skip / Take Tour buttons",
+  "description": "GNOME 40+ first-login welcome tour dialog: hot-air balloon icon",
   "tags": ["welcome-tour"],
   "properties": []
 }
