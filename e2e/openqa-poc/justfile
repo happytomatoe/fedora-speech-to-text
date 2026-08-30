@@ -2,9 +2,9 @@
 #
 # Usage:
 #   just setup-deps        # one-time: install host packages + clone the distri
-#   just provision-base    # one-time: download Fedora 42 cloud image as the base
-#   just prepare-img       # one-time: bake the testuser password into the golden image
-#   just openqa-test       # run the test (uses ../qemu-images/golden-gnome-deps-autologin.qcow2)
+#   just provision-base    # one-time: download Fedora 42 cloud image and bake GNOME+GDM
+#   just prepare-img       # one-time: bake the testuser password into the autologin copy
+#   just openqa-test       # run the test
 #   just build             # build the optional podman image (alternative to host packages)
 #   just clean             # remove test results and runtime artefacts
 #
@@ -14,12 +14,13 @@
 set shell := ["bash", "-uc"]
 
 poc_dir := justfile_directory()
-qemu_images_dir := poc_dir / ".." / "qemu-images"
-golden_img := qemu_images_dir / "golden-gnome-deps-autologin.qcow2"
-base_golden_img := qemu_images_dir / "golden-gnome-deps.qcow2"
+# The qemu-images dir lives one level up from the POC dir. We resolve the
+# absolute path inside each recipe (via `cd` and `pwd`), because just's `:=`
+# doesn't run shell backticks at interpolation time — it would treat the
+# backtick expression as a literal string.
 distri_dir := "/tmp/os-autoinst-distri-fedora"
-fedora_cloud_url := "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-42-1.14.x86_64.qcow2.xz"
-fedora_cloud_tmp := "/tmp/Fedora-Cloud-Base-42.qcow2.xz"
+fedora_cloud_url := "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
+fedora_cloud_tmp := "/tmp/Fedora-Cloud-Base-Generic-42.qcow2"
 
 # Default recipe: print usage
 default:
@@ -54,50 +55,70 @@ setup-deps:
     @echo
     @echo "Done. Next: just provision-base   (downloads Fedora 42 cloud image)"
 
-# One-time: download the Fedora 42 cloud image and save it as the base golden image.
-# Idempotent: skips the download if the base already exists.
+# One-time: download the Fedora 42 cloud image and bake GNOME + GDM + testuser
+# into it. Idempotent: skips the download if the base image exists, and skips
+# the bake if a .provisioned marker file exists.
 provision-base:
-    @mkdir -p {{qemu_images_dir}}
-    @if [ -f "{{base_golden_img}}" ]; then \
-        echo "base image already at {{base_golden_img}}."; \
-    else \
-        echo "downloading Fedora 42 cloud image..."; \
-        curl -L -o "{{fedora_cloud_tmp}}" "{{fedora_cloud_url}}"; \
-        unxz -f "{{fedora_cloud_tmp}}"; \
-        mv /tmp/Fedora-Cloud-Base-42.qcow2 "{{base_golden_img}}"; \
-        qemu-img resize "{{base_golden_img}}" +5G; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    qemu_images_dir="$(cd '{{poc_dir}}/..' && pwd)/qemu-images"
+    base_golden_img="${qemu_images_dir}/golden-gnome-deps.qcow2"
+    provisioned_marker="${qemu_images_dir}/.provisioned"
+    mkdir -p "${qemu_images_dir}"
+    if [ -f "${base_golden_img}" ]; then
+        echo "base image already at ${base_golden_img}."
+    else
+        echo "downloading Fedora 42 cloud image (~530 MB)..."
+        if ! curl -L -f -o "{{fedora_cloud_tmp}}" "{{fedora_cloud_url}}"; then
+            echo "ERROR: download failed. Check your network or pick a mirror."
+            rm -f "{{fedora_cloud_tmp}}"
+            exit 1
+        fi
+        mv "{{fedora_cloud_tmp}}" "${base_golden_img}"
+        qemu-img resize "${base_golden_img}" +5G
     fi
-    @echo
-    @echo "=== baking GNOME + GDM + testuser into base image (one-time, ~5-10 min) ==="
-    sudo virt-customize \
-        -a "{{base_golden_img}}" \
-        --root-password password:testuser \
-        --password testuser:password:testuser \
-        --install @gnome-desktop,gdm,NetworkManager,systemd-resolved,virtio-tools,spice-vdagent,glx-utils,libglvnd-glx,mesa-dri-drivers,plymouth \
-        --run-command "echo 'testuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/testuser" \
-        --run-command "systemctl enable gdm NetworkManager" \
-        --run-command "systemctl set-default graphical.target" \
-        --selinux-relabel
-    @echo
-    @echo "Done. Next: just prepare-img   (creates the autologin copy)"
+    if [ -f "${provisioned_marker}" ]; then
+        echo "base image already provisioned (marker: ${provisioned_marker})."
+        echo "  delete it to re-bake: rm ${provisioned_marker}"
+    else
+        echo
+        echo "=== baking GNOME + GDM + testuser into base image (one-time, ~5-10 min) ==="
+        sudo virt-customize \
+            -a "${base_golden_img}" \
+            --root-password password:testuser \
+            --password testuser:password:testuser \
+            --install @gnome-desktop,gdm,NetworkManager,systemd-resolved,virtio-tools,spice-vdagent,glx-utils,libglvnd-glx,mesa-dri-drivers,plymouth \
+            --run-command "echo 'testuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/testuser" \
+            --run-command "systemctl enable gdm NetworkManager" \
+            --run-command "systemctl set-default graphical.target" \
+            --selinux-relabel
+        date -Iseconds > "${provisioned_marker}"
+    fi
+    echo
+    echo "Done. Next: just prepare-img   (creates the autologin copy)"
 
 # Bake the testuser password into a copy of the base image, producing the
 # *autologin* image that the test boots. Idempotent: re-running overwrites
 # the autologin image but does not touch the base.
 prepare-img:
-    @if [ ! -f "{{base_golden_img}}" ]; then \
-        echo "ERROR: base golden image not found at {{base_golden_img}}"; \
-        echo "Run: just provision-base"; \
-        exit 1; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    qemu_images_dir="$(cd '{{poc_dir}}/..' && pwd)/qemu-images"
+    base_golden_img="${qemu_images_dir}/golden-gnome-deps.qcow2"
+    golden_img="${qemu_images_dir}/golden-gnome-deps-autologin.qcow2"
+    if [ ! -f "${base_golden_img}" ]; then
+        echo "ERROR: base golden image not found at ${base_golden_img}"
+        echo "Run: just provision-base"
+        exit 1
     fi
-    cp -f "{{base_golden_img}}" "{{golden_img}}"
-    @echo "Baking testuser password into {{golden_img}}..."
+    cp -f "${base_golden_img}" "${golden_img}"
+    echo "Baking testuser password into ${golden_img}..."
     sudo LIBGUESTFS_BACKEND=direct virt-customize \
-        -a "{{golden_img}}" \
+        -a "${golden_img}" \
         --password "testuser:password:testuser" \
         --run-command "echo testuser ALL=\\(ALL\\) NOPASSWD:ALL >/etc/sudoers.d/testuser" \
         --selinux-relabel
-    @echo "Done. Run: just openqa-test"
+    echo "Done. Run: just openqa-test"
 
 # Run the POC test on the host (no podman).
 # Boots the golden image, logs in as testuser via GDM, captures a desktop screenshot.
