@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
+import { beginSpan, endSpan } from "./timing.js";
 import { Deployer } from "./deploy.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 
@@ -203,6 +204,7 @@ export async function deployExtension(
   console.log("Deploying GNOME extension via install.sh...");
   
   // Upload install.sh and gnome-ext to VM, then run install.sh --local
+  beginSpan("upload");
   const tUpload = Date.now();
   if (deployer) {
     await deployer.exec('mkdir -p ~/tmp-deploy');
@@ -218,7 +220,9 @@ export async function deployExtension(
     rsyncToVm(join(cfg.projectRoot, 'service'), '~/tmp-deploy/service', cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    upload: ${Date.now() - tUpload}ms [time]`);
+  endSpan(); // upload
   
+  beginSpan("install.sh");
   const tInstall = Date.now();
   if (deployer) {
     // gnome-extensions needs the session bus, which a non-interactive SSH
@@ -230,7 +234,9 @@ export async function deployExtension(
     sshExec(`chmod +x ~/tmp-deploy/install.sh && bash ~/tmp-deploy/install.sh --e2e --local ~/tmp-deploy/gnome-ext`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   }
   console.log(`    install.sh: ${Date.now() - tInstall}ms [time]`);
+  endSpan(); // install.sh
   
+  beginSpan("dconf");
   const tDconf = Date.now();
   await shell.exec(`dconf write /org/gnome/shell/enabled-extensions "['${cfg.extensionUuid}']"`);
   await shell.exec(`dconf write /org/gnome/shell/disable-user-extensions false`);
@@ -244,6 +250,7 @@ dconf write /org/gnome/shell/extensions/voice-to-text/stop-timeout-seconds "120"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
+  endSpan(); // dconf
   console.log(`  install.sh+dconf: ${Date.now() - t0}ms [time]`);
 
   // Disconnect deployer before GDM restart
@@ -266,6 +273,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   let extensionFound = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     console.log(`  attempt ${attempt + 1}...`);
+    beginSpan("gdm-restart");
     try {
       sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
     } catch {
@@ -346,8 +354,10 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       15000
     );
     console.log(`  GDM restart+SSH: ${Date.now() - t2}ms [time]`);
+    endSpan(); // gdm-restart (includes re-ssh + session/shell/extension-system polls)
 
     // Wait for extension to be available
+    beginSpan("wait-extension-active");
     console.log("  waiting for extension...");
     try {
       await pollUntilFn(
@@ -369,7 +379,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // Extension not found — try again
       console.log("  extension not found, retrying...");
     }
+    endSpan(); // wait-extension-active (loop retry path)
   }
+  endSpan(); // wait-extension-active (success path)
 
   if (!extensionFound) {
     // Surface why the extension never reached ACTIVE so the failure is
