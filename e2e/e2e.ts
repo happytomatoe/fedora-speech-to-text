@@ -308,10 +308,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
   await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
-  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling).
-  // If it never appears, the terminal emulator likely died on spawn — respawn
-  // once before failing (flake: gnome-terminal sometimes crashes right after
-  // snapshot restore under load).
+  // If the tmux session never appears, respawn the terminal once before
+  // failing (flake: terminal sometimes crashes right after snapshot restore).
   const waitTmux = () =>
     vm.pollUntil(
       "tmux session",
@@ -585,7 +583,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       } catch (e) {
         console.log(`  Screencast retrieval failed: ${e}`);
       }
-      endSpan(); // retrieve-screencast
+      endSpan();
     }
   }
 }
