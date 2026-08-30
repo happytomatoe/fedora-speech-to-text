@@ -38,12 +38,8 @@ sub run {
     type_string "testuser\n";
     assert_screen 'password-prompt', 30;
     type_string "testuser\n";
-    # Dismiss GNOME 40+ first-login welcome tour if it appears.
-    # The dialog shows "Welcome to Fedora Linux" with Skip / Take Tour.
-    # Pressing Escape skips the tour.
-    if (check_screen 'welcome-tour', 5) {
-        send_key 'esc';
-    }
+    # The welcome-tour dialog is suppressed by a dconf key in bake-voice
+    # (welcome-dialog-last-shown-version=999 in /etc/dconf/db/local.d).
     # Wait for desktop (Activities/TopBar visible)
     assert_screen 'desktop', 30;
 

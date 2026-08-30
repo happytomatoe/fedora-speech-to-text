@@ -271,6 +271,7 @@ bake-voice:
         --upload "${debug_audio}:${_tmp_audio}" \
         --run-command "id testuser >/dev/null 2>&1 || useradd -m -G wheel -s /bin/bash testuser; echo 'testuser:testuser' | chpasswd; chown -R testuser:testuser ${_tmp_local} ${_tmp_audio}; sudo -u testuser bash -c 'cd ${_tmp_local} && E2E=1 LOCAL_DIR=${_tmp_local} bash ./install.sh'; mkdir -p /home/testuser/.config/voice-to-text && cp /etc/voice-to-text-config.yaml /home/testuser/.config/voice-to-text/config.yaml && chown -R testuser:testuser /home/testuser/.config/voice-to-text && chmod 644 /home/testuser/.config/voice-to-text/config.yaml" \
         --run-command "systemctl enable sshd || true" \
+        --run-command "mkdir -p /etc/dconf/profile /etc/dconf/db/local.d && echo 'user-db:user' > /etc/dconf/profile/user && echo -e '\\n[org/gnome/shell]\\nwelcome-dialog-last-shown-version=999\\n' > /etc/dconf/db/local.d/00-welcome-disable && dconf update" \
         --selinux-relabel
     date -Iseconds > "${voice_marker}"
     echo
