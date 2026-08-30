@@ -152,7 +152,9 @@ export class VmManager {
       "-cpu", "host",
       "-m", "4096",
       "-smp", "2",
-      "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
+      // cache=unsafe: throwaway test VM, no host crash recovery needed —
+      // skips flush barriers for faster disk I/O and snapshot restores.
+      "-drive", `file=${overlayImage},format=qcow2,if=virtio,cache=unsafe`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
