@@ -170,11 +170,11 @@ provision-base:
     else
         echo
         echo "=== baking GNOME + GDM + testuser into base image (one-time, ~5-10 min) ==="
-        sudo virt-customize \
+        LIBGUESTFS_BACKEND=direct virt-customize \
             -a "${base_golden_img}" \
             --root-password password:testuser \
             --password testuser:password:testuser \
-            --install @gnome-desktop,gdm,NetworkManager,systemd-resolved,virtio-tools,spice-vdagent,glx-utils,libglvnd-glx,mesa-dri-drivers,plymouth \
+            --run-command "dnf install -y --skip-unavailable @gnome-desktop gdm spice-vdagent glx-utils libglvnd-glx mesa-dri-drivers plymouth || true" \
             --run-command "echo 'testuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/testuser" \
             --run-command "systemctl enable gdm NetworkManager" \
             --run-command "systemctl set-default graphical.target" \
@@ -200,7 +200,7 @@ prepare-img:
     fi
     cp -f "${base_golden_img}" "${golden_img}"
     echo "Baking testuser password into ${golden_img}..."
-    sudo LIBGUESTFS_BACKEND=direct virt-customize \
+    LIBGUESTFS_BACKEND=direct virt-customize \
         -a "${golden_img}" \
         --password "testuser:password:testuser" \
         --run-command "echo testuser ALL=\\(ALL\\) NOPASSWD:ALL >/etc/sudoers.d/testuser" \
