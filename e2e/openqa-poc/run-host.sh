@@ -9,6 +9,18 @@ POC_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_DIR="${POC_DIR}/testresults"
 XVFB_DISPLAY=":99"
 XVFB_SCREEN="1920x1080x24"
+# os-autoinst's working dir (where the converted raw disk + screenshots
+# land). Default to /tmp; if /tmp is too small to hold HDDSIZEGB + 20%
+# buffer, fall back to a sibling dir under POC_DIR on /home.
+WORKDIR="${WORKDIR:-/tmp/os-autoinst-poc}"
+NEED_GB=$(( $(echo "${HDDSIZEGB:-10}" | awk '{print int($1+0)}') + 2 ))
+TMP_AVAIL_KB=$(df -Pk /tmp | awk 'NR==2 {print $4}')
+TMP_AVAIL_GB=$(( TMP_AVAIL_KB / 1024 / 1024 ))
+if (( TMP_AVAIL_GB < NEED_GB )); then
+    echo "/tmp has ${TMP_AVAIL_GB}G free, need ${NEED_GB}G; using ${POC_DIR}/.workdir instead."
+    WORKDIR="${POC_DIR}/.workdir"
+fi
+mkdir -p "${WORKDIR}"
 
 if [ ! -d /tmp/os-autoinst-distri-fedora/lib ]; then
     echo "ERROR: clone os-autoinst-distri-fedora first:"
@@ -68,11 +80,20 @@ if ! kill -0 ${XVFB_PID} 2>/dev/null; then
 fi
 echo "Xvfb started (PID: ${XVFB_PID})"
 export DISPLAY="${XVFB_DISPLAY}"
-export PERL5LIB="/usr/lib/os-autoinst:/tmp/os-autoinst-distri-fedora/lib:${PERL5LIB:-}"
+export PERL5LIB="/usr/lib/os-autoinst:/tmp/os-autoinst-distri-fedora/lib:${POC_DIR}:${PERL5LIB:-}"
+# Disable os-autoinst's pre-flight storage check (it requires
+# HDDSIZEGB * 1.2 free + 50 GB absolute). Our workdir has plenty.
+export OS_AUTOINST_STORAGE_KEEP_FREE_RATIO=0
+export OS_AUTOINST_STORAGE_KEEP_FREE_GB=0
 
 cd "${POC_DIR}"
-echo "Running isotovideo..."
-timeout 300 isotovideo 2>&1 | tee "${RESULTS_DIR}/isotovideo.log"
+echo "Running isotovideo (workdir: ${WORKDIR})..."
+# isotovideo's --workdir chdirs into the workdir before reading
+# vars.json, so symlink the necessary config files in.
+ln -sf "${POC_DIR}/vars.json" "${WORKDIR}/vars.json"
+ln -sf "${POC_DIR}/base_state.json" "${WORKDIR}/base_state.json" 2>/dev/null || true
+ln -sf "${POC_DIR}/qemuscreenshot" "${WORKDIR}/qemuscreenshot" 2>/dev/null || true
+timeout 300 isotovideo --workdir "${WORKDIR}" 2>&1 | tee "${RESULTS_DIR}/isotovideo.log"
 ISO_EXIT=${PIPESTATUS[0]}
 
 echo "Stopping Xvfb..."
@@ -80,14 +101,27 @@ kill ${XVFB_PID} 2>/dev/null || true
 wait ${XVFB_PID} 2>/dev/null || true
 
 echo
+echo
 echo "=== Test Results ==="
-if [ -f "${RESULTS_DIR}/result-login_with_password.json" ]; then
-    cat "${RESULTS_DIR}/result-login_with_password.json" | python3 -m json.tool
+# isotovideo writes its result JSON into the workdir, not RESULTS_DIR.
+# Prefer that, fall back to RESULTS_DIR.
+RESULT_FILE=""
+for candidate in "${WORKDIR}/testresults/result-login_with_password.json" "${RESULTS_DIR}/result-login_with_password.json"; do
+    if [ -f "${candidate}" ]; then
+        RESULT_FILE="${candidate}"
+        break
+    fi
+done
+if [ -n "${RESULT_FILE}" ]; then
+    cat "${RESULT_FILE}" | python3 -m json.tool
+elif ls "${WORKDIR}"/testresults/result-*.json 1>/dev/null 2>&1; then
+    cat "${WORKDIR}"/testresults/result-*.json | python3 -m json.tool
 elif ls "${RESULTS_DIR}"/result-*.json 1>/dev/null 2>&1; then
     cat "${RESULTS_DIR}"/result-*.json | python3 -m json.tool
 else
-    echo "No result-*.json found. Files in ${RESULTS_DIR}:"
-    ls -la "${RESULTS_DIR}/"
+    echo "No result-*.json found. Files in ${WORKDIR}/testresults and ${RESULTS_DIR}:"
+    ls -la "${WORKDIR}/testresults/" 2>/dev/null
+    ls -la "${RESULTS_DIR}/" 2>/dev/null
 fi
 echo
 echo "POC run complete. Exit code: ${ISO_EXIT}"

@@ -19,6 +19,7 @@ virtio_console_user.out
 virtio_console_user.log
 command-server-tmp/
 qemuscreenshot/
+.workdir/
 .pi-glla/
 *.pid
 *.log

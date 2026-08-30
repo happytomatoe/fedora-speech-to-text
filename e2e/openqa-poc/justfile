@@ -162,7 +162,15 @@ provision-base:
             fi
         fi
         mv "{{fedora_cloud_tmp}}" "${base_golden_img}"
-        qemu-img resize "${base_golden_img}" +5G
+        # The cloud image's btrfs root is ~4 GB, which is not enough for
+        # the @gnome-desktop install (~2.5 GB more). virt-resize grows
+        # both the qcow2 container and the btrfs filesystem inside, in
+        # one step. Output goes to a sibling file, then atomically
+        # swapped in. Takes ~25s.
+        _resized="${base_golden_img}.resized"
+        qemu-img create -f qcow2 "${_resized}" 12G
+        LIBGUESTFS_BACKEND=direct virt-resize --expand /dev/sda4 "${base_golden_img}" "${_resized}"
+        mv "${_resized}" "${base_golden_img}"
     fi
     if [ -f "${provisioned_marker}" ]; then
         echo "base image already provisioned (marker: ${provisioned_marker})."
@@ -175,6 +183,7 @@ provision-base:
             --root-password password:testuser \
             --password testuser:password:testuser \
             --run-command "dnf install -y --skip-unavailable @gnome-desktop gdm spice-vdagent glx-utils libglvnd-glx mesa-dri-drivers plymouth || true" \
+            --run-command "dnf remove -y gnome-initial-setup gnome-initial-setup-first-login || true" \
             --run-command "echo 'testuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/testuser" \
             --run-command "systemctl enable gdm NetworkManager" \
             --run-command "systemctl set-default graphical.target" \
@@ -220,7 +229,7 @@ clean:
     rm -f {{poc_dir}}/virtio_console.in {{poc_dir}}/virtio_console.out {{poc_dir}}/virtio_console.log
     rm -f {{poc_dir}}/virtio_console_user.in {{poc_dir}}/virtio_console_user.out {{poc_dir}}/virtio_console_user.log
     rm -f {{poc_dir}}/os-autoinst.pid {{poc_dir}}/qemu.pid
-    rm -rf {{poc_dir}}/raid {{poc_dir}}/qemuscreenshot {{poc_dir}}/command-server-tmp
+    rm -rf {{poc_dir}}/raid {{poc_dir}}/qemuscreenshot {{poc_dir}}/command-server-tmp {{poc_dir}}/.workdir
     rm -f {{poc_dir}}/video.webm {{poc_dir}}/video_time.vtt
     @echo "Cleaned."
 
