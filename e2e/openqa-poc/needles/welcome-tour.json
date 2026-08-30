@@ -1,0 +1,15 @@
+{
+  "area": [
+    {
+      "xpos": 0,
+      "ypos": 0,
+      "width": 330,
+      "height": 440,
+      "type": "match",
+      "match": 90
+    }
+  ],
+  "description": "GNOME 40+ first-login welcome tour dialog: 'Welcome to Fedora Linux 42' with Skip / Take Tour buttons",
+  "tags": ["welcome-tour"],
+  "properties": []
+}
