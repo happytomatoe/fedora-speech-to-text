@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Inner harness for the CI headless E2E test. Runs INSIDE `dbus-run-session`
+# (started by ci-e2e-headless.sh) with an isolated HOME/XDG environment.
+#
+# Responsibilities:
+#   1. Compile GSettings schemas (system + extension) into isolated tree
+#   2. Deploy the real voice-to-text extension, enable it
+#   3. Write service config (parakeet provider, localhost:5092)
+#   4. Start the Python D-Bus service + headless gnome-shell
+#   5. Wait for Wayland socket + service bus name
+#   6. Run the TypeScript test runner (bun ci-e2e/e2e.ts)
+#   7. Tear down; exit with the test runner's exit code
+#
+# Environment expected (set by outer script):
+#   HOME, XDG_*          — isolated temp tree
+#   CI_E2E_ASSETS        — dir containing gnome-ext/, voice-to-text-python/, ci-e2e/
+#   SCREENSHOT           — absolute output path for the screenshot
+#   WIDTH / HEIGHT       — virtual monitor size
+set -euo pipefail
+
+ASSETS="${CI_E2E_ASSETS:?CI_E2E_ASSETS not set}"
+
+# --- GSettings schemas ------------------------------------------------------
+schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"
+mkdir -p "$schema_dir"
+glib-compile-schemas --targetdir="$schema_dir" /usr/share/glib-2.0/schemas
+gsettings list-schemas | grep -q org.gnome.shell
+
+# --- Deploy the real extension ----------------------------------------------
+EXT_UUID="voice-to-text@happytomatoe.com"
+EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+mkdir -p "$EXT_DIR"
+cp -r "$ASSETS/gnome-ext/." "$EXT_DIR/"
+if [ -d "$EXT_DIR/schemas" ]; then
+  glib-compile-schemas --strict "$EXT_DIR/schemas"
+fi
+gsettings set org.gnome.shell disable-user-extensions false
+ext_array=$(printf "[%s]" "$(python3 -c "import json,sys; print(json.dumps([sys.argv[1]]))" "$EXT_UUID")")
+gsettings set org.gnome.shell enabled-extensions "$ext_array"
+echo "extension deployed: $EXT_UUID"
+
+# --- Service config ----------------------------------------------------------
+mkdir -p "$HOME/.config/voice-to-text"
+cat > "$HOME/.config/voice-to-text/config.yaml" <<YEOF
+provider: parakeet
+http_endpoint: http://localhost:5092
+YEOF
+
+# --- Install + start the Python service ---------------------------------------
+# uv run resolves the project's own dependencies; no pip needed.
+cd "$ASSETS/voice-to-text-python"
+uv run --project . voice-to-text-dbus > "$HOME/service.log" 2>&1 &
+SERVICE_PID=$!
+
+# --- Boot headless gnome-shell -------------------------------------------------
+gnome-shell --headless --wayland --no-x11 \
+  --virtual-monitor "${WIDTH}x${HEIGHT}" > "$HOME/shell.log" 2>&1 &
+SHELL_PID=$!
+echo "shell PID: $SHELL_PID  service PID: $SERVICE_PID"
+
+# --- Wait for Wayland socket ----------------------------------------------------
+WAYLAND_SOCKET_PATH="$XDG_RUNTIME_DIR/wayland-0"
+for i in $(seq 1 60); do
+  if ! kill -0 "$SHELL_PID" 2>/dev/null; then
+    echo "FATAL: gnome-shell exited early"
+    cat "$HOME/shell.log"
+    exit 1
+  fi
+  if [[ -S "$WAYLAND_SOCKET_PATH" ]]; then
+    echo "Wayland socket available after ${i}s"
+    break
+  fi
+  sleep 1
+done
+[[ -S "$WAYLAND_SOCKET_PATH" ]] || { echo "FATAL: no Wayland socket"; exit 1; }
+
+# --- Wait for the service bus name -----------------------------------------------
+for i in $(seq 1 30); do
+  if gdbus call --session --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.ListNames | grep -q com.happytomatoe.VoiceToText; then
+    echo "service ready after ${i}s"
+    break
+  fi
+  if ! kill -0 "$SERVICE_PID" 2>/dev/null; then
+    echo "FATAL: service exited early"
+    cat "$HOME/service.log"
+    exit 1
+  fi
+  sleep 1
+done
+
+# Grace period: let the shell render the initial frame / load the extension.
+sleep 6
+
+# --- Run the test runner ----------------------------------------------------------
+TEST_EXIT=0
+cd "$ASSETS/ci-e2e"
+bun run e2e.ts || TEST_EXIT=$?
+echo "test runner exit: $TEST_EXIT"
+
+# --- Screenshot (post-run state) ---------------------------------------------------
+gdbus call --session \
+  --dest org.gnome.Shell.Screenshot \
+  --object-path /org/gnome/Shell/Screenshot \
+  --method org.gnome.Shell.Screenshot.Screenshot \
+  true false "$SCREENSHOT" || echo "WARN: screenshot failed"
+
+# --- Tear down -----------------------------------------------------------------------
+kill "$SERVICE_PID" 2>/dev/null || true
+kill "$SHELL_PID" 2>/dev/null || true
+
+exit "$TEST_EXIT"

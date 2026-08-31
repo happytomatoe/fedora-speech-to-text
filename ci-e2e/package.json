@@ -1,0 +1,11 @@
+{
+  "name": "voice-to-text-ci-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun run e2e.ts"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
