@@ -271,7 +271,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   // shell session. The dotoold *start* below must stay after (needs the
   // recreated user session for XDG_RUNTIME_DIR).
   const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
-  const dotoolInstallP: Promise<void> = (async () => {
+  const dotoolInstallPromise: Promise<void> = (async () => {
     if (isGoldenDepsImage) return;
     try {
       const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
@@ -424,7 +424,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   }
 
   // Restart dotoold (dotool install ran in parallel with the GDM restart loop)
-  await dotoolInstallP;
+  await dotoolInstallPromise;
   // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
   try {
     await shell.exec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true");
