@@ -79,8 +79,12 @@ jobs:
                 --method org.freedesktop.DBus.ListNames | grep -q org.gnome.Shell || true
 
               # Take a screenshot via GNOME Shell D-Bus API
-              # Enable unsafe mode so the Screenshot API is callable
-              gsettings set org.gnome.shell development-tools true || true
+              # Screenshot API requires unsafe mode; Eval requires development-tools.
+              # Run 3 log: shell boots, Eval works, but Screenshot -> AccessDenied.
+              gdbus call --session \
+                --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Eval "global.context.unsafe_mode = true"
 
               gdbus call --session \
                 --dest org.gnome.Shell.Screenshot \
@@ -88,11 +92,19 @@ jobs:
                 --method org.gnome.Shell.Screenshot.Screenshot \
                 true false /tmp/poc-screenshot.png \
                 && echo "screenshot OK" \
-                || echo "screenshot API failed, will try fallback"
+                || echo "screenshot API failed"
 
-              # Fallback: raw framebuffer dump via journal, or just verify process alive
+              # Fallback 1: screenshot via Eval API directly
               if [[ ! -s /tmp/poc-screenshot.png ]]; then
-                echo "Primary screenshot failed; dumping shell state for debug"
+                gdbus call --session \
+                  --dest org.gnome.Shell \
+                  --object-path /org/gnome/Shell \
+                  --method org.gnome.Shell.Eval "global.display.screenshot('/tmp/poc-screenshot.png', true)" || true
+              fi
+
+              # Fallback 2: verify shell alive + dump display size (proof of session)
+              if [[ ! -s /tmp/poc-screenshot.png ]]; then
+                echo "Screenshot failed; dumping shell state for debug"
                 gdbus call --session \
                   --dest org.gnome.Shell \
                   --object-path /org/gnome/Shell \
