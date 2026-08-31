@@ -35,8 +35,33 @@ if [ -d "$EXT_DIR/schemas" ]; then
   glib-compile-schemas --strict "$EXT_DIR/schemas"
 fi
 gsettings set org.gnome.shell disable-user-extensions false
-gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID']"
-echo "extension deployed: $EXT_UUID"
+
+# Screenshot enabler: tiny second extension sets unsafe_mode from inside the
+# shell (POC trick), so the harness's outside-shell gdbus Screenshot call is
+# permitted. Real extension stays enabled alongside.
+SHOT_UUID="poc-screenshot@local"
+SHOT_DIR="$HOME/.local/share/gnome-shell/extensions/$SHOT_UUID"
+mkdir -p "$SHOT_DIR"
+cat > "$SHOT_DIR/metadata.json" <<MEOF
+{
+  "uuid": "poc-screenshot@local",
+  "name": "POC Screenshot",
+  "description": "POC: enable unsafe mode",
+  "shell-version": ["45", "46", "47", "48", "49"]
+}
+MEOF
+cat > "$SHOT_DIR/extension.js" <<JEOF
+export default class PocScreenshot {
+    enable() {
+        global.context.unsafe_mode = true;
+    }
+    disable() {
+        global.context.unsafe_mode = false;
+    }
+}
+JEOF
+gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID', '$SHOT_UUID']"
+echo "extensions deployed: $EXT_UUID + $SHOT_UUID"
 
 # --- Service config ----------------------------------------------------------
 mkdir -p "$HOME/.config/voice-to-text"

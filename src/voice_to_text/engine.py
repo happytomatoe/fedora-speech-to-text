@@ -214,6 +214,10 @@ class RecordingEngine:
                 # Output the result
                 if text and typer:
                     await typer.stream_diff(text)
+                    # stream_diff only stores text for MutterVirtualPaster (commit
+                    # happens in flush()); commit now so output isn't dropped.
+                    if isinstance(typer, MutterVirtualPaster):
+                        await typer.flush()
                 logger.info("DEBUG MODE: Transcription complete")
                 return  # Exit early, skip normal recording flow
 
