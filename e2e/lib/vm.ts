@@ -425,6 +425,7 @@ export class VmManager {
   }
 
   private recordingFfmpeg: ReturnType<typeof Bun.spawn> | null = null;
+  private recordingCodec = "mpeg4";
   private xvfbProcess: ReturnType<typeof Bun.spawn> | null = null;
 
   /** Start Xvfb virtual display for recording */
@@ -495,6 +496,7 @@ export class VmManager {
         "-framerate", "30", "-c:v", codec, "-pix_fmt", "yuv420p", "-r", "30", videoPath],
       { stdout: "pipe", stderr: "pipe" }
     );
+    this.recordingCodec = codec;
     // Check if ffmpeg failed immediately (e.g., codec not available, display not found)
     if (this.recordingFfmpeg.exitCode !== null) {
       const stderr = this.recordingFfmpeg.stderr?.toString() || "";
@@ -517,15 +519,30 @@ export class VmManager {
     }
     this.recordingFfmpeg = null;
     console.log(`  [recording] stopped → ${videoPath}`);
-    // Post-process trim (fire-and-forget): cut the pre-activity idle head so
-    // the video keeps only ~1s of context before the widget appears. Runs in
-    // parallel with VM shutdown, so it should not add wall time.
-    Bun.spawn(["bash", "-c",
-      `LOG=$(ffmpeg -i "${videoPath}" -vf freezedetect=n=0.001:d=0.5 -an -f null - 2>&1 | grep freeze); ` +
-      `END=$(echo "$LOG" | grep -m1 freeze_end | grep -oP 'freeze_end: \\K[0-9.]+'); ` +
-      `if [ -n "$END" ]; then SS=$(python3 -c "print(max(0, $END - 1.0))"); ` +
-      `ffmpeg -v error -ss "$SS" -i "${videoPath}" -c:v libx264 -preset veryfast -pix_fmt yuv420p -an -y "${videoPath}.trimmed.mp4" && mv "${videoPath}.trimmed.mp4" "${videoPath}"; fi`]);
+    this.trimRecordingHead(videoPath);
     return videoPath;
+  }
+
+  /**
+   * Fire-and-forget post-process: cut the pre-activity idle head from the
+   * recording so the video keeps only ~1s of context before the widget
+   * appears. freezedetect (n=0.001, d=0.5) finds the first freeze_end =
+   * activity start; we re-encode with the same H.264 encoder probing as
+   * startRecording (mpeg4 output does not play in browsers). Designed to run
+   * in parallel with VM shutdown, so it adds no wall time.
+   */
+  private trimRecordingHead(videoPath: string): void {
+    const t0 = Date.now();
+    const script = [
+      `LOG=$(ffmpeg -i "${videoPath}" -vf freezedetect=n=0.001:d=0.5 -an -f null - 2>&1 | grep freeze)`,
+      `END=$(echo "$LOG" | grep -m1 freeze_end | grep -oP 'freeze_end: \\K[0-9.]+')`,
+      `if [ -z "$END" ]; then echo "  [trim] no freeze head detected, skipping"; exit 0; fi`,
+      `SS=$(python3 -c "print(max(0, $END - 1.0))")`,
+      `ffmpeg -v error -ss "$SS" -i "${videoPath}" -c:v ${this.recordingCodec} -preset veryfast -pix_fmt yuv420p -an -y "${videoPath}.trimmed.mp4" || exit 1`,
+      `mv "${videoPath}.trimmed.mp4" "${videoPath}"`,
+      `echo "  [trim] cut idle head at ${SS}s, done in $(( $(date +%s%3N) - ${t0} ))ms (ran parallel with VM shutdown)"`,
+    ].join("; ");
+    Bun.spawn(["bash", "-c", script], { stdout: "inherit", stderr: "inherit" });
   }
 
   async shutdown(): Promise<void> {
