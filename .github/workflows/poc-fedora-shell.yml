@@ -27,8 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # gnome-shell-pod tags track Fedora releases; pick ours + latest
-        fedora: ["41", "42"]
+        # gnome-shell-pod publishes only up to Fedora 41 (GNOME Shell 47.1);
+        # latest tag = Fedora 41. Rawhide exists for bleeding edge.
+        fedora: ["41", "rawhide"]
     steps:
       - uses: actions/checkout@v4
 
