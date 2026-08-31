@@ -532,17 +532,12 @@ export class VmManager {
    * in parallel with VM shutdown, so it adds no wall time.
    */
   private trimRecordingHead(videoPath: string): void {
-    const t0 = Date.now();
-    const script = [
-      `LOG=$(ffmpeg -i "${videoPath}" -vf freezedetect=n=0.001:d=0.5 -an -f null - 2>&1 | grep freeze)`,
-      `END=$(echo "$LOG" | grep -m1 freeze_end | grep -oP 'freeze_end: \\K[0-9.]+')`,
-      `if [ -z "$END" ]; then echo "  [trim] no freeze head detected, skipping"; exit 0; fi`,
-      `SS=$(python3 -c "print(max(0, $END - 1.0))")`,
-      `ffmpeg -v error -ss "$SS" -i "${videoPath}" -c:v ${this.recordingCodec} -preset veryfast -pix_fmt yuv420p -an -y "${videoPath}.trimmed.mp4" || exit 1`,
-      `mv "${videoPath}.trimmed.mp4" "${videoPath}"`,
-      `echo "  [trim] cut idle head at ${SS}s, done in $(( $(date +%s%3N) - ${t0} ))ms (ran parallel with VM shutdown)"`,
-    ].join("; ");
-    Bun.spawn(["bash", "-c", script], { stdout: "inherit", stderr: "inherit" });
+    const scriptPath = join(import.meta.dir, "trim-recording.sh");
+    Bun.spawn(["bash", scriptPath, videoPath], {
+      stdout: "inherit",
+      stderr: "inherit",
+      env: { ...process.env, TRIM_CODEC: this.recordingCodec },
+    });
   }
 
   async shutdown(): Promise<void> {
