@@ -17,11 +17,6 @@ on:
         description: 'Open an SSH (tmate) session on the runner for live debugging'
         required: false
         default: false
-      debug_on_failure:
-        type: boolean
-        description: 'Open the SSH session only if a step fails'
-        required: false
-        default: true
   pull_request:
     paths:
       - ".github/workflows/poc-ubuntu-26-04-debug.yml"
@@ -78,25 +73,11 @@ jobs:
             "$PWD/ci-e2e-screenshot-2604.png"
 
       - name: Setup tmate session (manual debug)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled && !inputs.debug_on_failure }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: true
-          detached: true
-        id: tmate-manual
-
-      - name: Setup tmate session (on failure)
-        if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.debug_on_failure }}
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-        id: tmate-failure
-
-      - name: Print SSH connection string
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && (inputs.debug_enabled || inputs.debug_on_failure) }}
-        run: |
-          echo "SSH: ${{ steps.tmate-manual.outputs.ssh-command || steps.tmate-failure.outputs.ssh-command }}"
-          echo "Web: ${{ steps.tmate-manual.outputs.web-url || steps.tmate-failure.outputs.web-url }}"
+        id: tmate
 
       - name: Upload artifacts
         if: always()
