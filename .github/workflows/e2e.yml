@@ -48,6 +48,14 @@ jobs:
         with:
           detached: true
 
+      - name: Debug upterm outputs
+        if: always()
+        run: |
+          echo 'ssh-command: ${{ steps.upterm.outputs.ssh-command }}'
+          echo 'web-url: ${{ steps.upterm.outputs.web-url }}'
+          echo 'all outputs:'
+          env | grep UPTERM || true
+
       - name: Comment SSH command on PR
         if: always() && github.event_name == 'pull_request'
         uses: mshick/add-pr-comment@v3
