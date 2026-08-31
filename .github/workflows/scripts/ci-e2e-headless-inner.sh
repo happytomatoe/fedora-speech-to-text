@@ -124,6 +124,12 @@ bun run e2e.ts || TEST_EXIT=$?
 echo "test runner exit: $TEST_EXIT"
 
 # --- Screenshot (post-run state) ---------------------------------------------------
+# Exit the Activities overview (headless shell boots into it) so the
+# screenshot shows the desktop with the panel indicators visible.
+gdbus call --session --dest org.gnome.Shell \
+  --object-path /org/gnome/Shell \
+  --method org.gnome.Shell.Eval 'Main.overview.hide();' > /dev/null 2>&1 || true
+sleep 1
 gdbus call --session \
   --dest org.gnome.Shell.Screenshot \
   --object-path /org/gnome/Shell/Screenshot \
