@@ -81,6 +81,8 @@ env --ignore-environment \
   SCREENSHOT="$SCREENSHOT" \
   VOX_CI_E2E_TEXT_FILE="$ISOLATED/typed-text.txt" \
   VOICE_TO_TEXT_DEBUG_FILE="$ISOLATED/fixture.wav" \
+  WIDTH="$WIDTH" \
+  HEIGHT="$HEIGHT" \
   HEIGHT="$HEIGHT" \
   XDG_CONFIG_HOME="$ISOLATED/.config" \
   XDG_DATA_HOME="$ISOLATED/.local/share" \
