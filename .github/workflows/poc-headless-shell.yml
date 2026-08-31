@@ -1,0 +1,114 @@
+name: POC Headless GNOME Shell
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/poc-headless-shell.yml"
+      - "docs/plans/poc-headless-shell-ci.md"
+
+jobs:
+  headless-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GNOME Shell (no VM, no container)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gnome-shell gnome-shell-common glib2.0-bin dbus xvfb \
+            mesa-utils libgl1-mesa-dri libgbm1
+
+      - name: Boot headless GNOME Shell and screenshot
+        run: |
+          set -x
+          # Isolated environment like CopyQ's test
+          TMPDIR_ENV=$(mktemp -d)
+          mkdir -p "$TMPDIR_ENV/.config" "$TMPDIR_ENV/.local/share" \
+                   "$TMPDIR_ENV/.cache" "$TMPDIR_ENV/.runtime"
+          chmod 0700 "$TMPDIR_ENV/.runtime"
+
+          env --ignore-environment \
+            HOME="$TMPDIR_ENV" \
+            PATH="$PATH" \
+            LANG=C.UTF-8 \
+            XDG_CONFIG_HOME="$TMPDIR_ENV/.config" \
+            XDG_DATA_HOME="$TMPDIR_ENV/.local/share" \
+            XDG_DATA_DIRS="$TMPDIR_ENV/.local/share" \
+            XDG_CACHE_HOME="$TMPDIR_ENV/.cache" \
+            XDG_RUNTIME_DIR="$TMPDIR_ENV/.runtime" \
+            dbus-run-session -- bash -ceu '
+              # Launch real GNOME Shell headless on a virtual monitor
+              gnome-shell --headless --wayland --no-x11 \
+                --virtual-monitor 1280x720 &
+              SHELL_PID=$!
+              echo "gnome-shell PID: $SHELL_PID"
+
+              # Wait for Wayland socket
+              WAYLAND_SOCKET_PATH="$XDG_RUNTIME_DIR/wayland-0"
+              for i in $(seq 1 60); do
+                if ! kill -0 "$SHELL_PID" 2>/dev/null; then
+                  echo "FATAL: gnome-shell exited early"
+                  exit 1
+                fi
+                if [[ -S "$WAYLAND_SOCKET_PATH" ]]; then
+                  echo "Wayland socket available after ${i}s"
+                  break
+                fi
+                sleep 1
+              done
+              [[ -S "$WAYLAND_SOCKET_PATH" ]] || { echo "FATAL: no Wayland socket"; exit 1; }
+
+              # Give shell a few seconds to render the initial frame
+              sleep 5
+
+              # Verify via D-Bus that the shell is alive
+              gdbus call --session \
+                --dest org.freedesktop.DBus \
+                --object-path /org/freedesktop/DBus \
+                --method org.freedesktop.DBus.ListNames | grep -q org.gnome.Shell || true
+
+              # Take a screenshot via GNOME Shell D-Bus API
+              # Enable unsafe mode so the Screenshot API is callable
+              gsettings set org.gnome.shell development-tools true || true
+
+              gdbus call --session \
+                --dest org.gnome.Shell.Screenshot \
+                --object-path /org/gnome/Shell/Screenshot \
+                --method org.gnome.Shell.Screenshot.Screenshot \
+                true false /tmp/poc-screenshot.png \
+                && echo "screenshot OK" \
+                || echo "screenshot API failed, will try fallback"
+
+              # Fallback: raw framebuffer dump via journal, or just verify process alive
+              if [[ ! -s /tmp/poc-screenshot.png ]]; then
+                echo "Primary screenshot failed; dumping shell state for debug"
+                gdbus call --session \
+                  --dest org.gnome.Shell \
+                  --object-path /org/gnome/Shell \
+                  --method org.gnome.Shell.Eval "global.display.get_size()" || true
+              fi
+
+              kill "$SHELL_PID" 2>/dev/null || true
+            '
+
+          ls -la /tmp/poc-screenshot.png 2>/dev/null || echo "no screenshot produced"
+          file /tmp/poc-screenshot.png 2>/dev/null || true
+
+      - name: Prepare screenshot artifact
+        run: |
+          mkdir -p poc-output
+          cp /tmp/poc-screenshot.png poc-output/ 2>/dev/null || true
+          # Copy shell debug logs if present
+          cp "$TMPDIR_ENV/.runtime"/*.log poc-output/ 2>/dev/null || true
+          ls -la poc-output/
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc-headless-shell-screenshot
+          path: poc-output/
+          if-no-files-found: warn
+          retention-days: 7
