@@ -1,0 +1,56 @@
+name: POC Ubuntu 26.04 - GNOME 50 headless
+
+# Third POC: same bare-runner headless harness that is green on
+# ubuntu-latest (GNOME 46), but on the new ubuntu-26.04 image (public
+# preview) which ships GNOME 50 — matching the local Fedora 44 dev
+# environment. No container, no VM: same bare-runner harness, newer image.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/poc-ubuntu-26-04.yml"
+      - ".github/workflows/scripts/ci-e2e-headless.sh"
+      - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
+      - "ci-e2e/**"
+      - "gnome-ext/**"
+      - "src/voice_to_text/**"
+
+jobs:
+  headless-e2e-gnome50:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GNOME Shell + harness dependencies (no VM, no container)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gnome-shell gnome-shell-common glib2.0-bin dbus \
+            mesa-utils libgl1-mesa-dri libgbm1 \
+            dconf-gsettings-backend gsettings-desktop-schemas \
+            libportaudio2 \
+            curl
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install ci-e2e dependencies
+        run: cd ci-e2e && bun install
+
+      - name: Start Parakeet + boot headless GNOME Shell + run E2E
+        run: |
+          bash .github/workflows/scripts/ci-e2e-headless.sh \
+            "$PWD/ci-e2e-screenshot-2604.png"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-e2e-headless-gnome50-artifacts
+          path: |
+            ci-e2e-screenshot-2604.png
+          if-no-files-found: warn
+          retention-days: 7
