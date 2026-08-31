@@ -8,7 +8,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { doAtspiAction, findAtspiExtents, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { doAtspiAction, findAtspiExtents, setAtspiText, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
@@ -907,9 +907,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // The Add Word dialog exposes an entry — wait for it, set text via AT-SPI,
   // then click Add (button actions verified during recon)
   await waitForAtspiNode(vm.deployer, { name: "Enter a word or phrase:" });
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); python3 - <<'ATSPIEOF'\nimport gi\ngi.require_version("Atspi","2.0")\nfrom gi.repository import Atspi\nd = Atspi.get_desktop(0)\ndef walk(node, depth=0):\n    if node is None or depth > 25: return None\n    try:\n        if (node.get_name() or "").strip() == "Enter a word or phrase:":\n            t = node.query_text()\n            t.set_text_contents("E2E")\n            return True\n    except Exception: pass\n    try: n = node.get_child_count()\n    except Exception: return None\n    for i in range(n):\n        if walk(node.get_child_at_index(i), depth+1): return True\n    return None\nfor i in range(d.get_child_count()):\n    if walk(d.get_child_at_index(i)): break\nATSPIEOF`
-  );
+  await setAtspiText(vm.deployer, "Enter a word or phrase:", "E2E");
   await waitForAtspiText(vm.deployer, "Enter a word or phrase:", "E2E");
   // Click the Add button
   await doAtspiAction(vm.deployer, "Add", "click");

@@ -279,8 +279,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         console.log("  Installing dotool...");
         sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       }
-    } catch {
+    } catch (err) {
       // Continue — dotoold start may fail with clear error
+      console.error("dotool install check failed:", err instanceof Error ? err.message : err);
     }
   })();
 

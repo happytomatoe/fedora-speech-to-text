@@ -1,5 +1,9 @@
 import { join } from "node:path";
 
+// Python helpers live in atspi.py next to this file; loaded once and prepended
+// to every one-shot script sent over SSH (python3 - reads the heredoc stdin).
+const ATSPI_PY = await Bun.file(join(import.meta.dir, "atspi.py")).text();
+
 export interface AtspiNode {
   name: string;
   role: string;
@@ -30,13 +34,6 @@ function execText(deployer: ExecLike, cmd: string): Promise<string> {
   );
 }
 
-// gnome-shell must have toolkit-accessibility=true BEFORE the prefs app
-// launches; GTK apps register their a11y tree at startup only.
-export const ATSPI_PY_COMMON = `import gi
-gi.require_version("Atspi","2.0")
-from gi.repository import Atspi
-`;
-
 /** Escape a string for single-quoted Python literal. */
 function pyQuote(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -44,37 +41,12 @@ function pyQuote(s: string): string {
 
 /** Build a one-shot Python script that walks the a11y tree and prints matches. */
 function treeScript(predicate: string, action: string): string {
-  return `${ATSPI_PY_COMMON}
-d = Atspi.get_desktop(0)
-result = ""
-
-def walk(node, depth=0):
-    global result
-    if node is None or depth > 25 or result:
-        return
-    try:
-        name = (node.get_name() or "").strip()
-        role = node.get_role_name()
-        if ${predicate}:
-            result = ${action}
-            if result:
-                return
-    except Exception:
-        return
-    try:
-        n = node.get_child_count()
-    except Exception:
-        return
-    for i in range(n):
-        walk(node.get_child_at_index(i), depth + 1)
-
-for i in range(d.get_child_count()):
-    app = d.get_child_at_index(i)
-    walk(app)
-    if result:
-        break
-
-print("RESULT:" + result)
+  return `${ATSPI_PY}
+result = walk_tree(
+    lambda name, role, node: ${predicate},
+    lambda name, role, node: ${action},
+)
+print("RESULT:" + str(result or ""))
 `;
 }
 
@@ -139,7 +111,7 @@ export async function findAtspiExtents(
 ): Promise<Extents> {
   const script = treeScript(
     matchClause("name", name),
-    `f"{node.get_component().get_extents(Atspi.CoordType.WINDOW).x},{node.get_component().get_extents(Atspi.CoordType.WINDOW).y},{node.get_component().get_extents(Atspi.CoordType.WINDOW).width},{node.get_component().get_extents(Atspi.CoordType.WINDOW).height}"`
+    `",".join(str(v) for v in (lambda e: (e.x, e.y, e.width, e.height))(node.get_component().get_extents(Atspi.CoordType.WINDOW)))`
   );
   const out = await execPython(deployer, script);
   const res = parseResult(out);
@@ -184,4 +156,19 @@ export async function waitForAtspiText(
     await Bun.sleep(250);
   }
   throw new Error(`AT-SPI: text of '${name}' never became '${expected}'`);
+}
+
+/** Set text contents on the first Text-interface node matching name. */
+export async function setAtspiText(
+  deployer: ExecLike,
+  name: string,
+  text: string
+): Promise<void> {
+  const script = `${ATSPI_PY}
+print("RESULT:" + str(set_text_by_name('${pyQuote(name)}', '${pyQuote(text)}') or ""))
+`;
+  const out = await execPython(deployer, script);
+  if (parseResult(out) !== "ok") {
+    throw new Error(`AT-SPI: no Text node '${name}' to set '${text}'`);
+  }
 }
