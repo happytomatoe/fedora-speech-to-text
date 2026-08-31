@@ -12,8 +12,9 @@ from gi.repository import Atspi  # noqa: E402
 
 def walk_tree(predicate, action):
     """Depth-first walk of the desktop a11y tree; return action(node) on first predicate match."""
-    # ponytail: fixed 25 matches the depth cap previously inlined in the TS heredocs
-    max_depth = 25
+    # ponytail: depth 35 — GTK4 prefs nesting puts suffix buttons ~28 deep;
+    # 25 cut off just above them (root-cause of 'Add Word has no click action')
+    max_depth = 35
     d = Atspi.get_desktop(0)
     result = None
 

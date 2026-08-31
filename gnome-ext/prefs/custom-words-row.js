@@ -43,9 +43,15 @@ export function createCustomWordsGroup(
         row.title = word;
         const deleteButton = new Gtk.Button({
             icon_name: 'edit-delete-symbolic',
+            // Icon-only button — expose an accessible name so AT-SPI tests and
+            // screen readers can target it.
             css_classes: ['flat', 'error'],
             valign: Gtk.Align.CENTER,
         });
+        deleteButton.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            [_('Delete %s').format(word)]
+        );
         deleteButton.connect('clicked', () => {
             const wordToDelete = row.title;
             const currentWords = settings.get_strv('custom-words');
@@ -86,7 +92,8 @@ export function createCustomWordsGroup(
         }
     };
 
-    // "Add Word…" row at the top
+    // "Add Word…" row at the top. GTK4 rows expose no AT-SPI actions, so the
+    // actual activation lives on a suffix button (clickable via AT-SPI).
     addWordRow = new Adw.ActionRow({
         activatable: true,
         title: _('Add Word…'),
@@ -94,7 +101,15 @@ export function createCustomWordsGroup(
         icon_name: 'list-add-symbolic',
     });
     addWordRow.add_css_class('activatable');
-    addWordRow.connect('activated', () => {
+    const addWordButton = new Gtk.Button({
+        icon_name: 'list-add-symbolic',
+        valign: Gtk.Align.CENTER,
+    });
+    addWordButton.update_property(
+        [Gtk.AccessibleProperty.LABEL],
+        [_('Add Word')]
+    );
+    const openAddDialog = () => {
         const dialog = new Gtk.Window({
             title: _('Add Custom Word'),
             modal: true,
@@ -169,7 +184,10 @@ export function createCustomWordsGroup(
         );
 
         dialog.present();
-    });
+    };
+    addWordButton.connect('clicked', openAddDialog);
+    addWordRow.connect('activated', openAddDialog);
+    addWordRow.add_suffix(addWordButton);
     // Add "Add Word…" row first so it appears at the top of the list
     customWordsList.append(addWordRow);
 
