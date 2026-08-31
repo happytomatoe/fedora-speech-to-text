@@ -316,11 +316,14 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
-  const hasGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim().length > 0;
+  // Ghostty must exist in the VM — the test flow depends on it (window title,
+  // AT-SPI tree, dotool input). Fail fast instead of silently falling back.
+  const whichGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim();
+  if (!whichGhostty) {
+    throw new Error("ghostty not found in VM — expected pre-installed on the base image");
+  }
   const spawnTerminal = () =>
-    hasGhostty
-      ? shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`)
-      : shell.exec(`nohup gnome-terminal -- bash -c "tmux new-session -s ${tmuxCfg.session} -x 120 -y 40" &>/dev/null &`);
+    shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 \; set-option allow-rename off \; set-option set-titles on \; set-option set-titles-string "${tmuxCfg.session}" &>/dev/null &`);
   await spawnTerminal();
   // Poll until tmux session appears (usually <1s; 5s is a generous ceiling).
   // If it never appears, the terminal emulator likely died on spawn — respawn
@@ -347,14 +350,14 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     await spawnTerminal();
     await waitTmux();
   }
-  // Click on the terminal to ensure it has focus
+  // Click on the terminal to ensure it has focus (dotool pipeline is exercised
+  // for real here — its dedicated test would not catch Wayland regressions).
   await shell.dotoolCommand("mousemove 640 400");
   await shell.dotoolCommand("buttondown 1");
   await shell.dotoolCommand("buttonup 1");
   // Verify terminal is focused by typing a test character and checking tmux.
-  // Poll pane content instead of a fixed settle sleep — same signal, less waiting.
   const paneBefore = await tmux.capturePane(tmuxCfg);
-  await shell.dotoolCommand("key shift+space"); // type space to confirm dotool works
+  await shell.dotoolCommand("key shift+space");
   let paneAfter = "";
   for (let i = 0; i < 10; i++) {
     await Bun.sleep(100);
@@ -362,12 +365,23 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     if (paneAfter !== paneBefore) break;
   }
   if (paneAfter === paneBefore) {
-    // Terminal might not be focused, try clicking again
     console.log("  Retrying terminal focus...");
     await shell.dotoolCommand("mousemove 640 400");
     await shell.dotoolCommand("buttondown 1");
     await shell.dotoolCommand("buttonup 1");
     await Bun.sleep(300);
+  }
+  // Additionally verify the terminal window exists via AT-SPI. Ghostty's
+  // window title is exactly "Ghostty" (tmux set-titles does NOT propagate to
+  // the window title — verified live in the VM a11y tree).
+  try {
+    await waitForAtspiNode(vm.deployer, {
+      name: "Ghostty",
+      role: "frame",
+      timeoutMs: 10000,
+    });
+  } catch {
+    console.log("  WARNING: Ghostty frame not found via AT-SPI, continuing");
   }
   endSpan();
 

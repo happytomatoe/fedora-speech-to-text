@@ -70,12 +70,23 @@ export class ShellHelper {
     };
     if (this._deployer) {
       try {
-        const result = await this._deployer.exec(command);
+        // Race deployer.exec against a timeout — a half-open SSH connection
+        // (TCP alive, peer gone after VM reboot/snapshot restore) never fires
+        // "close" and would hang forever. On timeout, fall back to one-shot ssh.
+        const result = await Promise.race([
+          this._deployer.exec(command),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("deployer exec timeout")), Math.min(timeoutMs, 5000))
+          ),
+        ]);
         return result.stdout.trim();
       } catch (err) {
         // Persistent connection can die (VM reboot, snapshot restore, GDM
         // restart) — fall back to a one-shot ssh call instead of failing.
+        // Also disconnect the dead deployer so subsequent calls skip it and
+        // can lazily reconnect on the next call.
         console.log(`  deployer exec failed (${err instanceof Error ? err.message : err}), retrying via one-shot ssh`);
+        try { await this._deployer.disconnect(); } catch { /* ignore */ }
         return sshExecOnce();
       }
     }
