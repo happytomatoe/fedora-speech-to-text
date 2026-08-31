@@ -240,10 +240,10 @@ function loadTestMatrix(): any {
 }
 
 /** Pick which fixture audio case this run transcribes. */
-function pickRandomTestCase(): TestCase {
+function pickRandomTestCase(): TestCaseFile {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
-  const cases: TestCase[] = data["test-cases"];
-  let picked: TestCase;
+  const cases: TestCaseFile[] = data["test-cases"];
+  let picked: TestCaseFile;
   if (SELECTED_CASE) {
     picked = cases.find(c => c.file.includes(SELECTED_CASE))!;
     if (!picked) {
@@ -289,6 +289,14 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     sshUser: SSH_USER,
     deployer: vm.deployer,
   };
+
+  // Recording state (started mid-flow, after open-terminal's 2s settle)
+  let useXvfbRecording = false;
+  // Guarantee ffmpeg cleanup on any exit path
+  process.on('exit', () => {
+    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
+    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
+  });
 
   beginSpan("capture-frame");
   await vm.captureFrame("01-desktop");
@@ -363,6 +371,16 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   }
   endSpan();
 
+  // Start screen recording right before the hotkey: 1s of focused-terminal
+  // context, then capture the interesting part (widget → transcription typing).
+  await Bun.sleep(1000);
+  try {
+    vm.startRecording();
+    useXvfbRecording = true;
+  } catch (e) {
+    console.log(`  Xvfb recording not available: ${e}`);
+  }
+
   beginSpan("capture-frame");
   await vm.captureFrame("02-tmux-started");
   endSpan();
@@ -377,30 +395,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("03-pre-recording");
   endSpan();
 
-  // Start screen recording now so the basic test AND the preferences window are both captured
+  // Xvfb recording starts after open-terminal (2s settle). This span only
+  // prepares the fallback screencast path. The preferences window is NOT
+  // captured — prefs tests run after stop-recording.
   beginSpan("start-screencast");
-  const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
-  mkdirSync(screencastDir, { recursive: true });
+  const screencastDir = run.outputDir;
   let screencastFile = "";
-  let useXvfbRecording = false;
-  // Guarantee ffmpeg cleanup on any exit path
-  process.on('exit', () => {
-    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
-    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
-  });
-  try {
-    vm.startRecording();
-    useXvfbRecording = true;
-  } catch (e) {
-    console.log(`  Xvfb recording not available: ${e}`);
-    // Fallback to GNOME Shell screencast
-    try {
-      screencastFile = await shell.startScreencast("/tmp/e2e-screencast");
-      console.log(`  Screencast started: ${screencastFile}`);
-    } catch (e2) {
-      console.log(`  Screencast start failed: ${e2}`);
-    }
-  }
   endSpan();
 
   // Ensure Activities is dismissed and terminal focused before the hotkey
@@ -497,7 +497,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("05-transcription-received");
   endSpan();
 
-  // Step 6: Stop recording
+  // Hold the final frame briefly so the recording ends on the full typed line
+  // instead of cutting off mid-typing (video-only cost: 2s idle).
+  await Bun.sleep(2000);
+
+  // Step 6: Stop recording — stopRecording() then trims the idle head
+  // fire-and-forget, in parallel with VM shutdown.
   beginSpan("stop-recording");
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
@@ -582,7 +587,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log(`  Screencast file path rejected: ${screencastFile}`);
     } else {
       beginSpan("retrieve-screencast");
-      const localPath = join(screencastDir, "test-recording.webm");
+  const localPath = join(run.outputDir, "test-recording.webm");
       try {
         execSync(
           `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
@@ -607,15 +612,10 @@ function getTestCaseName(): string {
 }
 
 /**
- * Get screenshot path based on label and test case.
- * - Common screenshots (01-04, 06): e2e/output/common/
- * - Transcription screenshot (05): e2e/output/test-cases/{testCase}/
+ * Get screenshot path (flat: e2e/output/<id>/screenshot-<label>.png).
  */
-function getScreenshotPath(label: string, testCase?: string, outputDir = OUTPUT_DIR): string {
-  if (label === "05-transcription-received" && testCase) {
-    return join(outputDir, "test-cases", testCase, `screenshot-${label}.png`);
-  }
-  return join(outputDir, "common", `screenshot-${label}.png`);
+function getScreenshotPath(label: string, _testCase?: string, outputDir = OUTPUT_DIR): string {
+  return join(outputDir, "screenshots", `screenshot-${label}.png`);
 }
 
 /**
@@ -666,42 +666,7 @@ async function captureScreenshot(label: string, run: RunContext, vm?: VmManager)
 }
 
 /**
- * Create a video from screenshots using ffmpeg.
- */
-function createVideoFromScreenshots(run: RunContext): void {
-  const recordingDir = join(run.outputDir, "recording");
-  const outputDir = join(run.outputDir, "test-cases", getTestCaseName());
-  const videoPath = join(outputDir, "test-recording.mp4");
-  const screenshotPattern = join(recordingDir, "frame-*.ppm");
-  
-  try {
-    // Check if ffmpeg is available
-    execSync("which ffmpeg", { stdio: "ignore" });
-    
-    // Check if there are any screenshots
-    const files = require("node:fs").readdirSync(recordingDir).filter((f: string) => f.startsWith("frame-") && f.endsWith(".ppm"));
-    if (files.length === 0) {
-      return;
-    }
-    
-    // Create video from screenshots
-    // Each screenshot shows for 2 seconds (6 screenshots = 12 seconds total)
-    execSync(
-      `ffmpeg -y -framerate 0.5 -pattern_type glob -i '${screenshotPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
-      { stdio: "ignore" }
-    );
-    
-    if (existsSync(videoPath)) {
-      const stats = require("node:fs").statSync(videoPath);
-      console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
-    }
-  } catch {
-    // ffmpeg not available or failed - skip video creation
-  }
-}
-
-/**
- * Verify screenshot matches reference (if exists) and file content matches expected text.
+ * Compare a captured screenshot against its reference.
  */
 async function verifyWithScreenshot(
   vm: VmManager,
@@ -760,29 +725,23 @@ function updateReferenceImages(run: RunContext): void {
   const testCase = getTestCaseName();
   console.log(`\nUpdating reference images for test case: ${testCase}`);
   
-  // Create reference directories
-  const commonRefDir = join(CONFIG.paths.referencesDir, "common");
-  const testCaseRefDir = join(CONFIG.paths.referencesDir, "test-cases", testCase);
-  mkdirSync(commonRefDir, { recursive: true });
-  mkdirSync(testCaseRefDir, { recursive: true });
-  
   // Copy common screenshots
   const commonLabels = ["01-desktop", "02-tmux-started", "03-pre-recording", "04-recording-started", "06-recording-stopped"];
   for (const label of commonLabels) {
     const src = getScreenshotPath(label, undefined, run.outputDir);
-    const dst = join(commonRefDir, `screenshot-${label}.png`);
+    const dst = join(CONFIG.paths.referencesDir, `screenshot-${label}.png`);
     if (existsSync(src)) {
       execSync(`cp "${src}" "${dst}"`, { encoding: "utf-8" });
-      console.log(`  Copied: ${label} → common/`);
+      console.log(`  Copied: ${label} → expected-qemu/`);
     }
   }
   
   // Copy test-case-specific screenshot
   const transcriptionSrc = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
-  const transcriptionDst = join(testCaseRefDir, "screenshot-05-transcription-received.png");
+  const transcriptionDst = join(CONFIG.paths.referencesDir, "screenshot-05-transcription-received.png");
   if (existsSync(transcriptionSrc)) {
     execSync(`cp "${transcriptionSrc}" "${transcriptionDst}"`, { encoding: "utf-8" });
-    console.log(`  Copied: transcription → test-cases/${testCase}/`);
+    console.log(`  Copied: transcription → expected-qemu/`);
   }
   
   // Copy preferences screenshots
@@ -790,10 +749,10 @@ function updateReferenceImages(run: RunContext): void {
   mkdirSync(prefsRefDir, { recursive: true });
   const prefsNames = ["prefs-main", "prefs-scrolled-1", "prefs-scrolled-2", "prefs-scrolled-3", "prefs-after-add"];
   for (const name of prefsNames) {
-    const src = join(run.outputDir, "preferences", `${name}.png`);
+    const src = join(run.outputDir, "screenshots", `${name}.png`);
     if (existsSync(src)) {
       execSync(`cp "${src}" "${prefsRefDir}/screenshot-${name}.png"`, { encoding: "utf-8" });
-      console.log(`  Copied: ${name} → preferences/`);
+      console.log(`  Copied: ${name} → expected-qemu/preferences/`);
     }
   }
 }
@@ -817,7 +776,7 @@ function assertScreenshotMatches(referencePath: string, captured: string, run: R
   const diff = new PNG({ width: imgRef.width, height: imgRef.height });
   const diffPixels = pixelmatch(imgRef.data, imgAct.data, diff.data, imgRef.width, imgRef.height, { threshold: 0.1 });
   const ratio = diffPixels / (imgRef.width * imgRef.height);
-  const diffPath = join(run.outputDir, "test-cases", getTestCaseName(), `diff-${label}.png`);
+  const diffPath = join(run.outputDir, "screenshots", `diff-${label}.png`);
   mkdirSync(require("node:path").dirname(diffPath), { recursive: true });
   writeFileSync(diffPath, PNG.sync.write(diff));
   if (ratio >= 0.01) {
@@ -852,7 +811,7 @@ async function compareWithReference(name: string, captured: string, run: RunCont
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
   console.log("\n📸 Running preferences screenshot tests...");
   
-  const prefsDir = join(run.outputDir, "preferences");
+  const prefsDir = join(run.outputDir, "screenshots");
   mkdirSync(prefsDir, { recursive: true });
   
   // GNOME 50's gnome-extensions client has no --gsettings flag; also the
@@ -900,9 +859,9 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   
   const bottomPng = await capturePrefs("prefs-bottom");
   
-  // Test adding a new word via the Add Word row
+  // Test adding a new word via the Add Word button (exposes AT-SPI click)
   console.log("  Testing Add Word functionality...");
-  await doAtspiAction(vm.deployer, "Add Word…", "press");
+  await doAtspiAction(vm.deployer, "Add Word", "click");
   
   // The Add Word dialog exposes an entry — wait for it, set text via AT-SPI,
   // then click Add (button actions verified during recon)
@@ -962,7 +921,7 @@ async function main(): Promise<void> {
     updateMode: UPDATE_MODE,
   });
   console.log(`Run ID: ${run.id}`);
-  console.log(`Run directory: ${run.runDir}`);
+  console.log(`Output directory: ${run.outputDir}`);
   console.log(`SSH port: ${run.sshPort}`);
 
   const vmCfg: VmConfig = {
