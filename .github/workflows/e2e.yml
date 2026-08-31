@@ -44,7 +44,7 @@ jobs:
 
       - name: Setup SSH debug session (tmate)
         id: tmate
-        uses: mxschmitt/action-tmate@v3
+        uses: mxschmitt/action-tmate@v3.14.0
         with:
           detached: true
 
