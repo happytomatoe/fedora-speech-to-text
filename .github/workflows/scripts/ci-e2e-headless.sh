@@ -15,7 +15,7 @@
 # Usage: ci-e2e-headless.sh <output-png> [width] [height]
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SCREENSHOT="$(realpath "${1:?usage: ci-e2e-headless.sh <output-png> [width] [height]}")"
 WIDTH="${2:-1280}"
 HEIGHT="${3:-720}"
