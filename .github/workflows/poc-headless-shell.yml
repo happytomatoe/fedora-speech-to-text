@@ -21,7 +21,7 @@ jobs:
             gnome-shell gnome-shell-common glib2.0-bin dbus xvfb \
             mesa-utils libgl1-mesa-dri libgbm1 \
             libglib2.0-bin dconf-gsettings-backend gsettings-desktop-schemas \
-            grim
+            xdg-desktop-portal xdg-desktop-portal-gnome
 
       - name: Boot headless GNOME Shell and screenshot
         run: |
@@ -105,18 +105,38 @@ jobs:
               #    Screenshot in a follow-up. For THIS run: dump frame via
               #    GJS sidecar script that runs INSIDE the shell process? Not
               #    possible externally.
-              # => Use GRIM with the WAYLAND_DISPLAY of the headless shell.
-              #    Mutter does NOT implement wlr-screencopy. BUT it DOES
-              #    implement zwp-linux-dmabuf and the ext-image-copy-capture
-              #    protocol in GNOME 48+?Try grim anyway:
-              echo "Attempting grim screenshot via Wayland protocol..."
-              gsettings set org.gnome.desktop.lockdown disable-lock-screen false || true
-              if command -v grim >/dev/null 2>&1; then
-                GRIM_OUTPUT=$(WAYLAND_DISPLAY=wayland-0 grim /tmp/poc-screenshot.png 2>&1) \
-                  && echo "grim screenshot OK" \
-                  || echo "grim failed: $GRIM_OUTPUT"
-              else
-                echo "grim not installed"
+              # Run 7: grim fails — Mutter does not implement
+              # wlr-screencopy-unstable-v1. Mutter exposes capture ONLY via
+              # org.gnome.Mutter.ScreenCast (PipeWire) or the gated Shell
+              # Screenshot API. PipeWire path: install pipewire +
+              # xdg-desktop-portal-gnome, start them in the session, then use
+              # org.gnome.Shell.Screenshot? Still gated. The ScreenCast
+              # portal path needs a portal request round-trip — heavy for POC.
+              # SIMPLEST ACTUALLY-WORKING capture for Mutter: record the
+              # virtual monitor via org.gnome.Mutter.ScreenCast with a
+              # PipeWire null sink + pw-dump... still heavy.
+              # POC DECISION: the Shell process IS the renderer; prove it via
+              # Mutter debug: run shell with MUTTER_DEBUG env? No.
+              # USE THE OTHER SIDE: gnome-shell in headless mode still renders
+              # through cairo/CLUTTER into the virtual monitor framebuffer.
+              # QEMU is not needed to capture it — but nothing userland can
+              # read that framebuffer except Mutter itself.
+              # => FINAL: enable the screenshot by launching shell with
+              #    GNOME_SHELL_UNSAFE_MODE? Not a thing. The real supported
+              #    way: org.freedesktop.portal.Screenshot (xdg-desktop-portal
+              #    + xdg-desktop-portal-gnome), which uses the same gated API
+              #    but through the portal the SHELL ITSELF grants access.
+              echo "Attempting portal screenshot via xdg-desktop-portal..."
+              if command -v busctl >/dev/null 2>&1; then
+                # portal needs the portal services started in our session
+                /usr/libexec/xdg-desktop-portal >/dev/null 2>&1 &
+                PORTAL_PID=$!
+                sleep 3
+                gdbus call --session \
+                  --dest org.freedesktop.portal.Desktop \
+                  --object-path /org/freedesktop/portal/desktop \
+                  --method org.freedesktop.portal.Screenshot.Screenshot \
+                  "a{sv}" "[], handle_token: <'poc1'>" 2>&1 || echo "portal call failed"
               fi
 
               # Fallback: verify shell alive + dump display state (proof of session)
