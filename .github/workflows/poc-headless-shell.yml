@@ -20,7 +20,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gnome-shell gnome-shell-common glib2.0-bin dbus xvfb \
             mesa-utils libgl1-mesa-dri libgbm1 \
-            libglib2.0-bin dconf-gsettings-backend gsettings-desktop-schemas
+            libglib2.0-bin dconf-gsettings-backend gsettings-desktop-schemas \
+            grim
 
       - name: Boot headless GNOME Shell and screenshot
         run: |
@@ -79,34 +80,46 @@ jobs:
                 --method org.freedesktop.DBus.ListNames | grep -q org.gnome.Shell || true
 
               # Take a screenshot of the running desktop.
-              # Run 4 findings: Eval returns false with empty output for EVERYTHING — even
-              # "String(global.context.unsafe_mode)". That means Eval itself is
-              # denied (returns false, empty output), not that the JS threw.
-              # On GNOME 48+, Eval is gated: shell must run with --unsafe-mode
-              # (cannot restart with it here) OR global.context has
-              # set_debug_flags. Screenshot D-Bus is separately gated by
-              # lockdown disable-lock-screen ... actually by permissions in
-              # shellHelper. Next lever: launch shell with --unsafe-mode? Not
-              # supported on 48. Use Eval alternative: gdbus org.gnome.Shell.Extensions? No.
-              # PRAGMATIC PATH: prove the session renders by using the Wayland
-              # compositor itself — run grim/wayper screenshot client? Not for
-              # GNOME. Use gnome-screenshot via portal? Needs xdg-desktop-portal.
-              # Simplest robust proof-of-render: import our extension via D-Bus
-              # later; for POC capture via PipeWire ScreenCast — needs portal.
-              # FINAL POC choice: take screenshot INSIDE shell process using
-              # Meta.disable_unredirect... not exposed.
-              # => Use org.gnome.Shell.Screenshot with area flag after writing
-              #    the lockdown gsettings key that gates it:
+              # Run 5/6 findings: shell boots, session bus live, Eval exists
+              # but returns (false, ...) — eval gated without unsafe-mode
+              # (GNOME 48+ hard-gates Eval; no CLI flag anymore).
+              # Screenshot D-Bus also AccessDenied. Gated API trio:
+              # Eval/Screenshot/Screencast all require the shell to have been
+              # STARTED in unsafe mode (global.context.unsafe_mode settable
+              # only from within, which Eval cannot do).
+              # SOLUTION: we control the shell launch — set unsafe_mode via
+              # GNOME 48 supported mechanism: the environment var or... The
+              # actual gate is GLibs gsettings org.gnome.Shell
+              # development-tools? No — it is SHELL_DEBUG? Simplest: launch
+              # shell, then use its OWN main loop: install a tiny system
+              # extension? Overkill for POC.
+              # PRAGMATIC POC PROOF: screenshot via Wayland compositor
+              # protocol using the virtual monitor — GNOME headless compositor
+              # supports wlr-screencopy? No. BUT Mutter exposes
+              # org.gnome.Mutter.ScreenCast! Create a virtual session and
+              # record one frame. Needs PipeWire though.
+              # SIMPLEST RELIABLE: gnome-screenshot does not work on wayland.
+              # => POC success criteria adjustment: prove RENDERING via
+              #    Meta virtual monitor + verify gnome-shell alive + D-Bus
+              #    names; capture via dbus-run-session + xdg-desktop-portal
+              #    Screenshot in a follow-up. For THIS run: dump frame via
+              #    GJS sidecar script that runs INSIDE the shell process? Not
+              #    possible externally.
+              # => Use GRIM with the WAYLAND_DISPLAY of the headless shell.
+              #    Mutter does NOT implement wlr-screencopy. BUT it DOES
+              #    implement zwp-linux-dmabuf and the ext-image-copy-capture
+              #    protocol in GNOME 48+?Try grim anyway:
+              echo "Attempting grim screenshot via Wayland protocol..."
               gsettings set org.gnome.desktop.lockdown disable-lock-screen false || true
-              gdbus call --session \
-                --dest org.gnome.Shell.Screenshot \
-                --object-path /org/gnome/Shell/Screenshot \
-                --method org.gnome.Shell.Screenshot.Screenshot \
-                true false /tmp/poc-screenshot.png \
-                && echo "screenshot OK" \
-                || echo "screenshot API failed"
+              if command -v grim >/dev/null 2>&1; then
+                GRIM_OUTPUT=$(WAYLAND_DISPLAY=wayland-0 grim /tmp/poc-screenshot.png 2>&1) \
+                  && echo "grim screenshot OK" \
+                  || echo "grim failed: $GRIM_OUTPUT"
+              else
+                echo "grim not installed"
+              fi
 
-              # Fallback: verify shell alive + dump display size (proof of session)
+              # Fallback: verify shell alive + dump display state (proof of session)
               if [[ ! -s /tmp/poc-screenshot.png ]]; then
                 echo "Screenshot denied; dumping display state for proof-of-render"
                 gdbus call --session \
