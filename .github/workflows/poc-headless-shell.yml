@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/poc-headless-shell.yml"
+      - ".github/workflows/scripts/headless-gnome-shell.sh"
       - "docs/plans/poc-headless-shell-ci.md"
 
 jobs:
@@ -18,183 +19,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gnome-shell gnome-shell-common glib2.0-bin dbus xvfb \
+            gnome-shell gnome-shell-common glib2.0-bin dbus \
             mesa-utils libgl1-mesa-dri libgbm1 \
-            libglib2.0-bin dconf-gsettings-backend gsettings-desktop-schemas \
-            xdg-desktop-portal xdg-desktop-portal-gnome
+            dconf-gsettings-backend gsettings-desktop-schemas
 
       - name: Boot headless GNOME Shell and screenshot
         run: |
-          set -x
-          # Isolated environment like CopyQ's test
-          TMPDIR_ENV=$(mktemp -d)
-          mkdir -p "$TMPDIR_ENV/.config" "$TMPDIR_ENV/.local/share" \
-                   "$TMPDIR_ENV/.cache" "$TMPDIR_ENV/.runtime"
-          chmod 0700 "$TMPDIR_ENV/.runtime"
-
-          env --ignore-environment \
-            HOME="$TMPDIR_ENV" \
-            PATH="$PATH" \
-            LANG=C.UTF-8 \
-            XDG_CONFIG_HOME="$TMPDIR_ENV/.config" \
-            XDG_DATA_HOME="$TMPDIR_ENV/.local/share" \
-            XDG_DATA_DIRS="$TMPDIR_ENV/.local/share:/usr/local/share:/usr/share" \
-            XDG_CACHE_HOME="$TMPDIR_ENV/.cache" \
-            XDG_RUNTIME_DIR="$TMPDIR_ENV/.runtime" \
-            dbus-run-session -- bash -cexu '
-              # Compile system schemas into our isolated XDG_DATA_HOME
-              # (GIO looks in glib-2.0/schemas under XDG_DATA_DIRS)
-              schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"
-              mkdir -p "$schema_dir"
-              glib-compile-schemas --targetdir="$schema_dir" /usr/share/glib-2.0/schemas
-              gsettings list-schemas | grep -q org.gnome.shell && echo "schemas OK"
-
-              # --- Micro-extension screenshot (definitive path) ---
-              # History: Shell Screenshot D-Bus -> AccessDenied; Eval ->
-              # false/empty (gated); grim -> Mutter lacks wlr-screencopy;
-              # portal -> backend not attached to bare dbus session.
-              # All gates check global.context.unsafe_mode which only the
-              # shell process itself can set. A tiny extension runs INSIDE
-              # the shell, sets unsafe_mode, then captures the stage.
-              EXT_DIR="$HOME/.local/share/gnome-shell/extensions/poc-screenshot@local"
-              mkdir -p "$EXT_DIR"
-              echo "{" > "$EXT_DIR/metadata.json"
-              echo "  \"uuid\": \"poc-screenshot@local\"," >> "$EXT_DIR/metadata.json"
-              echo "  \"name\": \"POC Screenshot\"," >> "$EXT_DIR/metadata.json"
-              echo "  \"description\": \"POC: enable unsafe mode and capture screenshot\"," >> "$EXT_DIR/metadata.json"
-              echo "  \"shell-version\": [\"45\", \"46\", \"47\", \"48\", \"49\"]" >> "$EXT_DIR/metadata.json"
-              echo "}" >> "$EXT_DIR/metadata.json"
-              {
-                echo "import GLib from \"gi://GLib\";"
-                echo "export default class PocScreenshot {"
-                echo "    enable() {"
-                echo "        global.context.unsafe_mode = true;"
-                echo "        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 4000, () => {"
-                echo "            try {"
-                echo "                GLib.spawn_command_line_async("
-                echo "                    \"gdbus call --session \" +"
-                echo "                    \"--dest org.gnome.Shell.Screenshot \" +"
-                echo "                    \"--object-path /org/gnome/Shell/Screenshot \" +"
-                echo "                    \"--method org.gnome.Shell.Screenshot.Screenshot \" +"
-                echo "                    \"true false /tmp/poc-screenshot.png\");"
-                echo "            } catch (e) {"
-                echo "                log(\"POC ext error: \" + e);"
-                echo "            }"
-                echo "            return GLib.SOURCE_REMOVE;"
-                echo "        });"
-                echo "    }"
-                echo ""
-                echo "    disable() {"
-                echo "        global.context.unsafe_mode = false;"
-                echo "        if (this._timer) GLib.source_remove(this._timer);"
-                echo "    }"
-                echo "}"
-              } > "$EXT_DIR/extension.js"
-              echo "STEP: writing extension files done"
-              cat "$EXT_DIR/metadata.json" || true
-              cat "$EXT_DIR/extension.js" || true
-              gsettings set org.gnome.shell disable-user-extensions false || echo "FAIL: disable-user-extensions"
-              ext_array=$(printf "[\47poc-screenshot@local\47]")
-              gsettings set org.gnome.shell enabled-extensions "$ext_array" || echo "FAIL: enabled-extensions"
-              gsettings get org.gnome.shell enabled-extensions || true
-              echo "micro-extension installed"
-
-
-              # Launch real GNOME Shell headless on a virtual monitor
-              gnome-shell --headless --wayland --no-x11 \
-                --virtual-monitor 1280x720 &
-              SHELL_PID=$!
-              echo "gnome-shell PID: $SHELL_PID"
-
-              # Wait for Wayland socket
-              WAYLAND_SOCKET_PATH="$XDG_RUNTIME_DIR/wayland-0"
-              for i in $(seq 1 60); do
-                if ! kill -0 "$SHELL_PID" 2>/dev/null; then
-                  echo "FATAL: gnome-shell exited early"
-                  exit 1
-                fi
-                if [[ -S "$WAYLAND_SOCKET_PATH" ]]; then
-                  echo "Wayland socket available after ${i}s"
-                  break
-                fi
-                sleep 1
-              done
-              [[ -S "$WAYLAND_SOCKET_PATH" ]] || { echo "FATAL: no Wayland socket"; exit 1; }
-
-              # Give shell a few seconds to render the initial frame
-              sleep 5
-
-              # Verify via D-Bus that the shell is alive
-              gdbus call --session \
-                --dest org.freedesktop.DBus \
-                --object-path /org/freedesktop/DBus \
-                --method org.freedesktop.DBus.ListNames | grep -q org.gnome.Shell || true
-
-              # Take a screenshot of the running desktop.
-              # Run 5/6 findings: shell boots, session bus live, Eval exists
-              # but returns (false, ...) — eval gated without unsafe-mode
-              # (GNOME 48+ hard-gates Eval; no CLI flag anymore).
-              # Screenshot D-Bus also AccessDenied. Gated API trio:
-              # Eval/Screenshot/Screencast all require the shell to have been
-              # STARTED in unsafe mode (global.context.unsafe_mode settable
-              # only from within, which Eval cannot do).
-              # SOLUTION: we control the shell launch — set unsafe_mode via
-              # GNOME 48 supported mechanism: the environment var or... The
-              # actual gate is GLibs gsettings org.gnome.Shell
-              # development-tools? No — it is SHELL_DEBUG? Simplest: launch
-              # shell, then use its OWN main loop: install a tiny system
-              # extension? Overkill for POC.
-              # PRAGMATIC POC PROOF: screenshot via Wayland compositor
-              # protocol using the virtual monitor — GNOME headless compositor
-              # supports wlr-screencopy? No. BUT Mutter exposes
-              # org.gnome.Mutter.ScreenCast! Create a virtual session and
-              # record one frame. Needs PipeWire though.
-              # SIMPLEST RELIABLE: gnome-screenshot does not work on wayland.
-              # => POC success criteria adjustment: prove RENDERING via
-              #    Meta virtual monitor + verify gnome-shell alive + D-Bus
-              #    names; capture via dbus-run-session + xdg-desktop-portal
-              #    Screenshot in a follow-up. For THIS run: dump frame via
-              #    GJS sidecar script that runs INSIDE the shell process? Not
-              #    possible externally.
-              # Fallback: verify shell alive + dump display state (proof of session)
-              if [[ ! -s /tmp/poc-screenshot.png ]]; then
-                echo "Screenshot denied; dumping display state for proof-of-render"
-                gdbus call --session \
-                  --dest org.gnome.Shell \
-                  --object-path /org/gnome/Shell \
-                  --method org.gnome.Shell.Eval "1+1" || true
-                # list what the shell exposes
-                gdbus introspect --session --dest org.gnome.Shell \
-                  --object-path /org/gnome/Shell | head -40 || true
-              fi
-
-              # Fallback 2: verify shell alive + dump display size (proof of session)
-              if [[ ! -s /tmp/poc-screenshot.png ]]; then
-                echo "Screenshot failed; dumping shell state for debug"
-                gdbus call --session \
-                  --dest org.gnome.Shell \
-                  --object-path /org/gnome/Shell \
-                  --method org.gnome.Shell.Eval "global.display.get_size()" || true
-              fi
-
-              kill "$SHELL_PID" 2>/dev/null || true
-            '
-
-          ls -la /tmp/poc-screenshot.png 2>/dev/null || echo "no screenshot produced"
-          file /tmp/poc-screenshot.png 2>/dev/null || true
-
-      - name: Prepare screenshot artifact
-        run: |
-          mkdir -p poc-output
-          cp /tmp/poc-screenshot.png poc-output/ 2>/dev/null || true
-          # Copy shell debug logs if present
-          cp "$TMPDIR_ENV/.runtime"/*.log poc-output/ 2>/dev/null || true
-          ls -la poc-output/
+          .github/workflows/scripts/headless-gnome-shell.sh poc-screenshot.png
 
       - name: Upload screenshot
         uses: actions/upload-artifact@v4
         with:
           name: poc-headless-shell-screenshot
-          path: poc-output/
-          if-no-files-found: warn
+          path: poc-screenshot.png
+          if-no-files-found: error
           retention-days: 7
