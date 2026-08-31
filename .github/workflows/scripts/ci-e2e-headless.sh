@@ -89,6 +89,7 @@ env --ignore-environment \
   XDG_DATA_DIRS="$ISOLATED/.local/share:/usr/local/share:/usr/share" \
   XDG_CACHE_HOME="$ISOLATED/.cache" \
   XDG_RUNTIME_DIR="$ISOLATED/.runtime" \
+  PULSE_SERVER="unix:${XDG_RUNTIME_DIR_RUNNER:-/run/user/$(id -u)}/pulse/native" \
   dbus-run-session -- bash "$REPO_ROOT/.github/workflows/scripts/ci-e2e-headless-inner.sh"
 TEST_EXIT=$?
 set -e
