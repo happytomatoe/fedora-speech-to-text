@@ -53,6 +53,11 @@ class TestVoxtralProvider:
         import tempfile
         from unittest.mock import MagicMock
 
+        # Isolate from host env: resolve_api_key prefers env vars, and a real
+        # VOXTRAL_API_KEY on the dev machine would override the mock key.
+        old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
+        old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
+
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"text": "test transcription"}
@@ -101,3 +106,7 @@ class TestVoxtralProvider:
 
         finally:
             os.unlink(tmp_path)
+            if old_voxtral_key is not None:
+                os.environ["VOXTRAL_API_KEY"] = old_voxtral_key
+            if old_mistral_key is not None:
+                os.environ["MISTRAL_API_KEY"] = old_mistral_key
