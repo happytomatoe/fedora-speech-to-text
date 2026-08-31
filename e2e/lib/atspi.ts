@@ -153,7 +153,7 @@ export async function waitForAtspiText(
   while (Date.now() - start < timeoutMs) {
     const out = await execPython(deployer, script);
     if (parseResult(out) === "true") return;
-    await Bun.sleep(250);
+    await Bun.sleep(100);
   }
   throw new Error(`AT-SPI: text of '${name}' never became '${expected}'`);
 }
