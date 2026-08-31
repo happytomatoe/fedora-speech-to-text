@@ -4,7 +4,8 @@
     "e2e/e2e.ts",
     "gnome-ext/extension.js",
     "gnome-ext/prefs.js",
-    "gnome-ext/type-text-service.js"
+    "gnome-ext/type-text-service.js",
+    "ci-e2e/e2e.ts"
   ],
   "ignoreDependencies": [
     "aislop",
@@ -27,7 +28,6 @@
   "ignoreBinaries": [
     "convert",
     "ffmpeg",
-    "compare",
     "podman",
     "ss"
   ],
