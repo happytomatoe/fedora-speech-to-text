@@ -35,8 +35,7 @@ if [ -d "$EXT_DIR/schemas" ]; then
   glib-compile-schemas --strict "$EXT_DIR/schemas"
 fi
 gsettings set org.gnome.shell disable-user-extensions false
-ext_array=$(printf "[%s]" "$(python3 -c "import json,sys; print(json.dumps([sys.argv[1]]))" "$EXT_UUID")")
-gsettings set org.gnome.shell enabled-extensions "$ext_array"
+gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID']"
 echo "extension deployed: $EXT_UUID"
 
 # --- Service config ----------------------------------------------------------
