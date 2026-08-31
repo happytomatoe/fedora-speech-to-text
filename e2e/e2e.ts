@@ -350,26 +350,27 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     await spawnTerminal();
     await waitTmux();
   }
-  // Click on the terminal to ensure it has focus (dotool pipeline is exercised
-  // for real here — its dedicated test would not catch Wayland regressions).
-  await shell.dotoolCommand("mousemove 640 400");
-  await shell.dotoolCommand("buttondown 1");
-  await shell.dotoolCommand("buttonup 1");
-  // Verify terminal is focused by typing a test character and checking tmux.
-  const paneBefore = await tmux.capturePane(tmuxCfg);
-  await shell.dotoolCommand("key shift+space");
-  let paneAfter = "";
-  for (let i = 0; i < 10; i++) {
-    await Bun.sleep(100);
-    paneAfter = await tmux.capturePane(tmuxCfg);
-    if (paneAfter !== paneBefore) break;
-  }
-  if (paneAfter === paneBefore) {
-    console.log("  Retrying terminal focus...");
-    await shell.dotoolCommand("mousemove 640 400");
-    await shell.dotoolCommand("buttondown 1");
-    await shell.dotoolCommand("buttonup 1");
-    await Bun.sleep(300);
+  // Focus probe + verify: ONE in-VM script, ONE SSH round trip. Previously
+  // this was 3 dotool SSH calls + up to 10 capture-pane round trips (~20s).
+  // The script clicks, sends a probe key, diffs the tmux pane, retries once
+  // and prints FOCUSED / NOT_FOCUSED.
+  const focusProbe = [
+    "set -e",
+    "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe",
+    "D=/home/testuser/.local/bin/dotoolc",
+    "cap() { tmux capture-pane -t e2e -p; }",
+    "before=$(cap)",
+    "click() { echo 'mousemove 640 400' | $D; echo 'buttondown 1' | $D; echo 'buttonup 1' | $D; }",
+    "click; sleep 0.3",
+    "echo 'key shift+a' | $D; sleep 0.3",
+    "if [ \"$(cap)\" != \"$before\" ]; then echo FOCUSED; exit 0; fi",
+    "click; sleep 0.3",
+    "echo 'key shift+a' | $D; sleep 0.5",
+    "if [ \"$(cap)\" != \"$before\" ]; then echo FOCUSED; else echo NOT_FOCUSED; fi",
+  ].join("\n");
+  const focusOut = await shell.exec(`bash -c ${JSON.stringify(focusProbe)}`).catch(() => "");
+  if (!focusOut.includes("FOCUSED")) {
+    console.log("  WARNING: Terminal may not be focused");
   }
   // Additionally verify the terminal window exists via AT-SPI. Ghostty's
   // window title is exactly "Ghostty" (tmux set-titles does NOT propagate to
