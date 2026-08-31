@@ -83,9 +83,9 @@ jobs:
               # "String(global.context.unsafe_mode)". That means Eval itself is
               # denied (returns false, empty output), not that the JS threw.
               # On GNOME 48+, Eval is gated: shell must run with --unsafe-mode
-              # (we can't restart with it here) OR global.context has
+              # (cannot restart with it here) OR global.context has
               # set_debug_flags. Screenshot D-Bus is separately gated by
-              # lockdown 'disable-lock-screen'... actually by permissions in
+              # lockdown disable-lock-screen ... actually by permissions in
               # shellHelper. Next lever: launch shell with --unsafe-mode? Not
               # supported on 48. Use Eval alternative: gdbus org.gnome.Shell.Extensions? No.
               # PRAGMATIC PATH: prove the session renders by using the Wayland
