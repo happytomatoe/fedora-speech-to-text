@@ -172,12 +172,6 @@ function prefsSourceMatch(file: string): boolean {
   );
 }
 
-/** Print an elapsed-time line for a labeled phase. */
-function timing(label: string, startMs: number): void {
-  const ms = Date.now() - startMs;
-  console.log(`  [time] ${label}: ${ms}ms`);
-}
-
 // Configuration
 const CONFIG = {
   paths: {
@@ -514,18 +508,15 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.
   console.log("Closing terminal before preferences tests...");
   await tmux.killSession(tmuxCfg);
-  await shell.exec("pkill -f ghostty 2>/dev/null; pkill -f gnome-terminal 2>/dev/null; true");
+  await shell.exec("pkill -f ghostty 2>/dev/null; true");
   // Poll until the terminal emulator has actually exited (no blind sleep).
-  // Use one-shot ssh with swallow-on-error: shell.exec can throw if the
-  // persistent connection hiccups right after tmux kill, and pgrep matching
-  // nothing returns empty via `; true`.
   await vm.pollUntil(
     "terminal closed",
     async () => {
       try {
         // [g]hostty bracket trick: prevents pgrep from matching this very
         // ssh command's own cmdline (sh -c "...ghostty...").
-        const out = await shell.exec("pgrep -f '[g]hostty'; pgrep -f '[g]nome-terminal'; true");
+        const out = await shell.exec("pgrep -f '[g]hostty'; true");
         return out.trim().length === 0;
       } catch {
         return false;
@@ -590,7 +581,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     if (!/^\/tmp\/e2e-screencast[^']*\.webm$/.test(screencastFile)) {
       console.log(`  Screencast file path rejected: ${screencastFile}`);
     } else {
-      t = Date.now();
+      beginSpan("retrieve-screencast");
       const localPath = join(screencastDir, "test-recording.webm");
       try {
         execSync(
@@ -602,7 +593,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       } catch (e) {
         console.log(`  Screencast retrieval failed: ${e}`);
       }
-      timing("retrieve-screencast", t);
+      endSpan();
     }
   }
 }
