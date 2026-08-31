@@ -84,9 +84,9 @@ jobs:
               }
               EXTJS_END
               echo "STEP: writing extension files done"
-    cat "$EXT_DIR/metadata.json" || true
-    cat "$EXT_DIR/extension.js" || true
-    gsettings set org.gnome.shell disable-user-extensions false || echo "FAIL: disable-user-extensions"
+              cat "$EXT_DIR/metadata.json" || true
+              cat "$EXT_DIR/extension.js" || true
+              gsettings set org.gnome.shell disable-user-extensions false || echo "FAIL: disable-user-extensions"
               gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || echo "FAIL: enabled-extensions"
     gsettings get org.gnome.shell enabled-extensions || true
               echo "micro-extension installed"
