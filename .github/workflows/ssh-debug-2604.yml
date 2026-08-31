@@ -1,0 +1,66 @@
+name: SSH Debug - Ubuntu 26.04
+
+# Standalone SSH debug session on the ubuntu-26.04 preview image (GNOME 50).
+# Boots a tmate session on the runner and posts the SSH command to the PR so
+# you can connect and inspect the audio stack (PulseAudio/PipeWire/PortAudio),
+# GNOME Shell, or anything else live.
+#
+# Trigger: workflow_dispatch with debug_enabled=true, or any push touching
+# this file. Connection string is posted as a PR comment and printed in logs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Start tmate SSH session'
+        required: false
+        default: true
+  pull_request:
+    paths:
+      - ".github/workflows/ssh-debug-2604.yml"
+
+jobs:
+  ssh-debug-2604:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment snapshot
+        run: |
+          echo "=== OS ==="
+          cat /etc/os-release | head -4
+          echo "=== Audio stack ==="
+          dpkg -l | grep -iE "pulseaudio|pipewire|portaudio" | awk '{print $2, $3}' || echo "none installed"
+          echo "=== /dev/kvm ==="
+          test -e /dev/kvm && echo "KVM available" || echo "KVM NOT available"
+          echo "=== User ==="
+          whoami
+          id
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+
+      - name: Setup tmate session
+        id: tmate
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+          limit-access-to-actor: true
+
+      - name: Comment SSH command on PR
+        if: always()
+        uses: mshick/add-pr-comment@v3
+        with:
+          message: |
+            ### 🔌 SSH Debug Session — ubuntu-26.04
+            Run: ${{ github.run_id }}
+            ```
+            ${{ steps.tmate.outputs.ssh-command }}
+            ```
+            Session runs for **15 minutes**. To keep it alive longer, re-run the workflow.
+
+      - name: Keep session alive
+        run: sleep 900

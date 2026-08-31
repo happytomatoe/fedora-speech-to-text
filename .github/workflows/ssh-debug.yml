@@ -1,0 +1,31 @@
+name: SSH Debug
+
+on:
+  pull_request:
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup tmate session
+        id: tmate
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+
+      - name: Comment SSH command on PR
+        if: always()
+        uses: mshick/add-pr-comment@v3
+        with:
+          message: |
+            ### 🔌 SSH Debug Session
+            Run: ${{ github.run_id }}
+            ```
+            ${{ steps.tmate.outputs.ssh-command }}
+            ```
+            Session runs for **10 minutes**.
+      - name: Sleep for 10 minutes
+        run: sleep 600
