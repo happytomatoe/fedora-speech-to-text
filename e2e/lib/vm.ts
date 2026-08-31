@@ -1,10 +1,11 @@
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
+import { execSync } from "node:child_process";
 import {
   DeployConfig,
   waitForGdmLogin,
@@ -152,7 +153,9 @@ export class VmManager {
       "-cpu", "host",
       "-m", "4096",
       "-smp", "2",
-      "-drive", `file=${overlayImage},format=qcow2,if=virtio`,
+      // cache=unsafe: throwaway test VM, no host crash recovery needed —
+      // skips flush barriers for faster disk I/O and snapshot restores.
+      "-drive", `file=${overlayImage},format=qcow2,if=virtio,cache=unsafe`,
       "-monitor", `unix:${socketPath},server,nowait`,
       "-serial", `file:${this.config.run.serialLog}`,
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
@@ -161,9 +164,15 @@ export class VmManager {
       "-cdrom", join(vmDir, "cloud-init.iso"),
       "-no-reboot",
     ];
-    // GTK display without GL — renders a real window on Xvfb so x11grab
-    // recording works. GL variant (virtio-vga-gl + gl=on) fails headless.
-    qemuArgs.push("-device", "virtio-vga", "-display", "gtk,gl=off");
+    // std VGA (Bochs-VBE) with EDID override: no resize-negotiation channel, so
+    // the guest keeps its own resolution instead of shrinking to whatever size
+    // the GTK window opens at (virtio-vga did that, causing small recordings
+    // with padding). EDID xres/yres makes 1920x1080 the preferred mode, which
+    // GNOME/mutter picks at session start.
+    qemuArgs.push(
+        "-device", "VGA,edid=on,xres=1920,yres=1080",
+        "-display", "gtk,gl=off"
+      );
 
     // Restore from snapshot during startup when requested — guest resumes
     // directly from snapshot instead of doing a full boot.
@@ -202,7 +211,6 @@ export class VmManager {
     this.qemuProcessPid = qemuPid ? Number(qemuPid) : null;
 
     await this.qemu.connect();
-    await this.resizeQemuWindow();
   }
   /** Poll until no qemu-system process for this overlay remains. */
   private async waitQemuGone(timeoutMs: number): Promise<void> {
@@ -417,6 +425,7 @@ export class VmManager {
   }
 
   private recordingFfmpeg: ReturnType<typeof Bun.spawn> | null = null;
+  private recordingCodec = "mpeg4";
   private xvfbProcess: ReturnType<typeof Bun.spawn> | null = null;
 
   /** Start Xvfb virtual display for recording */
@@ -466,39 +475,28 @@ export class VmManager {
   }
 
   /** Resize QEMU window to fill Xvfb display */
-  private async resizeQemuWindow(): Promise<void> {
-    for (let i = 0; i < 20; i++) {
-      try {
-        const result = Bun.spawnSync(["xdotool", "search", "--name", "QEMU"], {
-          stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99", WAYLAND_DISPLAY: "" }
-        });
-        const wids = result.stdout.toString().trim().split("\n").filter(Boolean);
-        if (wids.length > 0) {
-          const wid = wids[wids.length - 1];
-          Bun.spawnSync(["xdotool", "windowsize", wid, "1920", "1080"], {
-            stdout: "pipe", stderr: "pipe", env: { ...process.env, DISPLAY: ":99", WAYLAND_DISPLAY: "" }
-          });
-          console.log("  [xvfb] QEMU window resized to 1920x1080");
-          return;
-        }
-      } catch { /* ignore */ }
-      await Bun.sleep(500);
-    }
-    console.log("  [xvfb] could not find QEMU window to resize");
-  }
 
-  /** Start continuous recording via x11grab + ffmpeg */
-  /** Start continuous recording via x11grab + ffmpeg (Xvfb mode only) */
+  /** Start continuous recording via x11grab (Xvfb mode only) */
   startRecording(): void {
     if (this.recordingFfmpeg) return;
     const dir = join(this.config.run.outputDir, "recording");
     mkdirSync(dir, { recursive: true });
     const videoPath = join(dir, "recording.mp4");
+    // Fedora ships ffmpeg-free: no libx264, and libopenh264 is a non-functional
+    // stub ("noopenh264"). Probe for a real H.264 encoder, else fall back to
+    // mpeg4 (always present in ffmpeg-free, plays everywhere, bigger file).
+    let codec = "mpeg4";
+    try {
+      const encoders = execSync("ffmpeg -hide_banner -encoders 2>/dev/null", { encoding: "utf-8" });
+      if (encoders.includes("libx264")) codec = "libx264";
+      else if (encoders.includes("libopenh264") && existsSync("/usr/lib64/libopenh264.so.8") && statSync("/usr/lib64/libopenh264.so.8").size > 100_000) codec = "libopenh264";
+    } catch { /* ffmpeg probe failed — mpeg4 fallback */ }
     this.recordingFfmpeg = Bun.spawn(
       ["ffmpeg", "-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0",
-        "-framerate", "30", "-c:v", "libx264", "-r", "30", videoPath],
+        "-framerate", "30", "-c:v", codec, "-pix_fmt", "yuv420p", "-r", "30", videoPath],
       { stdout: "pipe", stderr: "pipe" }
     );
+    this.recordingCodec = codec;
     // Check if ffmpeg failed immediately (e.g., codec not available, display not found)
     if (this.recordingFfmpeg.exitCode !== null) {
       const stderr = this.recordingFfmpeg.stderr?.toString() || "";
@@ -506,7 +504,7 @@ export class VmManager {
       this.recordingFfmpeg = null;
       return;
     }
-    console.log(`  [recording] started → ${videoPath}`);
+    console.log(`  [recording] started → ${videoPath} (codec=${codec})`);
   }
 
   /** Stop recording and return the video file path */
@@ -521,7 +519,25 @@ export class VmManager {
     }
     this.recordingFfmpeg = null;
     console.log(`  [recording] stopped → ${videoPath}`);
+    this.trimRecordingHead(videoPath);
     return videoPath;
+  }
+
+  /**
+   * Fire-and-forget post-process: cut the pre-activity idle head from the
+   * recording so the video keeps only ~1s of context before the widget
+   * appears. freezedetect (n=0.001, d=0.5) finds the first freeze_end =
+   * activity start; we re-encode with the same H.264 encoder probing as
+   * startRecording (mpeg4 output does not play in browsers). Designed to run
+   * in parallel with VM shutdown, so it adds no wall time.
+   */
+  private trimRecordingHead(videoPath: string): void {
+    const scriptPath = join(import.meta.dir, "trim-recording.sh");
+    Bun.spawn(["bash", scriptPath, videoPath], {
+      stdout: "inherit",
+      stderr: "inherit",
+      env: { ...process.env, TRIM_CODEC: this.recordingCodec },
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -552,7 +568,7 @@ export class VmManager {
     try {
       // Monitor `quit` terminates immediately — throwaway VM, graceful ACPI
       // powerdown cost ~5s of waitQemuGone polling for nothing.
-      await this.qemu.execute("quit");
+      await this.qemu.quit();
       await this.waitQemuGone(5000);
     } finally {
       if (this.qemuProcessPid) {

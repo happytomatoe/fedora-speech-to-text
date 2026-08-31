@@ -241,6 +241,9 @@ dconf write /org/gnome/shell/extensions/voice-to-text/custom-words "['herdr', 'c
 dconf write /org/gnome/shell/extensions/voice-to-text/show-audio-level-widget "true"
 dconf write /org/gnome/shell/extensions/voice-to-text/inhibit-sleep "true"
 dconf write /org/gnome/shell/extensions/voice-to-text/stop-timeout-seconds "120"
+# GTK apps expose their widget tree on the a11y bus only when this is on
+# (and only at app startup — must be set before prefs launches)
+dconf write /org/gnome/desktop/interface/toolkit-accessibility "true"
 SCRIPT
 chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   console.log(`    dconf: ${Date.now() - tDconf}ms [time]`);
@@ -263,6 +266,25 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     // May fail if already configured — continue
   }
   
+  // Install dotool concurrently with the GDM restart loop: it uses one-shot
+  // sshExec connections that survive a GDM restart, unlike the persistent
+  // shell session. The dotoold *start* below must stay after (needs the
+  // recreated user session for XDG_RUNTIME_DIR).
+  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
+  const dotoolInstallPromise: Promise<void> = (async () => {
+    if (isGoldenDepsImage) return;
+    try {
+      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      if (dotoolCheck.includes("missing")) {
+        console.log("  Installing dotool...");
+        sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      }
+    } catch (err) {
+      // Continue — dotoold start may fail with clear error
+      console.error("dotool install check failed:", err instanceof Error ? err.message : err);
+    }
+  })();
+
   let extensionFound = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     console.log(`  attempt ${attempt + 1}...`);
@@ -401,21 +423,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     console.log("WARNING: Extension state:", extState.trim());
   }
 
-  // Restart dotoold
-  // Install dotool if not present (not in base image)
-  const isGoldenDepsImage = cfg.projectRoot.includes('golden-gnome-deps') || false;
-  if (!isGoldenDepsImage) {
-    try {
-      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      if (dotoolCheck.includes("missing")) {
-        console.log("  Installing dotool...");
-        sshExec("sudo dnf copr enable -y smallcms/dotool 2>/dev/null && sudo dnf install -y dotool 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      }
-    } catch {
-      // Continue — dotoold start may fail with clear error
-    }
-  }
-  console.log("Restarting dotoold...");
+  // Restart dotoold (dotool install ran in parallel with the GDM restart loop)
+  await dotoolInstallPromise;
   // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
   try {
     await shell.exec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true");

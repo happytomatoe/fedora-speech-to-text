@@ -42,7 +42,7 @@ export class RunContext {
     this.overlayImage = join(this.runDir, "overlay.qcow2");
     this.socketPath = `/tmp/qemu-monitor-${this.id}.sock`;  // Short path (UNIX socket limit: 108 bytes)
     this.sshPort = this.findAvailablePort(2222, 2299);
-    this.outputDir = join(this.runDir, "output");
+    this.outputDir = join(config.projectRoot, "e2e", "output");
     this.serialLog = join(this.runDir, "serial.log");
 
     // Create fresh overlay from base image (each worker gets its own)

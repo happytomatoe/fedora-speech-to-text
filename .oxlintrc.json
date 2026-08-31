@@ -165,6 +165,7 @@
         { "name": "jsdoc-js", "specifier": "eslint-plugin-jsdoc" }
       ],
       "rules": {
+        "no-empty": ["error", { "allowEmptyCatch": false }],
         "jsdoc-js/require-jsdoc": [
           "error",
           {

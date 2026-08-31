@@ -277,7 +277,7 @@ ssh -i e2e/qemu-images/id_ed25519 -p 2222 testuser@localhost "systemctl status g
 # Record video frames during test execution
 cd e2e && bun run e2e.ts --record
 
-# Output saved to e2e/output/recording/
+# Output saved to e2e/output/<run-id>/ (frames + recording.mp4)
 ```
 
 ### Debugging with Snapshots

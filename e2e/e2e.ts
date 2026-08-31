@@ -8,7 +8,8 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { pollForCommandOutput } from "./lib/poll.js";
+import { doAtspiAction, findAtspiExtents, setAtspiText, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
 import { execSync } from "node:child_process";
@@ -239,10 +240,10 @@ function loadTestMatrix(): any {
 }
 
 /** Pick which fixture audio case this run transcribes. */
-function pickRandomTestCase(): TestCase {
+function pickRandomTestCase(): TestCaseFile {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
-  const cases: TestCase[] = data["test-cases"];
-  let picked: TestCase;
+  const cases: TestCaseFile[] = data["test-cases"];
+  let picked: TestCaseFile;
   if (SELECTED_CASE) {
     picked = cases.find(c => c.file.includes(SELECTED_CASE))!;
     if (!picked) {
@@ -289,6 +290,14 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     deployer: vm.deployer,
   };
 
+  // Recording state (started mid-flow, after open-terminal's 2s settle)
+  let useXvfbRecording = false;
+  // Guarantee ffmpeg cleanup on any exit path
+  process.on('exit', () => {
+    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
+    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
+  });
+
   beginSpan("capture-frame");
   await vm.captureFrame("01-desktop");
   endSpan();
@@ -307,9 +316,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Opening terminal with tmux...");
   // Kill any stale tmux session from a previous run
   await tmux.killSession(tmuxCfg);
-  await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
-  // If the tmux session never appears, respawn the terminal once before
-  // failing (flake: terminal sometimes crashes right after snapshot restore).
+  // Ghostty must exist in the VM — the test flow depends on it (window title,
+  // AT-SPI tree, dotool input). Fail fast instead of silently falling back.
+  const whichGhostty = (await shell.exec(`which ghostty 2>/dev/null`)).trim();
+  if (!whichGhostty) {
+    throw new Error("ghostty not found in VM — expected pre-installed on the base image");
+  }
+  const spawnTerminal = () =>
+    shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 \; set-option allow-rename off \; set-option set-titles on \; set-option set-titles-string "${tmuxCfg.session}" &>/dev/null &`);
+  await spawnTerminal();
+  // Poll until tmux session appears (usually <1s; 5s is a generous ceiling).
+  // If it never appears, the terminal emulator likely died on spawn — respawn
+  // once before failing (flake: gnome-terminal sometimes crashes right after
+  // snapshot restore under load).
   const waitTmux = () =>
     vm.pollUntil(
       "tmux session",
@@ -328,30 +347,54 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   } catch {
     console.log("  tmux session did not appear — respawning terminal once");
     await tmux.killSession(tmuxCfg);
-    await shell.exec(`nohup ghostty -e tmux new-session -s ${tmuxCfg.session} -x 120 -y 40 &>/dev/null &`);
+    await spawnTerminal();
     await waitTmux();
   }
-  // Click on the terminal to ensure it has focus
-  await shell.dotoolCommand("mousemove 640 400");
-  await shell.dotoolCommand("buttondown 1");
-  await shell.dotoolCommand("buttonup 1");
-  // Brief wait for window manager to settle after click
-  await Bun.sleep(500);
-
-  // Verify terminal is focused by typing a test character and checking tmux
-  const paneBefore = await tmux.capturePane(tmuxCfg);
-  await shell.dotoolCommand("key shift+space"); // type space to confirm dotool works
-  await Bun.sleep(200);
-  const paneAfter = await tmux.capturePane(tmuxCfg);
-  if (paneBefore === paneAfter) {
-    // Terminal might not be focused, try clicking again
-    console.log("  Retrying terminal focus...");
-    await shell.dotoolCommand("mousemove 640 400");
-    await shell.dotoolCommand("buttondown 1");
-    await shell.dotoolCommand("buttonup 1");
-    await Bun.sleep(500);
+  // Focus probe + verify: ONE in-VM script, ONE SSH round trip. Previously
+  // this was 3 dotool SSH calls + up to 10 capture-pane round trips (~20s).
+  // The script clicks, sends a probe key, diffs the tmux pane, retries once
+  // and prints FOCUSED / NOT_FOCUSED.
+  const focusProbe = [
+    "set -e",
+    "export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe",
+    "D=/home/testuser/.local/bin/dotoolc",
+    "cap() { tmux capture-pane -t e2e -p; }",
+    "before=$(cap)",
+    "click() { echo 'mousemove 640 400' | $D; echo 'buttondown 1' | $D; echo 'buttonup 1' | $D; }",
+    "click; sleep 0.3",
+    "echo 'key shift+a' | $D; sleep 0.3",
+    "if [ \"$(cap)\" != \"$before\" ]; then echo FOCUSED; exit 0; fi",
+    "click; sleep 0.3",
+    "echo 'key shift+a' | $D; sleep 0.5",
+    "if [ \"$(cap)\" != \"$before\" ]; then echo FOCUSED; else echo NOT_FOCUSED; fi",
+  ].join("\n");
+  const focusOut = await shell.exec(`bash -c ${JSON.stringify(focusProbe)}`).catch(() => "");
+  if (!focusOut.includes("FOCUSED")) {
+    console.log("  WARNING: Terminal may not be focused");
+  }
+  // Additionally verify the terminal window exists via AT-SPI. Ghostty's
+  // window title is exactly "Ghostty" (tmux set-titles does NOT propagate to
+  // the window title — verified live in the VM a11y tree).
+  try {
+    await waitForAtspiNode(vm.deployer, {
+      name: "Ghostty",
+      role: "frame",
+      timeoutMs: 10000,
+    });
+  } catch {
+    console.log("  WARNING: Ghostty frame not found via AT-SPI, continuing");
   }
   endSpan();
+
+  // Start screen recording right before the hotkey: 1s of focused-terminal
+  // context, then capture the interesting part (widget → transcription typing).
+  await Bun.sleep(1000);
+  try {
+    vm.startRecording();
+    useXvfbRecording = true;
+  } catch (e) {
+    console.log(`  Xvfb recording not available: ${e}`);
+  }
 
   beginSpan("capture-frame");
   await vm.captureFrame("02-tmux-started");
@@ -367,30 +410,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("03-pre-recording");
   endSpan();
 
-  // Start screen recording now so the basic test AND the preferences window are both captured
+  // Xvfb recording starts after open-terminal (2s settle). This span only
+  // prepares the fallback screencast path. The preferences window is NOT
+  // captured — prefs tests run after stop-recording.
   beginSpan("start-screencast");
-  const screencastDir = join(run.outputDir, "test-cases", getTestCaseName());
-  mkdirSync(screencastDir, { recursive: true });
+  const screencastDir = run.outputDir;
   let screencastFile = "";
-  let useXvfbRecording = false;
-  // Guarantee ffmpeg cleanup on any exit path
-  process.on('exit', () => {
-    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
-    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
-  });
-  try {
-    vm.startRecording();
-    useXvfbRecording = true;
-  } catch (e) {
-    console.log(`  Xvfb recording not available: ${e}`);
-    // Fallback to GNOME Shell screencast
-    try {
-      screencastFile = await shell.startScreencast("/tmp/e2e-screencast");
-      console.log(`  Screencast started: ${screencastFile}`);
-    } catch (e2) {
-      console.log(`  Screencast start failed: ${e2}`);
-    }
-  }
   endSpan();
 
   // Ensure Activities is dismissed and terminal focused before the hotkey
@@ -487,7 +512,12 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   await vm.captureFrame("05-transcription-received");
   endSpan();
 
-  // Step 6: Stop recording
+  // Hold the final frame briefly so the recording ends on the full typed line
+  // instead of cutting off mid-typing (video-only cost: 2s idle).
+  await Bun.sleep(2000);
+
+  // Step 6: Stop recording — stopRecording() then trims the idle head
+  // fire-and-forget, in parallel with VM shutdown.
   beginSpan("stop-recording");
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
@@ -572,7 +602,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       console.log(`  Screencast file path rejected: ${screencastFile}`);
     } else {
       beginSpan("retrieve-screencast");
-      const localPath = join(screencastDir, "test-recording.webm");
+  const localPath = join(run.outputDir, "test-recording.webm");
       try {
         execSync(
           `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
@@ -597,15 +627,10 @@ function getTestCaseName(): string {
 }
 
 /**
- * Get screenshot path based on label and test case.
- * - Common screenshots (01-04, 06): e2e/output/common/
- * - Transcription screenshot (05): e2e/output/test-cases/{testCase}/
+ * Get screenshot path (flat: e2e/output/<id>/screenshot-<label>.png).
  */
-function getScreenshotPath(label: string, testCase?: string, outputDir = OUTPUT_DIR): string {
-  if (label === "05-transcription-received" && testCase) {
-    return join(outputDir, "test-cases", testCase, `screenshot-${label}.png`);
-  }
-  return join(outputDir, "common", `screenshot-${label}.png`);
+function getScreenshotPath(label: string, _testCase?: string, outputDir = OUTPUT_DIR): string {
+  return join(outputDir, "screenshots", `screenshot-${label}.png`);
 }
 
 /**
@@ -633,8 +658,9 @@ async function captureScreenshot(label: string, run: RunContext, vm?: VmManager)
         { encoding: "utf-8", timeout: 5000 }
       );
     }
-    // Wait for file to be written
-    await Bun.sleep(500);
+    // screendump is synchronous (monitor waits for the (qemu) prompt), but the file
+    // write is async on QEMU's side — poll briefly as belt-and-suspenders
+    await pollFileExists(ppmPath);
     // Convert PPM to PNG
     execSync(`convert ${ppmPath} ${pngPath} 2>/dev/null || true`, {
       encoding: "utf-8",
@@ -655,42 +681,7 @@ async function captureScreenshot(label: string, run: RunContext, vm?: VmManager)
 }
 
 /**
- * Create a video from screenshots using ffmpeg.
- */
-function createVideoFromScreenshots(run: RunContext): void {
-  const recordingDir = join(run.outputDir, "recording");
-  const outputDir = join(run.outputDir, "test-cases", getTestCaseName());
-  const videoPath = join(outputDir, "test-recording.mp4");
-  const screenshotPattern = join(recordingDir, "frame-*.ppm");
-  
-  try {
-    // Check if ffmpeg is available
-    execSync("which ffmpeg", { stdio: "ignore" });
-    
-    // Check if there are any screenshots
-    const files = require("node:fs").readdirSync(recordingDir).filter((f: string) => f.startsWith("frame-") && f.endsWith(".ppm"));
-    if (files.length === 0) {
-      return;
-    }
-    
-    // Create video from screenshots
-    // Each screenshot shows for 2 seconds (6 screenshots = 12 seconds total)
-    execSync(
-      `ffmpeg -y -framerate 0.5 -pattern_type glob -i '${screenshotPattern}' -c:v libx264 -r 30 -pix_fmt yuv420p "${videoPath}" 2>/dev/null`,
-      { stdio: "ignore" }
-    );
-    
-    if (existsSync(videoPath)) {
-      const stats = require("node:fs").statSync(videoPath);
-      console.log(`  Video saved: ${videoPath} (${(stats.size / 1024).toFixed(1)}KB)`);
-    }
-  } catch {
-    // ffmpeg not available or failed - skip video creation
-  }
-}
-
-/**
- * Verify screenshot matches reference (if exists) and file content matches expected text.
+ * Compare a captured screenshot against its reference.
  */
 async function verifyWithScreenshot(
   vm: VmManager,
@@ -749,29 +740,23 @@ function updateReferenceImages(run: RunContext): void {
   const testCase = getTestCaseName();
   console.log(`\nUpdating reference images for test case: ${testCase}`);
   
-  // Create reference directories
-  const commonRefDir = join(CONFIG.paths.referencesDir, "common");
-  const testCaseRefDir = join(CONFIG.paths.referencesDir, "test-cases", testCase);
-  mkdirSync(commonRefDir, { recursive: true });
-  mkdirSync(testCaseRefDir, { recursive: true });
-  
   // Copy common screenshots
   const commonLabels = ["01-desktop", "02-tmux-started", "03-pre-recording", "04-recording-started", "06-recording-stopped"];
   for (const label of commonLabels) {
     const src = getScreenshotPath(label, undefined, run.outputDir);
-    const dst = join(commonRefDir, `screenshot-${label}.png`);
+    const dst = join(CONFIG.paths.referencesDir, `screenshot-${label}.png`);
     if (existsSync(src)) {
       execSync(`cp "${src}" "${dst}"`, { encoding: "utf-8" });
-      console.log(`  Copied: ${label} → common/`);
+      console.log(`  Copied: ${label} → expected-qemu/`);
     }
   }
   
   // Copy test-case-specific screenshot
   const transcriptionSrc = getScreenshotPath("05-transcription-received", testCase, run.outputDir);
-  const transcriptionDst = join(testCaseRefDir, "screenshot-05-transcription-received.png");
+  const transcriptionDst = join(CONFIG.paths.referencesDir, "screenshot-05-transcription-received.png");
   if (existsSync(transcriptionSrc)) {
     execSync(`cp "${transcriptionSrc}" "${transcriptionDst}"`, { encoding: "utf-8" });
-    console.log(`  Copied: transcription → test-cases/${testCase}/`);
+    console.log(`  Copied: transcription → expected-qemu/`);
   }
   
   // Copy preferences screenshots
@@ -779,10 +764,10 @@ function updateReferenceImages(run: RunContext): void {
   mkdirSync(prefsRefDir, { recursive: true });
   const prefsNames = ["prefs-main", "prefs-scrolled-1", "prefs-scrolled-2", "prefs-scrolled-3", "prefs-after-add"];
   for (const name of prefsNames) {
-    const src = join(run.outputDir, "preferences", `${name}.png`);
+    const src = join(run.outputDir, "screenshots", `${name}.png`);
     if (existsSync(src)) {
       execSync(`cp "${src}" "${prefsRefDir}/screenshot-${name}.png"`, { encoding: "utf-8" });
-      console.log(`  Copied: ${name} → preferences/`);
+      console.log(`  Copied: ${name} → expected-qemu/preferences/`);
     }
   }
 }
@@ -806,7 +791,7 @@ function assertScreenshotMatches(referencePath: string, captured: string, run: R
   const diff = new PNG({ width: imgRef.width, height: imgRef.height });
   const diffPixels = pixelmatch(imgRef.data, imgAct.data, diff.data, imgRef.width, imgRef.height, { threshold: 0.1 });
   const ratio = diffPixels / (imgRef.width * imgRef.height);
-  const diffPath = join(run.outputDir, "test-cases", getTestCaseName(), `diff-${label}.png`);
+  const diffPath = join(run.outputDir, "screenshots", `diff-${label}.png`);
   mkdirSync(require("node:path").dirname(diffPath), { recursive: true });
   writeFileSync(diffPath, PNG.sync.write(diff));
   if (ratio >= 0.01) {
@@ -841,29 +826,25 @@ async function compareWithReference(name: string, captured: string, run: RunCont
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
   console.log("\n📸 Running preferences screenshot tests...");
   
-  const prefsDir = join(run.outputDir, "preferences");
+  const prefsDir = join(run.outputDir, "screenshots");
   mkdirSync(prefsDir, { recursive: true });
   
+  // GNOME 50's gnome-extensions client has no --gsettings flag; also the
+  // dconf seed above only lands at deploy time. Belt-and-suspenders: set it
+  // again right before prefs launches (idempotent).
+  await vm.deployer.exec(
+    `gsettings set org.gnome.desktop.interface toolkit-accessibility true`
+  );
+
   // Open preferences window using gnome-extensions prefs command
   console.log("  Opening preferences window...");
   await vm.deployer.exec(
     `export DISPLAY=:0; export XDG_RUNTIME_DIR=/run/user/$(id -u); gnome-extensions prefs voice-to-text@happytomatoe.com &`
   );
   
-  // Wait for window to appear
-  await Bun.sleep(3000);
-  
-  // Dismiss any welcome/tour dialogs that may appear
-  console.log("  Dismissing welcome dialogs...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key Escape" | dotool`
-  );
-  await Bun.sleep(500);
-  // Click Skip button if tour dialog appears
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.42 0.76\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
+  // Wait for the prefs window node to appear in the a11y tree
+  await waitForAtspiNode(vm.deployer, { name: "Voice to Text", role: "frame" });
+  console.log("  Prefs window visible (AT-SPI)");
   
   // Capture a prefs screenshot via QEMU monitor screendump (full display).
   // CodeRabbit suggested portal/Shell.Screenshot here, but Eval is disabled
@@ -873,7 +854,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     const png = join(prefsDir, `${name}.png`);
     const ppm = join(prefsDir, `${name}.ppm`);
     await vm.qemu.screendump(ppm);
-    await Bun.sleep(500);
+    await pollFileExists(ppm);
     execSync(`convert "${ppm}" "${png}" 2>/dev/null || true`, { encoding: "utf-8" });
     execSync(`rm -f "${ppm}"`, { encoding: "utf-8" });
     console.log(`  📷 Captured: ${name}.png`);
@@ -883,57 +864,29 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Take screenshot of main preferences window
   const mainPng = await capturePrefs("prefs-main");
   
-  // Scroll down to see more settings using dotool (works on Wayland)
-  console.log("  Scrolling down to see more settings...");
-  // First click on the preferences window to focus it
+  // Scroll to page bottom in one go, wait for the last row to show
+  console.log("  Scrolling to bottom...");
+  const addWordExt = await findAtspiExtents(vm.deployer, "Add Word…");
   await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.5 0.5\nclick left" | dotool`
+    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto ${(addWordExt.x + addWordExt.width / 2) / 1920} ${(addWordExt.y + addWordExt.height / 2) / 1080}\nwheel -50" | dotool`
   );
-  await Bun.sleep(500);
-  // Then scroll down using dotool wheel (negative = scroll down)
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
+  await waitForAtspiNode(vm.deployer, { name: "Edit Configuration File", role: "list item" });
   
-  const scroll1Png = await capturePrefs("prefs-scrolled-1");
+  const bottomPng = await capturePrefs("prefs-bottom");
   
-  // Scroll down more
-  console.log("  Scrolling down more...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll2Png = await capturePrefs("prefs-scrolled-2");
-  
-  // Scroll down even more
-  console.log("  Scrolling down even more...");
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "wheel -5" | dotool`
-  );
-  await Bun.sleep(1000);
-  
-  const scroll3Png = await capturePrefs("prefs-scrolled-3");
-  
-  // Test adding a new word via the Add Word button
+  // Test adding a new word via the Add Word button (exposes AT-SPI click)
   console.log("  Testing Add Word functionality...");
-  // Click on "Add Word..." button (it's at the top of the custom words list)
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.39 0.43\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
+  await doAtspiAction(vm.deployer, "Add Word", "click");
   
-  // Type a new word in the dialog
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "type E2E" | dotool`
-  );
-  await Bun.sleep(500);
+  // The Add Word dialog exposes an entry — wait for it, set text via AT-SPI,
+  // then click Add (button actions verified during recon)
+  await waitForAtspiNode(vm.deployer, { name: "Enter a word or phrase:" });
+  await setAtspiText(vm.deployer, "Enter a word or phrase:", "E2E");
+  await waitForAtspiText(vm.deployer, "Enter a word or phrase:", "E2E");
   // Click the Add button
-  await vm.deployer.exec(
-    `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "mouseto 0.62 0.58\nclick left" | dotool`
-  );
-  await Bun.sleep(1000);
+  await doAtspiAction(vm.deployer, "Add", "click");
+  // Wait for the new word row to appear in the list
+  await waitForAtspiNode(vm.deployer, { name: "E2E", role: "list item" });
   
   const afterAddPng = await capturePrefs("prefs-after-add");
   
@@ -951,9 +904,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   // Visual regression: compare each capture against its reference (if one exists)
   const captures: Array<[string, string]> = [
     ["prefs-main", mainPng],
-    ["prefs-scrolled-1", scroll1Png],
-    ["prefs-scrolled-2", scroll2Png],
-    ["prefs-scrolled-3", scroll3Png],
+    ["prefs-bottom", bottomPng],
     ["prefs-after-add", afterAddPng],
   ];
   for (const [name, captured] of captures) {
@@ -985,7 +936,7 @@ async function main(): Promise<void> {
     updateMode: UPDATE_MODE,
   });
   console.log(`Run ID: ${run.id}`);
-  console.log(`Run directory: ${run.runDir}`);
+  console.log(`Output directory: ${run.outputDir}`);
   console.log(`SSH port: ${run.sshPort}`);
 
   const vmCfg: VmConfig = {
