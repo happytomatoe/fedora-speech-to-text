@@ -47,7 +47,7 @@ cat > "$SHOT_DIR/metadata.json" <<MEOF
   "uuid": "poc-screenshot@local",
   "name": "POC Screenshot",
   "description": "POC: enable unsafe mode",
-  "shell-version": ["45", "46", "47", "48", "49"]
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
 }
 MEOF
 cat > "$SHOT_DIR/extension.js" <<JEOF
