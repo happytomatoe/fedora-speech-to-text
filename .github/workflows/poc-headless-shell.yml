@@ -79,7 +79,7 @@ jobs:
                 --method org.freedesktop.DBus.ListNames | grep -q org.gnome.Shell || true
 
               # Take a screenshot of the running desktop.
-              # Run 4 findings: Eval returns (false, '') for EVERYTHING — even
+              # Run 4 findings: Eval returns false with empty output for EVERYTHING — even
               # "String(global.context.unsafe_mode)". That means Eval itself is
               # denied (returns false, empty output), not that the JS threw.
               # On GNOME 48+, Eval is gated: shell must run with --unsafe-mode
