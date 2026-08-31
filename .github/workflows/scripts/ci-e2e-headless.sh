@@ -37,9 +37,10 @@ cp -r "$REPO_ROOT/ci-e2e" "$ASSETS/ci-e2e"
 cp "$REPO_ROOT/ci-e2e/fixture.wav" "$ISOLATED/fixture.wav"
 
 # --- Parakeet container --------------------------------------------------------
+# NOTE: no volume mount — the achetronic/parakeet image bakes the models into
+# /models at build time (see its Dockerfile). Mounting an empty host dir HIDES
+# the baked models and the server fails with "open /models/config.json: no such file".
 CONTAINER_NAME="parakeet-ci-e2e"
-MODELS_DIR="${HOME}/parakeet/models"
-mkdir -p "$MODELS_DIR"
 if command -v docker > /dev/null 2>&1; then
   RUNTIME=docker
 elif command -v podman > /dev/null 2>&1; then
@@ -51,7 +52,7 @@ fi
 
 echo "Starting Parakeet container ($RUNTIME)..."
 $RUNTIME run -d --name "$CONTAINER_NAME" -p 5092:5092 \
-  -v "$MODELS_DIR:/models:Z" ghcr.io/achetronic/parakeet:latest
+  ghcr.io/achetronic/parakeet:latest
 
 PARAKEET_READY=0
 for i in $(seq 1 150); do
