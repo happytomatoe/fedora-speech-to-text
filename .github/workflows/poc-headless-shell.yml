@@ -58,7 +58,11 @@ jobs:
               # the shell, sets unsafe_mode, then captures the stage.
               EXT_DIR="$HOME/.local/share/gnome-shell/extensions/poc-screenshot@local"
               mkdir -p "$EXT_DIR"
-              printf '{ "uuid": "poc-screenshot@local", "name": "POC Screenshot", "shell-version": ["45", "46", "47", "48", "49"] }' > "$EXT_DIR/metadata.json"
+              echo "{" > "$EXT_DIR/metadata.json"
+              echo "  \"uuid\": \"poc-screenshot@local\"," >> "$EXT_DIR/metadata.json"
+              echo "  \"name\": \"POC Screenshot\"," >> "$EXT_DIR/metadata.json"
+              echo "  \"shell-version\": [\"45\", \"46\", \"47\", \"48\", \"49\"]" >> "$EXT_DIR/metadata.json"
+              echo "}" >> "$EXT_DIR/metadata.json"
               cat > "$EXT_DIR/extension.js" << "EXTJS_END"
               import GLib from "gi://GLib";
 
@@ -87,7 +91,8 @@ jobs:
               cat "$EXT_DIR/metadata.json" || true
               cat "$EXT_DIR/extension.js" || true
               gsettings set org.gnome.shell disable-user-extensions false || echo "FAIL: disable-user-extensions"
-              gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || echo "FAIL: enabled-extensions"
+              ext_array=$(printf "[\47poc-screenshot@local\47]")
+              gsettings set org.gnome.shell enabled-extensions "$ext_array" || echo "FAIL: enabled-extensions"
               gsettings get org.gnome.shell enabled-extensions || true
               echo "micro-extension installed"
 
