@@ -37,10 +37,17 @@ jobs:
             LANG=C.UTF-8 \
             XDG_CONFIG_HOME="$TMPDIR_ENV/.config" \
             XDG_DATA_HOME="$TMPDIR_ENV/.local/share" \
-            XDG_DATA_DIRS="$TMPDIR_ENV/.local/share" \
+            XDG_DATA_DIRS="$TMPDIR_ENV/.local/share:/usr/local/share:/usr/share" \
             XDG_CACHE_HOME="$TMPDIR_ENV/.cache" \
             XDG_RUNTIME_DIR="$TMPDIR_ENV/.runtime" \
             dbus-run-session -- bash -ceu '
+              # Compile system schemas into our isolated XDG_DATA_HOME
+              # (GIO looks in glib-2.0/schemas under XDG_DATA_DIRS)
+              schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"
+              mkdir -p "$schema_dir"
+              glib-compile-schemas --targetdir="$schema_dir" /usr/share/glib-2.0/schemas
+              gsettings list-schemas | grep -q org.gnome.shell && echo "schemas OK"
+
               # Launch real GNOME Shell headless on a virtual monitor
               gnome-shell --headless --wayland --no-x11 \
                 --virtual-monitor 1280x720 &
