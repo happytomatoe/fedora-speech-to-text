@@ -42,9 +42,9 @@ jobs:
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
           sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
 
-      - name: Setup SSH debug session (tmate)
-        id: tmate
-        uses: mxschmitt/action-tmate@v3
+      - name: Setup SSH debug session (upterm)
+        id: upterm
+        uses: owenthereal/action-upterm@v1
         with:
           detached: true
 
@@ -56,7 +56,7 @@ jobs:
             ### 🔌 SSH Debug Session
             Run: ${{ github.run_id }}
             ```
-            ${{ steps.tmate.outputs.ssh-command }}
+            ${{ steps.upterm.outputs.ssh-command }}
             ```
             Session runs for **45 minutes** (workflow timeout).
             Use: `.agents/skills/ssh-debug-github-runner/scripts/ssh-connect.sh [PR_NUMBER] ${{ github.run_id }}`
