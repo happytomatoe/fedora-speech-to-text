@@ -79,12 +79,19 @@ jobs:
                 --method org.freedesktop.DBus.ListNames | grep -q org.gnome.Shell || true
 
               # Take a screenshot via GNOME Shell D-Bus API
-              # Screenshot API requires unsafe mode; Eval requires development-tools.
-              # Run 3 log: shell boots, Eval works, but Screenshot -> AccessDenied.
+              # Run 3: Eval works but Screenshot -> AccessDenied. GNOME 48+
+              # gates Screenshot on lockdown setting; try enabling unsafe_mode
+              # AND checking what Eval returns (it returned (false,'') = Eval
+              # body threw or returned false). Debug via Eval string result.
               gdbus call --session \
                 --dest org.gnome.Shell \
                 --object-path /org/gnome/Shell \
-                --method org.gnome.Shell.Eval "global.context.unsafe_mode = true"
+                --method org.gnome.Shell.Eval "String(global.context.unsafe_mode)"
+
+              gdbus call --session \
+                --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Eval "global.context.unsafe_mode = true; String(global.context.unsafe_mode)"
 
               gdbus call --session \
                 --dest org.gnome.Shell.Screenshot \
@@ -94,12 +101,22 @@ jobs:
                 && echo "screenshot OK" \
                 || echo "screenshot API failed"
 
-              # Fallback 1: screenshot via Eval API directly
+              # Fallback: run inside the shell via Eval — take screenshot with
+              # Shell.Screenshot JS API (respects unsafe_mode set above)
               if [[ ! -s /tmp/poc-screenshot.png ]]; then
                 gdbus call --session \
                   --dest org.gnome.Shell \
                   --object-path /org/gnome/Shell \
-                  --method org.gnome.Shell.Eval "global.display.screenshot('/tmp/poc-screenshot.png', true)" || true
+                  --method org.gnome.Shell.Eval "imports.ui.screenshot.Screenshot.new().screenshot(0, false, '/tmp/poc-screenshot.png')" || true
+              fi
+
+              # Fallback 2: verify shell alive + dump display size (proof of session)
+              if [[ ! -s /tmp/poc-screenshot.png ]]; then
+                echo "Screenshot failed; dumping shell state for debug"
+                gdbus call --session \
+                  --dest org.gnome.Shell \
+                  --object-path /org/gnome/Shell \
+                  --method org.gnome.Shell.Eval "global.display.get_size()" || true
               fi
 
               # Fallback 2: verify shell alive + dump display size (proof of session)
