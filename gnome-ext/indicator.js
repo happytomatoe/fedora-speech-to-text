@@ -13,9 +13,9 @@ function createSpinner(params) {
         widget.set_content(new St.SpinnerContent());
         return widget;
     }
-    if (St.Spinner) {
-        const OldSpinner = /** @type {any} */ (St).Spinner;
-        return new OldSpinner({reactive: false});
+    const StAny = /** @type {any} */ (St);
+    if (StAny.Spinner) {
+        return new StAny.Spinner({reactive: false});
     }
     return new St.Icon({icon_name: 'media-playback-start-symbolic', ...params, reactive: false});
 }
