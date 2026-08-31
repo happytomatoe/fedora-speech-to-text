@@ -40,7 +40,7 @@ jobs:
 
       - name: Start Parakeet + boot headless GNOME Shell + run E2E
         run: |
-          .github/workflows/scripts/ci-e2e-headless.sh \
+          bash .github/workflows/scripts/ci-e2e-headless.sh \
             "$PWD/ci-e2e-screenshot.png"
 
       - name: Upload artifacts
