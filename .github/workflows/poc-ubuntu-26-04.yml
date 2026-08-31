@@ -33,6 +33,23 @@ jobs:
             libportaudio2 \
             curl
 
+      - name: Install + start PulseAudio with virtual devices (headless)
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            pulseaudio pulseaudio-utils
+          # Runner has no sound hardware; daemon must run with null devices
+          # so PortAudio's PulseAudio host API can initialize.
+          pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
+            --load="module-null-sink sink_name=virtual_sink" \
+            --load="module-null-source source_name=virtual_mic"
+          # pulseaudio -D returns before the socket is ready; poll for it
+          for i in $(seq 1 20); do
+            pactl info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          pactl list short sinks
+          pactl list short sources
+
       - uses: astral-sh/setup-uv@v5
 
       - uses: oven-sh/setup-bun@v2
