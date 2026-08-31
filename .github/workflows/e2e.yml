@@ -47,6 +47,7 @@ jobs:
         uses: owenthereal/action-upterm@v1
         with:
           detached: true
+          limit-access-to-actor: true
 
       - name: Debug upterm outputs
         if: always()
