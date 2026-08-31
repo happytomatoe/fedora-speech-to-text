@@ -1,15 +1,30 @@
-name: POC Ubuntu 26.04 - GNOME 50 headless
+name: POC Ubuntu 26.04 - GNOME 50 + tmate SSH debug
 
-# Third POC: same bare-runner headless harness that is green on
-# ubuntu-latest (GNOME 46), but on the new ubuntu-26.04 image (public
-# preview) which ships GNOME 50 — matching the local Fedora 44 dev
-# environment. No container, no VM: same bare-runner harness, newer image.
+# Debug-first POC on the ubuntu-26.04 preview image (GNOME 50 — matches the
+# local Fedora 44 dev env). Same bare-runner headless harness as the green
+# baseline, plus an opt-in tmate SSH session so a stuck/failed run can be
+# inspected live instead of blind push-and-pray.
+#
+# Trigger: workflow_dispatch with debug_enabled=true to land an SSH shell on
+# the runner right after the harness step (or on failure). Connection string
+# appears in the run logs and the Checks tab.
 
 on:
   workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Open an SSH (tmate) session on the runner for live debugging'
+        required: false
+        default: false
+      debug_on_failure:
+        type: boolean
+        description: 'Open the SSH session only if a step fails'
+        required: false
+        default: true
   pull_request:
     paths:
-      - ".github/workflows/poc-ubuntu-26-04.yml"
+      - ".github/workflows/poc-ubuntu-26-04-debug.yml"
       - ".github/workflows/scripts/ci-e2e-headless.sh"
       - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
       - "ci-e2e/**"
@@ -17,9 +32,9 @@ on:
       - "src/voice_to_text/**"
 
 jobs:
-  headless-e2e-gnome50:
+  headless-e2e-gnome50-debug:
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -61,6 +76,27 @@ jobs:
         run: |
           bash .github/workflows/scripts/ci-e2e-headless.sh \
             "$PWD/ci-e2e-screenshot-2604.png"
+
+      - name: Setup tmate session (manual debug)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled && !inputs.debug_on_failure }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          detached: true
+        id: tmate-manual
+
+      - name: Setup tmate session (on failure)
+        if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.debug_on_failure }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+        id: tmate-failure
+
+      - name: Print SSH connection string
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && (inputs.debug_enabled || inputs.debug_on_failure) }}
+        run: |
+          echo "SSH: ${{ steps.tmate-manual.outputs.ssh-command || steps.tmate-failure.outputs.ssh-command }}"
+          echo "Web: ${{ steps.tmate-manual.outputs.web-url || steps.tmate-failure.outputs.web-url }}"
 
       - name: Upload artifacts
         if: always()
