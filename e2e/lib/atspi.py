@@ -13,13 +13,13 @@ from gi.repository import Atspi  # noqa: E402
 def walk_tree(predicate, action):
     """Depth-first walk of the desktop a11y tree; return action(node) on first predicate match."""
     # ponytail: fixed 25 matches the depth cap previously inlined in the TS heredocs
-    MAX_DEPTH = 25
+    max_depth = 25
     d = Atspi.get_desktop(0)
     result = None
 
     def walk(node, depth=0):
         nonlocal result
-        if node is None or depth > MAX_DEPTH or result:
+        if node is None or depth > max_depth or result:
             return
         try:
             name = (node.get_name() or "").strip()
