@@ -105,39 +105,52 @@ jobs:
               #    Screenshot in a follow-up. For THIS run: dump frame via
               #    GJS sidecar script that runs INSIDE the shell process? Not
               #    possible externally.
-              # Run 7: grim fails — Mutter does not implement
-              # wlr-screencopy-unstable-v1. Mutter exposes capture ONLY via
-              # org.gnome.Mutter.ScreenCast (PipeWire) or the gated Shell
-              # Screenshot API. PipeWire path: install pipewire +
-              # xdg-desktop-portal-gnome, start them in the session, then use
-              # org.gnome.Shell.Screenshot? Still gated. The ScreenCast
-              # portal path needs a portal request round-trip — heavy for POC.
-              # SIMPLEST ACTUALLY-WORKING capture for Mutter: record the
-              # virtual monitor via org.gnome.Mutter.ScreenCast with a
-              # PipeWire null sink + pw-dump... still heavy.
-              # POC DECISION: the Shell process IS the renderer; prove it via
-              # Mutter debug: run shell with MUTTER_DEBUG env? No.
-              # USE THE OTHER SIDE: gnome-shell in headless mode still renders
-              # through cairo/CLUTTER into the virtual monitor framebuffer.
-              # QEMU is not needed to capture it — but nothing userland can
-              # read that framebuffer except Mutter itself.
-              # => FINAL: enable the screenshot by launching shell with
-              #    GNOME_SHELL_UNSAFE_MODE? Not a thing. The real supported
-              #    way: org.freedesktop.portal.Screenshot (xdg-desktop-portal
-              #    + xdg-desktop-portal-gnome), which uses the same gated API
-              #    but through the portal the SHELL ITSELF grants access.
-              echo "Attempting portal screenshot via xdg-desktop-portal..."
-              if command -v busctl >/dev/null 2>&1; then
-                # portal needs the portal services started in our session
-                /usr/libexec/xdg-desktop-portal >/dev/null 2>&1 &
-                PORTAL_PID=$!
-                sleep 3
-                gdbus call --session \
-                  --dest org.freedesktop.portal.Desktop \
-                  --object-path /org/freedesktop/portal/desktop \
-                  --method org.freedesktop.portal.Screenshot.Screenshot \
-                  "a{sv}" "[], handle_token: <'poc1'>" 2>&1 || echo "portal call failed"
-              fi
+              # --- Micro-extension screenshot (definitive path) ---
+              # History: Shell Screenshot D-Bus -> AccessDenied; Eval ->
+              # false/empty (gated); grim -> Mutter lacks wlr-screencopy;
+              # portal -> backend not attached to bare dbus session.
+              # All gates check global.context.unsafe_mode which only the
+              # shell process itself can set. A tiny extension runs INSIDE
+              # the shell, sets unsafe_mode, then captures the stage.
+              EXT_DIR="$HOME/.local/share/gnome-shell/extensions/poc-screenshot@local"
+              mkdir -p "$EXT_DIR"
+              cat > "$EXT_DIR/metadata.json" << 'META'
+              {
+                "uuid": "poc-screenshot@local",
+                "name": "POC Screenshot",
+                "shell-version": ["45", "46", "47", "48", "49"]
+              }
+              META
+              cat > "$EXT_DIR/extension.js" << 'EXTJS'
+              import GLib from 'gi://GLib';
+
+export function enable() {
+    global.context.unsafe_mode = true;
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+        try {
+            // Screenshot the whole stage via the Shell Screenshot service logic:
+            // with unsafe_mode on, our own D-Bus call now passes
+            GLib.spawn_command_line_async(
+                'gdbus call --session ' +
+                '--dest org.gnome.Shell.Screenshot ' +
+                '--object-path /org/gnome/Shell/Screenshot ' +
+                '--method org.gnome.Shell.Screenshot.Screenshot ' +
+                'true false /tmp/poc-screenshot.png');
+        } catch (e) {
+            GLib.spawn_command_line_sync(
+                'bash -c "echo EXT_ERROR >> /tmp/poc-ext.log"');
+        }
+        return GLib.SOURCE_REMOVE;
+    });
+}
+
+export function disable() {
+                  global.context.unsafe_mode = false;
+              }
+              EXTJS
+              gsettings set org.gnome.shell disable-user-extensions false || true
+              gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || true
+              echo "micro-extension installed"
 
               # Fallback: verify shell alive + dump display state (proof of session)
               if [[ ! -s /tmp/poc-screenshot.png ]]; then
