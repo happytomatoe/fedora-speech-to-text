@@ -6,9 +6,18 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 function createSpinner(params) {
-    const widget = new St.Widget({...params, reactive: false});
-    widget.set_content(new St.SpinnerContent());
-    return widget;
+    // GNOME 46 lacks St.SpinnerContent (added in 48); fall back to St.Spinner.
+    // Note: St.Spinner's constructor takes no params object in 46.
+    if (St.SpinnerContent) {
+        const widget = new St.Widget({...params, reactive: false});
+        widget.set_content(new St.SpinnerContent());
+        return widget;
+    }
+    const spinner = new St.Spinner({reactive: false});
+    for (const [k, v] of Object.entries(params)) {
+        if (k !== 'style_class' || v) spinner[k] = v;
+    }
+    return spinner;
 }
 
 export const VoiceIndicator = GObject.registerClass(
