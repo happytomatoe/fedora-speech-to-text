@@ -61,6 +61,7 @@ jobs:
               echo "{" > "$EXT_DIR/metadata.json"
               echo "  \"uuid\": \"poc-screenshot@local\"," >> "$EXT_DIR/metadata.json"
               echo "  \"name\": \"POC Screenshot\"," >> "$EXT_DIR/metadata.json"
+              echo "  \"description\": \"POC: enable unsafe mode and capture screenshot\"," >> "$EXT_DIR/metadata.json"
               echo "  \"shell-version\": [\"45\", \"46\", \"47\", \"48\", \"49\"]" >> "$EXT_DIR/metadata.json"
               echo "}" >> "$EXT_DIR/metadata.json"
               {
