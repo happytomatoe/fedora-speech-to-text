@@ -1,62 +1,56 @@
 # POC Plan: Headless GNOME Shell on GitHub Actions Runner
 
-**Goal:** Prove we can run a real GNOME Shell session directly on a GitHub-hosted
-runner (no VM, no container) and take a screenshot of the running desktop.
-This is the foundation for a future structural-assertion E2E suite
-(see `docs/e2e-ci-options.md`, Option 3).
+**Status:** In progress. Branch: `poc/headless-shell-screenshot-2`. PR: created from this branch.
+**Goal:** Run a real GNOME Shell session directly on a GitHub-hosted runner
+(no VM, no container, no KVM) and take a screenshot of the running desktop.
+Foundation for a structural-assertion E2E suite (docs/e2e-ci-options.md, Option 3).
 
 **Reference implementation:** CopyQ's extension test
 (https://github.com/hluk/CopyQ/blob/master/utils/github/test-linux-gnome-extension.sh)
-— installs gnome-shell via apt, boots it headless in a `dbus-run-session`,
-verifies via D-Bus. All on plain `ubuntu-latest`.
+— apt-installs gnome-shell, boots it headless inside `dbus-run-session`, verifies via D-Bus.
+All on plain `ubuntu-latest`. No VM.
 
-## Steps
+## What exists (already committed on this branch)
 
-### 1. Workflow: `.github/workflows/poc-headless-shell.yml`
-- Trigger: `workflow_dispatch` + `pull_request` (paths: this workflow + plan file,
-  so it runs on this PR but doesn't slow every future PR).
-- `runs-on: ubuntu-latest`, timeout 15 min.
-- Steps:
-  1. Install `gnome-shell gnome-shell-common glib2.0-bin dbus xvfb` via apt
-     (no VM, no QEMU, no KVM needed).
-  2. Create an isolated environment (clean `$HOME`, `XDG_*` dirs) and enter
-     `dbus-run-session`.
-  3. Launch `gnome-shell --headless --wayland --no-x11 --virtual-monitor 1280x720`.
-  4. Wait for the Wayland socket to appear (poll up to 60s).
-  5. Verify gnome-shell process is alive and owns a D-Bus name.
-  6. Take a screenshot of the running desktop.
-  7. Upload screenshot + logs as workflow artifacts.
+- `.github/workflows/poc-headless-shell.yml`:
+  1. apt: gnome-shell, gnome-shell-common, glib2.0-bin, dbus, xvfb, mesa libs
+  2. isolated env (clean HOME/XDG dirs) + `dbus-run-session`
+  3. `gnome-shell --headless --wayland --no-x11 --virtual-monitor 1280x720`
+  4. Wayland socket wait (60s), screenshot via org.gnome.Shell.Screenshot D-Bus API
+  5. artifact upload
 
-### 2. Screenshot method
-Primary: GNOME Shell's D-Bus screenshot API:
-```
-gdbus call --session \
-  --dest org.gnome.Shell.Screenshot \
-  --object-path /org/gnome/Shell/Screenshot \
-  --method org.gnome.Shell.Screenshot.Screenshot \
-  true false /tmp/poc-screenshot.png
-```
-Fallback (if the API is locked down in headless mode): read the virtual
-monitor framebuffer, or `gnome-screenshot` / PipeWire ScreenCast.
+## Debug log so far
 
-### 3. Success criteria
-- [ ] Workflow runs green on GitHub-hosted runner
-- [ ] gnome-shell boots headless without GDM/logind
-- [ ] Screenshot artifact contains a rendered GNOME Shell frame
-      (verified by human inspection + file size > blank-frame threshold)
+| Run | Failure | Fix |
+|---|---|---|
+| 1 | `GLib-GIO-ERROR: No GSettings schemas installed` | tried installing schema packages — didn't help |
+| 2 | same error | **root cause:** `env --ignore-environment` wipes `XDG_DATA_DIRS` → GIO finds no schema dirs. CopyQ hits the same and fixes it by compiling schemas into the isolated `$XDG_DATA_HOME/glib-2.0/schemas` with `glib-compile-schemas --targetdir=...` |
+| 3 | fix committed: set `XDG_DATA_DIRS=$XDG_DATA_HOME:...:/usr/share` + compile schemas | **run pending** (was interrupted locally; next push triggers) |
+
+## Remaining steps
+
+1. **Verify run 3 goes green.** If schemas error persists, add explicit
+   `GSETTINGS_SCHEMA_DIR` or compile `/usr/share/glib-2.0/schemas` in place.
+2. **If gnome-shell crashes after schemas fix** (likely next: missing
+   `gnome-session`-provided bits, dconf backend, or GL renderer issues):
+   - add `GSETTINGS_BACKEND=keyfile` (CopyQ does this)
+   - add `MESA_LOADER_DRIVER_OVERRIDE=swrast` / check llvmpipe present
+   - capture `journalctl`/stderr to artifact for diagnosis
+3. **Confirm screenshot artifact** is a real rendered frame (human check +
+   `file` output, size > blank-frame threshold).
+4. **Stretch (if time):** install our extension, enable via gsettings,
+   poll `org.freedesktop.DBus.NameHasOwner` for our D-Bus name (CopyQ pattern),
+   screenshot with the extension's indicator visible.
+
+## Success criteria
+
+- [ ] Workflow green on ubuntu-latest
+- [ ] gnome-shell stays alive without GDM/logind
+- [ ] Screenshot artifact shows a rendered GNOME Shell frame
 - [ ] Total runtime < 5 min
 
-### 4. What this POC does NOT cover (future work)
-- Extension install/enable + D-Bus interaction (CopyQ shows the pattern)
-- PipeWire/audio bootstrap for the transcription flow
-- Pixel-exact visual regression (impossible on Ubuntu runner; structural
-  assertions only)
-- Parakeet transcription inside the runner
+## Explicitly out of scope
 
-## Risks
-- gnome-shell may require packages beyond the three above (mesa/llvmpipe deps) —
-  apt will pull them; watch for missing `libgbm`.
-- The Screenshot D-Bus API may be restricted (`--unsafe-mode` needed in some
-  versions) — fallback documented above.
-- ubuntu-latest has no `gnome-session`; we launch gnome-shell directly, which
-  CopyQ proves works.
+- Pixel-exact regression (Ubuntu rendering ≠ Fedora golden references)
+- Audio/PipeWire/transcription path
+- Parakeet, extension deployment via install.sh
