@@ -70,13 +70,15 @@ export class ShellHelper {
     };
     if (this._deployer) {
       try {
-        // Race deployer.exec against a timeout — a half-open SSH connection
+        // Race deployer.exec against a short timeout — a half-open SSH connection
         // (TCP alive, peer gone after VM reboot/snapshot restore) never fires
-        // "close" and would hang forever. On timeout, fall back to one-shot ssh.
+        // "close" and would hang forever. Healthy VM commands answer in <1s;
+        // 8s is generous headroom, and on timeout the one-shot ssh fallback
+        // below runs with the FULL caller budget (timeoutMs).
         const result = await Promise.race([
           this._deployer.exec(command),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("deployer exec timeout")), Math.max(timeoutMs, 15000))
+            setTimeout(() => reject(new Error("deployer exec timeout")), Math.min(timeoutMs, 8000))
           ),
         ]);
         return result.stdout.trim();
