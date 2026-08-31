@@ -1,0 +1,64 @@
+# POC: headless GNOME Shell on a FEDORA container, screenshot via the shell's
+# own Screenshot API. Same micro-extension trick as the Ubuntu POC
+# (scripts/headless-gnome-shell.sh), but rendered by Fedora's GNOME — so
+# pixels match our Fedora golden references.
+#
+# No Fedora hosted runner exists (actions/runner-images#10802 declined).
+# Instead: podman + Schneegans' gnome-shell-pod images — Fedora containers
+# with a full GNOME session (Xvfb-based X11), proven in CI by
+# Burn-My-Windows (references.yml runs this on ubuntu-22.04 with sudo).
+#
+# Screenshot path differs from Ubuntu POC: Xvfb framebuffer capture
+# (Xvfb_screen0 via podman cp) — the gnome-shell-pod containers run
+# gnome-xsession on Xvfb, so the X11 root window IS the rendered desktop.
+
+name: POC Fedora Headless Shell
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/poc-fedora-shell.yml"
+
+jobs:
+  fedora-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # gnome-shell-pod tags track Fedora releases; pick ours + latest
+        fedora: ["41", "42"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install podman + imagemagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman imagemagick
+
+      - name: Start Fedora GNOME container
+        run: |
+          podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK -td \
+            --name gnome-poc \
+            "ghcr.io/schneegans/gnome-shell-pod-${{ matrix.fedora }}"
+
+      - name: Wait for session, capture screenshot
+        run: |
+          # Xvfb session starts with the container (systemd user session);
+          # give it time to render the desktop
+          sleep 15
+          # Verify gnome-shell is alive
+          podman exec --user gnomeshell --workdir /home/gnomeshell gnome-poc \
+            gnome-shell --version
+          # Capture: Xvfb root window = rendered desktop
+          podman cp gnome-poc:/opt/Xvfb_screen0 - | \
+            tar xf - --to-command "convert xwd:- poc-fedora-${{ matrix.fedora }}.png"
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc-fedora-shell-${{ matrix.fedora }}
+          path: poc-fedora-*.png
+          if-no-files-found: error
+          retention-days: 7
