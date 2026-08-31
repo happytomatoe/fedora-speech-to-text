@@ -6,18 +6,17 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 function createSpinner(params) {
-    // GNOME 46 lacks St.SpinnerContent (added in 48); fall back to St.Spinner.
-    // Note: St.Spinner's constructor takes no params object in 46.
+    // St.SpinnerContent 在 GNOME 48 才加入；46 上既无 SpinnerContent 也无 St.Spinner。
+    // 转圈只是装饰，老 Shell 退化为静态图标即可，不影响 E2E 断言。
     if (St.SpinnerContent) {
         const widget = new St.Widget({...params, reactive: false});
         widget.set_content(new St.SpinnerContent());
         return widget;
     }
-    const spinner = new St.Spinner({reactive: false});
-    for (const [k, v] of Object.entries(params)) {
-        if (k !== 'style_class' || v) spinner[k] = v;
+    if (St.Spinner) {
+        return new St.Spinner({reactive: false});
     }
-    return spinner;
+    return new St.Icon({icon_name: 'media-playback-start-symbolic', ...params, reactive: false});
 }
 
 export const VoiceIndicator = GObject.registerClass(
