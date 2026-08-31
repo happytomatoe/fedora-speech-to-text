@@ -49,6 +49,45 @@ jobs:
               glib-compile-schemas --targetdir="$schema_dir" /usr/share/glib-2.0/schemas
               gsettings list-schemas | grep -q org.gnome.shell && echo "schemas OK"
 
+              # --- Micro-extension screenshot (definitive path) ---
+              # History: Shell Screenshot D-Bus -> AccessDenied; Eval ->
+              # false/empty (gated); grim -> Mutter lacks wlr-screencopy;
+              # portal -> backend not attached to bare dbus session.
+              # All gates check global.context.unsafe_mode which only the
+              # shell process itself can set. A tiny extension runs INSIDE
+              # the shell, sets unsafe_mode, then captures the stage.
+              EXT_DIR="$HOME/.local/share/gnome-shell/extensions/poc-screenshot@local"
+              mkdir -p "$EXT_DIR"
+              printf '%s\n' '{' '  "uuid": "poc-screenshot@local",' '  "name": "POC Screenshot",' '  "shell-version": ["45", "46", "47", "48", "49"]' '}' > "$EXT_DIR/metadata.json"
+              cat > "$EXT_DIR/extension.js" << "EXTJS_END"
+              import GLib from "gi://GLib";
+
+              export function enable() {
+                  global.context.unsafe_mode = true;
+                  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+                      try {
+                          GLib.spawn_command_line_async(
+                              "gdbus call --session " +
+                              "--dest org.gnome.Shell.Screenshot " +
+                              "--object-path /org/gnome/Shell/Screenshot " +
+                              "--method org.gnome.Shell.Screenshot.Screenshot " +
+                              "true false /tmp/poc-screenshot.png");
+                      } catch (e) {
+                          log("POC extension error: " + e);
+                      }
+                      return GLib.SOURCE_REMOVE;
+                  });
+              }
+
+              export function disable() {
+                  global.context.unsafe_mode = false;
+              }
+              EXTJS_END
+              gsettings set org.gnome.shell disable-user-extensions false || true
+              gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || true
+              echo "micro-extension installed"
+
+
               # Launch real GNOME Shell headless on a virtual monitor
               gnome-shell --headless --wayland --no-x11 \
                 --virtual-monitor 1280x720 &
@@ -105,44 +144,6 @@ jobs:
               #    Screenshot in a follow-up. For THIS run: dump frame via
               #    GJS sidecar script that runs INSIDE the shell process? Not
               #    possible externally.
-              # --- Micro-extension screenshot (definitive path) ---
-              # History: Shell Screenshot D-Bus -> AccessDenied; Eval ->
-              # false/empty (gated); grim -> Mutter lacks wlr-screencopy;
-              # portal -> backend not attached to bare dbus session.
-              # All gates check global.context.unsafe_mode which only the
-              # shell process itself can set. A tiny extension runs INSIDE
-              # the shell, sets unsafe_mode, then captures the stage.
-              EXT_DIR="$HOME/.local/share/gnome-shell/extensions/poc-screenshot@local"
-              mkdir -p "$EXT_DIR"
-              printf '%s\n' '{' '  "uuid": "poc-screenshot@local",' '  "name": "POC Screenshot",' '  "shell-version": ["45", "46", "47", "48", "49"]' '}' > "$EXT_DIR/metadata.json"
-              cat > "$EXT_DIR/extension.js" << "EXTJS_END"
-              import GLib from "gi://GLib";
-
-              export function enable() {
-                  global.context.unsafe_mode = true;
-                  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
-                      try {
-                          GLib.spawn_command_line_async(
-                              "gdbus call --session " +
-                              "--dest org.gnome.Shell.Screenshot " +
-                              "--object-path /org/gnome/Shell/Screenshot " +
-                              "--method org.gnome.Shell.Screenshot.Screenshot " +
-                              "true false /tmp/poc-screenshot.png");
-                      } catch (e) {
-                          log("POC extension error: " + e);
-                      }
-                      return GLib.SOURCE_REMOVE;
-                  });
-              }
-
-              export function disable() {
-                  global.context.unsafe_mode = false;
-              }
-              EXTJS_END
-              gsettings set org.gnome.shell disable-user-extensions false || true
-              gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || true
-              echo "micro-extension installed"
-
               # Fallback: verify shell alive + dump display state (proof of session)
               if [[ ! -s /tmp/poc-screenshot.png ]]; then
                 echo "Screenshot denied; dumping display state for proof-of-render"
