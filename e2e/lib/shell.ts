@@ -76,7 +76,7 @@ export class ShellHelper {
         const result = await Promise.race([
           this._deployer.exec(command),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("deployer exec timeout")), Math.min(timeoutMs, 5000))
+            setTimeout(() => reject(new Error("deployer exec timeout")), Math.max(timeoutMs, 15000))
           ),
         ]);
         return result.stdout.trim();
