@@ -41,7 +41,7 @@ jobs:
             XDG_DATA_DIRS="$TMPDIR_ENV/.local/share:/usr/local/share:/usr/share" \
             XDG_CACHE_HOME="$TMPDIR_ENV/.cache" \
             XDG_RUNTIME_DIR="$TMPDIR_ENV/.runtime" \
-            dbus-run-session -- bash -ceu '
+            dbus-run-session -- bash -cexu '
               # Compile system schemas into our isolated XDG_DATA_HOME
               # (GIO looks in glib-2.0/schemas under XDG_DATA_DIRS)
               schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"
@@ -83,8 +83,12 @@ jobs:
                   global.context.unsafe_mode = false;
               }
               EXTJS_END
-              gsettings set org.gnome.shell disable-user-extensions false || true
-              gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || true
+              echo "STEP: writing extension files done"
+    cat "$EXT_DIR/metadata.json" || true
+    cat "$EXT_DIR/extension.js" || true
+    gsettings set org.gnome.shell disable-user-extensions false || echo "FAIL: disable-user-extensions"
+              gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || echo "FAIL: enabled-extensions"
+    gsettings get org.gnome.shell enabled-extensions || true
               echo "micro-extension installed"
 
 
