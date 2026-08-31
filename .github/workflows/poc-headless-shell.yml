@@ -122,31 +122,31 @@ jobs:
               }
               META
               cat > "$EXT_DIR/extension.js" << 'EXTJS'
-              import GLib from 'gi://GLib';
+                            import GLib from 'gi://GLib';
 
-export function enable() {
-    global.context.unsafe_mode = true;
-    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
-        try {
-            // Screenshot the whole stage via the Shell Screenshot service logic:
-            // with unsafe_mode on, our own D-Bus call now passes
-            GLib.spawn_command_line_async(
-                'gdbus call --session ' +
-                '--dest org.gnome.Shell.Screenshot ' +
-                '--object-path /org/gnome/Shell/Screenshot ' +
-                '--method org.gnome.Shell.Screenshot.Screenshot ' +
-                'true false /tmp/poc-screenshot.png');
-        } catch (e) {
-            GLib.spawn_command_line_sync(
-                'bash -c "echo EXT_ERROR >> /tmp/poc-ext.log"');
-        }
-        return GLib.SOURCE_REMOVE;
-    });
-}
-
-export function disable() {
-                  global.context.unsafe_mode = false;
+              export function enable() {
+                  global.context.unsafe_mode = true;
+                  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+                      try {
+                          // Screenshot the whole stage via the Shell Screenshot service logic:
+                          // with unsafe_mode on, our own D-Bus call now passes
+                          GLib.spawn_command_line_async(
+                              'gdbus call --session ' +
+                              '--dest org.gnome.Shell.Screenshot ' +
+                              '--object-path /org/gnome/Shell/Screenshot ' +
+                              '--method org.gnome.Shell.Screenshot.Screenshot ' +
+                              'true false /tmp/poc-screenshot.png');
+                      } catch (e) {
+                          GLib.spawn_command_line_sync(
+                              'bash -c "echo EXT_ERROR >> /tmp/poc-ext.log"');
+                      }
+                      return GLib.SOURCE_REMOVE;
+                  });
               }
+
+              export function disable() {
+                                global.context.unsafe_mode = false;
+                            }
               EXTJS
               gsettings set org.gnome.shell disable-user-extensions false || true
               gsettings set org.gnome.shell enabled-extensions "['poc-screenshot@local']" || true
