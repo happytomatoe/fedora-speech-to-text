@@ -111,3 +111,8 @@ e2e-output-frame-*.png
 .aislop/history.jsonl
 e2e-ci/output/
 e2e-vm/output/
+e2e-ubuntu-ci/output/
+e2e-ubuntu-ci/vm-run/
+e2e-ubuntu-ci/golden-ubuntu-2604.qcow2
+e2e-ubuntu-ci/id_ed25519
+e2e-ubuntu-ci/id_ed25519.pub

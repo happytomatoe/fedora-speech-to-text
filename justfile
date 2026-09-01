@@ -1152,6 +1152,28 @@ ego-lint:
 ubuntu-vm-setup:
     ./e2e-vm/setup-vm.sh
 
+# @category e2e-ubuntu-ci
+# Ubuntu CI E2E suite: run the basic test against a fresh pinned-image VM
+# (CI-identical path). Passthrough args: just ubuntu-ci-e2e -- --use-existing
+# attaches to the already-running ubuntu-vm VM instead (CI-failure repro).
+ubuntu-ci-e2e *args='':
+    cd e2e-ubuntu-ci && bun install --silent && bun run e2e.ts {{ args }}
+
+# @category e2e-ubuntu-ci
+# First-time setup for the Ubuntu CI E2E suite: pinned resolute cloud image +
+# golden customization + ssh key (same URL/recipe as CI uses).
+ubuntu-ci-e2e-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e-ubuntu-ci
+    [ -f golden-ubuntu-2604.qcow2 ] && { echo "golden image already exists"; exit 0; }
+    # Reuse the e2e-vm setup: identical pinned image + apt package list + GDM
+    # autologin. Copy the result so both suites own their artifacts.
+    bash ../e2e-vm/setup-vm.sh
+    cp ../e2e-vm/golden-ubuntu-2604.qcow2 .
+    cp ../e2e-vm/id_ed25519 ../e2e-vm/id_ed25519.pub .
+    echo "e2e-ubuntu-ci golden image ready"
+
 # @category e2e-vm
 # Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent).
 # Overlay persists across runs; `just ubuntu-vm-boot fresh` resets to golden image.
