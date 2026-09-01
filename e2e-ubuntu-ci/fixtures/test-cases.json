@@ -1,0 +1,16 @@
+{
+  "test-cases": [
+    {
+      "file": "test-02-reminder.wav",
+      "expected": "Remember the mind donation."
+    },
+    {
+      "file": "test-03-hello.wav",
+      "expected": "Good morning."
+    },
+    {
+      "file": "test-04-calendar.wav",
+      "expected": "Our meeting is annual for 3 pm on Monday."
+    }
+  ]
+}
