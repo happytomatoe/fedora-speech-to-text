@@ -1149,23 +1149,49 @@ ego-lint:
 
 # @category e2e-vm
 # Local CI-parity: set up the Ubuntu 26.04 VM (image download + customize)
-e2e-vm-setup:
+ubuntu-vm-setup:
     ./e2e-vm/setup-vm.sh
 
 # @category e2e-vm
-# Local CI-parity: boot the Ubuntu 26.04 VM (idempotent)
-e2e-vm-boot:
+# Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent)
+ubuntu-vm-boot:
     ./e2e-vm/boot-vm.sh
 
 # @category e2e-vm
+# Local CI-parity: boot the Ubuntu 26.04 VM with a visible desktop window
+# (GTK display instead of headless). Same disk/SSH as ubuntu-vm-boot.
+ubuntu-vm-boot-gui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e-vm
+    if [ -f qemu.pid ] && kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+      echo "VM already running (PID $(cat qemu.pid)) — run 'just ubuntu-vm-kill' first" >&2
+      exit 1
+    fi
+    [ -f golden-ubuntu-2604.qcow2 ] || { echo "Run 'just ubuntu-vm-setup' first" >&2; exit 1; }
+    rm -f overlay.qcow2
+    qemu-img create -f qcow2 -b golden-ubuntu-2604.qcow2 -F qcow2 overlay.qcow2 > /dev/null
+    qemu-system-x86_64 \
+      -enable-kvm -cpu host -m 4096 -smp 2 \
+      -drive file=overlay.qcow2,format=qcow2,if=virtio \
+      -device virtio-vga \
+      -display gtk,gl=off \
+      -monitor unix:qemu-monitor.sock,server,nowait \
+      -serial file:serial.log \
+      -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+      -device virtio-net-pci,netdev=net0 \
+      -daemonize -pidfile qemu.pid
+    echo "Ubuntu 26.04 desktop window open (GDM auto-login: testuser), SSH on :2222"
+
+# @category e2e-vm
 # Local CI-parity: run the CI harness (ci-e2e-headless.sh) inside the VM.
-# Requires Parakeet on the host: just e2e-vm-parakeet
-e2e-vm-run:
+# Requires Parakeet on the host: just ubuntu-vm-parakeet
+ubuntu-vm-run:
     ./e2e-vm/run-parity.sh
 
 # @category e2e-vm
-# Start Parakeet on the host (port 5092) for the VM parity run
-e2e-vm-parakeet:
+# Start Parakeet on the host (port 5092) for the Ubuntu VM parity run
+ubuntu-vm-parakeet:
     #!/usr/bin/env bash
     set -euo pipefail
     RUNTIME=docker
@@ -1180,8 +1206,8 @@ e2e-vm-parakeet:
     echo "FATAL: Parakeet not ready" >&2; exit 1
 
 # @category e2e-vm
-# Stop the parity VM
-e2e-vm-kill:
+# Stop the Ubuntu 26.04 parity VM
+ubuntu-vm-kill:
     #!/usr/bin/env bash
     PID_FILE="e2e-vm/qemu.pid"
     if [ -f "$PID_FILE" ]; then
