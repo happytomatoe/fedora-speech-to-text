@@ -45,7 +45,7 @@ export class VmManager {
   frameCount = 0;
   config!: VmConfig;
 
-  private deployCfg: DeployConfig;
+  deployCfg: DeployConfig;
 
   constructor(config: VmConfig) {
     this.config = config;

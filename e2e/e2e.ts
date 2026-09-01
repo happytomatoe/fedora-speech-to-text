@@ -48,6 +48,21 @@ console.error = (...args: any[]) => {
 // Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
+
+// Environment selector: fedora-local (Fedora VM, original suite) |
+// ubuntu-local (pinned Ubuntu 26.04 VM via QEMU, same bits as CI) |
+// ubuntu-ci (identical to ubuntu-local; run by GitHub Actions).
+// Only environment config differs — suite logic is shared.
+type Env = "fedora-local" | "ubuntu-local" | "ubuntu-ci";
+const envIdx = args.indexOf("--env");
+const ENV: Env = envIdx >= 0 ? (args[envIdx + 1] as Env) : "fedora-local";
+if (!"fedora-local ubuntu-local ubuntu-ci".split(" ").includes(ENV)) {
+  throw new Error(`Unknown env '${ENV}'. Valid: fedora-local, ubuntu-local, ubuntu-ci`);
+}
+const IS_UBUNTU = ENV !== "fedora-local";
+// --use-existing: attach to an already-running VM instead of booting a fresh
+// one — for reproducing CI failures locally against the same VM/image.
+const USE_EXISTING = args.includes("--use-existing");
 // Default: shut the VM down after the test (pass/fail). Keep it running for
 // manual debugging with --keep-vm.
 const KEEP_VM = args.includes("--keep-vm");
@@ -174,28 +189,24 @@ function prefsSourceMatch(file: string): boolean {
 
 // Configuration
 const CONFIG = {
+  env: ENV,
+  isUbuntu: IS_UBUNTU,
+  ubuntuCloudImage: UBUNTU_2604_CLOUD_IMAGE,
   paths: {
     projectRoot: join(import.meta.dir, ".."),
-    vmDir: join(import.meta.dir, "qemu-images"),
-    baseImage: (() => {
-      const goldenDeps = join(import.meta.dir, "qemu-images/golden-gnome-deps.qcow2");
-      if (existsSync(goldenDeps)) return goldenDeps;
-      const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
-      if (existsSync(depsBase)) return depsBase;
-      const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
-      if (existsSync(uvBase)) return uvBase;
-      return join(import.meta.dir, "qemu-images/base.qcow2");
-    })(),
-    overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
+    suiteDir: import.meta.dir,
+    vmDir: IS_UBUNTU ? join(import.meta.dir, "vm-run") : join(import.meta.dir, "qemu-images"),
+    baseImage: envCfg.baseImage,
+    overlayImage: join(IS_UBUNTU ? join(import.meta.dir, "vm-run") : join(import.meta.dir, "qemu-images"), "overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
-    sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
-    referencesDir: join(import.meta.dir, "expected-qemu"),
+    sshKey: USE_EXISTING && IS_UBUNTU ? UBUNTU_CONFIG.existing.key : envCfg.sshKey,
+    referencesDir: envCfg.referencesDir,
     outputDir: join(import.meta.dir, "output"),
     pythonSrc: join(import.meta.dir, "../src/voice_to_text"),
     testCasesFile: join(import.meta.dir, "fixtures/test-cases.json"),
   },
   ssh: {
-    port: 2222,
+    port: USE_EXISTING && IS_UBUNTU ? UBUNTU_CONFIG.existing.port : 2222,
     user: "testuser",
   },
   extension: {
