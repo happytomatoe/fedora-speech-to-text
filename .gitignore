@@ -110,3 +110,4 @@ e2e-output-frame-*.png
 # aislop local score history
 .aislop/history.jsonl
 e2e-ci/output/
+e2e-vm/output/
