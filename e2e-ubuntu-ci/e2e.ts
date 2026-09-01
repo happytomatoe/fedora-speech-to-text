@@ -35,9 +35,11 @@ console.error = (...args: any[]) => {
 // Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
-// Default: shut the VM down after the test (pass/fail). Keep it running for
-// manual debugging with --keep-vm.
-const KEEP_VM = args.includes("--keep-vm");
+// Objective contract: a FAILED run leaves the VM alive for triage. --keep-vm
+// forces it even after a PASS. Screenshots/recording land in run output (and
+// are copied to output/<run-id>/ by cleanup); serial console + e2e.log are
+// always preserved.
+const KEEP_VM = args.includes("--keep-vm") || process.exitCode !== 0;
 const SKIP_DEPS = args.includes("--skip-deps");
 // --use-existing: attach to an already-running VM (e.g. e2e-vm/boot-vm.sh)
 // instead of booting a fresh one — for reproducing CI failures locally
