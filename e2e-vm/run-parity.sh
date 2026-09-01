@@ -32,16 +32,34 @@ rsync -az --delete \
 #    The CI harness expects Parakeet at localhost:5092; the VM's localhost is
 #    not the host. The harness has no host override, so we port-forward with
 #    a tiny relay: socat inside the VM, 10.0.2.2:5092 -> 127.0.0.1:5092.
-$SSH 'command -v socat >/dev/null || sudo apt-get install -y --no-install-recommends socat' 2>/dev/null
-$SSH 'pkill -f "socat.*TCP-LISTEN:5092" 2>/dev/null; sleep 0.5; nohup socat TCP-LISTEN:5092,fork,reuseaddr TCP:10.0.2.2:5092 > /tmp/socat.log 2>&1 & disown; sleep 1; curl -sf http://localhost:5092/health > /dev/null && echo "Parakeet reachable in VM"' 2>/dev/null || $SSH 'nohup socat TCP-LISTEN:5092,fork,reuseaddr TCP:10.0.2.2:5092 > /tmp/socat.log 2>&1 < /dev/null & sleep 1; curl -sf http://localhost:5092/health' 2>/dev/null
+$SSH 'command -v socat >/dev/null || sudo apt-get install -y --no-install-recommends socat'
+$SSH 'pkill -f "socat.*TCP-LISTEN:5092" 2>/dev/null; sleep 0.5; nohup socat TCP-LISTEN:5092,fork,reuseaddr TCP:10.0.2.2:5092 > /tmp/socat.log 2>&1 & disown; sleep 1; curl -sf http://localhost:5092/health > /dev/null && echo "Parakeet reachable in VM"' || $SSH 'nohup socat TCP-LISTEN:5092,fork,reuseaddr TCP:10.0.2.2:5092 > /tmp/socat.log 2>&1 < /dev/null & sleep 1; curl -sf http://localhost:5092/health'
 
 # 4. PulseAudio null devices (needed by PortAudio in the service)
-$SSH 'pactl info >/dev/null 2>&1 || (pulseaudio -D --exit-idle-time=-1 --disallow-exit=true --load="module-null-sink sink_name=virtual_sink" --load="module-null-source source_name=virtual_mic"; for i in $(seq 1 20); do pactl info >/dev/null 2>&1 && break; sleep 1; done); pactl list short sinks | head -2' 2>/dev/null
+$SSH 'pactl info >/dev/null 2>&1 || (pulseaudio -D --exit-idle-time=-1 --disallow-exit=true --load="module-null-sink sink_name=virtual_sink" --load="module-null-source source_name=virtual_mic"; for i in $(seq 1 20); do pactl info >/dev/null 2>&1 && break; sleep 1; done); pactl list short sinks | head -2'
 
 # 4b. Stub docker/podman: the CI harness starts a Parakeet container itself;
 # in the VM we relay 10.0.2.2:5092 (host Parakeet) instead. A fake `docker`
 # shim satisfies the harness's runtime check and no-ops its container steps.
-$SSH 'command -v docker >/dev/null || printf "#!/bin/sh\nexit 0\n" | sudo tee /usr/local/bin/docker >/dev/null && sudo chmod +x /usr/local/bin/docker' 2>/dev/null
+$SSH 'command -v docker >/dev/null || printf "#!/bin/sh\nexit 0\n" | sudo tee /usr/local/bin/docker >/dev/null && sudo chmod +x /usr/local/bin/docker'
+
+# 4c. Screenshot helper: QEMU monitor screendump (works headless, no unsafe mode).
+#     Output mirrors e2e/ layout: output/common/screenshot-<NN>-<label>.png
+shot() {
+  local label="$1"
+  mkdir -p "$OUT/common"
+  printf 'screendump %s\n' "$OUT/common/.tmp-shot.ppm" | timeout 10 socat - unix:"$VM_DIR/qemu-monitor.sock" >/dev/null 2>&1
+  if [ -s "$OUT/common/.tmp-shot.ppm" ]; then
+    python3 -c "from PIL import Image; Image.open('$OUT/common/.tmp-shot.ppm').save('$OUT/common/screenshot-$label.png')" 2>/dev/null \
+      || echo "WARN: ppm->png conversion failed for $label"
+    rm -f "$OUT/common/.tmp-shot.ppm"
+  else
+    echo "WARN: screendump failed for $label"
+  fi
+}
+
+# 1. Desktop before anything runs (pre-harness idle state)
+shot 01-desktop
 
 # 5. Run the CI harness unchanged (GITHUB_WORKSPACE required: the script's
 #    dirname fallback breaks because we invoke it via its repo-relative path
@@ -49,11 +67,17 @@ $SSH 'command -v docker >/dev/null || printf "#!/bin/sh\nexit 0\n" | sudo tee /u
 $SSH 'cd ~/repo && export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH && GITHUB_WORKSPACE=$HOME/repo bash .github/workflows/scripts/ci-e2e-headless.sh ~/parity-screenshot.png 2>&1' | tee "$OUT/harness.log"
 TEST_EXIT=${PIPESTATUS[0]}
 
-# 6. Pull artifacts
-scp -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-  "testuser@localhost:~/repo/parity-screenshot.png" "$OUT/" 2>/dev/null || echo "WARN: no screenshot"
-scp -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-  "testuser@localhost:~/parity-screenshot.png" "$OUT/" 2>/dev/null || true
+# 6. Pull harness-side screenshots (during = 04-recording-started,
+#    after = 05-transcription-received, both taken inside the harness)
+for pair in "during 04-recording-started" "after 05-transcription-received"; do
+  set -- $pair
+  scp -q -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "testuser@localhost:~/parity-screenshot-$1.png" "$OUT/common/screenshot-$2.png" 2>/dev/null \
+    || echo "WARN: no $1 screenshot"
+done
+
+# 7. After-state screendump from the monitor (06-recording-stopped)
+shot 06-recording-stopped
 
 echo "exit=$TEST_EXIT"
 exit "$TEST_EXIT"

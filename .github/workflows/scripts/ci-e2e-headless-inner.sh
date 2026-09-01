@@ -117,15 +117,38 @@ done
 # Grace period: let the shell render the initial frame / load the extension.
 sleep 6
 
-# --- Run the test runner ----------------------------------------------------------
-TEST_EXIT=0
-cd "$ASSETS/ci-e2e"
-bun run e2e.ts || TEST_EXIT=$?
-echo "test runner exit: $TEST_EXIT"
+# --- Terminal for visible typed text -----------------------------------------------
+# Launch ghostty + tmux so the committed transcription is visibly typed into a
+# window on the virtual monitor (the after-screenshot shows it on screen).
+# Focused input context also makes CommitText go through the real IM commit
+# path instead of the headless capture-file fallback.
+if command -v ghostty >/dev/null 2>&1; then
+  tmux kill-server 2>/dev/null || true   # stale session from a previous run
+  nohup ghostty -e tmux new-session -s ci-e2e -x 120 -y 20 > /dev/null 2>&1 &
+  for i in $(seq 1 10); do
+    TMUX_RUNNING=1 tmux has-session -t ci-e2e 2>/dev/null && { echo "tmux session up after ${i}s"; break; }
+    sleep 1
+  done
+  # Click the terminal so it has keyboard focus (center of the 960x540 monitor)
+  export WAYLAND_DISPLAY=wayland-0
+  if command -v dotool >/dev/null 2>&1; then
+    printf 'mouseto 0.5 0.5\nclick left\n' | dotool 2>/dev/null || true
+  fi
+  sleep 1
+fi
 
-# --- Screenshot (post-run state) ---------------------------------------------------
+# --- Screenshots: before/during/after the recording -------------------------------
+# before: taken here (desktop, pre-recording). during/after: taken by the test
+# runner via VOX_CI_E2E_SHOT_* (it knows the recording state and typed text).
+SHOT_BASE="${SCREENSHOT%.png}"
+BEFORE_SHOT="$SHOT_BASE-before.png"
+DURING_SHOT="$SHOT_BASE-during.png"
+AFTER_SHOT="$SHOT_BASE-after.png"
+export VOX_CI_E2E_SHOT_DURING="$DURING_SHOT"
+export VOX_CI_E2E_SHOT_AFTER="$AFTER_SHOT"
+
 # Exit the Activities overview (headless shell boots into it) so the
-# screenshot shows the desktop with the panel indicators visible.
+# screenshots show the desktop with the panel indicators visible.
 gdbus call --session --dest org.gnome.Shell \
   --object-path /org/gnome/Shell \
   --method org.gnome.Shell.Eval 'Main.overview.hide();' > /dev/null 2>&1 || true
@@ -134,7 +157,21 @@ gdbus call --session \
   --dest org.gnome.Shell.Screenshot \
   --object-path /org/gnome/Shell/Screenshot \
   --method org.gnome.Shell.Screenshot.Screenshot \
-  true false "$SCREENSHOT" || echo "WARN: screenshot failed"
+  true false "$BEFORE_SHOT" || echo "WARN: before-screenshot failed"
+
+# --- Run the test runner ----------------------------------------------------------
+TEST_EXIT=0
+cd "$ASSETS/ci-e2e"
+bun run e2e.ts || TEST_EXIT=$?
+echo "test runner exit: $TEST_EXIT"
+
+# --- Screenshot (post-run state) ---------------------------------------------------
+sleep 1
+gdbus call --session \
+  --dest org.gnome.Shell.Screenshot \
+  --object-path /org/gnome/Shell/Screenshot \
+  --method org.gnome.Shell.Screenshot.Screenshot \
+  true false "$AFTER_SHOT" || echo "WARN: after-screenshot failed"
 
 # --- Tear down -----------------------------------------------------------------------
 kill "$SERVICE_PID" 2>/dev/null || true

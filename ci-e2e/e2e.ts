@@ -116,6 +116,27 @@ const config = JSON.stringify({
   output_method: "mutter-commit",
   language: "en",
 });
+const shotDuring = process.env.VOX_CI_E2E_SHOT_DURING;
+const shotAfter = process.env.VOX_CI_E2E_SHOT_AFTER;
+
+async function shellScreenshot(path: string): Promise<boolean> {
+  if (!path) return false;
+  try {
+    await gdbus([
+      "call", "--session",
+      "--dest", "org.gnome.Shell.Screenshot",
+      "--object-path", "/org/gnome/Shell/Screenshot",
+      "--method", "org.gnome.Shell.Screenshot.Screenshot",
+      "true", "false", path,
+    ]);
+    console.log(`CI E2E: screenshot saved: ${path}`);
+    return true;
+  } catch (e) {
+    console.error(`CI E2E: WARN screenshot failed (${path}): ${e}`);
+    return false;
+  }
+}
+
 console.log(`CI E2E: StartRecording(${config})`);
 await gdbus([
   "call", "--session",
@@ -125,12 +146,30 @@ await gdbus([
 ]);
 console.log("CI E2E: recording started; waiting for completion...");
 
-// Poll for the typed-text capture file (written by the extension when
-// CommitText lands in the headless fallback path).
+// Screenshot while recording is active (floating indicator visible in panel)
+await new Promise((r) => setTimeout(r, 1500));
+await shellScreenshot(shotDuring);
+
+// Poll for the typed text two ways:
+//   1. tmux pane (ghostty+tmux launched by the harness — text visibly typed)
+//   2. capture file (headless no-focus fallback path of CommitText)
 const deadline = Date.now() + TIMEOUT_MS;
 let typedText: string | null = null;
 let sawError: string | null = null;
+async function readTmuxPane(): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(["tmux", "capture-pane", "-t", "ci-e2e", "-p"], { stdout: "pipe" });
+    return await new Response(proc.stdout).text();
+  } catch {
+    return null;
+  }
+}
 while (Date.now() < deadline) {
+  const pane = await readTmuxPane();
+  if (pane && normalize(pane).includes(normalize(fixture.expected))) {
+    typedText = pane.trim();
+    break;
+  }
   const blob = Bun.file(textFile);
   if (await blob.exists()) {
     typedText = await blob.text();
@@ -142,12 +181,16 @@ while (Date.now() < deadline) {
 }
 await stop();
 
+// After-screenshot: text is now committed in the terminal on screen
+await new Promise((r) => setTimeout(r, 1000));
+await shellScreenshot(shotAfter);
+
 // ── report ────────────────────────────────────────────────────────────────────
 console.log("\n=== CI E2E RESULTS ===");
-assert(typedText !== null, "typed text was captured (CommitText reached extension)");
+assert(typedText !== null, "typed text visible in terminal (tmux pane) or capture file");
 if (typedText !== null) {
   assert(
-    normalize(typedText) === normalize(fixture.expected),
+    normalize(typedText).includes(normalize(fixture.expected)),
     `typed text matches expected: got '${normalize(typedText)}', want '${normalize(fixture.expected)}'`,
   );
 }
