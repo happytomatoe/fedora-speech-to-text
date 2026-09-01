@@ -13,6 +13,8 @@ The return value of that method is sent as the signal payload.
 import asyncio
 import json
 import logging
+from collections.abc import Coroutine
+from typing import Any
 
 import sounddevice as sd
 from dbus_next.aio import MessageBus
@@ -84,6 +86,12 @@ class VoiceToTextInterface(ServiceInterface):
         self._connect_engine_signals()
         self._bus: MessageBus | None = None
 
+    def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     def set_bus(self, bus: MessageBus) -> None:
         """Set the D-Bus message bus reference."""
         self._bus = bus
@@ -142,20 +150,17 @@ class VoiceToTextInterface(ServiceInterface):
                 f"Expected JSON object, got {type(parsed_config).__name__}",
             )
         logger.info("D-Bus StartRecording received config: %s", parsed_config)
-        loop = asyncio.get_running_loop()
-        self._tasks.add(loop.create_task(self._engine.start(parsed_config)))
+        self._spawn(self._engine.start(parsed_config))
 
     @method()
     def StopRecording(self) -> None:  # noqa: N802
         """Stop the current recording session."""
-        loop = asyncio.get_running_loop()
-        self._tasks.add(loop.create_task(self._engine.stop()))
+        self._spawn(self._engine.stop())
 
     @method()
     def CancelRecording(self) -> None:  # noqa: N802
         """Cancel recording and discard output."""
-        loop = asyncio.get_running_loop()
-        self._tasks.add(loop.create_task(self._engine.cancel()))
+        self._spawn(self._engine.cancel())
 
     @method()
     def GetStatus(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
