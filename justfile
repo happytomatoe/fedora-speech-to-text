@@ -1146,3 +1146,46 @@ ego-lint:
     ./scripts/ego-lint --show=fail,warn gnome-ext/
     echo ""
     echo "=== EGO Review Complete ==="
+
+# @category e2e-vm
+# Local CI-parity: set up the Ubuntu 26.04 VM (image download + customize)
+e2e-vm-setup:
+    ./e2e-vm/setup-vm.sh
+
+# @category e2e-vm
+# Local CI-parity: boot the Ubuntu 26.04 VM (idempotent)
+e2e-vm-boot:
+    ./e2e-vm/boot-vm.sh
+
+# @category e2e-vm
+# Local CI-parity: run the CI harness (ci-e2e-headless.sh) inside the VM.
+# Requires Parakeet on the host: just e2e-vm-parakeet
+e2e-vm-run:
+    ./e2e-vm/run-parity.sh
+
+# @category e2e-vm
+# Start Parakeet on the host (port 5092) for the VM parity run
+e2e-vm-parakeet:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RUNTIME=docker
+    command -v docker >/dev/null 2>&1 || RUNTIME=podman
+    $RUNTIME rm -f parakeet-e2e-parity >/dev/null 2>&1 || true
+    $RUNTIME run -d --name parakeet-e2e-parity --network host \
+      ghcr.io/achetronic/parakeet:latest > /dev/null
+    for i in $(seq 1 60); do
+      curl -sf http://localhost:5092/health >/dev/null && { echo "Parakeet ready"; exit 0; }
+      sleep 2
+    done
+    echo "FATAL: Parakeet not ready" >&2; exit 1
+
+# @category e2e-vm
+# Stop the parity VM
+e2e-vm-kill:
+    #!/usr/bin/env bash
+    PID_FILE="e2e-vm/qemu.pid"
+    if [ -f "$PID_FILE" ]; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null || true
+      rm -f "$PID_FILE"
+    fi
+    echo "VM stopped"

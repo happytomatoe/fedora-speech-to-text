@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Run the CI headless E2E harness inside the Ubuntu 26.04 VM, locally.
+# Parakeet must run on the HOST (just e2e-vm-parakeet); the guest reaches it
+# via the QEMU user-network gateway 10.0.2.2:5092.
+#
+# What this does:
+#   1. Installs bun + uv into the VM (idempotent)
+#   2. Rsyncs the repo into the VM (excluding .git, images, node_modules)
+#   3. Starts PulseAudio with null devices (CI does the same)
+#   4. Runs .github/workflows/scripts/ci-e2e-headless.sh UNCHANGED
+#   5. Copies screenshot/artifacts back to ./e2e-vm/output/
+set -euo pipefail
+
+VM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$VM_DIR/.." && pwd)"
+OUT="$VM_DIR/output"
+SSH_CMD="ssh -p 2222 -i $VM_DIR/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null testuser@localhost"
+SSH="$SSH_CMD"
+mkdir -p "$OUT"
+
+# 1. bun + uv in the VM (idempotent)
+$SSH 'command -v bun >/dev/null || (curl -fsSL https://bun.sh/install | bash); command -v uv >/dev/null || (curl -LsSf https://astral.sh/uv/install.sh | sh)' 2>/dev/null
+
+# 2. Sync repo
+rsync -az --delete \
+  --exclude .git --exclude node_modules --exclude "*.qcow2" \
+  --exclude e2e-vm/output --exclude e2e/output-qemu \
+  -e "ssh -p 2222 -i $VM_DIR/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+  "$REPO_ROOT/" "testuser@localhost:~/repo/"
+
+# 3. PulseAudio with virtual devices inside the VM (CI parity) + Parakeet env.
+#    The CI harness expects Parakeet at localhost:5092; the VM's localhost is
+#    not the host. The harness has no host override, so we port-forward with
+#    a tiny relay: socat inside the VM, 10.0.2.2:5092 -> 127.0.0.1:5092.
+$SSH 'command -v socat >/dev/null || sudo apt-get install -y --no-install-recommends socat' 2>/dev/null
+$SSH 'pkill -f "socat.*TCP-LISTEN:5092" 2>/dev/null; sleep 0.5; nohup socat TCP-LISTEN:5092,fork,reuseaddr TCP:10.0.2.2:5092 > /tmp/socat.log 2>&1 & disown; sleep 1; curl -sf http://localhost:5092/health > /dev/null && echo "Parakeet reachable in VM"' 2>/dev/null || $SSH 'nohup socat TCP-LISTEN:5092,fork,reuseaddr TCP:10.0.2.2:5092 > /tmp/socat.log 2>&1 < /dev/null & sleep 1; curl -sf http://localhost:5092/health' 2>/dev/null
+
+# 4. PulseAudio null devices (needed by PortAudio in the service)
+$SSH 'pactl info >/dev/null 2>&1 || (pulseaudio -D --exit-idle-time=-1 --disallow-exit=true --load="module-null-sink sink_name=virtual_sink" --load="module-null-source source_name=virtual_mic"; for i in $(seq 1 20); do pactl info >/dev/null 2>&1 && break; sleep 1; done); pactl list short sinks | head -2' 2>/dev/null
+
+# 4b. Stub docker/podman: the CI harness starts a Parakeet container itself;
+# in the VM we relay 10.0.2.2:5092 (host Parakeet) instead. A fake `docker`
+# shim satisfies the harness's runtime check and no-ops its container steps.
+$SSH 'command -v docker >/dev/null || printf "#!/bin/sh\nexit 0\n" | sudo tee /usr/local/bin/docker >/dev/null && sudo chmod +x /usr/local/bin/docker' 2>/dev/null
+
+# 5. Run the CI harness unchanged (GITHUB_WORKSPACE required: the script's
+#    dirname fallback breaks because we invoke it via its repo-relative path
+#    from the VM's home, not from the repo checkout)
+$SSH 'cd ~/repo && export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH && GITHUB_WORKSPACE=$HOME/repo bash .github/workflows/scripts/ci-e2e-headless.sh ~/parity-screenshot.png 2>&1' | tee "$OUT/harness.log"
+TEST_EXIT=${PIPESTATUS[0]}
+
+# 6. Pull artifacts
+scp -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  "testuser@localhost:~/repo/parity-screenshot.png" "$OUT/" 2>/dev/null || echo "WARN: no screenshot"
+scp -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  "testuser@localhost:~/parity-screenshot.png" "$OUT/" 2>/dev/null || true
+
+echo "exit=$TEST_EXIT"
+exit "$TEST_EXIT"
