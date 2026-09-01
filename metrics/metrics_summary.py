@@ -28,18 +28,16 @@ def table(headers, rows):
 
 
 def top_lines(name, n=5):
-    lines = (REPORTS / name).read_text().splitlines()
-    return lines[:n]
+    return (REPORTS / name).read_text().splitlines()[:n]
 
 
 def main():
     lines = ["# Metrics Summary", ""]
 
-    # Python SLOC (radon raw)
+    # Python: SLOC, cyclomatic, cognitive, coverage, CRAP
     raw = load_json("radon-raw.json")
-    tot = {k: sum(f.get(k, 0) for f in raw.values()) for k in ("loc", "sloc", "comments", "blank")}
+    py_sloc = sum(f.get("sloc", 0) for f in raw.values())
 
-    # Python cyclomatic (radon cc)
     cc = load_json("radon-cc.json")
 
     def short(path):
@@ -53,51 +51,38 @@ def main():
                 funcs.append(b)
     ccs = [b["complexity"] for b in funcs]
 
-    # Python cognitive (complexipy)
     cog = load_json("complexipy-results.json")
     cog_scores = [f["complexity"] for f in cog]
 
-    # Coverage
     cov = ET.parse(REPORTS / "coverage.xml").getroot()
     line_rate = float(cov.attrib["line-rate"])
 
-    # CRAP
     crap = load_json("crap.json")
 
-    # JS LOC
-    js_loc_lines = top_lines("js-loc.txt")
-    js_total = next(int(x.split()[0]) for x in js_loc_lines if "total" in x)
-
-    # JS complexity (sonarjs via eslint)
+    # JS: SLOC, complexity issues
+    js_total = next(int(x.split()[0]) for x in top_lines("js-loc.txt") if "total" in x)
     eslint = load_json("eslint-complexity.json")
     js_issues = sum(len(f["messages"]) for f in eslint)
 
-    # Duplication (jscpd)
+    # Cross-cutting
     jscpd = load_json("jscpd/jscpd-report.json")["statistics"]["total"]
-
-    # Pyright / Any
     pyright = load_json("any-unknown-count.json")["pyright_summary"]
 
     overview = table(
-        ["Metric", "Value"],
+        ["Metric", "Python", "JavaScript"],
         [
-            ["Python LOC", tot["loc"]],
-            ["Python SLOC", tot["sloc"]],
-            ["Python comments", tot["comments"]],
-            ["JS LOC", js_total],
-            ["Python functions", len(funcs)],
-            ["Avg cyclomatic (py)", round(sum(ccs) / len(ccs), 1)],
-            ["Max cyclomatic (py)", max(ccs)],
-            ["Cyclomatic > 10 (py)", sum(1 for c in ccs if c > 10)],
-            ["Avg cognitive (py)", round(sum(cog_scores) / len(cog_scores), 1)],
-            ["Cognitive > 10 (py)", sum(1 for c in cog_scores if c > 10)],
-            ["JS complexity issues (sonarjs)", js_issues],
-            ["Coverage", f"{line_rate * 100:.1f}% (target 80%, not enforced)"],
-            ["CRAP > 30 (py)", sum(1 for c in crap if c["crap"] > 30)],
-            ["Duplicated lines (jscpd)", f"{jscpd['duplicatedLines']} ({jscpd['percentage']:.2f}%)"],
-            ["Pyright errors", pyright["errorCount"]],
-            ["Vulture findings", len(top_lines("vulture.txt"))],
-            ["Knip findings", len(top_lines("knip.txt"))],
+            ["SLOC", py_sloc, js_total],
+            ["Avg cyclomatic", round(sum(ccs) / len(ccs), 1), "-"],
+            ["Max cyclomatic", max(ccs), "-"],
+            ["Cyclomatic > 10", sum(1 for c in ccs if c > 10), "-"],
+            ["Avg cognitive", round(sum(cog_scores) / len(cog_scores), 1), "-"],
+            ["Cognitive > 10", sum(1 for c in cog_scores if c > 10), "-"],
+            ["Complexity issues (sonarjs)", "-", js_issues],
+            ["Coverage", f"{line_rate * 100:.1f}% (target 80%, not enforced)", "-"],
+            ["CRAP > 30", sum(1 for c in crap if c["crap"] > 30), "-"],
+            ["Duplicated lines", f"{jscpd['duplicatedLines']} ({jscpd['percentage']:.2f}%)", ""],
+            ["Pyright errors", pyright["errorCount"], "-"],
+            ["Dead code (vulture/knip)", f"{len(top_lines('vulture.txt'))} / {len(top_lines('knip.txt'))}", "-"],
         ],
     )
     lines += [overview, ""]
