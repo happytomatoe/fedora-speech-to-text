@@ -99,7 +99,7 @@ export class ShellHelper {
     // Escape single quotes in the command for safe shell interpolation
     const escapedCommand = command.replace(/'/g, "'\\''");
     await this.exec(
-      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | /home/testuser/.local/bin/dotoolc`
+      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | dotoolc`
     );
   }
 
@@ -308,6 +308,14 @@ export class ShellHelper {
     throw new Error(`Timeout waiting for transcription (${timeoutMs}ms)`);
   }
 
+  /** Take a full-screen screenshot via the GNOME Shell Screenshot D-Bus API
+   * (works on --use-existing VMs where we don't own the QEMU monitor socket). */
+  async dbusScreenshot(remotePath: string): Promise<void> {
+    await this.dbusExec(
+      `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${remotePath}'`
+    );
+  }
+
   /** Start GNOME Shell screencast via D-Bus. Returns the output filename. */
   async startScreencast(fileTemplate: string): Promise<string> {
     const result = await this.dbusExec(
@@ -353,7 +361,9 @@ export class ShellHelper {
   }
 }
 
-/** Quote a command for the ssh CLI (double-quoted, escaping inner double quotes). */
+/** Quote a command for the ssh CLI (single quotes, so $HOME / $(id -u)
+ * expand on the REMOTE shell — double-quote escaping turned $ into a literal
+ * and made remote expansions fail). */
 function quote(s: string): string {
-  return `"${s.replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`")}"`;
+  return "'" + s.replace(/'/g, "'\\''") + "'";
 }
