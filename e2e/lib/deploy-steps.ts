@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
 import { Deployer } from "./deploy.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
+import type { SuiteEnv } from "./env.js";
 
 // --- SSH exec helpers (sync, for quick one-off commands) ---
 
@@ -64,6 +65,8 @@ export interface DeployConfig {
   extensionUuid: string;
   testAudioFile: string;
   outputMethod?: string; // Output method to test: type, clipboard, mutter-virtual
+  /** Environment abstraction — OS/package-manager specifics live here. */
+  env: SuiteEnv;
 }
 
 // --- Deployment steps ---
@@ -76,16 +79,19 @@ const GDM_READY_TIMEOUT_MS = 240_000;
 // greeter crash-loops (glib int3 traps) and no user session ever appears,
 // so waitForGdmLogin would burn its full timeout. Writing custom.conf and
 // restarting GDM here gets autologin running before we poll.
-/** Write custom.conf for autologin and restart GDM before we poll. */
-export async function ensureGdmAutologin(deployer: Deployer, sshUser: string): Promise<void> {
+/** Write custom.conf for autologin and restart GDM before we poll.
+ * Ubuntu keeps GDM config at /etc/gdm3/custom.conf (Debian layout, unlike
+ * Fedora's /etc/gdm/custom.conf). */
+export async function ensureGdmAutologin(deployer: Deployer, sshUser: string, env: SuiteEnv): Promise<void> {
   const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
+  const gdmConfPath = env.gdmConfPath;
   try {
-    const current = await deployer.exec("cat /etc/gdm/custom.conf 2>/dev/null || true");
+    const current = await deployer.exec(`cat ${gdmConfPath} 2>/dev/null || true`);
     // WaylandEnable=true is required too: gdm 48 on Fedora 42 dropped X11
     // support, and with WaylandEnable=false it finds no X11 session desktop
     // files and SIGTRAPs in get_fallback_session_name (crash-loop).
     if (current.stdout.includes(`AutomaticLogin=${sshUser}`) && !current.stdout.includes("WaylandEnable=false")) return;
-    await deployer.exec(`echo '${gdmConf}' | sudo tee /etc/gdm/custom.conf > /dev/null`);
+    await deployer.exec(`echo '${gdmConf}' | sudo tee ${gdmConfPath} > /dev/null`);
     try {
       await deployer.exec("sudo systemctl restart gdm");
     } catch {
@@ -147,6 +153,7 @@ export async function waitForGdmLogin(deployer: Deployer): Promise<void> {
 
 /** Install VM-side test dependencies (packages, tools) via SSH. */
 export async function installDependencies(
+  env: SuiteEnv,
   _sshKey: string,
   _sshPort: number,
   _sshUser: string
@@ -155,21 +162,63 @@ export async function installDependencies(
 
   // Install GDM + GNOME Shell if not present (base cloud image is headless)
   try {
-    const gdmCheck = sshExec("rpm -q gdm 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+    const gdmCheck = sshExec(env.pkgIsInstalled("gnome-shell"), _sshKey, _sshPort, _sshUser);
     if (gdmCheck.includes("missing")) {
       console.log("  Installing GDM + GNOME Shell...");
-      sshExec("sudo dnf install -y gdm gnome-shell 2>/dev/null", _sshKey, _sshPort, _sshUser);
+      sshExec(env.pkgInstall("gdm gnome-shell gnome-session"), _sshKey, _sshPort, _sshUser);
     }
   } catch {
     // Continue — GDM install may fail on some images
   }
+
+  if (env.os === "ubuntu") {
+    // ghostty + tmux (ghostty is the terminal used in E2E; apt has a ghostty
+    // package on Ubuntu 26.04)
+    try {
+      const termCheck = sshExec("which ghostty tmux 2>/dev/null | wc -l", _sshKey, _sshPort, _sshUser);
+      if (!termCheck.includes("2")) {
+        console.log("  Installing ghostty + tmux...");
+        sshExec(env.pkgInstall("ghostty tmux") + " || " + env.pkgInstall("tmux"), _sshKey, _sshPort, _sshUser);
+      }
+    } catch {
+      // Continue — tmux may work without a terminal emulator depending on flow
+    }
+    // dotool: no Ubuntu apt package — bundled prebuilt binaries
+    // (built from git.sr.ht/~geb/dotool v1.6)
+    try {
+      const dotoolCheck = sshExec("which dotool 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+      if (dotoolCheck.includes("missing") && env.dotool.kind === "bundled") {
+        console.log("  Installing dotool (bundled binaries)...");
+        for (const bin of ["dotool", "dotoolc", "dotoold"]) {
+          scpToVm(join(env.dotool.dir, "bin", bin), `/tmp/${bin}`, _sshKey, _sshPort, _sshUser);
+        }
+        sshExec("sudo install -m755 /tmp/dotool /tmp/dotoolc /tmp/dotoold /usr/local/bin/ && rm -f /tmp/dotool /tmp/dotoolc /tmp/dotoold", _sshKey, _sshPort, _sshUser);
+      }
+    } catch {
+      // Continue — dotoold start may fail with clear error
+    }
+    // uv (Python package manager, used to run the voice service)
+    try {
+      const uvCheck = sshExec("which uv 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+      if (uvCheck.includes("missing")) {
+        console.log("  Installing uv...");
+        sshExec("curl -LsSf https://astral.sh/uv/install.sh | sh > /tmp/uv-install.log 2>&1", _sshKey, _sshPort, _sshUser);
+      }
+    } catch {
+      // Continue — service start will surface a clear error if uv is missing
+    }
+    console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
+    return;
+  }
+
+  // --- Fedora path ---
 
   // Install gnome-terminal if not present (needed for tmux in E2E tests)
   try {
     const termCheck = sshExec("which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
     if (termCheck.includes("missing")) {
       console.log("  Installing gnome-terminal...");
-      sshExec("sudo dnf install -y gnome-terminal 2>/dev/null", _sshKey, _sshPort, _sshUser);
+      sshExec(env.pkgInstall("gnome-terminal"), _sshKey, _sshPort, _sshUser);
     }
   } catch {
     // Continue — tmux may work without it depending on test flow
@@ -179,7 +228,7 @@ export async function installDependencies(
     const ghosttyCheck = sshExec("which ghostty 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
     if (ghosttyCheck.includes("missing")) {
       console.log("  Installing Ghostty via COPR...");
-      sshExec("sudo dnf copr enable -y scottames/ghostty 2>/dev/null && sudo dnf install -y ghostty 2>/dev/null", _sshKey, _sshPort, _sshUser);
+      sshExec("sudo dnf copr enable -y scottames/ghostty 2>/dev/null && " + env.pkgInstall("ghostty"), _sshKey, _sshPort, _sshUser);
     }
   } catch {
     // Continue — Ghostty install may fail, fall back to gnome-terminal
@@ -261,7 +310,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   // Ensure GDM auto-login is configured (base image may not have it)
   const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${cfg.sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
   try {
-    sshExec(`echo '${gdmConf}' | sudo tee /etc/gdm/custom.conf > /dev/null`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
+    sshExec(`echo '${gdmConf}' | sudo tee ${cfg.env.gdmConfPath} > /dev/null`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
   } catch {
     // May fail if already configured — continue
   }
@@ -431,7 +480,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   } catch {
     // Best effort — may fail if udev rule already set permissions
   }
-  // Kill existing dotoold and remove stale pipe before starting fresh
+  // Kill existing dotoold and remove stale pipe before starting fresh.
+  // Kill by process NAME, not -f: pkill -f matches this very bash's own
+  // cmdline (the pattern text is in its argv) and SIGKILLs the session.
   try {
     await shell.exec("pkill -f dotoold; rm -f /run/user/$(id -u)/dotool-pipe; sleep 0.5");
   } catch {
@@ -484,8 +535,14 @@ export async function startVoiceService(
     console.log("  Skipping Python deps install (golden image)");
   } else {
   console.log("Installing Python dependencies...");
+  // Ubuntu 26.04: PEP 668 externally-managed + root-owned dist-packages and
+  // no pip module. uv (installed to ~/.local/bin) with sudo --system +
+  // --break-system-packages is the working path; plain uv does not support
+  // --user installs.
+  const uvPrefix = cfg.env.uvSystemInstall ? "sudo " : "";
+  const uvExtra = cfg.env.uvSystemInstall ? " --break-system-packages" : "";
   const uvResult = await shell.exec(
-    "$HOME/.local/bin/uv pip install --system --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__"
+    `${uvPrefix}$HOME/.local/bin/uv pip install --system${uvExtra} --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__`
   );
   if (!uvResult.includes("__UV_OK__")) {
     // Fallback to pip if uv not available / network constrained
@@ -504,17 +561,18 @@ export async function startVoiceService(
   }
   }
 
-  // portaudio-devel (for sounddevice) is provided by the golden image; only
+  // portaudio (for sounddevice) is provided by the Fedora golden image; only
   // install it when we're not relying on that pre-provisioned image.
   if (!skipDeps) {
     try {
-      const paCheck = sshExec("rpm -q portaudio-devel 2>/dev/null || echo missing", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      const paPkg = cfg.env.os === "ubuntu" ? "portaudio19-dev" : "portaudio-devel";
+      const paCheck = sshExec(cfg.env.pkgIsInstalled(paPkg), cfg.sshKey, cfg.sshPort, cfg.sshUser);
       if (paCheck.includes("missing")) {
-        console.log("  Installing portaudio-devel...");
-        sshExec("sudo dnf install -y portaudio-devel 2>/dev/null", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+        console.log(`  Installing ${paPkg}...`);
+        sshExec(cfg.env.pkgInstall(paPkg), cfg.sshKey, cfg.sshPort, cfg.sshUser);
       }
     } catch {
-      // Continue — sounddevice install may fail with clear error
+      // Continue — sounddevice import failure will surface at service start
     }
   }
 

@@ -1,4 +1,5 @@
 import { ensureParakeet } from "./lib/parakeet.js";
+import { resolveEnv, type EnvName } from "./lib/env.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, readdirSync, statSync } from "node:fs";
 import { PNG } from "pngjs";
@@ -220,6 +221,9 @@ const CONFIG = {
     vmBoot: 120000,
   },
 };
+
+// Resolved environment (env interface lives in lib/env.ts)
+const SUITE_ENV = resolveEnv(import.meta.dir, ENV as EnvName, USE_EXISTING);
 
 // Derived constants
 const PROJECT_ROOT = CONFIG.paths.projectRoot;
@@ -945,6 +949,8 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     recordMode: RECORD_MODE,
     updateMode: UPDATE_MODE,
+    existingSshPort: USE_EXISTING && IS_UBUNTU ? SUITE_ENV.existingSshPort : undefined,
+    preserveArtifacts: true,
   });
   console.log(`Run ID: ${run.id}`);
   console.log(`Output directory: ${run.outputDir}`);
@@ -965,6 +971,8 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    env: SUITE_ENV,
+    useExisting: USE_EXISTING,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -1006,6 +1014,7 @@ async function main(): Promise<void> {
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
       skipDeps: SKIP_DEPS,
+      env: SUITE_ENV,
     });
     
     const results = await runner.runAll();

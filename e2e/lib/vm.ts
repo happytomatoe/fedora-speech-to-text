@@ -27,11 +27,15 @@ export interface VmConfig {
   pythonSrc: string;
   fixtureDir: string;
   extensionUuid: string;
-  recordMode: boolean;
-  updateMode: boolean;
+  recordMode?: boolean;
+  updateMode?: boolean;
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  /** Environment abstraction — OS/boot specifics live here. */
+  env: SuiteEnv;
+  /** Attach to an already-running VM instead of booting (CI-failure repro). */
+  useExisting?: boolean;
 }
 
 export class VmManager {
@@ -67,6 +71,7 @@ export class VmManager {
       extensionUuid: config.extensionUuid,
       testAudioFile: config.testAudioFile,
       outputMethod: config.outputMethod,
+      env: config.env,
     };
   }
 
@@ -265,7 +270,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
-      await ensureGdmAutologin(this.deployer, this.config.sshUser);
+      await ensureGdmAutologin(this.deployer, this.config.sshUser, this.config.env);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
@@ -281,7 +286,7 @@ export class VmManager {
       const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
       console.log(`  Skipping installDependencies (${reason})`);
     } else {
-      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await installDependencies(this.config.env, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
@@ -314,7 +319,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
-      await ensureGdmAutologin(this.deployer, this.config.sshUser);
+      await ensureGdmAutologin(this.deployer, this.config.sshUser, this.config.env);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");

@@ -1,4 +1,4 @@
-import { rmSync, existsSync, mkdirSync } from "node:fs";
+import { rmSync, existsSync, mkdirSync, cpSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
@@ -12,11 +12,16 @@ export interface RunConfig {
   fixtureDir: string;
   extensionUuid: string;
   testAudioFile: string;
-  recordMode: boolean;
-  updateMode: boolean;
+  recordMode?: boolean;
+  updateMode?: boolean;
+  /** Attach to an existing VM instead of allocating a fresh port. */
+  existingSshPort?: number;
+  /** Preserve run artifacts into output/ on cleanup. */
+  preserveArtifacts?: boolean;
 }
 
 export class RunContext {
+  private readonly config!: RunConfig;
   readonly id: string;
   readonly runDir: string;
   readonly overlayImage: string;
@@ -79,6 +84,11 @@ export class RunContext {
       return;
     }
     try {
+      if (this.config.preserveArtifacts && existsSync(this.outputDir)) {
+        const suiteOutput = join(this.runDir, "..", "..", "output");
+        mkdirSync(suiteOutput, { recursive: true });
+        cpSync(this.outputDir, join(suiteOutput, this.id), { recursive: true });
+      }
       rmSync(this.runDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
