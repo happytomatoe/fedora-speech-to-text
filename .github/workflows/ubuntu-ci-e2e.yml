@@ -8,7 +8,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ubuntu-ci-e2e.yml"
-      - "e2e-ubuntu-ci/**"
+      - "e2e/**"
       - "e2e-vm/setup-vm.sh"
       - "gnome-ext/**"
       - "src/voice_to_text/**"
@@ -35,10 +35,10 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Build golden image (pinned resolute + CI apt list + GDM autologin)
-        run: just ubuntu-ci-e2e-setup
+        run: just e2e-setup-ubuntu
 
-      - name: Run E2E suite
-        run: just ubuntu-ci-e2e
+      - name: Run E2E suite (ubuntu-ci)
+        run: just e2e ubuntu-ci
 
       - name: Upload artifacts
         if: always()
@@ -46,6 +46,5 @@ jobs:
         with:
           name: e2e-artifacts
           path: |
-            e2e-ubuntu-ci/output/
-            e2e-ubuntu-ci/output/e2e.log
+            e2e/output/
           if-no-files-found: warn

@@ -1038,11 +1038,20 @@ qemu-e2e-update-ts:
 e2e *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    env="fedora-local"
+    if [[ "${1:-}" =~ ^(fedora-local|ubuntu-local|ubuntu-ci)$ ]]; then
+      env="$1"; shift
+    fi
     cd e2e
     LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
     : > "$LOG"
-    bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
-    exit ${PIPESTATUS[0]}
+    if [[ "$env" == "fedora-local" ]]; then
+      bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
+      exit ${PIPESTATUS[0]}
+    else
+      bun run e2e.ts --env "$env" {{ ARGS }} 2>&1 | tee "$LOG"
+      exit ${PIPESTATUS[0]}
+    fi
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
@@ -1152,27 +1161,19 @@ ego-lint:
 ubuntu-vm-setup:
     ./e2e-vm/setup-vm.sh
 
-# @category e2e-ubuntu-ci
-# Ubuntu CI E2E suite: run the basic test against a fresh pinned-image VM
-# (CI-identical path). Passthrough args: just ubuntu-ci-e2e -- --use-existing
-# attaches to the already-running ubuntu-vm VM instead (CI-failure repro).
-ubuntu-ci-e2e *args='':
-    cd e2e-ubuntu-ci && bun install --silent && bun run e2e.ts {{ args }}
+# @category e2e
+# First-time setup for the Ubuntu env of the unified suite: pinned resolute
+# cloud image + golden customization + ssh key (same URL/recipe as CI).
+e2e-setup-ubuntu:
+    ./e2e/setup-ubuntu-vm.sh
 
-# @category e2e-ubuntu-ci
-# First-time setup for the Ubuntu CI E2E suite: pinned resolute cloud image +
-# golden customization + ssh key (same URL/recipe as CI uses).
+# @category e2e-ubuntu-ci (LEGACY - forwards to the unified suite)
+ubuntu-ci-e2e *args='':
+    just e2e ubuntu-ci {{ args }}
+
+# @category e2e-ubuntu-ci (LEGACY)
 ubuntu-ci-e2e-setup:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd e2e-ubuntu-ci
-    [ -f golden-ubuntu-2604.qcow2 ] && { echo "golden image already exists"; exit 0; }
-    # Reuse the e2e-vm setup: identical pinned image + apt package list + GDM
-    # autologin. Copy the result so both suites own their artifacts.
-    bash ../e2e-vm/setup-vm.sh
-    cp ../e2e-vm/golden-ubuntu-2604.qcow2 .
-    cp ../e2e-vm/id_ed25519 ../e2e-vm/id_ed25519.pub .
-    echo "e2e-ubuntu-ci golden image ready"
+    just e2e-setup-ubuntu
 
 # @category e2e-vm
 # Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent).
