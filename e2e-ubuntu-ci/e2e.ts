@@ -781,7 +781,16 @@ async function main(): Promise<void> {
   } finally {
     // A failing test (testsFailed>0) or global timeout must leave the VM
     // alive for triage — evaluated here, after the run, not at startup.
-    const keepVmForTriage = KEEP_VM_FLAG || process.exitCode !== 0 || testsFailed > 0 || timedOut;
+    const keepVmForTriage = KEEP_VM_FLAG || (process.exitCode ?? 0) !== 0 || testsFailed > 0 || timedOut;
+    if (keepVmForTriage && !USE_EXISTING) {
+      const reasons = [
+        KEEP_VM_FLAG && "--keep-vm",
+        process.exitCode !== 0 && `exitCode=${process.exitCode}`,
+        testsFailed > 0 && `${testsFailed} test(s) failed`,
+        timedOut && "global timeout",
+      ].filter(Boolean);
+      console.log(`\n(keep-vm reasons: ${reasons.join(", ")})`);
+    }
     if (!keepVmForTriage && !USE_EXISTING) {
       // Hard cap on shutdown: QEMU monitor / ssh2 teardown can hang forever on
       // a dead socket. Never let cleanup block the exit code.
