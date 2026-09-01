@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: "23 3 * * 1" # Mondays 03:23 UTC (off-minute avoids the :00 stampede)
   workflow_dispatch:
+  push:
+    branches:
+      - metrics/add-quality-tooling
 
 jobs:
   python-mutmut:
