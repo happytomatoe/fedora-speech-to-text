@@ -1153,9 +1153,10 @@ ubuntu-vm-setup:
     ./e2e-vm/setup-vm.sh
 
 # @category e2e-vm
-# Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent)
-ubuntu-vm-boot:
-    ./e2e-vm/boot-vm.sh
+# Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent).
+# Overlay persists across runs; `just ubuntu-vm-boot fresh` resets to golden image.
+ubuntu-vm-boot *args='':
+    ./e2e-vm/boot-vm.sh {{args}}
 
 # @category e2e-vm
 # Local CI-parity: boot the Ubuntu 26.04 VM with a visible desktop window

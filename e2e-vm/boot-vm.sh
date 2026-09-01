@@ -15,8 +15,36 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
 fi
 [ -f "$IMAGE" ] || { echo "Run e2e-vm/setup-vm.sh first" >&2; exit 1; }
 
-rm -f "$OVERLAY"
-qemu-img create -f qcow2 -b "$IMAGE" -F qcow2 "$OVERLAY" > /dev/null
+# Overlay persists across runs (caches uv/bun deps — harness bus-wait timeout
+# is 30s; a wiped home means uv re-downloads and the service misses it).
+# Pass fresh=1 to reset to the golden image.
+if [ "${1:-}" = "fresh" ] || [ ! -f "$OVERLAY" ]; then
+  rm -f "$OVERLAY"
+  qemu-img create -f qcow2 -b "$IMAGE" -F qcow2 "$OVERLAY" > /dev/null
+  echo "overlay created from golden image"
+fi
+
+# Internal snapshot support:
+#   boot-vm.sh snapshot save <name>  — must be run while VM is running
+#   boot-vm.sh snapshot load <name>  — stops VM, reverts overlay to snapshot
+#   boot-vm.sh snapshot list
+# Snapshots live inside overlay.qcow2 (qemu internal snapshots).
+case "${1:-}" in
+  snapshot)
+    cmd="${2:-list}"; name="${3:-}"
+    if [ "$cmd" = "list" ]; then
+      printf 'info snapshots\n' | timeout 5 socat - unix:"$MONITOR" 2>/dev/null | grep -E '^\s+[0-9]' || echo "(VM not running — use qemu-img: qemu-img snapshot -l $OVERLAY)"
+    elif [ -z "$name" ]; then
+      echo "usage: boot-vm.sh snapshot save|load <name>" >&2; exit 1
+    elif [ "$cmd" = "save" ]; then
+      printf 'savevm %s\n' "$name" | timeout 30 socat - unix:"$MONITOR" >/dev/null 2>&1 && echo "snapshot '$name' saved"
+    elif [ "$cmd" = "load" ]; then
+      [ -f "$PID_FILE" ] && kill "$(cat "$PID_FILE")" 2>/dev/null && sleep 2
+      qemu-img snapshot -a "$name" "$OVERLAY" && echo "reverted to snapshot '$name'"
+    fi
+    exit 0
+    ;;
+esac
 
 cd "$VM_DIR"
 qemu-system-x86_64 \
