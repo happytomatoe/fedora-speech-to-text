@@ -91,6 +91,17 @@ export class VmManager {
   }
 
   async boot(loadvmTag?: string): Promise<void> {
+    if (this.config.useExisting) {
+      // Attach mode: an externally-managed VM (e.g. e2e-vm/boot-vm.sh parity
+      // VM) is already running — no QEMU lifecycle of our own. waitForSsh
+      // does the reachability check; setup() skips GDM wait (already logged
+      // in) and QEMU-monitor screenshots fall back to D-Bus (no socket of
+      // ours). Used to reproduce CI failures against the same image.
+      console.log("Using existing VM (no boot)... --use-existing");
+      this.booted = false;
+      this.freshlyBooted = false;
+      return;
+    }
     const { baseImage, vmDir, updateMode } = this.config;
     const { socketPath, overlayImage, sshPort } = this.config.run;
 
