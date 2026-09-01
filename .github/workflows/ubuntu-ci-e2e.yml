@@ -1,0 +1,51 @@
+# E2E on Ubuntu 26.04 — CI-identical path: boots the SAME pinned resolute
+# cloud image the local suite uses, deploys the extension, runs the basic
+# record → transcribe → typed test inside QEMU (runner exposes /dev/kvm).
+name: ubuntu-ci-e2e
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/ubuntu-ci-e2e.yml"
+      - "e2e-ubuntu-ci/**"
+      - "e2e-vm/setup-vm.sh"
+      - "gnome-ext/**"
+      - "src/voice_to_text/**"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install virtualization + image tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils libguestfs-tools wget
+
+      - name: Set up just, uv, bun
+        run: |
+          curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build golden image (pinned resolute + CI apt list + GDM autologin)
+        run: just ubuntu-ci-e2e-setup
+
+      - name: Run E2E suite
+        run: just ubuntu-ci-e2e
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e-ubuntu-ci/output/
+            e2e-ubuntu-ci/output/e2e.log
+          if-no-files-found: warn
