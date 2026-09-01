@@ -743,7 +743,7 @@ async function main(): Promise<void> {
       console.log("\nExisting VM left running (--use-existing).");
       vm.shutdown().catch(() => {});
     } else {
-      console.log("\nVM kept running (pass --keep-vm to leave it up)");
+      console.log("\nVM kept running (failed run or --keep-vm) for triage.");
       console.log(`SSH: ssh -i ${SSH_KEY} -p ${run.sshPort} ${SSH_USER}@localhost`);
     }
   }
