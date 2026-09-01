@@ -1184,6 +1184,17 @@ ubuntu-vm-boot-gui:
     echo "Ubuntu 26.04 desktop window open (GDM auto-login: testuser), SSH on :2222"
 
 # @category e2e-vm
+# Full local CI-parity cycle: boot Ubuntu 26.04 VM (if not running) + Parakeet
+# + run the CI harness + stop the VM. Add GUI=1 for a visible desktop window.
+ubuntu-vm-test GUI='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just ubuntu-vm-{{ if GUI == "1" { "boot-gui" } else { "boot" } }}
+    trap 'just ubuntu-vm-kill' EXIT
+    just ubuntu-vm-parakeet
+    just ubuntu-vm-run
+
+# @category e2e-vm
 # Local CI-parity: run the CI harness (ci-e2e-headless.sh) inside the VM.
 # Requires Parakeet on the host: just ubuntu-vm-parakeet
 ubuntu-vm-run:
