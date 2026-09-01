@@ -1174,6 +1174,7 @@ metrics:
     uv run vulture src/ --min-confidence 80 > metrics-report/vulture.txt || true
     # Both: duplicate code
     bunx jscpd src/ gnome-ext/ --reporters json --output metrics-report/jscpd --min-tokens 50 --silent || true
+    uv run python metrics/metrics_summary.py
     echo "Metrics reports written to metrics-report/"
 
 # @category metrics

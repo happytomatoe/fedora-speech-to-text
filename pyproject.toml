@@ -42,6 +42,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "PT", "PERF", "PL", "D", "SI
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "PLC0415", "PLR2004"]
+"metrics/**" = ["D100", "D103", "PLR2004", "E741"]
 
 [tool.mypy]
 ignore_missing_imports = true
