@@ -110,3 +110,25 @@ jobs:
 
       - name: Run tests
         run: uv run python -m pytest
+
+  js-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Complexity (sonarjs, threshold 22)
+        run: npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --max-warnings 0 'gnome-ext/**/*.js'
+
+      - name: Dead code (knip)
+        run: bunx knip
+
+      - name: Duplication (jscpd, max 1%)
+        run: bunx jscpd src/ gnome-ext/ --min-tokens 50 --threshold 1 --silent

@@ -1165,7 +1165,7 @@ metrics:
     uv run pyright --outputjson src/ > metrics-report/pyright.json || true
     uv run python -c "import json,subprocess; d=json.load(open('metrics-report/pyright.json')); out=subprocess.run(['grep','-rn','\\bAny\\b','src/'],capture_output=True,text=True).stdout; open('metrics-report/any-unknown-count.json','w').write(json.dumps({'pyright_summary':d['summary'],'explicit_Any_occurrences_grep':len(out.splitlines())},indent=2))"
     # JS: cyclomatic + cognitive via sonarjs rules (metrics-only ESLint)
-    npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --format json gnome-ext/ > metrics-report/eslint-complexity.json || true
+    npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --format json 'gnome-ext/**/*.js' > metrics-report/eslint-complexity.json || true
     # JS: LOC
     find gnome-ext -name '*.js' -not -path '*/tests/*' -not -path '*/vendor/*' | xargs wc -l | sort -rn > metrics-report/js-loc.txt
     # JS: dead code (knip)
@@ -1225,4 +1225,4 @@ metrics-types:
 # @category metrics
 # Run mutation testing on src/ (long: possibly hours; parallel across cores)
 mutants:
-    uv run mutmut run --max-children 8
+    uv run mutmut run --max-children 4

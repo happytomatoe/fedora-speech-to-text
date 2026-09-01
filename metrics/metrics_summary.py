@@ -1,6 +1,7 @@
 """Render a formatted summary table from the reports in metrics-report/."""
 
 import json
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -25,6 +26,14 @@ def table(headers, rows):
     out += [fmt_row(r, widths) for r in rows]
     out.append(sep)
     return "\n".join(out)
+
+
+def short_msg(msg):
+    # sonarjs cyclomatic rule packs a JSON blob into the message; extract the number
+    if '"' in msg:
+        m = re.search(r"complexity of (\d+) which is greater than (\d+)", msg)
+        return f"cyclomatic {m.group(1)} > {m.group(2)}" if m else msg
+    return msg.replace("Refactor this function to reduce its ", "").replace(" allowed.", "")
 
 
 def top_lines(name, n=5):
@@ -62,7 +71,7 @@ def main():
     # JS: SLOC, complexity issues
     js_total = next(int(x.split()[0]) for x in top_lines("js-loc.txt") if "total" in x)
     eslint = load_json("eslint-complexity.json")
-    js_issues = sum(len(f["messages"]) for f in eslint)
+    js_issues = [m for f in eslint for m in f["messages"] if m.get("ruleId")]
 
     # Cross-cutting
     jscpd = load_json("jscpd/jscpd-report.json")["statistics"]["total"]
@@ -77,7 +86,7 @@ def main():
             ["Cyclomatic > 10", sum(1 for c in ccs if c > 10), "-"],
             ["Avg cognitive", round(sum(cog_scores) / len(cog_scores), 1), "-"],
             ["Cognitive > 10", sum(1 for c in cog_scores if c > 10), "-"],
-            ["Complexity issues (sonarjs)", "-", js_issues],
+            ["Complexity issues > 22 (sonarjs)", "-", len(js_issues)],
             ["Coverage", f"{line_rate * 100:.1f}% (target 80%, not enforced)", "-"],
             ["CRAP > 30", sum(1 for c in crap if c["crap"] > 30), "-"],
             ["Duplicated lines", f"{jscpd['duplicatedLines']} ({jscpd['percentage']:.2f}%)", ""],
@@ -101,9 +110,19 @@ def main():
     ]
     lines += ["## Top CRAP score (Python)", table(["Function", "File", "CC", "Cov", "CRAP"], rows), ""]
 
-    rows = [[f["filePath"].split("/")[-1], m["ruleId"], m["line"]] for f in eslint for m in f["messages"]][:5]
+    rows = [
+        [
+            f["filePath"].split("/")[-1],
+            m["ruleId"].split("/")[-1],
+            m["line"],
+            short_msg(m["message"]),
+        ]
+        for f in eslint
+        for m in f["messages"]
+        if m.get("ruleId")
+    ]
     if rows:
-        lines += ["## JS complexity issues (sonarjs, top 5)", table(["File", "Rule", "Line"], rows), ""]
+        lines += ["## JS complexity issues (sonarjs)", table(["File", "Rule", "Line", "Detail"], rows), ""]
 
     print("\n".join(lines))
 
