@@ -39,12 +39,18 @@ const UPDATE_MODE = args.includes("--update");
 // forces it even after a PASS. Screenshots/recording land in run output (and
 // are copied to output/<run-id>/ by cleanup); serial console + e2e.log are
 // always preserved.
-const KEEP_VM = args.includes("--keep-vm") || process.exitCode !== 0;
+// KEEP_VM is re-evaluated in the finally block (keepVmForTriage) — the const
+// here only captures the flag, because process.exitCode is set later by
+// failures, not at startup.
+const KEEP_VM_FLAG = args.includes("--keep-vm");
 const SKIP_DEPS = args.includes("--skip-deps");
 // --use-existing: attach to an already-running VM (e.g. e2e-vm/boot-vm.sh)
 // instead of booting a fresh one — for reproducing CI failures locally
 // against the same VM/image.
 const USE_EXISTING = args.includes("--use-existing");
+// Monitor socket of the e2e-vm-managed VM — used as screenshot fallback in
+// --use-existing mode (D-Bus screenshot is AccessDenied in the SSH session).
+const EXISTING_MONITOR_SOCKET = "/home/l/git/fstt-ci-headless-e2e/e2e-vm/qemu-monitor.sock";
 
 // Parse --timeout <seconds> (default: 600)
 const timeoutIdx = args.indexOf("--timeout");
@@ -507,13 +513,37 @@ async function captureScreenshot(label: string, run: RunContext, vm?: VmManager)
       // QemuMonitor (HMP over the monitor socket)
       await vm.qemu.screendump(ppmPath);
     } else {
-      // In-VM screenshot via GNOME Shell Screenshot D-Bus, then pull it
-      const remotePng = `/tmp/e2e-shot-${label}.png`;
-      await vm!.shell.dbusScreenshot(remotePng);
-      execSync(
-        `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} ${SSH_USER}@localhost:${remotePng} ${pngPath}`,
-        { encoding: "utf-8", timeout: 15000, stdio: "pipe" }
-      );
+      // In-VM screenshot via GNOME Shell Screenshot D-Bus, then pull it.
+      // May be AccessDenied in the SSH session (screenshot portal policy).
+      let gotDbus = false;
+      try {
+        const remotePng = `/tmp/e2e-shot-${label}.png`;
+        await vm!.shell.dbusScreenshot(remotePng);
+        execSync(
+          `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} ${SSH_USER}@localhost:${remotePng} ${pngPath}`,
+          { encoding: "utf-8", timeout: 15000, stdio: "pipe" }
+        );
+        gotDbus = existsSync(pngPath);
+      } catch (e) {
+        console.log(`  D-Bus screenshot failed (${e instanceof Error ? e.message.split("\n")[0] : e}), falling back to QEMU monitor screendump`);
+      }
+      if (!gotDbus) {
+        // Fall back to the e2e-vm QEMU monitor socket — the existing VM is
+        // exactly the one e2e-vm/boot-vm.sh started, so its HMP screendump
+        // shows the same screen the test just drove.
+        try {
+          const fallback = new (require("./lib/qemu.js").QemuMonitor)(EXISTING_MONITOR_SOCKET);
+          await fallback.connect(5000);
+          await fallback.screendump(ppmPath);
+          fallback.close();
+          execSync(`convert ${ppmPath} ${pngPath} 2>/dev/null || magick ${ppmPath} ${pngPath} 2>/dev/null || true`, {
+            encoding: "utf-8", timeout: 5000
+          });
+          execSync(`rm -f ${ppmPath}`, { encoding: "utf-8" });
+        } catch (e) {
+          console.log(`  QEMU screendump fallback failed: ${e instanceof Error ? e.message : e}`);
+        }
+      }
       if (existsSync(pngPath)) {
         console.log(`  Screenshot saved: ${pngPath}`);
         return pngPath;
@@ -728,7 +758,10 @@ async function main(): Promise<void> {
     // which phase died (and how long it hung before dying).
     printTimingTree();
   } finally {
-    if (!KEEP_VM && !USE_EXISTING) {
+    // A failing test (testsFailed>0) or global timeout must leave the VM
+    // alive for triage — evaluated here, after the run, not at startup.
+    const keepVmForTriage = KEEP_VM_FLAG || process.exitCode !== 0 || testsFailed > 0 || timedOut;
+    if (!keepVmForTriage && !USE_EXISTING) {
       // Hard cap on shutdown: QEMU monitor / ssh2 teardown can hang forever on
       // a dead socket. Never let cleanup block the exit code.
       beginSpan("vm-shutdown");
