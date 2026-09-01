@@ -22,7 +22,7 @@ on:
       - ".github/workflows/poc-ubuntu-26-04-debug.yml"
       - ".github/workflows/scripts/ci-e2e-headless.sh"
       - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
-      - "ci-e2e/**"
+      - "e2e-vm/**"
       - "gnome-ext/**"
       - "src/voice_to_text/**"
 
@@ -64,9 +64,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Install ci-e2e dependencies
-        run: cd ci-e2e && bun install
-
+      - name: Install test-runner dependencies
       - name: Start Parakeet + boot headless GNOME Shell + run E2E
         run: |
           bash .github/workflows/scripts/ci-e2e-headless.sh \
