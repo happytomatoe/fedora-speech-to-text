@@ -20,6 +20,7 @@ export default [
         rules: {
             'sonarjs/cognitive-complexity': ['warn', 22],
             'sonarjs/cyclomatic-complexity': ['warn', { threshold: 22 }],
+            'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
         },
     },
 ];
