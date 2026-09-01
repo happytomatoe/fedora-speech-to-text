@@ -65,4 +65,13 @@ dev = [
     "types-requests",
     "types-PyYAML",
     "vulture>=2.16",
+    "radon>=6.0.1",
+    "complexipy>=7.0.1",
+    "pytest-cov>=7.1.0",
+    "mutmut>=3.7.0",
 ]
+
+[tool.mutmut]
+source_paths = ["src/voice_to_text/"]
+also_copy = ["config.yaml", "service/", "gnome-ext/"]
+tests_dir = ["tests/"]

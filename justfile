@@ -1146,3 +1146,37 @@ ego-lint:
     ./scripts/ego-lint --show=fail,warn gnome-ext/
     echo ""
     echo "=== EGO Review Complete ==="
+
+# @category metrics
+# Run all code-quality metric tools (measurement only, reports in metrics-report/)
+metrics:
+    mkdir -p metrics-report
+    # Python: cyclomatic + Halstead + SLOC
+    uv run radon cc -s -j src/ > metrics-report/radon-cc.json
+    uv run radon hal src/ -j > metrics-report/radon-hal.json
+    uv run radon raw -j src/ > metrics-report/radon-raw.json
+    # Python: cognitive complexity
+    uv run complexipy src/ --output metrics-report --output-format json -q || true
+    # Python: coverage (target 80%, not enforced)
+    uv run pytest -q --cov=src/voice_to_text --cov-report=xml:metrics-report/coverage.xml --cov-report=term-missing -p no:cacheprovider || true
+    # Python: CRAP from radon CC + coverage
+    uv run python metrics/crap_check.py
+    # Python: explicit Any occurrences (pyright config unchanged)
+    uv run pyright --outputjson src/ > metrics-report/pyright.json || true
+    uv run python -c "import json,subprocess; d=json.load(open('metrics-report/pyright.json')); out=subprocess.run(['grep','-rn','\\bAny\\b','src/'],capture_output=True,text=True).stdout; open('metrics-report/any-unknown-count.json','w').write(json.dumps({'pyright_summary':d['summary'],'explicit_Any_occurrences_grep':len(out.splitlines())},indent=2))"
+    # JS: cyclomatic + cognitive via sonarjs rules (metrics-only ESLint)
+    npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --format json gnome-ext/ > metrics-report/eslint-complexity.json || true
+    # JS: LOC
+    find gnome-ext -name '*.js' -not -path '*/tests/*' -not -path '*/vendor/*' | xargs wc -l | sort -rn > metrics-report/js-loc.txt
+    # JS: dead code (knip)
+    bunx knip > metrics-report/knip.txt || true
+    # Python: dead code (vulture)
+    uv run vulture src/ --min-confidence 80 > metrics-report/vulture.txt || true
+    # Both: duplicate code
+    bunx jscpd src/ gnome-ext/ --reporters json --output metrics-report/jscpd --min-tokens 50 --silent || true
+    echo "Metrics reports written to metrics-report/"
+
+# @category metrics
+# Run mutation testing on src/ (long: possibly hours; parallel across cores)
+mutants:
+    uv run mutmut run --max-children 8
