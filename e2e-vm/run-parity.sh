@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "$VM_DIR/.." && pwd)"
 OUT="$VM_DIR/output"
 SSH_CMD="ssh -p 2222 -i $VM_DIR/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null testuser@localhost"
 SSH="$SSH_CMD"
-mkdir -p "$OUT"
+mkdir -p "$OUT/common"
 
 # 1. bun + uv in the VM (idempotent)
 $SSH 'command -v bun >/dev/null || (curl -fsSL https://bun.sh/install | bash); command -v uv >/dev/null || (curl -LsSf https://astral.sh/uv/install.sh | sh)' 2>/dev/null
@@ -43,23 +43,17 @@ $SSH 'pactl info >/dev/null 2>&1 || (pulseaudio -D --exit-idle-time=-1 --disallo
 # shim satisfies the harness's runtime check and no-ops its container steps.
 $SSH 'command -v docker >/dev/null || printf "#!/bin/sh\nexit 0\n" | sudo tee /usr/local/bin/docker >/dev/null && sudo chmod +x /usr/local/bin/docker'
 
-# 4c. Screenshot helper: QEMU monitor screendump (works headless, no unsafe mode).
-#     Output mirrors e2e/ layout: output/common/screenshot-<NN>-<label>.png
-shot() {
-  local label="$1"
-  mkdir -p "$OUT/common"
-  printf 'screendump %s\n' "$OUT/common/.tmp-shot.ppm" | timeout 10 socat - unix:"$VM_DIR/qemu-monitor.sock" >/dev/null 2>&1
-  if [ -s "$OUT/common/.tmp-shot.ppm" ]; then
-    python3 -c "from PIL import Image; Image.open('$OUT/common/.tmp-shot.ppm').save('$OUT/common/screenshot-$label.png')" 2>/dev/null \
-      || echo "WARN: ppm->png conversion failed for $label"
-    rm -f "$OUT/common/.tmp-shot.ppm"
-  else
-    echo "WARN: screendump failed for $label"
-  fi
-}
+# 4c-b. Reclaim space: each harness run leaves a ~286MB isolated HOME in /tmp;
+# the 2GB tmpfs fills after ~5 runs (disk-quota failures mid-run).
+$SSH 'rm -rf /tmp/tmp.??????????/ 2>/dev/null; true'
 
-# 1. Desktop before anything runs (pre-harness idle state)
-shot 01-desktop
+# 4c. Screenshot naming mirrors e2e/ layout: output/common/screenshot-<NN>-<label>.png
+#     All shots are taken inside the harness via org.gnome.Shell.Screenshot
+#     (the VM runs with -display none, so QEMU monitor screendumps are blank).
+
+# 1. (01-desktop before-shot is taken inside the harness via
+#     org.gnome.Shell.Screenshot — see step 6. -display none makes monitor
+#     screendumps blank.)
 
 # 5. Run the CI harness unchanged (GITHUB_WORKSPACE required: the script's
 #    dirname fallback breaks because we invoke it via its repo-relative path
@@ -67,17 +61,15 @@ shot 01-desktop
 $SSH 'cd ~/repo && export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH && GITHUB_WORKSPACE=$HOME/repo bash .github/workflows/scripts/ci-e2e-headless.sh ~/parity-screenshot.png 2>&1' | tee "$OUT/harness.log"
 TEST_EXIT=${PIPESTATUS[0]}
 
-# 6. Pull harness-side screenshots (during = 04-recording-started,
-#    after = 05-transcription-received, both taken inside the harness)
-for pair in "during 04-recording-started" "after 05-transcription-received"; do
+# 6. Pull harness-side screenshots (in-shell org.gnome.Shell.Screenshot —
+#    the VM runs with -display none, so QEMU monitor screendumps are blank).
+#    before = 01-desktop, during = 04-recording-started, after = 05-transcription-received
+for pair in "before 01-desktop" "during 04-recording-started" "after 05-transcription-received"; do
   set -- $pair
   scp -q -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     "testuser@localhost:~/parity-screenshot-$1.png" "$OUT/common/screenshot-$2.png" 2>/dev/null \
     || echo "WARN: no $1 screenshot"
 done
-
-# 7. After-state screendump from the monitor (06-recording-stopped)
-shot 06-recording-stopped
 
 echo "exit=$TEST_EXIT"
 exit "$TEST_EXIT"
