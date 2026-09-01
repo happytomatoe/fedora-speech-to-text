@@ -105,6 +105,10 @@ export class VmManager {
     const { baseImage, vmDir, updateMode } = this.config;
     const { socketPath, overlayImage, sshPort } = this.config.run;
 
+    // vmDir is cwd for the QEMU spawn — must exist before spawn or posix_spawn
+    // fails with a misleading ENOENT on 'sh'.
+    mkdirSync(vmDir, { recursive: true });
+
     if (await this.isVmRunning()) {
       console.log("VM already running, shutting down for clean restart...");
       try {
@@ -177,7 +181,9 @@ export class VmManager {
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-device", "virtio-rng-pci",
-      "-cdrom", join(vmDir, "cloud-init.iso"),
+      // Fedora golden images historically boot with a cloud-init seed ISO;
+      // the Ubuntu golden image has the user baked in (no seed needed).
+      ...(this.config.env.os === "fedora" ? ["-cdrom", join(vmDir, "cloud-init.iso")] : []),
       "-no-reboot",
     ];
     // std VGA (Bochs-VBE) with EDID override: no resize-negotiation channel, so

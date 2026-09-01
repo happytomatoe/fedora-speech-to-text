@@ -31,6 +31,7 @@ export class RunContext {
   readonly serialLog: string;
 
   constructor(config: RunConfig, customId?: string) {
+    this.config = config;
     // In single (non-parallel) snapshot mode, use a fixed ID so overlays persist between runs.
     // Parallel workers get unique IDs to avoid socket/port conflicts.
     this.id = customId ?? (config.updateMode ? randomUUID().slice(0, 8) : "main");
@@ -79,17 +80,23 @@ export class RunContext {
   }
 
   cleanup(): void {
-    // Don't cleanup persistent-run directory (used for snapshots)
-    if (this.runDir.includes('persistent-run')) {
+    // Snapshot mode keeps the whole run dir for -loadvm reuse.
+    if (this.runDir.includes('persistent-run') && !this.config.preserveArtifacts) {
       return;
     }
     try {
       if (this.config.preserveArtifacts && existsSync(this.outputDir)) {
-        const suiteOutput = join(this.runDir, "..", "..", "output");
+        // runDir is <suite>/vm-run/<id> (fresh) or <suite>/qemu-images/persistent-run/<id>
+        // (snapshot) — suite dir is always exactly 3 levels up from the run dir.
+        const suiteOutput = join(this.runDir, "..", "..", "..", "output");
         mkdirSync(suiteOutput, { recursive: true });
         cpSync(this.outputDir, join(suiteOutput, this.id), { recursive: true });
       }
-      rmSync(this.runDir, { recursive: true, force: true });
+      // persistent-run dirs (snapshot mode) keep their dir — only artifacts
+      // are copied out. Fresh-run dirs are removed entirely.
+      if (!this.runDir.includes('persistent-run')) {
+        rmSync(this.runDir, { recursive: true, force: true });
+      }
     } catch {
       // Ignore cleanup errors
     }
