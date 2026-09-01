@@ -2,15 +2,15 @@
   "test-cases": [
     {
       "file": "test-02-reminder.wav",
-      "expected": "Remember the mind donation."
+      "expected": "remember to buy groceries after work today"
     },
     {
       "file": "test-03-hello.wav",
-      "expected": "Good morning."
+      "expected": "good morning, how are you today?"
     },
     {
       "file": "test-04-calendar.wav",
-      "expected": "Our meeting is annual for 3 pm on Monday."
+      "expected": "our meeting is scheduled for 3pm on monday"
     }
   ]
 }

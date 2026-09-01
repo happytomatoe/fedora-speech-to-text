@@ -575,6 +575,25 @@ async function captureScreenshot(label: string, run: RunContext, vm?: VmManager)
 /**
  * Verify screenshot matches reference (if exists) and file content matches expected text.
  */
+async function dumpFailureLogs(vm: VmManager, run: RunContext): Promise<void> {
+  const dumpDir = join(run.outputDir, "failure-logs");
+  mkdirSync(dumpDir, { recursive: true });
+  const dump = async (name: string, cmd: string) => {
+    try {
+      const { stdout } = await vm.deployer.exec(cmd);
+      writeFileSync(join(dumpDir, name), stdout);
+    } catch {
+      // best-effort diagnostics on an already-failing run
+    }
+  };
+  await Promise.all([
+    dump("journalctl-voice-to-text.log", "journalctl -b 2>&1 | grep -i 'voice-to-text' | tail -100"),
+    dump("gnome-extensions.log", "gnome-extensions list --disabled 2>&1; gnome-extensions info voice-to-text@fstt 2>&1"),
+    dump("voice-service-status.log", "systemctl --user status voice-to-text 2>&1 || true"),
+  ]);
+  console.log(`  Failure diagnostics saved to ${dumpDir}`);
+}
+
 async function verifyWithScreenshot(
   vm: VmManager,
   expected: string,
@@ -740,6 +759,7 @@ async function main(): Promise<void> {
     } else {
       console.log(`  FAIL: ${result.message}`);
       testsFailed++;
+      await dumpFailureLogs(vm, run);
     }
 
     // Update reference images if in update mode
@@ -754,6 +774,7 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error("\nFATAL:", err);
     testsFailed++;
+    try { await dumpFailureLogs(vm, run); } catch { /* best-effort */ }
     // Close any spans still open when the failure happened, so the tree shows
     // which phase died (and how long it hung before dying).
     printTimingTree();
