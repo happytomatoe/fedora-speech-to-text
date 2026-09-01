@@ -71,5 +71,10 @@ for pair in "before 01-desktop" "during 04-recording-started" "after 05-transcri
     || echo "WARN: no $1 screenshot"
 done
 
+# 6b. Pull the screencast recording (webm, covers record→transcribe→type)
+scp -q -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  "testuser@localhost:~/recording.webm" "$OUT/recording.webm" 2>/dev/null \
+  || echo "WARN: no recording"
+
 echo "exit=$TEST_EXIT"
 exit "$TEST_EXIT"

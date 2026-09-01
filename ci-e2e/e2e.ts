@@ -118,6 +118,7 @@ const config = JSON.stringify({
 });
 const shotDuring = process.env.VOX_CI_E2E_SHOT_DURING;
 const shotAfter = process.env.VOX_CI_E2E_SHOT_AFTER;
+const screencastFile = process.env.VOX_CI_E2E_SCREENCAST || "";
 
 async function shellScreenshot(path: string): Promise<boolean> {
   if (!path) return false;
@@ -145,6 +146,36 @@ await gdbus([
   config,
 ]);
 console.log("CI E2E: recording started; waiting for completion...");
+
+// Start screen recording (GNOME Shell Screencast, VP8 webm) — covers the
+// whole record → transcribe → type cycle. The holder process keeps the D-Bus
+// connection open so gnome-shell doesn't abort with "Sender has vanished".
+let screencastProc: Bun.Subprocess<"pipe", "pipe"> | null = null;
+let screencastPath: string | null = null;
+if (screencastFile) {
+  try {
+    screencastProc = Bun.spawn(
+      ["python3", new URL("./screencast-holder.py", import.meta.url).pathname, screencastFile],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const reader = screencastProc.stdout.getReader();
+    const { value } = await reader.read();
+    const startLine = new TextDecoder().decode(value ?? new Uint8Array());
+    reader.releaseLock();
+    if (startLine.includes("ok")) {
+      screencastPath = startLine.trim().split(" ")[2] ?? null;
+      console.log(`CI E2E: screencast started: ${screencastPath}`);
+    } else {
+      screencastProc.kill();
+      screencastProc = null;
+      console.error(`CI E2E: WARN screencast start failed: ${startLine.trim()}`);
+    }
+  } catch (e) {
+    console.error(`CI E2E: WARN screencast unavailable: ${e}`);
+    screencastProc?.kill();
+    screencastProc = null;
+  }
+}
 
 // Screenshot while recording is active (floating indicator visible in panel)
 await new Promise((r) => setTimeout(r, 1500));
@@ -180,6 +211,14 @@ while (Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 await stop();
+
+// Stop screencast: SIGTERM the holder — its handler calls StopScreencast on
+// the still-open bus connection, then exits.
+if (screencastProc) {
+  screencastProc.kill();
+  await screencastProc.exited;
+  console.log(`CI E2E: screencast stopped: ${screencastPath}`);
+}
 
 // After-screenshot: text is now committed in the terminal on screen
 await new Promise((r) => setTimeout(r, 1000));

@@ -146,6 +146,14 @@ DURING_SHOT="$SHOT_BASE-during.png"
 AFTER_SHOT="$SHOT_BASE-after.png"
 export VOX_CI_E2E_SHOT_DURING="$DURING_SHOT"
 export VOX_CI_E2E_SHOT_AFTER="$AFTER_SHOT"
+export VOX_CI_E2E_SCREENCAST="$HOME/recording.webm"
+
+# PipeWire bridge for the screencast: gnome-shell resolves pipewire-0 under
+# XDG_RUNTIME_DIR, but the sockets live in the real user runtime dir. Symlink
+# them in (best-effort; screencast degrades gracefully if this fails).
+for s in /run/user/$(id -u)/pipewire-0 /run/user/$(id -u)/pipewire-0.manager; do
+  [ -S "$s" ] && ln -sfn "$s" "$XDG_RUNTIME_DIR/$(basename "$s")" 2>/dev/null || true
+done
 
 # Exit the Activities overview (headless shell boots into it) so the
 # screenshots show the desktop with the panel indicators visible.
@@ -174,6 +182,10 @@ gdbus call --session \
   true false "$AFTER_SHOT" || echo "WARN: after-screenshot failed"
 
 # --- Tear down -----------------------------------------------------------------------
+# Rescue the screencast recording before the isolated HOME vanishes.
+if [ -s "$HOME/recording.webm" ]; then
+  cp "$HOME/recording.webm" /home/$(id -un)/recording.webm 2>/dev/null || true
+fi
 kill "$SERVICE_PID" 2>/dev/null || true
 kill "$SHELL_PID" 2>/dev/null || true
 
