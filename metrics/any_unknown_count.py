@@ -8,7 +8,7 @@ from pathlib import Path
 REPORTS = Path("metrics-report")
 
 d = json.loads((REPORTS / "pyright.json").read_text())
-out = subprocess.run(["grep", "-rn", r"\bAny\b", "src/"], capture_output=True, text=True)
+out = subprocess.run(["grep", "-rn", r"\bAny\b", "src/"], capture_output=True, text=True, check=False)
 (REPORTS / "any-unknown-count.json").write_text(
     json.dumps(
         {
