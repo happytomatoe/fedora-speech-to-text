@@ -38,12 +38,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install dependencies
         run: |
           uv sync --locked
-          npm ci
+          bun install --frozen-lockfile
 
       - name: Get Silero model URL from source
         run: |
@@ -119,10 +119,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Complexity (sonarjs, threshold 22, max-lines 400)
         run: npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --max-warnings 0 'gnome-ext/**/*.js'
