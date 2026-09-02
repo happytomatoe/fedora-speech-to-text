@@ -535,14 +535,12 @@ export async function startVoiceService(
     console.log("  Skipping Python deps install (golden image)");
   } else {
   console.log("Installing Python dependencies...");
-  // Ubuntu 26.04: PEP 668 externally-managed + root-owned dist-packages and
-  // no pip module. uv (installed to ~/.local/bin) with sudo --system +
-  // --break-system-packages is the working path; plain uv does not support
-  // --user installs.
+  // Fedora 43+ and Ubuntu 26.04 both mark the system interpreter
+  // externally-managed (PEP 668) — --break-system-packages is required on
+  // both. Ubuntu additionally needs sudo (root-owned dist-packages).
   const uvPrefix = cfg.env.uvSystemInstall ? "sudo " : "";
-  const uvExtra = cfg.env.uvSystemInstall ? " --break-system-packages" : "";
   const uvResult = await shell.exec(
-    `${uvPrefix}$HOME/.local/bin/uv pip install --system${uvExtra} --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>&1 && echo __UV_OK__ || echo __UV_FAILED__`
+    `${uvPrefix}$HOME/.local/bin/uv pip install --system --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>/dev/null && echo __UV_OK__ || echo __UV_FAILED__`
   );
   if (!uvResult.includes("__UV_OK__")) {
     // Fallback to pip if uv not available / network constrained
@@ -550,7 +548,7 @@ export async function startVoiceService(
     try {
       sshExec("python3 -m ensurepip --user 2>/dev/null || true", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       sshExec(
-        "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
+        "python3 -m pip install --user --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime 2>/dev/null || sudo $HOME/.local/bin/uv pip install --system --break-system-packages --quiet httpx dbus-next numpy pyyaml python-dotenv websockets jellyfish rapidfuzz sounddevice groq onnxruntime",
         cfg.sshKey, cfg.sshPort, cfg.sshUser
       );
       console.log("  pip install completed");
