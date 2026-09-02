@@ -186,9 +186,6 @@ class RecordingEngine:
         # handle_debug_recording is guaranteed importable when is_debug_mode() is True
         from voice_to_text.debug import handle_debug_recording  # noqa: PLC0415
 
-        logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
-
-        logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
         self.state = EngineState.RECORDING
         self._notify_state()
         text = await handle_debug_recording(config, on_level=self.on_audio_level, _cancel_event=self._cancel_event)
@@ -421,6 +418,7 @@ class RecordingEngine:
         profiling_enabled, _step = self._make_profiler()
 
         try:
+            _step("config_parsed")
             typer = await self._init_typer(config)
             _step("dotoolc_opened")
 
