@@ -61,6 +61,9 @@ packages:
 runcmd:
   - mkdir -p /etc/gdm3
   - printf '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n' > /etc/gdm3/custom.conf
+  # gnome-session #190: profile state from a previous run can abort the session
+  # on next autologin; wipe it before GDM starts the session
+  - sh -c 'rm -rf ~testuser/.config/gnome-* ~testuser/.cache/gnome-shell ~testuser/.local/share/gnome-shell ~testuser/.local/state/gnome-shell'
   - sh -c 'echo cloud-init-ready > /var/tmp/cloud-init-ready'
 EOF
   cat > "$TMPD/meta-data" <<EOF
