@@ -1168,8 +1168,8 @@ metrics:
     npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --format json 'gnome-ext/**/*.js' > metrics-report/eslint-complexity.json || true
     # JS: LOC
     find gnome-ext -name '*.js' -not -path '*/tests/*' -not -path '*/vendor/*' | xargs wc -l | sort -rn > metrics-report/js-loc.txt
-    # JS: dead code (knip)
-    bunx knip > metrics-report/knip.txt || true
+    # JS: dead code (knip, JSON reporter so summary can count entries precisely)
+    bunx knip --reporter json --no-exit-code > metrics-report/knip.json || true
     # Python: dead code (vulture)
     uv run vulture src/ --min-confidence 80 > metrics-report/vulture.txt || true
     # Both: duplicate code

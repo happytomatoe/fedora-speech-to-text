@@ -32,6 +32,14 @@ def report_lines(name):
     return (REPORTS / name).read_text().splitlines()
 
 
+def knip_count():
+    # JSON reporter's issues[] is a flat list of {file, dependencies[], ...} entries
+    try:
+        return len(json.load(open(REPORTS / "knip.json"))["issues"])
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError):
+        return "-"
+
+
 def short_msg(msg):
     # sonarjs cyclomatic rule packs a JSON blob into the message; extract the number
     if '"' in msg:
@@ -99,7 +107,7 @@ def main():
             ["CRAP > 30", sum(1 for c in crap if c["crap"] > 30), "-"],
             ["Duplicated lines", f"{jscpd['duplicatedLines']} ({jscpd['percentage']:.2f}%)", ""],
             ["Pyright errors", pyright["errorCount"], "-"],
-            ["Dead code (vulture/knip)", f"{len(report_lines('vulture.txt'))} / {len(report_lines('knip.txt'))}", "-"],
+            ["Dead code (vulture/knip)", f"{len(report_lines('vulture.txt'))} / {knip_count()}", "-"],
         ],
     )
     lines += [overview, ""]
@@ -127,7 +135,7 @@ def main():
         ]
         for f in eslint
         for m in f["messages"]
-        if m.get("ruleId")
+        if m.get("ruleId") and m["ruleId"].startswith("sonarjs/")
     ]
     if rows:
         lines += ["## JS complexity issues (sonarjs)", table(["File", "Rule", "Line", "Detail"], rows), ""]
