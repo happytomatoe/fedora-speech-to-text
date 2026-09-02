@@ -54,6 +54,40 @@ jobs:
       - name: Run mutmut
         run: uv run mutmut run --max-children 4
 
+      - name: Summarize mutation results
+        if: always()
+        run: |
+          uv run python - <<'EOF'
+          import json, glob, collections
+          status = {1: "killed", 3: "killed", 0: "survived", 5: "no tests",
+                    33: "no tests", 36: "timeout", -24: "timeout", 255: "timeout"}
+          stats = collections.Counter()
+          for meta in glob.glob("mutants/**/*.meta", recursive=True):
+              try:
+                  d = json.load(open(meta))
+              except (json.JSONDecodeError, OSError):
+                  continue
+              for code in d.get("exit_code_by_key", {}).values():
+                  stats[status.get(code, f"other({code})")] += 1
+          killed, survived, no_tests = stats["killed"], stats["survived"], stats["no tests"]
+          total = sum(stats.values())
+          denom = killed + survived
+          print()
+          print("+---------------+---------+--------+")
+          print("| Status        | Count   | %      |")
+          print("+---------------+---------+--------+")
+          rows = [("Killed 🎉", killed), ("Survived 🙁", survived), ("No tests 🫥", no_tests),
+                  ("Timeout ⏰", stats["timeout"]), ("Other", total - killed - survived - no_tests - stats["timeout"])]
+          for name, c in rows:
+              pct = f"{c * 100 / total:.1f}%" if total else "-"
+              print(f"| {name:<13} | {c:<7} | {pct:<6} |")
+          print("+---------------+---------+--------+")
+          print(f"| Total         | {total:<7} |        |")
+          print("+---------------+---------+--------+")
+          if denom:
+              print(f"Mutation score (killed / (killed+survived)): {killed * 100 / denom:.1f}%")
+          EOF
+
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
