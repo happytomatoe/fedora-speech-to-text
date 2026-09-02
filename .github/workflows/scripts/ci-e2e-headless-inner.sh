@@ -189,6 +189,9 @@ else
   echo "uinput check: ABSENT — dotool input injection SKIPped for this run (later phases needing synthetic input will be limited)"
 fi
 
+# Service log path for the ported suite's transcription poll
+export VOX_CI_E2E_SERVICE_LOG="$HOME/service.log"
+
 # --- Run the test runner ----------------------------------------------------------
 # Ported suite (e2e/e2e.ts --env ubuntu-bare): local D-Bus flow, no SSH.
 # The suite dir is staged into the isolated tree; run it with the project

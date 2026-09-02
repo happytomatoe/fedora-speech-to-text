@@ -305,9 +305,17 @@ function pickRandomTestCase(): TestCaseFile {
   return picked;
 }
 
-const CURRENT_TEST = pickRandomTestCase();
+// ubuntu-bare: the harness plays exactly one fixture WAV (ci-e2e/fixture.wav
+// = test-03 "good morning") — pin the case to it instead of random pick.
+const CURRENT_TEST = (() => {
+  const picked = pickRandomTestCase();
+  if (ENV !== "ubuntu-bare") return picked;
+  const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
+  const pinned = (data["test-cases"] as TestCaseFile[]).find(c => c.file.includes("test-03-hello"));
+  console.log(`  ubuntu-bare: pinned case to harness fixture: ${pinned!.file}`);
+  return pinned!;
+})();
 const EXPECTED_TEXT = CURRENT_TEST.expected;
-
 /** Fail fast when the VM base image is missing. */
 async function preflight(): Promise<void> {
   if (!existsSync(BASE_IMAGE)) {
@@ -1003,16 +1011,19 @@ async function runBareMode(): Promise<void> {
 
   gdbus(
     "StartRecording",
-    `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: OUTPUT_METHOD })}'`,
+    `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: "mutter-commit" })}'`,
   );
   console.log("  recording started; polling for transcription...");
 
+  // Service log location: the bare harness redirects service stdout to
+  // $HOME/service.log (isolated HOME); the VM path uses /tmp/voice-service.log.
+  const serviceLog = process.env.VOX_CI_E2E_SERVICE_LOG ?? "/tmp/voice-service.log";
   let transcription = "";
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline && !transcription) {
     try {
       const out = execSync(
-        `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`,
+        `grep -oP 'Transcription result: \\K.*' ${serviceLog} 2>/dev/null | tail -1`,
         { encoding: "utf-8", timeout: 5_000 },
       );
       const trimmed = out.trim();
