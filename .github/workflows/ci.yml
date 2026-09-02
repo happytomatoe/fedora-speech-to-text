@@ -169,8 +169,8 @@ jobs:
       - name: Cyclomatic complexity (radon, report C or worse)
         run: uv run radon cc --min C --total-average src/
 
-      - name: Cognitive complexity (complexipy, max 91 = current worst function)
-        run: uv run complexipy src/ --max-complexity-allowed 91 -q
+      - name: Cognitive complexity (complexipy, max 21)
+        run: uv run complexipy src/ --max-complexity-allowed 21 -q
 
       - name: Dead code (vulture)
         run: uv run vulture src/ --min-confidence 80
