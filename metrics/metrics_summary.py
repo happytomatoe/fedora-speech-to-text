@@ -35,7 +35,7 @@ def report_lines(name):
 def knip_count():
     # JSON reporter's issues[] is a flat list of {file, dependencies[], ...} entries
     try:
-        return len(json.load(open(REPORTS / "knip.json"))["issues"])
+        return len(json.loads((REPORTS / "knip.json").read_text())["issues"])
     except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError):
         return "-"
 
