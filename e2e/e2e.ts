@@ -969,8 +969,98 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   console.log("  ✅ Preferences tests completed");
 }
 
+/**
+ * ubuntu-bare mode: the suite executes directly on the CI runner inside the
+ * harness's dbus-run-session. No VM, no SSH, no GDM — the harness has already
+ * booted headless gnome-shell, deployed the extension, and started the voice
+ * service with VOICE_TO_TEXT_DEBUG_FILE set to the fixture WAV.
+ */
+async function runBareMode(): Promise<void> {
+  const outputDir = join(import.meta.dir, "output", "ubuntu-bare");
+  mkdirSync(outputDir, { recursive: true });
+  const textFile = process.env.VOX_CI_E2E_TEXT_FILE ?? "/tmp/typed-text.txt";
+
+  await new StepRunner().run([
+    {
+      name: "wait-service-bus",
+      timeout: 60_000,
+      fn: () =>
+        pollForCommandOutput(
+          async (cmd: string) => execSync(cmd, { encoding: "utf-8", timeout: 10_000 }),
+          "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+          "com.happytomatoe.VoiceToText",
+          60_000,
+        ),
+    },
+  ]);
+
+  beginSpan("test-flow-bare");
+  const gdbus = (method: string, argsJson = "") =>
+    execSync(
+      `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${argsJson}`,
+      { encoding: "utf-8", timeout: 15_000 },
+    );
+
+  gdbus(
+    "StartRecording",
+    `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: OUTPUT_METHOD })}'`,
+  );
+  console.log("  recording started; polling for transcription...");
+
+  let transcription = "";
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline && !transcription) {
+    try {
+      const out = execSync(
+        `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`,
+        { encoding: "utf-8", timeout: 5_000 },
+      );
+      const trimmed = out.trim();
+      if (trimmed) transcription = trimmed;
+    } catch {
+      // poll again
+    }
+    if (!transcription) await Bun.sleep(500);
+  }
+  try {
+    gdbus("StopRecording");
+  } catch (e) {
+    console.log(`  StopRecording warning: ${e}`);
+  }
+
+  // Typed text: prefer the service log result; fall back to the capture file
+  // written by the extension's headless CommitText path.
+  let typed = transcription;
+  if (!typed) {
+    try {
+      typed = readFileSync(textFile, "utf-8").trim();
+    } catch {
+      // capture file absent
+    }
+  }
+  endSpan();
+
+  const normalize = (s: string) =>
+    s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
+  const passed = typed.length > 0 && normalize(typed).includes(normalize(EXPECTED_TEXT));
+  console.log(`  expected: '${EXPECTED_TEXT}'`);
+  console.log(`  typed:    '${typed}'`);
+  console.log(passed ? "  PASS: ubuntu-bare end-to-end (no SSH)" : "  FAIL: typed text mismatch or absent");
+
+  const startedAt = Date.now();
+  writeFileSync(join(outputDir, "result.txt"), typed);
+  console.log(`\nTotal: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+  process.exit(passed ? 0 : 1);
+}
+
 /** Entry point: parse flags, boot VM, run flow or prefs tests. */
 async function main(): Promise<void> {
+  // ubuntu-bare handles its own lifecycle before any VM/RunContext setup.
+  if (ENV === "ubuntu-bare") {
+    await runBareMode();
+    return;
+  }
+
   const run = new RunContext({
     baseImage: BASE_IMAGE,
     sshKey: SSH_KEY,
@@ -1019,66 +1109,6 @@ async function main(): Promise<void> {
     timedOut = true;
   }, GLOBAL_TIMEOUT_MS);
 
-
-  // Handle parallel mode
-  if (ENV === "ubuntu-bare") {
-    // Bare-runner mode: we are already inside the harness's dbus-run-session
-    // (ci-e2e-headless-inner.sh booted gnome-shell + the service for us).
-    // No VM, no SSH, no GDM wait — readiness was the harness's job; we poll
-    // the bus name and drive the record→transcribe→assert flow locally.
-    console.log("\n=== ubuntu-bare: local D-Bus flow (no SSH) ===");
-    const textFile = process.env.VOX_CI_E2E_TEXT_FILE ?? "/tmp/typed-text.txt";
-    const fixtureWav = process.env.VOICE_TO_TEXT_DEBUG_FILE ?? "";
-
-    await new StepRunner().run([
-      { name: "wait-service-bus", fn: () => pollForCommandOutput(
-          async (cmd: string) => execSync(cmd, { encoding: "utf-8", timeout: 10_000 }),
-          "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
-          "com.happytomatoe.VoiceToText", 60_000) },
-    ]);
-
-    beginSpan("test-flow-bare");
-    const gdbus = (method: string, extra = "") => execSync(
-      `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${extra}`,
-      { encoding: "utf-8", timeout: 15_000 });
-
-    gdbus("StartRecording", `'{'"provider":"parakeet","language":"en","output_method":"mutter-commit"}'`);
-    console.log("  recording started; polling for transcription...");
-
-    let transcription = "";
-    const deadline = Date.now() + 90_000;
-    while (Date.now() < deadline) {
-      try {
-        const out = execSync(
-          `grep -oP 'Transcription result: \\K.*' /tmp/voice-service.log 2>/dev/null | tail -1`,
-          { encoding: "utf-8", timeout: 5_000 });
-        const trimmed = out.trim();
-        if (trimmed) { transcription = trimmed; break; }
-      } catch { /* poll again */ }
-      await Bun.sleep(500);
-    }
-    gdbus("StopRecording");
-
-    // typed text: service log result, else capture file written by the
-    // extension's headless CommitText fallback
-    let typed = transcription;
-    if (!typed) {
-      try {
-        typed = readFileSync(textFile, "utf-8").trim();
-      } catch { /* capture file absent */ }
-    }
-    endSpan();
-
-    const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
-    const passed = typed.length > 0 && normalize(typed).includes(normalize(EXPECTED_TEXT));
-    console.log(`  expected: '${EXPECTED_TEXT}'`);
-    console.log(`  typed:    '${typed}'`);
-    console.log(passed ? "  PASS: ubuntu-bare end-to-end (no SSH)" : "  FAIL: typed text mismatch/absent");
-
-    console.log(`\nTotal: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-    clearTimeout(timeoutTimer);
-    process.exit(passed ? 0 : 1);
-  }
 
   // Handle parallel mode
   if (PARALLEL_VMS > 1) {
