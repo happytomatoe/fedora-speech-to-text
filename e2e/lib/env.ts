@@ -95,8 +95,10 @@ export function resolveEnv(
   const env = !name || name === "fedora-local"
     ? fedoraEnv(suiteDir)
     : ubuntuEnv(suiteDir, name);
-  // ubuntu-ci is the same bits as ubuntu-local — the only difference is who
-  // invokes the run (GitHub Actions vs a human), which lives in the workflow.
+  // ubuntu-ci: CI runs the bare-runner headless harness
+  // (.github/workflows/scripts/ci-e2e-headless.sh) on ubuntu-26.04, not this
+  // QEMU path. The VM-based env here is kept for local reproduction of CI
+  // failures; see docs/CI-E2E-STATUS.md for the decision record.
   if (useExisting && env.existingSshKey) {
     return { ...env, sshKey: env.existingSshKey };
   }
