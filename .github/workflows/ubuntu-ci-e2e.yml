@@ -28,10 +28,17 @@ jobs:
       - name: Make kernel readable for libguestfs (Ubuntu /boot perms bug)
         run: sudo chmod +r /boot/vmlinuz*
 
-      - name: Force slirp networking (passt breaks DNS on runners)
-        # pasta is required by podman (rootless container netns); only passt
-        # (used by libguestfs) breaks DNS, and pasta is a separate package.
-        run: sudo apt-get purge -y passt || true
+      - name: DNS-capable podman net for Parakeet container
+        # libguestfs needs slirp (passt DNS dead on runners); podman needs
+        # pasta for rootless networking. Fix: purge passt AND tell podman to
+        # use slirp4netns backend instead of pasta.
+        run: |
+          sudo apt-get purge -y passt || true
+          mkdir -p ~/.config/containers
+          cat > ~/.config/containers/containers.conf <<'EOF'
+          [network]
+          default_rootless_network_cmd = "slirp4netns"
+          EOF
 
       - name: Set up just, uv, bun
         run: |
