@@ -69,7 +69,8 @@ jobs:
           fi
 
       - name: Run lefthook pre-commit checks
-        run: npx lefthook run pre-commit --all-files --no-tty
+        # --no-auto-install: lefthook 2.x's auto hook-install panics in CI (nil deref, install.go)
+        run: npx lefthook run pre-commit --all-files --no-tty --no-auto-install
 
       - name: Run ego-lint (EGO compliance)
         run: ./scripts/ego-lint --show=fail,warn gnome-ext/
