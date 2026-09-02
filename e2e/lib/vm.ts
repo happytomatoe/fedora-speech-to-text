@@ -6,6 +6,7 @@ import { Deployer } from "./deploy.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import { execSync } from "node:child_process";
+import type { SuiteEnv } from "./env.js";
 import {
   DeployConfig,
   waitForGdmLogin,

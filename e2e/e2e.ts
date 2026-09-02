@@ -188,7 +188,38 @@ function prefsSourceMatch(file: string): boolean {
   );
 }
 
-// Configuration
+// Configuration — per-environment. Ubuntu 26.04 (resolute) PINNED: the exact
+// same cloud image URL must be used by local fresh-mode runs and CI, so a CI
+// failure can be reproduced locally with identical bits.
+const UBUNTU_2604_CLOUD_IMAGE = "https://cloud-images.ubuntu.com/daily/server/resolute/current/resolute-server-cloudimg-amd64.img";
+
+const FEDORA_CONFIG = {
+  baseImage: (() => {
+    const goldenDeps = join(import.meta.dir, "qemu-images/golden-gnome-deps.qcow2");
+    if (existsSync(goldenDeps)) return goldenDeps;
+    const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
+    if (existsSync(depsBase)) return depsBase;
+    const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
+    if (existsSync(uvBase)) return uvBase;
+    return join(import.meta.dir, "qemu-images/base.qcow2");
+  })(),
+  sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
+  referencesDir: join(import.meta.dir, "expected-qemu"),
+};
+
+const UBUNTU_CONFIG = {
+  baseImage: join(import.meta.dir, "golden-ubuntu-2604.qcow2"),
+  sshKey: join(import.meta.dir, "id_ed25519"),
+  referencesDir: join(import.meta.dir, "expected-ubuntu"),
+  // e2e-vm/boot-vm.sh parity VM: localhost:2222, key in e2e-vm/
+  existing: {
+    port: 2222,
+    key: join(import.meta.dir, "../e2e-vm/id_ed25519"),
+  },
+};
+
+const envCfg = IS_UBUNTU ? UBUNTU_CONFIG : FEDORA_CONFIG;
+
 const CONFIG = {
   env: ENV,
   isUbuntu: IS_UBUNTU,
