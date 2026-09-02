@@ -156,6 +156,8 @@ export class VmManager {
       const proc = Bun.spawnSync([
         "qemu-img", "create", "-f", "qcow2",
         "-b", baseImage, "-F", "qcow2", overlayImage,
+        // raw cloud image is ~3G virtual; suite needs room for deps + artifacts
+        ...(this.config.env.os === "ubuntu" ? ["20G"] : []),
       ]);
       if (proc.exitCode !== 0) throw new Error(`Failed to create overlay: ${proc.stderr.toString()}`);
     } else {
@@ -182,10 +184,15 @@ export class VmManager {
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-device", "virtio-rng-pci",
-      // Fedora golden images historically boot with a cloud-init seed ISO;
-      // the Ubuntu golden image has the user baked in (no seed needed).
-      ...(this.config.env.os === "fedora" ? ["-cdrom", join(vmDir, "cloud-init.iso")] : []),
-      "-no-reboot",
+      // cloud-init seed ISO per env: Fedora uses cloud-init.iso, Ubuntu uses
+      // ubuntu-seed.iso (raw cloud image + seed, no baked golden image).
+      ...(this.config.env.os === "fedora"
+        ? ["-cdrom", join(vmDir, "cloud-init.iso")]
+        : ["-cdrom", join(vmDir, "ubuntu-seed.iso")]),
+      // Fedora's deploy flow relies on mid-run GDM restarts only; Ubuntu 26.04
+      // GDM restarts core-dump gnome-session, so the Ubuntu flow uses a full
+      // guest reboot instead and must not exit QEMU on reset.
+      ...(this.config.env.os === "ubuntu" ? [] : ["-no-reboot"]),
     ];
     // std VGA (Bochs-VBE) with EDID override: no resize-negotiation channel, so
     // the guest keeps its own resolution instead of shrinking to whatever size
@@ -247,10 +254,10 @@ export class VmManager {
   }
 
   async waitForSsh(): Promise<void> {
-    // Wait for a full SSH handshake, not just an open port — sshd may accept
-    // the TCP connection but reset during the handshake on a fresh boot under
-    // load, which makes the ssh2 Deployer connections flake with ECONNRESET.
-    await this.waitForSshHandshake();
+    // Cloud-init (seed ISO) applies user/key/packages at first boot — apt can
+    // take minutes on CI, so give the marker-file wait a generous window.
+    const cloudInit = this.config.env.os === "ubuntu";
+    await this.waitForSshHandshake(cloudInit ? 600_000 : 90_000);
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
       sshPort: this.config.run.sshPort,

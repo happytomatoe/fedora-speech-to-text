@@ -93,13 +93,13 @@ export async function ensureGdmAutologin(deployer: Deployer, sshUser: string, en
     if (current.stdout.includes(`AutomaticLogin=${sshUser}`) && !current.stdout.includes("WaylandEnable=false")) return;
     await deployer.exec(`echo '${gdmConf}' | sudo tee ${gdmConfPath} > /dev/null`);
     try {
-      await deployer.exec("sudo systemctl restart gdm");
+      await deployer.exec(env.os === "ubuntu" ? "sudo systemctl restart gdm3.service || sudo systemctl restart display-manager.service" : "sudo systemctl restart gdm");
     } catch {
       // Expected: GDM restart may drop the connection mid-command
     }
     // Wait for GDM to come back up
     for (let i = 0; i < 30; i++) {
-      const r = await deployer.exec("systemctl is-active gdm 2>/dev/null || true");
+      const r = await deployer.exec(`systemctl is-active ${env.os === "ubuntu" ? "gdm3 display-manager" : "gdm"} 2>/dev/null || true`);
       if (r.stdout.trim() === "active") return;
       await Bun.sleep(1000);
     }
@@ -337,10 +337,33 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   let extensionFound = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     console.log(`  attempt ${attempt + 1}...`);
-    try {
-      sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-    } catch {
-      // Expected: GDM restart drops the SSH connection mid-command
+    if (cfg.env.os === "ubuntu") {
+      // Ubuntu 26.04: mid-run `systemctl restart gdm3` core-dumps
+      // gnome-session (Session never registered). A full guest reboot is the
+      // reliable way to re-create the autologin session (QEMU runs without
+      // -no-reboot for Ubuntu so the guest resets in place).
+      try { sshExec("sudo reboot", cfg.sshKey, cfg.sshPort, cfg.sshUser); } catch {
+        // Expected: reboot drops the SSH connection
+      }
+      // Wait for VM to go down and come back
+      const es = (await import("node:child_process")).execSync;
+      // First wait for SSH to drop (guest going down), then for it to return.
+      let down = false;
+      for (let i = 0; i < 120; i++) {
+        await Bun.sleep(1000);
+        try {
+          es(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost true`, { timeout: 8000 });
+          if (down) break; // went down, then came back — reboot complete
+        } catch {
+          down = true; // SSH dropped — reboot in progress
+        }
+      }
+    } else {
+      try {
+        sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+      } catch {
+        // Expected: GDM restart drops the SSH connection mid-command
+      }
     }
 
     // Wait for GDM to restart. Best-effort: if restart-command output has
@@ -354,7 +377,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       "GDM active after restart",
       async () => {
         try {
-          const result = sshExec("systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+          const result = sshExec(cfg.env.os === "ubuntu" ? "systemctl is-active gdm3.service" : "systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
           return result.trim() === "active";
         } catch {
           return false;

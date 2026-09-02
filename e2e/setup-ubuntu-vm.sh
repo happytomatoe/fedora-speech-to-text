@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Set up the Ubuntu 26.04 E2E environment for the unified e2e/ suite:
-# download the pinned resolute cloud image, inject user + SSH key + the exact
-# CI apt package list, and prepare for QEMU boot (golden image).
+# Set up the Ubuntu 26.04 E2E environment for the unified e2e/ suite.
+# Proven CI recipe (dev.to "qemu-kvm-ubuntu-minimal-cloudimg-ssh"): download
+# the pinned resolute cloud image and build a cloud-init seed ISO — user, SSH
+# key, packages and GDM autologin are applied AT BOOT by cloud-init, not baked
+# into the image. No virt-customize, no golden image.
 #
 # Idempotent: skips steps whose outputs already exist.
 set -euo pipefail
 
 SUITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE="$SUITE_DIR/golden-ubuntu-2604.qcow2"
 BASE="$SUITE_DIR/ubuntu-2604-cloud.qcow2"
+SEED="$SUITE_DIR/qemu-images/ubuntu-seed.iso"
 KEY="$SUITE_DIR/id_ed25519"
 
 # 1. Download the cloud image (resolute = 26.04) — same URL as CI
@@ -24,27 +26,54 @@ if [ ! -f "$KEY" ]; then
   ssh-keygen -t ed25519 -f "$KEY" -N "" -C "e2e-ubuntu"
 fi
 
-# 3. Customize: user, key, CI package list, GDM auto-login, 20G disk
-if [ ! -f "$IMAGE" ]; then
-  echo "Customizing image (virt-customize)..."
-  cp "$BASE" "$IMAGE"
-  qemu-img resize "$IMAGE" 20G
-  # direct backend: passt networking fails on GitHub Actions runners
-  export LIBGUESTFS_BACKEND=direct
-  virt-customize -a "$IMAGE" \
-    --run-command 'growpart /dev/sda 1 || growpart /dev/vda 1 || true' \
-    --run-command 'resize2fs /dev/sda1 || resize2fs /dev/vda1 || true' \
-    --run-command 'useradd -m -s /bin/bash testuser' \
-    --run-command 'echo "testuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/testuser' \
-    --ssh-inject testuser:file:"$KEY.pub" \
-    --run-command 'apt-get update' \
-    --install 'gdm3,gnome-shell,gnome-session,glib2.0-bin,mesa-utils,libgl1-mesa-dri,libgbm1,dconf-gsettings-backend,gsettings-desktop-schemas,libportaudio2,tmux,dbus,curl,pulseaudio,pulseaudio-utils' \
-    --run-command 'mkdir -p /run/sshd && chmod 0755 /run/sshd' \
-    --run-command 'rm -f /etc/systemd/system/ssh.socket; systemctl disable ssh.socket 2>/dev/null || true; systemctl enable ssh.service 2>/dev/null || true' \
-    --run-command 'mkdir -p /etc/systemd/system/ssh.service.d && printf "[Unit]\nAfter=systemd-tmpfiles-setup.service\n" > /etc/systemd/system/ssh.service.d/after-tmpfiles.conf' \
-    --run-command 'mkdir -p /var/log/journal' \
-    --run-command 'mkdir -p /etc/gdm3 && printf "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n" > /etc/gdm3/custom.conf'
-  rm -f "$IMAGE".*
+# 3. Cloud-init seed ISO (user-data + meta-data)
+if [ ! -f "$SEED" ]; then
+  echo "Building cloud-init seed ISO..."
+  TMPD="$(mktemp -d)"
+  trap 'rm -rf "$TMPD"' EXIT
+  PUB="$(cat "$KEY.pub")"
+  cat > "$TMPD/user-data" <<EOF
+#cloud-config
+users:
+  - name: testuser
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    groups: [sudo]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - $PUB
+ssh_pwauth: false
+packages:
+  - gdm3
+  - gnome-shell
+  - gnome-session
+  - glib2.0-bin
+  - mesa-utils
+  - libgl1-mesa-dri
+  - libgbm1
+  - dconf-gsettings-backend
+  - gsettings-desktop-schemas
+  - libportaudio2
+  - tmux
+  - dbus
+  - curl
+  - pulseaudio
+  - pulseaudio-utils
+runcmd:
+  - mkdir -p /etc/gdm3
+  - printf '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n' > /etc/gdm3/custom.conf
+  - sh -c 'echo cloud-init-ready > /var/tmp/cloud-init-ready'
+EOF
+  cat > "$TMPD/meta-data" <<EOF
+instance-id: e2e-ubuntu-2604
+local-hostname: e2e-ubuntu
+EOF
+  if command -v cloud-localds >/dev/null; then
+    cloud-localds "$SEED" "$TMPD/user-data" "$TMPD/meta-data"
+  else
+    # genisoimage fallback: volume label "cidata" is what cloud-init looks for
+    genisoimage -output "$SEED" -volid cidata -joliet -rock "$TMPD/user-data" "$TMPD/meta-data"
+  fi
 fi
+ls -la "$SEED"
 
-echo "Golden Ubuntu image ready: $IMAGE"
+echo "Ubuntu 26.04 E2E environment ready (raw image + seed ISO)"

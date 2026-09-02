@@ -70,12 +70,12 @@ function ubuntuEnv(suiteDir: string, name: EnvName): SuiteEnv {
   return {
     name,
     os: "ubuntu",
-    baseImage: join(suiteDir, "golden-ubuntu-2604.qcow2"),
+    baseImage: join(suiteDir, "ubuntu-2604-cloud.qcow2"),
     sshKey: join(suiteDir, "id_ed25519"),
     existingSshKey: join(suiteDir, "../e2e-vm/id_ed25519"),
     existingSshPort: 2222,
     referencesDir: join(suiteDir, "expected-ubuntu"),
-    vmDir: join(suiteDir, "vm-run"),
+    vmDir: join(suiteDir, "qemu-images"),
     gdmConfPath: "/etc/gdm3/custom.conf",
     cloudImageUrl: UBUNTU_2604_CLOUD_IMAGE,
     pkgIsInstalled: (pkg) =>

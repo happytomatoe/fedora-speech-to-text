@@ -208,7 +208,7 @@ const FEDORA_CONFIG = {
 };
 
 const UBUNTU_CONFIG = {
-  baseImage: join(import.meta.dir, "golden-ubuntu-2604.qcow2"),
+  baseImage: join(import.meta.dir, "ubuntu-2604-cloud.qcow2"),
   sshKey: join(import.meta.dir, "id_ed25519"),
   referencesDir: join(import.meta.dir, "expected-ubuntu"),
   // e2e-vm/boot-vm.sh parity VM: localhost:2222, key in e2e-vm/
@@ -227,9 +227,9 @@ const CONFIG = {
   paths: {
     projectRoot: join(import.meta.dir, ".."),
     suiteDir: import.meta.dir,
-    vmDir: IS_UBUNTU ? join(import.meta.dir, "vm-run") : join(import.meta.dir, "qemu-images"),
+    vmDir: join(import.meta.dir, "qemu-images"),
     baseImage: envCfg.baseImage,
-    overlayImage: join(IS_UBUNTU ? join(import.meta.dir, "vm-run") : join(import.meta.dir, "qemu-images"), "overlay.qcow2"),
+    overlayImage: join(join(import.meta.dir, "qemu-images"), "overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
     sshKey: USE_EXISTING && IS_UBUNTU ? UBUNTU_CONFIG.existing.key : envCfg.sshKey,
     referencesDir: envCfg.referencesDir,
@@ -1068,7 +1068,7 @@ async function main(): Promise<void> {
     await new StepRunner().run([
       { name: "preflight", fn: preflight },
       { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 700_000 },
       { name: "setup", fn: () => vm.setupForPrefs(), timeout: 600_000 },
     ]);
     
@@ -1109,7 +1109,7 @@ async function main(): Promise<void> {
         console.log("\n--- No snapshot restore, deploying fresh ---");
         await new StepRunner().run([
           { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-          { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+          { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 700_000 },
           { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
           ...(NO_SAVE_SNAPSHOT
             ? []
@@ -1162,7 +1162,7 @@ async function main(): Promise<void> {
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 700_000 },
         { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
         { name: "test-flow", fn: () => runTestFlow(vm, run) },
       ]);

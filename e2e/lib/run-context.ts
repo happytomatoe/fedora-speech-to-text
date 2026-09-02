@@ -57,6 +57,8 @@ export class RunContext {
       const proc = Bun.spawnSync([
         "qemu-img", "create", "-f", "qcow2",
         "-b", config.baseImage, "-F", "qcow2", this.overlayImage,
+        // raw cloud image is ~3G virtual; suite needs room for deps
+        ...(config.baseImage.includes("ubuntu-2604-cloud") ? ["20G"] : []),
       ]);
       if (proc.exitCode !== 0) {
         throw new Error(`Failed to create overlay: ${proc.stderr.toString()}`);
