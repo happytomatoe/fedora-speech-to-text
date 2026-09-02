@@ -38,7 +38,7 @@ if [ ! -f "$IMAGE" ]; then
     --run-command 'echo "testuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/testuser' \
     --ssh-inject testuser:file:"$KEY.pub" \
     --run-command 'apt-get update' \
-    --install 'gdm3,gnome-shell,gnome-session,ghostty,tmux,dbus,portaudio19-dev,curl' \
+    --install 'gdm3,gnome-shell,gnome-session,glib2.0-bin,mesa-utils,libgl1-mesa-dri,libgbm1,dconf-gsettings-backend,gsettings-desktop-schemas,libportaudio2,tmux,dbus,curl,pulseaudio,pulseaudio-utils' \
     --run-command 'mkdir -p /etc/gdm3 && printf "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n" > /etc/gdm3/custom.conf' \
     --firstboot-command 'systemctl restart gdm || true'
   rm -f "$IMAGE".*
