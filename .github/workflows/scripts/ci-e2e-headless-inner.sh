@@ -76,6 +76,21 @@ cd "$ASSETS/voice-to-text-python"
 uv run --project . voice-to-text-dbus > "$HOME/service.log" 2>&1 &
 SERVICE_PID=$!
 
+# --- PipeWire + WirePlumber (required for shell screencast) -------------------
+# gnome-shell's screencast needs a PipeWire connection. The isolated
+# dbus-run-session has no session manager, so start pipewire + wireplumber
+# inside it, pointing at the isolated XDG_RUNTIME_DIR.
+mkdir -p "$XDG_RUNTIME_DIR"
+pipewire &
+PIPEWIRE_PID=$!
+wireplumber &
+WIREPLUMBER_PID=$!
+for i in $(seq 1 15); do
+  [[ -S "$XDG_RUNTIME_DIR/pipewire-0" ]] && { echo "pipewire socket up after ${i}s"; break; }
+  sleep 1
+done
+[[ -S "$XDG_RUNTIME_DIR/pipewire-0" ]] || echo "WARN: pipewire socket not found — screencast may fail"
+
 # --- Boot headless gnome-shell -------------------------------------------------
 gnome-shell --headless --wayland --no-x11 \
   --virtual-monitor "${WIDTH}x${HEIGHT}" > "$HOME/shell.log" 2>&1 &
@@ -188,5 +203,6 @@ if [ -s "$HOME/recording.webm" ]; then
 fi
 kill "$SERVICE_PID" 2>/dev/null || true
 kill "$SHELL_PID" 2>/dev/null || true
+kill "$WIREPLUMBER_PID" "$PIPEWIRE_PID" 2>/dev/null || true
 
 exit "$TEST_EXIT"

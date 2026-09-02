@@ -36,6 +36,7 @@ jobs:
             mesa-utils libgl1-mesa-dri libgbm1 \
             dconf-gsettings-backend gsettings-desktop-schemas \
             libportaudio2 \
+            pipewire pipewire-bin wireplumber \
             tmux \
             curl
 
