@@ -34,7 +34,19 @@ jobs:
           echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Restore cached golden image
+        id: golden-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            e2e/golden-ubuntu-2604.qcow2
+            e2e/ubuntu-2604-cloud.qcow2
+            e2e/id_ed25519
+            e2e/id_ed25519.pub
+          key: ubuntu-golden-${{ hashFiles('e2e/setup-ubuntu-vm.sh') }}-resolute-current
+
       - name: Build golden image (pinned resolute + CI apt list + GDM autologin)
+        if: steps.golden-cache.outputs.cache-hit != 'true'
         run: just e2e-setup-ubuntu
 
       - name: Run E2E suite (ubuntu-ci)
