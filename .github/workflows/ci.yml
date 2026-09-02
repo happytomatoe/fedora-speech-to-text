@@ -135,18 +135,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Complexity (sonarjs, threshold 22, max-lines 400)
-        # metrics-only until thresholds are enforced: tracked in issue "Enable JS quality gates"
-        run: npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --max-warnings 999 'gnome-ext/**/*.js'
+      - name: Complexity (sonarjs, max 2 findings)
+        # thresholds pinned to current baseline (2026-09-02); tighten later via issue "Enable JS quality gates"
+        run: npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --max-warnings 2 'gnome-ext/**/*.js'
 
       - name: Type check (tsc checkJs)
-        run: npx tsc --noEmit || true
+        run: npx tsc --noEmit
 
       - name: Dead code (knip)
-        run: bunx knip || true
+        run: bunx knip
 
       - name: Duplication (jscpd, max 1%)
-        run: bunx jscpd src/ gnome-ext/ --min-tokens 50 --threshold 1 --silent || true
+        run: bunx jscpd src/ gnome-ext/ --min-tokens 50 --threshold 1 --silent
 
   python-quality:
     runs-on: ubuntu-latest
@@ -167,14 +167,17 @@ jobs:
         run: uv sync --locked
 
       - name: Cyclomatic complexity (radon, report C or worse)
-        # metrics-only until thresholds are enforced: tracked in issue "Enable Python quality gates"
         run: uv run radon cc --min C --total-average src/
 
-      - name: Cognitive complexity (complexipy, threshold 22)
-        run: uv run complexipy src/ --max-complexity-allowed 22 -q || true
+      - name: Cognitive complexity (complexipy, max 91 = current worst function)
+        run: uv run complexipy src/ --max-complexity-allowed 91 -q
 
       - name: Dead code (vulture)
-        run: uv run vulture src/ --min-confidence 80 || true
+        run: uv run vulture src/ --min-confidence 80
 
-      - name: Type check (pyright)
-        run: uv run pyright src/ || true
+      - name: Type check (pyright, max 3 errors = current baseline)
+        # pyright has no error-count-limit flag; count via outputjson
+        run: |
+          uv run pyright --outputjson src/ > /tmp/pyright.json || true
+          ERRORS=$(python3 -c "import json; print(json.load(open('/tmp/pyright.json'))['summary']['errorCount'])")
+          test "$ERRORS" -le 3 || { echo "pyright errors: $ERRORS (limit 3)"; exit 1; }
