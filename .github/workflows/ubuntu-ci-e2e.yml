@@ -1,89 +1,89 @@
-# E2E on Ubuntu 26.04 — CI-identical path: boots the SAME pinned resolute
-# cloud image the local suite uses, deploys the extension, runs the basic
-# record → transcribe → typed test inside QEMU (runner exposes /dev/kvm).
+# E2E on Ubuntu 26.04 — bare-runner headless path (no VM, no image download).
+# Boots a real GNOME Shell (Wayland, headless virtual monitor) directly on the
+# runner, deploys the extension + Python service, drives a record → transcribe
+# → typed-text assertion via D-Bus, and captures screenshots + screencast.
 name: ubuntu-ci-e2e
 
 on:
   workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Open an SSH (tmate) session on the runner for live debugging'
+        required: false
+        default: false
   pull_request:
     paths:
       - ".github/workflows/ubuntu-ci-e2e.yml"
-      - "e2e/**"
-      - "e2e-vm/setup-vm.sh"
+      - ".github/workflows/scripts/ci-e2e-headless.sh"
+      - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
+      - "ci-e2e/**"
       - "gnome-ext/**"
       - "src/voice_to_text/**"
 
 jobs:
   e2e:
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install virtualization + image tooling
+      - name: Install GNOME Shell + harness dependencies (no VM, no container)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qemu-system-x86 qemu-system-gui qemu-utils libguestfs-tools cloud-image-utils wget linux-image-generic dhcpcd-base
-      - name: Make kernel readable for libguestfs (Ubuntu /boot perms bug)
-        run: sudo chmod +r /boot/vmlinuz*
+            gnome-shell gnome-shell-common gnome-session glib2.0-bin dbus \
+            mesa-utils libgl1-mesa-dri libgbm1 \
+            dconf-gsettings-backend gsettings-desktop-schemas \
+            libportaudio2 \
+            tmux \
+            curl
 
-      - name: Grant KVM access
+      - name: Install + start PulseAudio with virtual devices (headless)
         run: |
-          sudo chmod 666 /dev/kvm
-          ls -la /dev/kvm
+          sudo apt-get install -y --no-install-recommends \
+            pulseaudio pulseaudio-utils
+          # Runner has no sound hardware; daemon must run with null devices
+          # so PortAudio's PulseAudio host API can initialize.
+          pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
+            --load="module-null-sink sink_name=virtual_sink" \
+            --load="module-null-source source_name=virtual_mic"
+          # pulseaudio -D returns before the socket is ready; poll for it
+          for i in $(seq 1 20); do
+            pactl info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          pactl list short sinks
+          pactl list short sources
 
-      - name: DNS-capable podman net for Parakeet container
-        # libguestfs needs slirp (passt DNS dead on runners); podman needs
-        # pasta for rootless networking. Fix: purge passt AND tell podman to
-        # use slirp4netns backend instead of pasta.
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install test-runner dependencies
+        run: cd ci-e2e && bun install
+
+      - name: Start Parakeet + boot headless GNOME Shell + run E2E
         run: |
-          sudo apt-get purge -y passt || true
-          mkdir -p ~/.config/containers
-          cat > ~/.config/containers/containers.conf <<'EOF'
-          [network]
-          default_rootless_network_cmd = "slirp4netns"
-          EOF
+          bash .github/workflows/scripts/ci-e2e-headless.sh \
+            "$PWD/ci-e2e-screenshot-2604.png"
 
-      - name: Set up just, uv, bun
-        run: |
-          curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          curl -fsSL https://bun.sh/install | bash
-          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Restore cached golden image
-        id: golden-cache
-        uses: actions/cache@v4
+      - name: Setup tmate session (manual debug)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
+        uses: mxschmitt/action-tmate@v3
         with:
-          path: |
-            e2e/golden-ubuntu-2604.qcow2
-            e2e/ubuntu-2604-cloud.qcow2
-            e2e/id_ed25519
-            e2e/id_ed25519.pub
-          key: ubuntu-golden-${{ hashFiles('e2e/setup-ubuntu-vm.sh') }}-resolute-current
-
-      - name: Build golden image (pinned resolute + CI apt list + GDM autologin)
-        if: steps.golden-cache.outputs.cache-hit != 'true'
-        run: just e2e-setup-ubuntu
-
-      - name: Run E2E suite (ubuntu-ci)
-        run: just e2e-ubuntu-ci
+          limit-access-to-actor: true
+        timeout-minutes: 15
+        id: tmate
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-artifacts
+          name: ubuntu-ci-e2e
           path: |
-            e2e/output/
+            ci-e2e-screenshot-2604.png
+            ci-e2e-screenshot-2604-*.png
+            recording.webm
           if-no-files-found: warn
-
-      - name: Upload qemu run dir (qemu-stderr.log, serial.log)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-qemu-run-dir
-          path: e2e/qemu-images/persistent-run/
-          if-no-files-found: warn
+          retention-days: 7
