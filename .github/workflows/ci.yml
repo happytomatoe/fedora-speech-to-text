@@ -166,7 +166,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
-      - name: Cyclomatic complexity (radon, fail on C or worse)
+      - name: Cyclomatic complexity (radon, report C or worse)
         # metrics-only until thresholds are enforced: tracked in issue "Enable Python quality gates"
         run: uv run radon cc --min C --total-average src/
 
