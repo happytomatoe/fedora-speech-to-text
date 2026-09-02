@@ -74,3 +74,11 @@ jobs:
           path: |
             e2e/output/
           if-no-files-found: warn
+
+      - name: Upload qemu run dir (qemu-stderr.log, serial.log)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-qemu-run-dir
+          path: e2e/qemu-images/persistent-run/
+          if-no-files-found: warn
