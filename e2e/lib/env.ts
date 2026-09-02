@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-export type EnvName = "fedora-local" | "ubuntu-local" | "ubuntu-ci";
+export type EnvName = "fedora-local" | "ubuntu-local" | "ubuntu-ci" | "ubuntu-bare";
 export type Os = "fedora" | "ubuntu";
 
 export const UBUNTU_2604_CLOUD_IMAGE =
@@ -87,6 +87,26 @@ function ubuntuEnv(suiteDir: string, name: EnvName): SuiteEnv {
   };
 }
 
+function ubuntuBareEnv(suiteDir: string): SuiteEnv {
+  return {
+    name: "ubuntu-bare",
+    os: "ubuntu",
+    // No VM — the suite runs on the runner itself inside dbus-run-session.
+    baseImage: "",
+    sshKey: "",
+    referencesDir: join(suiteDir, "expected-ubuntu-bare"),
+    vmDir: join(suiteDir, "output/ubuntu-bare"),
+    gdmConfPath: "/etc/gdm3/custom.conf",
+    pkgIsInstalled: (pkg) =>
+      `dpkg -s ${pkg} 2>/dev/null | grep -q 'Status: install ok installed' && echo ok || echo missing`,
+    pkgInstall: (pkgs) =>
+      `sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ${pkgs} 2>/dev/null`,
+    // dotool viability depends on /dev/uinput on the runner — checked at runtime
+    dotool: { kind: "bundled", dir: suiteDir },
+    uvSystemInstall: true,
+  };
+}
+
 export function resolveEnv(
   suiteDir: string,
   name: EnvName | undefined,
@@ -94,7 +114,9 @@ export function resolveEnv(
 ): SuiteEnv {
   const env = !name || name === "fedora-local"
     ? fedoraEnv(suiteDir)
-    : ubuntuEnv(suiteDir, name);
+    : name === "ubuntu-bare"
+      ? ubuntuBareEnv(suiteDir)
+      : ubuntuEnv(suiteDir, name);
   // ubuntu-ci: CI runs the bare-runner headless harness
   // (.github/workflows/scripts/ci-e2e-headless.sh) on ubuntu-26.04, not this
   // QEMU path. The VM-based env here is kept for local reproduction of CI
@@ -104,3 +126,4 @@ export function resolveEnv(
   }
   return env;
 }
+
