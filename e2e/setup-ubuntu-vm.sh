@@ -12,6 +12,7 @@ SUITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$SUITE_DIR/ubuntu-2604-cloud.qcow2"
 SEED="$SUITE_DIR/qemu-images/ubuntu-seed.iso"
 KEY="$SUITE_DIR/id_ed25519"
+mkdir -p "$SUITE_DIR/qemu-images"
 
 # 1. Download the cloud image (resolute = 26.04) — same URL as CI
 if [ ! -f "$BASE" ]; then
