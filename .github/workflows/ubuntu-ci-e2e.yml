@@ -28,6 +28,9 @@ jobs:
       - name: Make kernel readable for libguestfs (Ubuntu /boot perms bug)
         run: sudo chmod +r /boot/vmlinuz*
 
+      - name: Force slirp networking (passt breaks DNS on runners)
+        run: sudo apt-get purge -y passt || true
+
       - name: Set up just, uv, bun
         run: |
           curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
