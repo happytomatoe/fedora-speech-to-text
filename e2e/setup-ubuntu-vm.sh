@@ -39,6 +39,7 @@ if [ ! -f "$IMAGE" ]; then
     --ssh-inject testuser:file:"$KEY.pub" \
     --run-command 'apt-get update' \
     --install 'gdm3,gnome-shell,gnome-session,glib2.0-bin,mesa-utils,libgl1-mesa-dri,libgbm1,dconf-gsettings-backend,gsettings-desktop-schemas,libportaudio2,tmux,dbus,curl,pulseaudio,pulseaudio-utils' \
+    --run-command 'mkdir -p /run/sshd && chmod 0755 /run/sshd' \
     --run-command 'mkdir -p /etc/gdm3 && printf "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n" > /etc/gdm3/custom.conf' \
     --firstboot-command 'systemctl restart gdm || true'
   rm -f "$IMAGE".*
