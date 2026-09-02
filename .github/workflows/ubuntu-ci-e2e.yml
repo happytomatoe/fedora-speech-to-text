@@ -24,7 +24,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qemu-system-x86 qemu-utils libguestfs-tools wget
+            qemu-system-x86 qemu-utils libguestfs-tools wget linux-image-generic
+      - name: Make kernel readable for libguestfs (Ubuntu /boot perms bug)
+        run: sudo chmod +r /boot/vmlinuz*
 
       - name: Set up just, uv, bun
         run: |
