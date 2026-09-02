@@ -55,7 +55,7 @@ jobs:
         run: just e2e-setup-ubuntu
 
       - name: Run E2E suite (ubuntu-ci)
-        run: just e2e ubuntu-ci
+        run: just e2e-ubuntu-ci
 
       - name: Upload artifacts
         if: always()

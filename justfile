@@ -1031,27 +1031,35 @@ qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
 # @category e2e-qemu
-# Run E2E tests (snapshot mode by default, fast ~40s after first run)
+# Unified E2E suite — one command per environment:
+#   just e2e-fedora-local   (default; snapshot mode, fast ~40s after first run)
+#   just e2e-ubuntu-local   (fresh pinned resolute VM)
+#   just e2e-ubuntu-ci      (same bits as ubuntu-local; what CI runs)
 # Output is always tee'd to /tmp/fedora-speech-to-text-e2e-run.log — tail it to
 # watch progress: tail -f /tmp/fedora-speech-to-text-e2e-run.log
-# Override with args: just e2e --update
-e2e *ARGS:
+# Override with args: just e2e-fedora-local --update
+_e2e-run E2E_ENV *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
-    env="fedora-local"
-    if [[ "${1:-}" =~ ^(fedora-local|ubuntu-local|ubuntu-ci)$ ]]; then
-      env="$1"; shift
-    fi
     cd e2e
     LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
     : > "$LOG"
-    if [[ "$env" == "fedora-local" ]]; then
+    if [[ "{{E2E_ENV}}" == "fedora-local" ]]; then
       bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
       exit ${PIPESTATUS[0]}
     else
-      bun run e2e.ts --env "$env" {{ ARGS }} 2>&1 | tee "$LOG"
+      bun run e2e.ts --env "{{E2E_ENV}}" {{ ARGS }} 2>&1 | tee "$LOG"
       exit ${PIPESTATUS[0]}
     fi
+
+e2e-fedora-local *ARGS:
+    just _e2e-run fedora-local {{ ARGS }}
+
+e2e-ubuntu-local *ARGS:
+    just _e2e-run ubuntu-local {{ ARGS }}
+
+e2e-ubuntu-ci *ARGS:
+    just _e2e-run ubuntu-ci {{ ARGS }}
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
