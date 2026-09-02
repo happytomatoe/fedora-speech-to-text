@@ -12,16 +12,20 @@ from pathlib import Path
 REPORTS = Path("metrics-report")
 
 
-def load_coverage() -> dict[str, set[int]]:
+def load_coverage() -> tuple[dict[str, set[int]], dict[str, set[int]]]:
     root = ET.parse(REPORTS / "coverage.xml").getroot()
     covered: dict[str, set[int]] = {}
+    executable: dict[str, set[int]] = {}
     for cls in root.iter("class"):
         filename = cls.get("filename", "")
-        lines = covered.setdefault(filename, set())
+        cov_set = covered.setdefault(filename, set())
+        exe_set = executable.setdefault(filename, set())
         for line in cls.iter("line"):
+            num = int(line.get("number"))
+            exe_set.add(num)
             if line.get("hits") != "0":
-                lines.add(int(line.get("number")))
-    return covered
+                cov_set.add(num)
+    return covered, executable
 
 
 def load_complexity() -> list[dict]:
@@ -42,16 +46,19 @@ def load_complexity() -> list[dict]:
 
 
 def main() -> int:
-    coverage = load_coverage()
+    coverage, executable = load_coverage()
     functions = load_complexity()
     rows = []
     for fn in functions:
         rel = fn["file"].removeprefix("src/voice_to_text/")
         src_file = f"src/voice_to_text/{rel}"
-        lines = coverage.get(src_file, set()) | coverage.get(fn["file"], set())
+        cov_lines = coverage.get(src_file, set()) | coverage.get(fn["file"], set())
+        exe_lines = executable.get(src_file, set()) | executable.get(fn["file"], set())
         span = range(fn["line"], fn["endline"] + 1)
-        covered = sum(1 for n in span if n in lines)
-        cov = covered / len(span) if span else 0.0
+        # denominator = executable lines in span (coverage.xml only records executable lines)
+        exec_in_span = sum(1 for n in span if n in exe_lines)
+        covered = sum(1 for n in span if n in cov_lines)
+        cov = covered / exec_in_span if exec_in_span else 0.0
         cc = fn["cc"]
         crap = round(cc * cc * (1 - cov) ** 3 + cc, 1)
         rows.append({**fn, "coverage": round(cov, 2), "crap": crap})
