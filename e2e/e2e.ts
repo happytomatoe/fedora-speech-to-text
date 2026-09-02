@@ -54,13 +54,15 @@ const UPDATE_MODE = args.includes("--update");
 // ubuntu-local (pinned Ubuntu 26.04 VM via QEMU, same bits as CI) |
 // ubuntu-ci (identical to ubuntu-local; run by GitHub Actions).
 // Only environment config differs — suite logic is shared.
-type Env = "fedora-local" | "ubuntu-local" | "ubuntu-ci";
+type Env = "fedora-local" | "ubuntu-local" | "ubuntu-ci" | "ubuntu-bare";
 const envIdx = args.indexOf("--env");
 const ENV: Env = envIdx >= 0 ? (args[envIdx + 1] as Env) : "fedora-local";
-if (!"fedora-local ubuntu-local ubuntu-ci".split(" ").includes(ENV)) {
-  throw new Error(`Unknown env '${ENV}'. Valid: fedora-local, ubuntu-local, ubuntu-ci`);
+if (!"fedora-local ubuntu-local ubuntu-ci ubuntu-bare".split(" ").includes(ENV)) {
+  throw new Error(`Unknown env '${ENV}'. Valid: fedora-local, ubuntu-local, ubuntu-ci, ubuntu-bare`);
 }
 const IS_UBUNTU = ENV !== "fedora-local";
+// ubuntu-bare: suite runs on the runner itself inside dbus-run-session —
+// no QEMU VM, no SSH. All commands go through LocalTransport.
 // --use-existing: attach to an already-running VM instead of booting a fresh
 // one — for reproducing CI failures locally against the same VM/image.
 const USE_EXISTING = args.includes("--use-existing");
