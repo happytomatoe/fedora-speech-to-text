@@ -1161,9 +1161,9 @@ metrics:
     uv run pytest -q --cov=src/voice_to_text --cov-report=xml:metrics-report/coverage.xml --cov-report=term-missing -p no:cacheprovider || true
     # Python: CRAP from radon CC + coverage (guarded: depends on coverage.xml from optional pytest step)
     test -f metrics-report/coverage.xml && uv run python metrics/crap_check.py || echo "crap_check skipped: coverage.xml missing"
-    # Python: explicit Any occurrences (pyright config unchanged)
+    # Python: explicit Any occurrences (pyright config unchanged; guarded — pyright.json may be empty if pyright failed)
     uv run pyright --outputjson src/ > metrics-report/pyright.json || true
-    uv run python -c "import json,subprocess; d=json.load(open('metrics-report/pyright.json')); out=subprocess.run(['grep','-rn','\\bAny\\b','src/'],capture_output=True,text=True).stdout; open('metrics-report/any-unknown-count.json','w').write(json.dumps({'pyright_summary':d['summary'],'explicit_Any_occurrences_grep':len(out.splitlines())},indent=2))"
+    test -s metrics-report/pyright.json && uv run python -c "import json,subprocess; d=json.load(open('metrics-report/pyright.json')); out=subprocess.run(['grep','-rn','\\bAny\\b','src/'],capture_output=True,text=True).stdout; open('metrics-report/any-unknown-count.json','w').write(json.dumps({'pyright_summary':d['summary'],'explicit_Any_occurrences_grep':len(out.splitlines())},indent=2))" || echo "pyright summary skipped: report missing or empty"
     # JS: cyclomatic + cognitive via sonarjs rules (metrics-only ESLint)
     npx eslint --no-warn-ignored --config metrics/eslint.config.metrics.mjs --format json 'gnome-ext/**/*.js' > metrics-report/eslint-complexity.json || true
     # JS: LOC

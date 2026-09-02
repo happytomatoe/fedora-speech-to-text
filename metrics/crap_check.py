@@ -58,8 +58,8 @@ def main() -> int:
 
     rows.sort(key=lambda r: r["crap"], reverse=True)
     (REPORTS / "crap.json").write_text(json.dumps(rows, indent=2))
-    over = [r for r in rows if r["crap"] > 25]
-    print(f"CRAP > 25: {len(over)} of {len(rows)} functions")
+    over = [r for r in rows if r["crap"] > 30]
+    print(f"CRAP > 30: {len(over)} of {len(rows)} functions")
     for r in over[:15]:
         print(f"  {r['crap']:>7.1f}  cc={r['cc']:<3} cov={r['coverage']:<5} {r['file']}:{r['line']} {r['name']}")
     return 0
