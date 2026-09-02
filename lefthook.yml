@@ -4,6 +4,19 @@
 pre-commit:
   parallel: true
   commands:
+    check-file-size:
+      # Block large files (e.g. accidentally staged VM images) — a 3GB qcow2
+      # once got committed here and permanently bloats the pack.
+      run: |
+        failed=0
+        for f in {staged_files}; do
+          size=$(wc -c < "$f" 2>/dev/null || echo 0)
+          if [ "$size" -gt 10485760 ]; then
+            echo "REJECTED: $f is $((size/1048576))MB (> 10MB). VM images / build output belong in .gitignore."
+            failed=1
+          fi
+        done
+        exit $failed
     knip:
       run: npx knip
       glob: "*.{ts,js,json}"
