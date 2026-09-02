@@ -182,6 +182,13 @@ gdbus call --session \
   --method org.gnome.Shell.Screenshot.Screenshot \
   true false "$BEFORE_SHOT" || echo "WARN: before-screenshot failed"
 
+# --- Risk check: /dev/uinput (dotool viability for later phases) ----------------
+if [[ -w /dev/uinput || -c /dev/uinput ]]; then
+  echo "uinput check: PRESENT $(ls -l /dev/uinput 2>/dev/null || echo '(no perms info)')"
+else
+  echo "uinput check: ABSENT — dotool input injection SKIPped for this run (later phases needing synthetic input will be limited)"
+fi
+
 # --- Run the test runner ----------------------------------------------------------
 TEST_EXIT=0
 cd "$ASSETS/ci-e2e"
