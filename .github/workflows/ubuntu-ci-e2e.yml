@@ -28,6 +28,11 @@ jobs:
       - name: Make kernel readable for libguestfs (Ubuntu /boot perms bug)
         run: sudo chmod +r /boot/vmlinuz*
 
+      - name: Grant KVM access
+        run: |
+          sudo chmod 666 /dev/kvm
+          ls -la /dev/kvm
+
       - name: DNS-capable podman net for Parakeet container
         # libguestfs needs slirp (passt DNS dead on runners); podman needs
         # pasta for rootless networking. Fix: purge passt AND tell podman to
