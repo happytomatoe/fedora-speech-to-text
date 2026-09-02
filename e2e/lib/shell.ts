@@ -1,5 +1,4 @@
-import { execSync } from "node:child_process";
-import { LocalTransport } from "./transport.js";
+import { LocalTransport, SshTransport } from "./transport.js";
 
 /**
  * SSH-backed helper for running commands in the VM and driving the GNOME session.
@@ -69,14 +68,15 @@ export class ShellHelper {
     }
     const sshExecOnce = async (): Promise<string> => {
       if (!this.session) throw new Error("No session");
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
+      const transport = new SshTransport({
+        sshKey: this.session.sshKey,
+        sshPort: this.session.sshPort,
+        sshUser: this.session.sshUser,
+        host: this.session.host,
+      });
       try {
-        return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
-          encoding: "utf-8",
-          timeout: timeoutMs,
-          stdio: ["pipe", "pipe", "pipe"],
-        }).trim();
+        const r = await transport.exec(command, timeoutMs);
+        return r.stdout.trim();
       } catch (err) {
         // Nonzero remote exit (e.g. `grep` with no match) — still return stdout
         const e = err as { stdout?: string; status?: number };
@@ -139,13 +139,19 @@ export class ShellHelper {
           `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
         );
         raw = result.stdout.trim();
+      } else if (this.session) {
+        const transport = new SshTransport({
+          sshKey: this.session.sshKey,
+          sshPort: this.session.sshPort,
+          sshUser: this.session.sshUser,
+          host: this.session.host,
+        });
+        raw = (await transport.exec(
+          `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`,
+          5000,
+        )).stdout.trim();
       } else {
-        const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-        const sshHost = `${this.session.sshUser}@${this.session.host}`;
-        raw = execSync(
-          `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
-          { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-        ).trim();
+        raw = "";
       }
       if (raw) {
         this.dbusAddr = raw;
@@ -174,11 +180,15 @@ export class ShellHelper {
     try {
       const addr = await this.getShellDbusAddr();
       if (!addr) return;
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
-      execSync(
-        `ssh ${sshOpts} ${sshHost} "DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'" 2>/dev/null`,
-        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      const transport = new SshTransport({
+        sshKey: this.session.sshKey,
+        sshPort: this.session.sshPort,
+        sshUser: this.session.sshUser,
+        host: this.session.host,
+      });
+      await transport.exec(
+        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'`,
+        5000,
       );
     } catch {
       // Ignore — may already be dismissed
@@ -236,21 +246,18 @@ export class ShellHelper {
    */
   async verifyTerminalFocus(tmuxSession: string, sshKey: string, sshPort: number): Promise<boolean> {
     try {
+      const transport = new SshTransport({ sshKey, sshPort, sshUser: this.session?.sshUser ?? "testuser", host: this.session?.host ?? "localhost" });
+      const captureCmd = `tmux capture-pane -t ${tmuxSession} -p`;
+
       // Get tmux content before
-      const before = execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort} ${this.session?.sshUser}@${this.session?.host} "tmux capture-pane -t ${tmuxSession} -p"`,
-        { encoding: "utf-8", timeout: 5000 }
-      ).trim();
+      const before = (await transport.exec(captureCmd, 5000)).stdout.trim();
 
       // Type a test character
       await this.dotoolCommand("key shift+a"); // 'A' is visible, unlike space
       await Bun.sleep(200);
 
       // Get tmux content after
-      const after = execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort} ${this.session?.sshUser}@${this.session?.host} "tmux capture-pane -t ${tmuxSession} -p"`,
-        { encoding: "utf-8", timeout: 5000 }
-      ).trim();
+      const after = (await transport.exec(captureCmd, 5000)).stdout.trim();
 
       return before !== after;
     } catch {
@@ -375,11 +382,4 @@ export class ShellHelper {
     this.dbusAddr = null; // Invalidate cached address
     this.session = null;
   }
-}
-
-/** Quote a command for the ssh CLI (single quotes, so $HOME / $(id -u)
- * expand on the REMOTE shell — double-quote escaping turned $ into a literal
- * and made remote expansions fail). */
-function quote(s: string): string {
-  return "'" + s.replace(/'/g, "'\\''") + "'";
 }

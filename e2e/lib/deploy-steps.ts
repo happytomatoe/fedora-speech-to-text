@@ -14,14 +14,20 @@ function sshOpts(sshKey: string, sshPort: number): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort}`;
 }
 
-/** One-shot ssh exec with retries; throws after the last attempt fails. */
+/** Shared SshTransport factory — all raw ssh/rsync callers go through the seam. */
+function sshTransport(sshKey: string, sshPort: number, sshUser = "testuser"): SshTransport {
+  return new SshTransport({ sshKey, sshPort, sshUser, host: "localhost" });
+}
+
+/** One-shot ssh exec with retries; throws after the last attempt fails.
+ * Routed through SshTransport.execSync — no raw ssh command construction here. */
 function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "testuser", retries = 3): string {
   if (retries < 1) retries = 1;
-  const host = `${sshUser}@localhost`;
+  const transport = sshTransport(sshKey, sshPort, sshUser);
   let lastErr: Error | null = null;
   for (let i = 0; i < retries; i++) {
     try {
-      return execSync(`ssh ${sshOpts(sshKey, sshPort)} ${host} "${command}"`, { timeout: 30000 }).toString();
+      return transport.execSync(command);
     } catch (err) {
       lastErr = err as Error;
       if (i < retries - 1) {
@@ -41,22 +47,19 @@ export async function sshExecAsync(command: string, sshKey: string, sshPort: num
   }
 }
 
-/** Copy a directory into the VM via the transport seam (rsync for exact mirror). */
+/** Exact-mirror directory sync into the VM — routed through SshTransport.rsyncTo. */
 function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
-  const host = `${sshUser}@localhost`;
-  execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
+  sshTransport(sshKey, sshPort, sshUser).rsyncTo(src, dest);
 }
 
-/** Copy a single file into the VM via the SshTransport seam. */
+/** Copy a single file into the VM via the SshTransport seam (fire-and-forget sync caller). */
 function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
-  new SshTransport({ sshKey, sshPort, sshUser, host: "localhost" })
-    .copyTo(src, dest)
-    .catch((e) => { throw e; });
+  void sshTransport(sshKey, sshPort, sshUser).copyTo(src, dest);
 }
 
 /** Awaitable scpToVm — callers in async flows should prefer this. */
 async function scpToVmAsync(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): Promise<void> {
-  await new SshTransport({ sshKey, sshPort, sshUser, host: "localhost" }).copyTo(src, dest);
+  await sshTransport(sshKey, sshPort, sshUser).copyTo(src, dest);
 }
 
 // --- Deployment config ---
@@ -354,11 +357,12 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // Wait for VM to go down and come back
       const es = (await import("node:child_process")).execSync;
       // First wait for SSH to drop (guest going down), then for it to return.
+      const t = sshTransport(cfg.sshKey, cfg.sshPort, cfg.sshUser);
       let down = false;
       for (let i = 0; i < 120; i++) {
         await Bun.sleep(1000);
         try {
-          es(`ssh ${sshOpts(cfg.sshKey, cfg.sshPort)} ${cfg.sshUser}@localhost true`, { timeout: 8000 });
+          t.execSync("true", 8000);
           if (down) break; // went down, then came back — reboot complete
         } catch {
           down = true; // SSH dropped — reboot in progress

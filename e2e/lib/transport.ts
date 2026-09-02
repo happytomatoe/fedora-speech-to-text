@@ -8,6 +8,11 @@
 
 import { execSync } from "node:child_process";
 
+/** Shell-quote a single argument. */
+function quote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 export interface ExecResult {
   stdout: string;
   stderr: string;
@@ -60,6 +65,15 @@ export class SshTransport implements Transport {
     });
   }
 
+  /** Synchronous exec — for legacy sync callers (deploy steps). Same ssh
+   * command construction as exec(); no duplicate option strings. */
+  execSync(command: string, timeoutMs = 30000): string {
+    return execSync(
+      `ssh ${sshOpts(this.session)} ${this.session.sshUser}@${this.session.host} ${quote(command)}`,
+      { encoding: "utf-8", timeout: timeoutMs, stdio: ["pipe", "pipe", "pipe"] },
+    ).toString();
+  }
+
   async copyTo(localPath: string, remotePath: string): Promise<void> {
     execSync(
       `scp ${this.scpOpts()} ${shellQuote(localPath)} ${this.session.sshUser}@${this.session.host}:${shellQuote(remotePath)}`,
@@ -71,6 +85,16 @@ export class SshTransport implements Transport {
     execSync(
       `scp ${this.scpOpts()} ${this.session.sshUser}@${this.session.host}:${shellQuote(remotePath)} ${shellQuote(localPath)}`,
       { stdio: "pipe", timeout: 15000 },
+    );
+  }
+
+  /** Exact-mirror directory sync (rsync -azc --delete) over this transport's
+   * ssh options — deploy steps use it instead of building their own command. */
+  rsyncTo(localDir: string, remoteDir: string): void {
+    const host = `${this.session.sshUser}@${this.session.host}`;
+    execSync(
+      `rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(this.session)}" ${shellQuote(localDir)}/ ${host}:${shellQuote(remoteDir)}/`,
+      { stdio: "pipe" },
     );
   }
 }
