@@ -29,12 +29,13 @@ def load_complexity() -> list[dict]:
     out = []
     for filepath, blocks in data.items():
         for block in blocks:
-            if block["type"] != "function":
+            if block["type"] not in ("function", "method"):
                 continue
             out.append({
                 "file": filepath,
                 "name": block["name"],
                 "line": block["lineno"],
+                "endline": block["endline"],
                 "cc": block["complexity"],
             })
     return out
@@ -48,14 +49,9 @@ def main() -> int:
         rel = fn["file"].removeprefix("src/voice_to_text/")
         src_file = f"src/voice_to_text/{rel}"
         lines = coverage.get(src_file, set()) | coverage.get(fn["file"], set())
-        if not lines:
-            cov = 0.0
-        else:
-            end = max(lines) if lines else fn["line"]
-            fn_lines = {n for n in lines if n >= fn["line"]}
-            # approximate: function coverage = covered lines within its span
-            total_fn = end - fn["line"] + 1
-            cov = min(1.0, len(fn_lines) / total_fn) if total_fn > 0 else 0.0
+        span = range(fn["line"], fn["endline"] + 1)
+        covered = sum(1 for n in span if n in lines)
+        cov = covered / len(span) if span else 0.0
         cc = fn["cc"]
         crap = round(cc * cc * (1 - cov) ** 3 + cc, 1)
         rows.append({**fn, "coverage": round(cov, 2), "crap": crap})

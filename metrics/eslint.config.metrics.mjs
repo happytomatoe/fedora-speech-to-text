@@ -5,7 +5,6 @@ import sonarjs from 'eslint-plugin-sonarjs';
 export default [
     {
         files: ['gnome-ext/**/*.js'],
-        ignores: ['gnome-ext/vendor/**', 'gnome-ext/**/*.mjs'],
         plugins: { sonarjs },
         languageOptions: {
             ecmaVersion: 2024,

@@ -28,16 +28,16 @@ def table(headers, rows):
     return "\n".join(out)
 
 
+def report_lines(name):
+    return (REPORTS / name).read_text().splitlines()
+
+
 def short_msg(msg):
     # sonarjs cyclomatic rule packs a JSON blob into the message; extract the number
     if '"' in msg:
         m = re.search(r"complexity of (\d+) which is greater than (\d+)", msg)
         return f"cyclomatic {m.group(1)} > {m.group(2)}" if m else msg
     return msg.replace("Refactor this function to reduce its ", "").replace(" allowed.", "")
-
-
-def top_lines(name, n=5):
-    return (REPORTS / name).read_text().splitlines()[:n]
 
 
 def main():
@@ -69,9 +69,17 @@ def main():
     crap = load_json("crap.json")
 
     # JS: SLOC, complexity issues
-    js_total = next(int(x.split()[0]) for x in top_lines("js-loc.txt") if "total" in x)
+    js_total = next(
+        (int(x.split()[0]) for x in report_lines("js-loc.txt") if "total" in x),
+        0,
+    )
     eslint = load_json("eslint-complexity.json")
-    js_issues = [m for f in eslint for m in f["messages"] if m.get("ruleId")]
+    js_issues = [
+        m
+        for f in eslint
+        for m in f["messages"]
+        if m.get("ruleId") and m["ruleId"].startswith("sonarjs/")
+    ]
 
     # Cross-cutting
     jscpd = load_json("jscpd/jscpd-report.json")["statistics"]["total"]
@@ -81,17 +89,17 @@ def main():
         ["Metric", "Python", "JavaScript"],
         [
             ["SLOC", py_sloc, js_total],
-            ["Avg cyclomatic", round(sum(ccs) / len(ccs), 1), "-"],
-            ["Max cyclomatic", max(ccs), "-"],
+            ["Avg cyclomatic", round(sum(ccs) / len(ccs), 1) if ccs else "-", "-"],
+            ["Max cyclomatic", max(ccs) if ccs else "-", "-"],
             ["Cyclomatic > 10", sum(1 for c in ccs if c > 10), "-"],
-            ["Avg cognitive", round(sum(cog_scores) / len(cog_scores), 1), "-"],
+            ["Avg cognitive", round(sum(cog_scores) / len(cog_scores), 1) if cog_scores else "-", "-"],
             ["Cognitive > 10", sum(1 for c in cog_scores if c > 10), "-"],
             ["Complexity issues > 22 (sonarjs)", "-", len(js_issues)],
             ["Coverage", f"{line_rate * 100:.1f}% (target 80%, not enforced)", "-"],
             ["CRAP > 30", sum(1 for c in crap if c["crap"] > 30), "-"],
             ["Duplicated lines", f"{jscpd['duplicatedLines']} ({jscpd['percentage']:.2f}%)", ""],
             ["Pyright errors", pyright["errorCount"], "-"],
-            ["Dead code (vulture/knip)", f"{len(top_lines('vulture.txt'))} / {len(top_lines('knip.txt'))}", "-"],
+            ["Dead code (vulture/knip)", f"{len(report_lines('vulture.txt'))} / {len(report_lines('knip.txt'))}", "-"],
         ],
     )
     lines += [overview, ""]

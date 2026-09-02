@@ -1159,8 +1159,8 @@ metrics:
     uv run complexipy src/ --output metrics-report --output-format json -q || true
     # Python: coverage (target 80%, not enforced)
     uv run pytest -q --cov=src/voice_to_text --cov-report=xml:metrics-report/coverage.xml --cov-report=term-missing -p no:cacheprovider || true
-    # Python: CRAP from radon CC + coverage
-    uv run python metrics/crap_check.py
+    # Python: CRAP from radon CC + coverage (guarded: depends on coverage.xml from optional pytest step)
+    test -f metrics-report/coverage.xml && uv run python metrics/crap_check.py || echo "crap_check skipped: coverage.xml missing"
     # Python: explicit Any occurrences (pyright config unchanged)
     uv run pyright --outputjson src/ > metrics-report/pyright.json || true
     uv run python -c "import json,subprocess; d=json.load(open('metrics-report/pyright.json')); out=subprocess.run(['grep','-rn','\\bAny\\b','src/'],capture_output=True,text=True).stdout; open('metrics-report/any-unknown-count.json','w').write(json.dumps({'pyright_summary':d['summary'],'explicit_Any_occurrences_grep':len(out.splitlines())},indent=2))"
@@ -1174,7 +1174,8 @@ metrics:
     uv run vulture src/ --min-confidence 80 > metrics-report/vulture.txt || true
     # Both: duplicate code
     bunx jscpd src/ gnome-ext/ --reporters json --output metrics-report/jscpd --min-tokens 50 --silent || true
-    uv run python metrics/metrics_summary.py
+    # summary is best-effort: individual report producers above are allowed to fail
+    uv run python metrics/metrics_summary.py || echo "metrics_summary skipped: reports incomplete"
     echo "Metrics reports written to metrics-report/"
 
 # @category metrics

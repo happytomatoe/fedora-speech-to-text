@@ -62,7 +62,6 @@ coverage.xml
 
 *.log
 node_modules/
-bun.lock
 build/
 
 src/voice_to_text/_build_info.py

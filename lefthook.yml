@@ -51,10 +51,10 @@ commit-msg:
 
 pre-push:
   commands:
-    metrics:
-      # Disabled: measurement-only metrics run (uncomment to enforce on push)
-      # run: just metrics
-      # glob: "*.{py,js,toml,lock}"
+    # Disabled: measurement-only metrics run (uncomment to enforce on push)
+    # metrics:
+    #   run: just metrics
+    #   glob: "*.{py,js,toml,lock}"
     pytest:
       run: uv run pytest -n auto
       glob: "*.{py,js,toml,lock}"
