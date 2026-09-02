@@ -62,7 +62,6 @@ coverage.xml
 
 *.log
 node_modules/
-bun.lock
 build/
 
 src/voice_to_text/_build_info.py
@@ -109,3 +108,5 @@ e2e-output-frame-*.png
 
 # aislop local score history
 .aislop/history.jsonl
+metrics-report/
+mutants/
