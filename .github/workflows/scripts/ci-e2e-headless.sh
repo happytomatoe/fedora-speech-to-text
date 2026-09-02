@@ -32,6 +32,7 @@ cp -r "$REPO_ROOT/gnome-ext" "$ASSETS/gnome-ext"
 mkdir -p "$ASSETS/voice-to-text-python"
 cp -r "$REPO_ROOT/src" "$REPO_ROOT/pyproject.toml" "$REPO_ROOT/uv.lock" "$ASSETS/voice-to-text-python/"
 cp -r "$REPO_ROOT/ci-e2e" "$ASSETS/ci-e2e"
+cp -r "$REPO_ROOT/e2e" "$ASSETS/e2e"
 # Fixtures must live inside the isolated tree: the service runs with HOME
 # pointed at $ISOLATED and reads the debug WAV from there.
 cp "$REPO_ROOT/ci-e2e/fixture.wav" "$ISOLATED/fixture.wav"

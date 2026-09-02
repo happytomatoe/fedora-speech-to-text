@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { LocalTransport } from "./transport.js";
 
 /**
  * SSH-backed helper for running commands in the VM and driving the GNOME session.
@@ -24,6 +25,16 @@ export class ShellHelper {
 
   private dbusAddr: string | null = null;
   private _deployer: import("./deploy.js").Deployer | null = null;
+  private _localTransport: LocalTransport | null = null;
+
+  /** Use LocalTransport — all exec() calls run locally via bash -lc. */
+  useLocalTransport(): void {
+    this._localTransport = new LocalTransport();
+  }
+
+  private get isLocal(): boolean {
+    return this._localTransport !== null;
+  }
 
   /** Set deployer for fast persistent SSH commands */
   setDeployer(deployer: import("./deploy.js").Deployer): void {
@@ -51,6 +62,11 @@ export class ShellHelper {
   }
 
   async exec(command: string, timeoutMs = 30000): Promise<string> {
+    // Local transport (ubuntu-bare): run via bash -lc on the host itself.
+    if (this._localTransport) {
+      const r = await this._localTransport.exec(command, timeoutMs);
+      return r.stdout.trim();
+    }
     const sshExecOnce = async (): Promise<string> => {
       if (!this.session) throw new Error("No session");
       const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;

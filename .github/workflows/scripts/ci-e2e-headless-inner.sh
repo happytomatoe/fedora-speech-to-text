@@ -190,9 +190,18 @@ else
 fi
 
 # --- Run the test runner ----------------------------------------------------------
+# Ported suite (e2e/e2e.ts --env ubuntu-bare): local D-Bus flow, no SSH.
+# The suite dir is staged into the isolated tree; run it with the project
+# root's e2e/ sources.
 TEST_EXIT=0
-cd "$ASSETS/ci-e2e"
-bun run e2e.ts || TEST_EXIT=$?
+if [[ -d "$ASSETS/e2e" ]]; then
+  echo "running ported suite: e2e/e2e.ts --env ubuntu-bare"
+  (cd "$ASSETS/e2e" && bun run e2e.ts --env ubuntu-bare) || TEST_EXIT=$?
+else
+  echo "WARN: staged e2e/ not found — falling back to smoke runner"
+  cd "$ASSETS/ci-e2e"
+  bun run e2e.ts || TEST_EXIT=$?
+fi
 echo "test runner exit: $TEST_EXIT"
 
 # --- Screenshot (post-run state) ---------------------------------------------------
