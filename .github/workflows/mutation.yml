@@ -1,10 +1,9 @@
 name: Mutation Testing
 
-# mutmut runs take 30-60+ min (hours at first) — too slow for per-PR.
-# Weekly schedule + on-demand manual runs.
+# mutmut runs take ~6 min on current suite size — acceptable per-PR.
+# Revisit if runtime grows: move to weekly schedule + manual dispatch.
 on:
-  schedule:
-    - cron: "23 3 * * 1" # Mondays 03:23 UTC (off-minute avoids the :00 stampede)
+  pull_request:
   workflow_dispatch:
 
 jobs:
