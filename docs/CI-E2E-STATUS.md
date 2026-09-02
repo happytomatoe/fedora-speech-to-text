@@ -1,6 +1,15 @@
 # Headless CI E2E — Status
 
-Status: **green on CI (poc-ubuntu-26-04-debug.yml) + local parity via Ubuntu 26.04 VM**
+Status: **green on CI (ubuntu-ci-e2e.yml, bare-runner headless harness) + local parity via Ubuntu 26.04 VM**
+
+> **2026-09-02 update — VM-in-CI abandoned, bare-runner restored.** The
+> QEMU-VM-in-CI experiment (`e2e/setup-ubuntu-vm.sh` + `--env ubuntu-ci`)
+> never went green: it failed repeatedly at `wait-ssh` (run 33661390006) —
+> the guest reached cloud-init completion, but the host never completed an
+> SSH handshake. The diagnosis plan lives in
+> `thoughts/shared/plans/fix-ubuntu-ci-wait-ssh.md`. Decision: CI now runs
+> the proven bare-runner headless harness (below); the VM path remains
+> available locally via `just ubuntu-vm-test` for parity reproduction.
 
 ## Goal
 
@@ -13,7 +22,7 @@ locally, so CI failures can be reproduced with one command.
 ## Architecture
 
 ```
-.github/workflows/poc-ubuntu-26-04-debug.yml   (canonical CI workflow)
+.github/workflows/ubuntu-ci-e2e.yml             (canonical CI workflow)
 └── .github/workflows/scripts/ci-e2e-headless.sh        (outer: isolation env,
     │                              Parakeet container, dbus-run-session)
     └── .github/workflows/scripts/ci-e2e-headless-inner.sh  (inner: schemas,
