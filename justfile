@@ -1044,11 +1044,11 @@ _e2e-run E2E_ENV *ARGS:
     cd e2e
     LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
     : > "$LOG"
-    if [[ "{{E2E_ENV}}" == "fedora-local" ]]; then
+    if [[ "{{ E2E_ENV }}" == "fedora-local" ]]; then
       bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
       exit ${PIPESTATUS[0]}
     else
-      bun run e2e.ts --env "{{E2E_ENV}}" {{ ARGS }} 2>&1 | tee "$LOG"
+      bun run e2e.ts --env "{{ E2E_ENV }}" {{ ARGS }} 2>&1 | tee "$LOG"
       exit ${PIPESTATUS[0]}
     fi
 

@@ -29,6 +29,8 @@ jobs:
         run: sudo chmod +r /boot/vmlinuz*
 
       - name: Force slirp networking (passt breaks DNS on runners)
+        # pasta is required by podman (rootless container netns); only passt
+        # (used by libguestfs) breaks DNS, and pasta is a separate package.
         run: sudo apt-get purge -y passt || true
 
       - name: Set up just, uv, bun
