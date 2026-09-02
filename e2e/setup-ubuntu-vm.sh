@@ -29,6 +29,8 @@ if [ ! -f "$IMAGE" ]; then
   echo "Customizing image (virt-customize)..."
   cp "$BASE" "$IMAGE"
   qemu-img resize "$IMAGE" 20G
+  # direct backend: passt networking fails on GitHub Actions runners
+  export LIBGUESTFS_BACKEND=direct
   virt-customize -a "$IMAGE" \
     --run-command 'growpart /dev/sda 1 || growpart /dev/vda 1 || true' \
     --run-command 'resize2fs /dev/sda1 || resize2fs /dev/vda1 || true' \
