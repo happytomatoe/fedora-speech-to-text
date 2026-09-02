@@ -37,6 +37,7 @@ jobs:
             dconf-gsettings-backend gsettings-desktop-schemas \
             libportaudio2 \
             pipewire pipewire-bin wireplumber \
+            imagemagick \
             tmux \
             curl
 
