@@ -13,6 +13,8 @@ import { doAtspiAction, findAtspiExtents, setAtspiText, waitForAtspiNode, waitFo
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
+import { LocalTransport } from "./lib/transport.js";
+import { ShellHelper } from "./lib/shell.js";
 import { execSync } from "node:child_process";
 
 // Log to file
@@ -660,10 +662,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       beginSpan("retrieve-screencast");
   const localPath = join(run.outputDir, "test-recording.webm");
       try {
-        execSync(
-          `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
-          { encoding: "utf-8", timeout: 10000 }
-        );
+        await vm.transport.copyFrom(screencastFile, localPath);
         const stats = require("node:fs").statSync(localPath);
         console.log(`  Screencast saved: ${localPath} (${(stats.size / 1024).toFixed(1)}KB)`);
       } catch (e) {
@@ -984,6 +983,14 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
  * service with VOICE_TO_TEXT_DEBUG_FILE set to the fixture WAV.
  */
 async function runBareMode(): Promise<void> {
+  // Exercise the transport seam: a LocalTransport-backed ShellHelper plus the
+  // LocalTransport instance this function uses directly — proves bash -lc +
+  // inherited dbus-run-session env at runtime.
+  const shell = new ShellHelper();
+  shell.useLocalTransport();
+  const transport = new LocalTransport();
+  const probe = await transport.exec("echo __SEAM_OK__ $DBUS_SESSION_BUS_ADDRESS");
+  console.log(`  local transport probe: code=${probe.code} dbus=${probe.stdout.includes("__SEAM_OK__") ? "set" : "unset"}`);
   const outputDir = join(import.meta.dir, "output", "ubuntu-bare");
   mkdirSync(outputDir, { recursive: true });
   const textFile = process.env.VOX_CI_E2E_TEXT_FILE ?? "/tmp/typed-text.txt";
@@ -992,24 +999,32 @@ async function runBareMode(): Promise<void> {
     {
       name: "wait-service-bus",
       timeout: 60_000,
-      fn: () =>
-        pollForCommandOutput(
-          async (cmd: string) => execSync(cmd, { encoding: "utf-8", timeout: 10_000 }),
+      fn: () => {
+        const transport = new LocalTransport();
+        return pollForCommandOutput(
+          (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
           "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
           "com.happytomatoe.VoiceToText",
           60_000,
-        ),
+        );
+      },
     },
   ]);
 
   beginSpan("test-flow-bare");
+  // All bare-mode commands run through the LocalTransport seam (bash -lc,
+  // inheriting the dbus-run-session env) — the same interface the SSH envs use.
+  const run = async (cmd: string, timeoutMs = 15_000) => {
+    const r = await transport.exec(cmd, timeoutMs);
+    if (r.code !== 0) throw new Error(`command failed (${r.code}): ${cmd}\n${r.stderr}`);
+    return r.stdout;
+  };
   const gdbus = (method: string, argsJson = "") =>
-    execSync(
+    run(
       `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${argsJson}`,
-      { encoding: "utf-8", timeout: 15_000 },
     );
 
-  gdbus(
+  await gdbus(
     "StartRecording",
     `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: "mutter-commit" })}'`,
   );
@@ -1022,11 +1037,11 @@ async function runBareMode(): Promise<void> {
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline && !transcription) {
     try {
-      const out = execSync(
+      const out = await transport.exec(
         `grep -oP 'Transcription result: \\K.*' ${serviceLog} 2>/dev/null | tail -1`,
-        { encoding: "utf-8", timeout: 5_000 },
+        5_000,
       );
-      const trimmed = out.trim();
+      const trimmed = out.stdout.trim();
       if (trimmed) transcription = trimmed;
     } catch {
       // poll again
@@ -1034,7 +1049,7 @@ async function runBareMode(): Promise<void> {
     if (!transcription) await Bun.sleep(500);
   }
   try {
-    gdbus("StopRecording");
+    await gdbus("StopRecording");
   } catch (e) {
     console.log(`  StopRecording warning: ${e}`);
   }

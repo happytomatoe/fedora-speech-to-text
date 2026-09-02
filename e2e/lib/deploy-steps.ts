@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { ShellHelper } from "./shell.js";
 import { Deployer } from "./deploy.js";
+import { SshTransport } from "./transport.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import type { SuiteEnv } from "./env.js";
 
@@ -40,17 +41,22 @@ export async function sshExecAsync(command: string, sshKey: string, sshPort: num
   }
 }
 
-/** Rsync a directory into the VM (exact mirror, deletes extras). */
+/** Copy a directory into the VM via the transport seam (rsync for exact mirror). */
 function rsyncToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
   const host = `${sshUser}@localhost`;
   execSync(`rsync -azc --delete --delete-excluded -e "ssh ${sshOpts(sshKey, sshPort)}" ${src}/ ${host}:${dest}/`, { stdio: "pipe" });
 }
 
-/** Copy a single file into the VM. */
+/** Copy a single file into the VM via the SshTransport seam. */
 function scpToVm(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): void {
-  const host = `${sshUser}@localhost`;
-  const scpOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${sshKey} -P ${sshPort}`;
-  execSync(`scp ${scpOpts} ${src} ${host}:${dest}`, { stdio: "pipe" });
+  new SshTransport({ sshKey, sshPort, sshUser, host: "localhost" })
+    .copyTo(src, dest)
+    .catch((e) => { throw e; });
+}
+
+/** Awaitable scpToVm — callers in async flows should prefer this. */
+async function scpToVmAsync(src: string, dest: string, sshKey: string, sshPort: number, sshUser = "testuser"): Promise<void> {
+  await new SshTransport({ sshKey, sshPort, sshUser, host: "localhost" }).copyTo(src, dest);
 }
 
 // --- Deployment config ---

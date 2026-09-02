@@ -1,11 +1,12 @@
-/**
- * Transport seam: how the suite executes commands on the "target machine".
+/** Transport seam: how the suite executes commands on the "target machine".
  *
- * - SshTransport: one-shot `ssh` CLI exec into a VM (existing behavior).
- * - LocalTransport: `bash -lc` on the host itself — used by the ubuntu-bare
+ * - SshTransport: one-shot `ssh` CLI exec + `scp` file transfer into a VM (existing behavior).
+ * - LocalTransport: `bash -lc` on the host itself + plain fs copy — used by the ubuntu-bare
  *   env where the suite runs INSIDE the same dbus-run-session as the headless
  *   gnome-shell, so no SSH hop exists.
  */
+
+import { execSync } from "node:child_process";
 
 export interface ExecResult {
   stdout: string;
@@ -15,6 +16,10 @@ export interface ExecResult {
 
 export interface Transport {
   exec(command: string, timeoutMs?: number): Promise<ExecResult>;
+  /** Copy a local file/dir to the target. LocalTransport: plain fs copy. */
+  copyTo(localPath: string, remotePath: string): Promise<void>;
+  /** Copy a file from the target to local. LocalTransport: plain fs copy. */
+  copyFrom(remotePath: string, localPath: string): Promise<void>;
 }
 
 export interface SshSessionInfo {
@@ -30,6 +35,10 @@ function sshOpts(session: SshSessionInfo): string {
 
 export class SshTransport implements Transport {
   constructor(private session: SshSessionInfo) {}
+
+  private scpOpts(): string {
+    return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -P ${this.session.sshPort}`;
+  }
 
   async exec(command: string, timeoutMs = 30000): Promise<ExecResult> {
     const { execFile } = await import("node:child_process");
@@ -50,6 +59,24 @@ export class SshTransport implements Transport {
       );
     });
   }
+
+  async copyTo(localPath: string, remotePath: string): Promise<void> {
+    execSync(
+      `scp ${this.scpOpts()} ${shellQuote(localPath)} ${this.session.sshUser}@${this.session.host}:${shellQuote(remotePath)}`,
+      { stdio: "pipe" },
+    );
+  }
+
+  async copyFrom(remotePath: string, localPath: string): Promise<void> {
+    execSync(
+      `scp ${this.scpOpts()} ${this.session.sshUser}@${this.session.host}:${shellQuote(remotePath)} ${shellQuote(localPath)}`,
+      { stdio: "pipe", timeout: 15000 },
+    );
+  }
+}
+
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
 export class LocalTransport implements Transport {
@@ -70,5 +97,13 @@ export class LocalTransport implements Transport {
     const code = await proc.exited;
     clearTimeout(timer);
     return { stdout, stderr, code };
+  }
+
+  async copyTo(localPath: string, remotePath: string): Promise<void> {
+    await Bun.write(remotePath, Bun.file(localPath));
+  }
+
+  async copyFrom(remotePath: string, localPath: string): Promise<void> {
+    await Bun.write(localPath, Bun.file(remotePath));
   }
 }

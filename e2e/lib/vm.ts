@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
+import { SshTransport } from "./transport.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import { execSync } from "node:child_process";
@@ -47,6 +48,8 @@ export class VmManager {
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
+  /** File/command transport to the VM (ssh2-backed scp/exec). */
+  transport: SshTransport;
   frameCount = 0;
   config!: VmConfig;
 
@@ -60,6 +63,12 @@ export class VmManager {
       port: config.run.sshPort,
       username: config.sshUser,
       privateKey: readFileSync(config.sshKey),
+    });
+    this.transport = new SshTransport({
+      sshKey: config.sshKey,
+      sshPort: config.run.sshPort,
+      sshUser: config.sshUser,
+      host: "localhost",
     });
     this.shell = new ShellHelper();
     this.deployCfg = {
