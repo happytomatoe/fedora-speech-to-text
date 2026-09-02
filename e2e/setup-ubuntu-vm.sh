@@ -42,6 +42,7 @@ if [ ! -f "$IMAGE" ]; then
     --run-command 'mkdir -p /run/sshd && chmod 0755 /run/sshd' \
     --run-command 'rm -f /etc/systemd/system/ssh.socket; systemctl disable ssh.socket 2>/dev/null || true; systemctl enable ssh.service 2>/dev/null || true' \
     --run-command 'mkdir -p /etc/systemd/system/ssh.service.d && printf "[Unit]\nAfter=systemd-tmpfiles-setup.service\n" > /etc/systemd/system/ssh.service.d/after-tmpfiles.conf' \
+    --run-command 'mkdir -p /var/log/journal' \
     --run-command 'mkdir -p /etc/gdm3 && printf "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n" > /etc/gdm3/custom.conf'
   rm -f "$IMAGE".*
 fi
