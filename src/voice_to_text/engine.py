@@ -167,9 +167,11 @@ class RecordingEngine:
             elif output_method == "mutter-commit":
                 typer = MutterVirtualPaster()
                 await typer.start()
-            else:
+            elif output_method == "type":
                 typer = DotoolTyper()
                 await typer.start()
+            else:
+                logger.warning("Unsupported output_method %r, no output will be typed", output_method)
             logger.info("Output method %s initialized", output_method)
         except DotoolcNotFoundError as e:
             logger.warning("Typing requested but dotoolc not found: %s", e)
@@ -181,7 +183,10 @@ class RecordingEngine:
 
     async def _run_debug_mode(self, config: dict[str, Any], typer) -> None:
         """Handle debug-mode recording (test file instead of microphone)."""
+        # handle_debug_recording is guaranteed importable when is_debug_mode() is True
         from voice_to_text.debug import handle_debug_recording  # noqa: PLC0415
+
+        logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
 
         logger.info("DEBUG MODE DETECTED: Using test file instead of microphone")
         self.state = EngineState.RECORDING
@@ -250,21 +255,23 @@ class RecordingEngine:
         if not filepath:
             return
 
-        text = await self._transcribe(config, filepath, language, transcriber, batch_provider)
-        _step("transcription_done")
-        text = self._postprocess(config, text, language)
-        _step("postprocess_done")
+        try:
+            text = await self._transcribe(config, filepath, language, transcriber, batch_provider)
+            _step("transcription_done")
+            text = self._postprocess(config, text, language)
+            _step("postprocess_done")
 
-        if self._skip_output:
-            logger.info("Output skipped (cancel) after transcription")
-            if typer and isinstance(typer, MutterVirtualPaster):
-                await typer.flush()
-            return
+            if self._skip_output:
+                logger.info("Output skipped (cancel) after transcription")
+                if typer and isinstance(typer, MutterVirtualPaster):
+                    await typer.flush()
+                return
 
-        await self._output_text(typer, text)
-        _step("output_done")
-        logger.info("Transcription completed: %d characters", len(text) if text else 0)
-        self._store_audio(filepath)
+            await self._output_text(typer, text)
+            _step("output_done")
+            logger.info("Transcription completed: %d characters", len(text) if text else 0)
+        finally:
+            self._store_audio(filepath)
 
     async def _start_recording(
         self,
@@ -418,7 +425,13 @@ class RecordingEngine:
             _step("dotoolc_opened")
 
             # Check for debug mode (test file instead of microphone)
-            from voice_to_text.debug import is_debug_mode  # noqa: PLC0415
+            # Lazy import to avoid circular dependencies in production builds
+            try:
+                from voice_to_text.debug import is_debug_mode  # noqa: PLC0415
+            except ImportError:
+
+                def is_debug_mode() -> bool:
+                    return False
 
             if is_debug_mode():
                 await self._run_debug_mode(config, typer)
