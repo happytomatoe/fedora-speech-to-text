@@ -41,6 +41,7 @@ if [ ! -f "$IMAGE" ]; then
     --install 'gdm3,gnome-shell,gnome-session,glib2.0-bin,mesa-utils,libgl1-mesa-dri,libgbm1,dconf-gsettings-backend,gsettings-desktop-schemas,libportaudio2,tmux,dbus,curl,pulseaudio,pulseaudio-utils' \
     --run-command 'mkdir -p /run/sshd && chmod 0755 /run/sshd' \
     --run-command 'rm -f /etc/systemd/system/ssh.socket; systemctl disable ssh.socket 2>/dev/null || true; systemctl enable ssh.service 2>/dev/null || true' \
+    --run-command 'mkdir -p /etc/systemd/system/ssh.service.d && printf "[Unit]\nAfter=systemd-tmpfiles-setup.service\n" > /etc/systemd/system/ssh.service.d/after-tmpfiles.conf' \
     --run-command 'mkdir -p /etc/gdm3 && printf "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n" > /etc/gdm3/custom.conf'
   rm -f "$IMAGE".*
 fi
