@@ -65,6 +65,11 @@ runcmd:
   # gnome-session #190: profile state from a previous run can abort the session
   # on next autologin; wipe it before GDM starts the session
   - sh -c 'rm -rf ~testuser/.config/gnome-* ~testuser/.cache/gnome-shell ~testuser/.local/share/gnome-shell ~testuser/.local/state/gnome-shell'
+  # sshd PerSourcePenalties (default-on in OpenSSH 9.8+) penalizes the slirp
+  # NAT IP 10.0.2.2 when wait-ssh probes race cloud-init, dropping all host
+  # connections for the rest of the run
+  - printf 'PerSourcePenalties no\n' > /etc/ssh/sshd_config.d/60-e2e-nopenalties.conf
+  - systemctl reload ssh || systemctl restart ssh || true
   - sh -c 'echo cloud-init-ready > /var/tmp/cloud-init-ready'
 EOF
   cat > "$TMPD/meta-data" <<EOF
