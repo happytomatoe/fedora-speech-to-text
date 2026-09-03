@@ -43,6 +43,10 @@ HEIGHT="${CI_E2E_HEIGHT:-540}"
 export WIDTH HEIGHT
 PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
 export PULSE_SERVER
+VOICE_TO_TEXT_DEBUG_FILE="$HOME/current-fixture.wav"
+VOX_CI_E2E_TEXT_FILE="$HOME/typed-text.txt"
+DOTOOL_PIPE="$HOME/.runtime/dotool-pipe"
+export VOICE_TO_TEXT_DEBUG_FILE VOX_CI_E2E_TEXT_FILE DOTOOL_PIPE
 # Fixed-path model cache (workflow-cached); the service runs with an isolated
 # HOME whose cache would be re-downloaded (~90s) every run otherwise.
 MOONSHINE_VOICE_CACHE=/home/runner/moonshine-model
