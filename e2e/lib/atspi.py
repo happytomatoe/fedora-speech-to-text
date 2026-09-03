@@ -144,13 +144,23 @@ def add_word_roundtrip(word):
     if not entry:
         return "no-entry"
 
+    set_ok = False
     for _ in range(10):
         try:
             if entry.query_text().set_text_contents(word):
+                set_ok = True
+                break
+        except Exception:
+            pass
+        try:
+            if entry.query_editable_text().set_text_contents(word):
+                set_ok = True
                 break
         except Exception:
             pass
         time.sleep(0.3)
+    if not set_ok:
+        return "set-failed"
     try:
         if entry.query_text().get_text(0, -1) != word:
             return "set-failed"
