@@ -1417,7 +1417,7 @@ ATSPIEOF`,
         5_000,
       );
       const registered = hotkeyVal.includes("Super") && (parseInt(regErr.stdout.trim() || "0") === 0);
-      hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : "hotkey unregistered" });
+      hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : `hotkey unregistered val=${hotkeyVal.trim()} regErr=${regErr.stdout.trim()}` });
     } catch (e) {
       hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: "fail", note: String(e) });
       await gdbus("StopRecording").catch(() => {});
