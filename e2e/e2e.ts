@@ -1415,7 +1415,7 @@ ATSPIEOF`,
       // the default schema source in this env) — read the default straight
       // from the deployed gschema.xml instead.
       const extDir = "$HOME/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com";
-      const hotkeyVal = await run(`grep -A1 'name="hotkey"' '${extDir}/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml' | grep default`);
+      const hotkeyVal = await run(`grep -A1 'name="hotkey"' "${extDir}/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml" | grep default`);
       const dconfOverride = await transport.exec(
         `dconf read /org/gnome/shell/extensions/voice-to-text/hotkey 2>/dev/null || true`,
         5_000,
