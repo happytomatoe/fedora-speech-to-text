@@ -2,24 +2,29 @@
   "test-cases": [
     {
       "file": "test-01-weather.wav",
-      "expected": "the weather today is sunny with a high of 75 degrees"
+      "expected": "the weather today is sunny with a high of 75 degrees",
+      "output-method": "mutter-commit"
     },
     {
       "file": "test-02-reminder.wav",
-      "expected": "remember to buy groceries after work today"
+      "expected": "remember to buy groceries after work today",
+      "output-method": "mutter-virtual"
     },
     {
       "file": "test-03-hello.wav",
-      "expected": "good morning, how are you today?"
+      "expected": "good morning, how are you today?",
+      "output-method": "mutter-commit"
     },
     {
       "file": "test-04-calendar.wav",
-      "expected": "our meeting is scheduled for 3pm on monday"
+      "expected": "our meeting is scheduled for 3pm on monday",
+      "output-method": "mutter-virtual"
     },
     {
       "file": "test-05-note.wav",
       "expected": "note that the project",
-      "note": "substring both Parakeet and Moonshine-medium produce verbatim (Moonshine mishears deadline->then died, CI 2026-09-03)"
+      "note": "substring both Parakeet and Moonshine-medium produce verbatim (Moonshine mishears deadline->then died, CI 2026-09-03)",
+      "output-method": "mutter-commit"
     }
   ]
 }

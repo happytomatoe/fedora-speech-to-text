@@ -1035,26 +1035,21 @@ async function runBareMode(): Promise<void> {
   const debugFile = process.env.VOICE_TO_TEXT_DEBUG_FILE;
   const fixturesDir = join(import.meta.dir, "fixtures");
   const serviceLog = process.env.VOX_CI_E2E_SERVICE_LOG ?? "/tmp/voice-service.log";
-  // Cells come from the test matrix (case → output-method pairs), not a
-  // hardcoded cross-product. --case filters by audio filename substring.
+  // Each test case carries its own output-method (one case = one cell), so
+  // --case runs exactly one file+method combination. --case filters by audio
+  // filename substring.
   const matrix = loadTestMatrix()["test-suites"].transcription;
-  const audioById = new Map<string, { file: string; expected: string }>(
-    matrix.matrix["audio-files"].map((a: any) => [a.id, { file: a.file, expected: a.expected }]),
-  );
   const enabledMethods = new Set(
     matrix.matrix["output-methods"].filter((m: any) => m.enabled).map((m: any) => m.id),
   );
   const methodRequires: Record<string, string[]> = Object.fromEntries(
     matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
   );
-  const allCases: (TestCaseFile & { method: string })[] = matrix["test-cases"]
-    .map((tc: any) => {
-      const audio = audioById.get(tc.audio);
-      if (!audio) throw new Error(`matrix case ${tc.id}: unknown audio '${tc.audio}'`);
-      return { file: audio.file, expected: audio.expected, method: tc["output-method"] };
-    })
-    .filter((c: any) => !SELECTED_CASE || c.file.includes(SELECTED_CASE));
-  if (allCases.length === 0) throw new Error(`no matrix cases match '${SELECTED_CASE ?? "(all)"}'`);
+  const rawCases = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"))["test-cases"] as TestCaseFile[];
+  const allCases: (TestCaseFile & { method: string })[] = rawCases
+    .map(c => ({ ...c, method: (c as any)["output-method"] ?? "mutter-commit" }))
+    .filter(c => !SELECTED_CASE || c.file.includes(SELECTED_CASE));
+  if (allCases.length === 0) throw new Error(`no test cases match '${SELECTED_CASE ?? "(all)"}'`);
   const uinputOk = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
     (await transport.exec(`test -c /dev/uinput && test -w /dev/uinput`).then(r => r.code === 0));
   const canUseDotool = uinputOk;
