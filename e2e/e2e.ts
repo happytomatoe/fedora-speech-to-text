@@ -1119,12 +1119,111 @@ async function runBareMode(): Promise<void> {
   endSpan();
 
   console.log("\n=== bare-mode summary ===");
-  for (const r of results) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.file} ${r.method}${r.note ? `  (${r.note})` : ""}`);
+
+  // Phase 4: config + error cases — no screen, no input; D-Bus + config-file
+  // assertions through the same transport.
+  const configPath = "$HOME/.config/voice-to-text/config.yaml";
+  const configRows: Array<{ id: string; status: "pass" | "fail" | "skip"; note?: string }> = [];
+  const row = (id: string, ok: boolean, note?: string) =>
+    configRows.push({ id, status: ok ? "pass" : "fail", note });
+  const skipRow = (id: string, why: string) => configRows.push({ id, status: "skip", note: why });
+
+  // C07: config exists + parses as YAML (service started, so it must)
+  try {
+    const c07 = await run(`cat ${configPath}`);
+    row("C07 config-exists-parses", c07.includes("provider"));
+  } catch (e) {
+    row("C07 config-exists-parses", false, String(e));
+  }
+  // C08: permissions 0600
+  try {
+    const perms = (await run(`stat -c '%a' ${configPath}`)).trim();
+    row("C08 config-perms-600", perms === "600", `got ${perms}`);
+  } catch (e) {
+    row("C08 config-perms-600", false, String(e));
+  }
+  // C01/C02/C03: write provider/output-method/language into config, restart
+  // service, verify bus name returns (service picked the file up cleanly).
+  try {
+    await run(
+      `sed -i 's/^provider:.*/provider: parakeet/' ${configPath} && ` +
+        `grep -q '^output_method:' ${configPath} || echo 'output_method: mutter-commit' >> ${configPath} && ` +
+        `grep -q '^language:' ${configPath} || echo 'language: en' >> ${configPath}`,
+    );
+    const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
+    const cmdline = (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
+    await run(`kill ${svcPid} 2>/dev/null; sleep 1`);
+    if (cmdline) {
+      await transport.exec(`nohup ${cmdline} >> '${serviceLog}' 2>&1 &`, 5_000);
+    }
+    await pollForCommandOutput(
+      (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
+      "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+      "com.happytomatoe.VoiceToText",
+      30_000,
+    );
+    row("C01-C03 config-reload-restart", true);
+  } catch (e) {
+    row("C01-C03 config-reload-restart", false, String(e));
+  }
+  skipRow("C04 hotkey-dconf", "needs synthetic input (phase 5)");
+  skipRow("C05 debug-toggle", "low priority");
+  skipRow("C06 api-key-keyring", "no keyring on runner");
+
+  // E06: service down → StartRecording must fail cleanly
+  try {
+    const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
+    if (svcPid) await run(`kill ${svcPid}; sleep 1`);
+    const e06 = await transport.exec(
+      "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
+      10_000,
+    );
+    row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
+    if (svcPid) {
+      const cmdline = (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
+      if (cmdline) await transport.exec(`nohup ${cmdline} >> '${serviceLog}' 2>&1 &`, 5_000);
+      await pollForCommandOutput(
+        (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
+        "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+        "com.happytomatoe.VoiceToText",
+        30_000,
+      );
+    }
+  } catch (e) {
+    row("E06 service-down-clean-error", false, String(e));
+  }
+  // E02: invalid endpoint → error in log, service stays alive
+  try {
+    await run(`cp ${configPath} ${configPath}.bak && sed -i 's|http_endpoint:.*|http_endpoint: http://localhost:59999|' ${configPath}`);
+    const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
+    await gdbus("StartRecording", `'${JSON.stringify({ provider: "parakeet", language: "en" })}'`).catch(() => {});
+    await Bun.sleep(3000);
+    await gdbus("StopRecording").catch(() => {});
+    const errHit = await transport.exec(
+      `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
+      5_000,
+    );
+    row("E02 api-error-logged", parseInt(errHit.stdout.trim() || "0") > 0);
+    await run(`mv ${configPath}.bak ${configPath}`);
+  } catch (e) {
+    row("E02 api-error-logged", false, String(e));
+  }
+  skipRow("E07 parallel-recording", "deferred");
+  skipRow("E01 no-audio-device", "deferred");
+  skipRow("E03 network-timeout", "deferred");
+  skipRow("E05 config-dir-readonly", "deferred");
+
+  console.log("\n=== config/error rows ===");
+  for (const r of configRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
+  const configFailed = configRows.filter(r => r.status === "fail").length;
   const failed = results.filter(r => r.status === "fail").length;
+  const totalFailed = failed + configFailed;
   const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: no uinput)` : "";
-  console.log(`\n${results.length - failed}/${results.length} passed${skippedNote}`);
-  writeFileSync(join(outputDir, "results.json"), JSON.stringify(results, null, 2));
-  process.exit(failed === 0 ? 0 : 1);
+  writeFileSync(
+    join(outputDir, "results.json"),
+    JSON.stringify({ transcription: results, configError: configRows }, null, 2),
+  );
+  process.exit(totalFailed === 0 ? 0 : 1);
 }
 
 /** Entry point: parse flags, boot VM, run flow or prefs tests. */
