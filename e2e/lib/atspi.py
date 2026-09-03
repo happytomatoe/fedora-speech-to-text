@@ -146,7 +146,7 @@ def add_word_roundtrip(word):
 
     st = entry.get_state_set()
     state_names = [str(s) for s in (Atspi.StateType.EDITABLE, Atspi.StateType.FOCUSABLE, Atspi.StateType.FOCUSED, Atspi.StateType.ENABLED, Atspi.StateType.SHOWING) if st.contains(s)]
-    print("ENTRY-STATES:" + ",".join(state_names), flush=True)
+    entry_states = ",".join(state_names)
     set_ok = False
     set_err = ""
     for _ in range(6):
@@ -169,7 +169,7 @@ def add_word_roundtrip(word):
             set_err = repr(e)
         time.sleep(0.3)
     if not set_ok:
-        return f"set-failed roles={entry.get_role_name()} states={entry.get_state_set()} err={set_err[:120]}"
+        return f"set-failed states={entry_states} err={set_err[:120]}"
     try:
         if entry.query_text().get_text(0, -1) != word:
             return "set-failed"
