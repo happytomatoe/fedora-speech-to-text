@@ -144,9 +144,12 @@ def add_word_roundtrip(word):
     if not entry:
         return "no-entry"
 
+    st = entry.get_state_set()
+    state_names = [str(s) for s in (Atspi.StateType.EDITABLE, Atspi.StateType.FOCUSABLE, Atspi.StateType.FOCUSED, Atspi.StateType.ENABLED, Atspi.StateType.SHOWING) if st.contains(s)]
+    print("ENTRY-STATES:" + ",".join(state_names), flush=True)
     set_ok = False
     set_err = ""
-    for _ in range(3):
+    for _ in range(6):
         try:
             entry.query_component().grab_focus()
             time.sleep(0.2)
