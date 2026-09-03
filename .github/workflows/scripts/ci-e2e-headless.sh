@@ -64,6 +64,15 @@ fi
 
 if [ "$RUNTIME" != "skip" ]; then
   echo "Starting Parakeet container ($RUNTIME)..."
+  # GHCR blob pulls are flaky on CI (connection reset mid-pull); retry a few
+  # times before giving up — run 33726716165 died on a transient reset.
+  pulled=0
+  for attempt in 1 2 3; do
+    $RUNTIME pull ghcr.io/achetronic/parakeet:latest && pulled=1 && break
+    echo "WARN: image pull attempt $attempt failed, retrying in 5s..." >&2
+    sleep 5
+  done
+  [ "$pulled" = 1 ] || { echo "FATAL: could not pull Parakeet image" >&2; exit 1; }
   $RUNTIME run -d --name "$CONTAINER_NAME" -p 5092:5092 \
     ghcr.io/achetronic/parakeet:latest
 fi
