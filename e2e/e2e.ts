@@ -1186,11 +1186,16 @@ async function runBareMode(): Promise<void> {
       // `--project .` — must run from the original service cwd (CI C01-C03).
       // nohup'd child inherits stdout/stderr pipes; redirect them so exec's
       // pipe drain doesn't block, and log the restart for forensics.
-      const rr = await transport.exec(
-        `cd '${cwd}' && nohup ${cmdline} >> '${serviceLog}' 2>&1 < /dev/null & sleep 2; pgrep -f voice-to-text-dbus | head -1`,
-        15_000,
-      );
-      console.log(`  service restart: code=${rr.code} pid=${rr.stdout.trim()} stderr=${rr.stderr.slice(0, 200)}`);
+      // setsid + full stdio detach: any fd left on the exec's pipes makes
+      // LocalTransport's stream await hang past the kill timer (CI run
+      // 33738359924 hung 42min here). Verify the restart in a separate exec.
+      transport.exec(
+        `setsid bash -c "cd '${cwd}' && exec ${cmdline}" >> '${serviceLog}' 2>&1 < /dev/null &`,
+        5_000,
+      ).catch(() => {});
+      await new Promise(r => setTimeout(r, 3_000));
+      const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
+      console.log(`  service restart: pid=${vr.stdout.trim()}`);
     }
     await pollForCommandOutput(
       (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
@@ -1242,11 +1247,13 @@ async function runBareMode(): Promise<void> {
     row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
     await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
     if (restoreCmd) {
-      const rr = await transport.exec(
-        `cd '${restoreCwd}' && nohup ${restoreCmd} >> '${serviceLog}' 2>&1 < /dev/null & sleep 2; pgrep -f voice-to-text-dbus | head -1`,
-        15_000,
-      );
-      console.log(`  service restore: code=${rr.code} pid=${rr.stdout.trim()} stderr=${rr.stderr.slice(0, 200)}`);
+      transport.exec(
+        `setsid bash -c "cd '${restoreCwd}' && exec ${restoreCmd}" >> '${serviceLog}' 2>&1 < /dev/null &`,
+        5_000,
+      ).catch(() => {});
+      await new Promise(r => setTimeout(r, 3_000));
+      const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
+      console.log(`  service restore: pid=${vr.stdout.trim()}`);
       await pollForCommandOutput(
         (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
         "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
