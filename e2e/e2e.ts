@@ -1243,10 +1243,11 @@ async function runBareMode(): Promise<void> {
           `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -m1 -ioP '${pattern}'`,
           5_000,
         ).then(r => r.stdout.trim());
-      await dtool("key ctrl+alt+r");
+      // Schema default hotkey is <Super>w (gschema.xml) — match it here.
+      await dtool("key super+w");
       await Bun.sleep(1000);
       const started = await since("Recording|recording started|DEBUG MODE");
-      await dtool("key ctrl+alt+r");
+      await dtool("key super+w");
       await Bun.sleep(1000);
       hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: started ? "pass" : "fail", note: started ? undefined : "no recording evidence in log" });
     } catch (e) {
