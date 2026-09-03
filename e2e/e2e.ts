@@ -871,11 +871,14 @@ async function compareWithReference(name: string, captured: string, run: RunCont
  */
 // Read the service's cmdline AND cwd from /proc — replaying the cmdline from a
 // different cwd silently breaks commands with relative paths (uv --project .).
-async function svcCmdline(svcPid: string): Promise<{ cmdline: string; cwd: string }> {
-  const pidOk = svcPid && /^\d+$/.test(svcPid) && (await transport.exec(`test -d /proc/${svcPid}`, 5_000)).stdout.includes("yes");
+async function svcCmdline(
+  svcPid: string,
+  exec: (cmd: string, timeout?: number) => Promise<{ stdout: string }>,
+): Promise<{ cmdline: string; cwd: string }> {
+  const pidOk = svcPid && /^\d+$/.test(svcPid) && (await exec(`test -d /proc/${svcPid}`, 5_000)).stdout.includes("yes");
   if (!pidOk) return { cmdline: "", cwd: "" };
-  const cmdline = (await transport.exec(`tr '\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
-  const cwd = (await transport.exec(`readlink /proc/${svcPid}/cwd 2>/dev/null`)).stdout.trim() || "";
+  const cmdline = (await exec(`tr '\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
+  const cwd = (await exec(`readlink /proc/${svcPid}/cwd 2>/dev/null`)).stdout.trim() || "";
   return { cmdline, cwd };
 }
 
@@ -1165,10 +1168,12 @@ async function runBareMode(): Promise<void> {
         `grep -q '^language:' ${configPath} || echo 'language: en' >> ${configPath}`,
     );
     const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
-    const cmdline = (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
+    const { cmdline, cwd } = await svcCmdline(svcPid, transport.exec.bind(transport));
     await run(`kill ${svcPid} 2>/dev/null; sleep 1`);
     if (cmdline) {
-      await transport.exec(`nohup ${cmdline} >> '${serviceLog}' 2>&1 &`, 5_000);
+      // replaying the cmdline from the harness cwd breaks uv's relative
+      // `--project .` — must run from the original service cwd (CI C01-C03)
+      await transport.exec(`cd '${cwd}' && nohup ${cmdline} >> '${serviceLog}' 2>&1 &`, 5_000);
     }
     await pollForCommandOutput(
       (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
@@ -1192,9 +1197,9 @@ async function runBareMode(): Promise<void> {
     // cmdline and the restore below becomes a no-op (regression 2026-09-03).
     const pidAlive = svcPid && /^\d+$/.test(svcPid) &&
       (await transport.exec(`test -d /proc/${svcPid} && echo yes || echo no`, 5_000)).stdout.trim() === "yes";
-    const restoreCmd = pidAlive
-      ? (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim()
-      : "";
+    const { cmdline: restoreCmd, cwd: restoreCwd } = pidAlive
+      ? await svcCmdline(svcPid, transport.exec.bind(transport))
+      : { cmdline: "", cwd: "" };
     // The gdbus call must fail while the service is down AND stay down until
     // the probe returned — a lingering old process re-owning the name makes
     // the restarted service accept the call (E06 false-fail + VOXTRAL
