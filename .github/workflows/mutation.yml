@@ -1,0 +1,93 @@
+name: Mutation Testing
+
+# mutmut runs take ~6 min on current suite size — acceptable per-PR.
+# Revisit if runtime grows: move to weekly schedule + manual dispatch.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-mutmut:
+    runs-on: ubuntu-latest # 4 vCPU / 16 GB — enough for --max-children 4
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Get Silero model URL from source
+        run: |
+          MODEL_URL=$(sed -n 's/.*DEFAULT_MODEL_URL = "\([^"]*\)".*/\1/p' src/voice_to_text/vad.py)
+          echo "MODEL_URL=$MODEL_URL" >> $GITHUB_ENV
+
+      - name: Cache Silero VAD model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/voice-to-text/silero_vad.onnx
+          key: silero-vad-${{ env.MODEL_URL }}
+
+      - name: Download Silero VAD model
+        run: |
+          mkdir -p ~/.cache/voice-to-text
+          if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
+            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx "$MODEL_URL"
+          fi
+
+      - name: Run mutmut
+        run: uv run mutmut run --max-children 4
+
+      - name: Summarize mutation results
+        if: always()
+        run: |
+          uv run python - <<'EOF'
+          import json, glob, collections
+          from mutmut.__main__ import status_by_exit_code
+          stats = collections.Counter()
+          for meta in glob.glob("mutants/**/*.meta", recursive=True):
+              try:
+                  d = json.load(open(meta))
+              except (json.JSONDecodeError, OSError):
+                  continue
+              for code in d.get("exit_code_by_key", {}).values():
+                  stats[status_by_exit_code[code].replace(" ", "_")] += 1
+          killed, survived, no_tests = stats["killed"], stats["survived"], stats["no_tests"]
+          total = sum(stats.values())
+          denom = killed + survived
+          print()
+          print("+---------------+---------+--------+")
+          print("| Status        | Count   | %      |")
+          print("+---------------+---------+--------+")
+          rows = [("Killed 🎉", killed), ("Survived 🙁", survived), ("No tests 🫥", no_tests),
+                  ("Timeout ⏰", stats["timeout"]),
+                  ("Other", total - killed - survived - no_tests - stats["timeout"] - stats.get("suspicious", 0) - stats.get("skipped", 0) - stats.get("segfault", 0) - stats.get("caught_by_type_check", 0))]
+          for name, c in rows:
+              pct = f"{c * 100 / total:.1f}%" if total else "-"
+              print(f"| {name:<13} | {c:<7} | {pct:<6} |")
+          print("+---------------+---------+--------+")
+          print(f"| Total         | {total:<7} |        |")
+          print("+---------------+---------+--------+")
+          if denom:
+              print(f"Mutation score (killed / (killed+survived)): {killed * 100 / denom:.1f}%")
+          EOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutmut-results
+          path: mutants/
+          retention-days: 30

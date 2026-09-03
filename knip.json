@@ -10,6 +10,7 @@
   "ignoreDependencies": [
     "aislop",
     "jscpd",
+    "eslint-plugin-sonarjs",
     "@girs/adw-1",
     "@girs/cairo-1.0",
     "@girs/clutter-18",

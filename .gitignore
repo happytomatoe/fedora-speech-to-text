@@ -62,7 +62,6 @@ coverage.xml
 
 *.log
 node_modules/
-bun.lock
 build/
 
 src/voice_to_text/_build_info.py
@@ -121,3 +120,5 @@ e2e/ubuntu-2604-cloud.qcow2
 e2e/id_ed25519
 e2e/id_ed25519.pub
 e2e/vm-run/
+metrics-report/
+mutants/

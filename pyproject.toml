@@ -44,6 +44,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "PT", "PERF", "PL", "D", "SI
 "tests/**" = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "PLC0415", "PLR2004"]
 "e2e-ci/**" = ["D", "N802"]  # harness fixtures: dbus method names must stay PascalCase (D-Bus spec)
 "ci-e2e/**" = ["D", "PLR2004"]  # standalone harness scripts
+"metrics/**" = ["D100", "D103", "PLR2004", "E741"]
 
 [tool.mypy]
 ignore_missing_imports = true
@@ -67,4 +68,14 @@ dev = [
     "types-requests",
     "types-PyYAML",
     "vulture>=2.16",
+    "radon>=6.0.1",
+    "complexipy>=7.0.1",
+    "pytest-cov>=7.1.0",
+    "mutmut>=3.7.0",
 ]
+
+[tool.mutmut]
+source_paths = ["src/voice_to_text/"]
+also_copy = ["config.yaml", "service/", "gnome-ext/"]
+# tests_dir is deprecated in mutmut 3.7+; pass test selection via pytest args instead
+pytest_add_cli_args_test_selection = ["tests/"]
