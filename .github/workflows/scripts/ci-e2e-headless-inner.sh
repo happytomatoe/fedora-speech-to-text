@@ -260,6 +260,7 @@ if [ -d "$ASSETS/e2e/output/ubuntu-bare" ]; then
   cp -r "$ASSETS/e2e/output/ubuntu-bare/." "$REPO_ROOT/output/" 2>/dev/null || true
 fi
 # Split the run screencast into per-cell clips using each cell's time window
+if command -v ffmpeg >/dev/null 2>&1; then echo "ffmpeg: $(ffmpeg -version | head -1)"; else echo "ffmpeg: NOT FOUND"; fi
 if command -v ffmpeg >/dev/null 2>&1 && [ -s "$REPO_ROOT/output/recording.webm" ]; then
   RUN_START="$SCREENCAST_START_EPOCH"
   for w in "$REPO_ROOT/output/cells"/*/window.txt; do
@@ -272,7 +273,8 @@ if command -v ffmpeg >/dev/null 2>&1 && [ -s "$REPO_ROOT/output/recording.webm" 
     recStart=$(python3 -c "import sys,datetime; print(datetime.datetime.fromtimestamp(int(sys.argv[1]), datetime.timezone.utc).timestamp())" "$RUN_START")
     ss=$(python3 -c "print(max(0, $startSec - $recStart))")
     to=$(python3 -c "print(max(0, $endSec - $recStart))")
-    ffmpeg -y -ss "$ss" -to "$to" -i "$REPO_ROOT/output/recording.webm" -c copy "$cellDir/clip.webm" >/dev/null 2>&1 || true
+    echo "clip: $cellDir ss=$ss to=$to"
+    ffmpeg -y -ss "$ss" -to "$to" -i "$REPO_ROOT/output/recording.webm" -c copy "$cellDir/clip.webm" > "$cellDir/ffmpeg.log" 2>&1 || echo "WARN: ffmpeg failed for $cellDir"
   done
   rm -f "$REPO_ROOT/output/cells"/*/window.txt
 fi
