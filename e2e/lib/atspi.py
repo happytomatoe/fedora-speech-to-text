@@ -131,13 +131,29 @@ def add_word_roundtrip(word):
     if not dlg:
         return "no-dialog"
 
+    def find_entry(node, depth=0):
+        # Search within the dialog subtree only; require a mapped (SHOWING)
+        # editable text node — global walk matched hidden shell text nodes.
+        if node is None or depth > 30:
+            return None
+        try:
+            if node.get_role_name() in ("text", "text entry") and node.get_state_set().contains(Atspi.StateType.SHOWING):
+                return node
+        except Exception:
+            return None
+        try:
+            n = node.get_child_count()
+        except Exception:
+            return None
+        for i in range(n):
+            found = find_entry(node.get_child_at_index(i), depth + 1)
+            if found:
+                return found
+        return None
+
     entry = None
     for _ in range(20):
-        def pred(n, r, node):
-            return r in ("text", "text entry")
-        def act(n, r, node):
-            return node
-        entry = walk_tree(pred, act)
+        entry = find_entry(dlg)
         if entry:
             break
         time.sleep(0.5)
