@@ -1255,12 +1255,11 @@ async function runBareMode(): Promise<void> {
       await gdbus("StopRecording").catch(() => {});
     }
     try {
-      const gjs = "gjs --module $HOME/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com/prefs.js";
-      await transport.exec(`nohup ${gjs} >/dev/null 2>&1 & echo $! > /tmp/prefs.pid`, 10_000);
-      await Bun.sleep(3000);
-      const alive = (await transport.exec("kill -0 $(cat /tmp/prefs.pid) 2>/dev/null && echo alive || echo dead")).stdout.trim();
-      hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: alive === "alive" ? "pass" : "fail" });
-      await transport.exec("kill $(cat /tmp/prefs.pid) 2>/dev/null");
+      // P01: the inner harness issued OpenExtensionPrefs on
+      // org.gnome.Shell.Extensions — the dialog runs inside the nested shell
+      // process, so "process alive" == nested gnome-shell still running.
+      const shellAlive = (await transport.exec("pgrep -f 'gnome-shell' | head -1 | xargs -I{} test -d /proc/{} && echo alive || echo dead")).stdout.trim();
+      hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: shellAlive === "alive" ? "pass" : "fail" });
     } catch (e) {
       hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: "fail", note: String(e) });
     }

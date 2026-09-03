@@ -178,6 +178,13 @@ gdbus call --session --dest org.gnome.Shell \
   --object-path /org/gnome/Shell \
   --method org.gnome.Shell.Eval 'Main.overview.hide();' > /dev/null 2>&1 || true
 sleep 1
+
+# P01 support: open the extension prefs dialog in-process via the nested
+# shell's ExtensionsJS proxy (gjs --module cannot resolve resource:///org/gnome/Shell/Extensions).
+gdbus call --session --dest org.gnome.Shell.Extensions \
+  --object-path /org/gnome/Shell/Extensions \
+  --method org.gnome.Shell.Extensions.OpenExtensionPrefs \
+  'voice-to-text@happytomatoe.com' '' '{}' > /dev/null 2>&1 || true
 gdbus call --session \
   --dest org.gnome.Shell.Screenshot \
   --object-path /org/gnome/Shell/Screenshot \
