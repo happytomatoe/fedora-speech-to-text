@@ -159,6 +159,11 @@ def focus_add_word_entry():
         entry.grab_focus()
         return "focused"
     except Exception:
+        pass
+    try:
+        entry.query_component().grab_focus()
+        return "focused"
+    except Exception:
         return "focus-failed"
 
 
