@@ -126,6 +126,8 @@ env --ignore-environment \
   XDG_CACHE_HOME="$ISOLATED/.cache" \
   XDG_RUNTIME_DIR="$ISOLATED/.runtime" \
   REPO_ROOT="$REPO_ROOT" \
+  E2E_CASES="${E2E_CASES:-}" \
+  E2E_SKIP_PREFS="${E2E_SKIP_PREFS:-}" \
   PULSE_SERVER="unix:${XDG_RUNTIME_DIR_RUNNER:-/run/user/$(id -u)}/pulse/native" \
   DOTOOL_PIPE="$ISOLATED/.runtime/dotool-pipe" \
   dbus-run-session -- bash "$REPO_ROOT/.github/workflows/scripts/ci-e2e-headless-inner.sh"
