@@ -33,7 +33,7 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v5
 
