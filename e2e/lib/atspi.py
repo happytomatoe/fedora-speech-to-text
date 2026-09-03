@@ -147,6 +147,11 @@ def add_word_roundtrip(word):
     set_ok = False
     for _ in range(10):
         try:
+            entry.query_component().grab_focus()
+            time.sleep(0.2)
+        except Exception:
+            pass
+        try:
             if entry.query_text().set_text_contents(word):
                 set_ok = True
                 break
