@@ -36,6 +36,10 @@ if [ -d "$EXT_DIR/schemas" ]; then
 fi
 gsettings set org.gnome.shell disable-user-extensions false
 
+# Bridge apps onto the accessibility bus so AT-SPI assertions can see prefs
+# windows (org.a11y.Bus service comes from at-spi2-core).
+gsettings set org.gnome.desktop.interface toolkit-accessibility true
+
 # Screenshot enabler: tiny second extension sets unsafe_mode from inside the
 # shell (POC trick), so the harness's outside-shell gdbus Screenshot call is
 # permitted. Real extension stays enabled alongside.
