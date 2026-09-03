@@ -1409,8 +1409,10 @@ ATSPIEOF`,
     await run(`cp ${configPath} ${configPath}.bak`);
     await run(`sed -i 's/^provider:.*/provider: nonexistent_provider/' ${configPath}`);
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
-    await gdbus("StartRecording", `'${JSON.stringify({ provider: "moonshine", language: "en" })}'`).catch(() => {});
-    // httpx connect retries can outlast a fixed sleep — poll for the error
+    // No provider in the payload here: the patched config (nonexistent
+    // provider) must govern, that is the error being tested.
+    await gdbus("StartRecording", `'${JSON.stringify({ language: "en" })}'`).catch(() => {});
+    // Engine raises synchronously in get_batch_provider — poll briefly for the
     // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
     let errHit = "0";
     for (let i = 0; i < 10; i++) {
