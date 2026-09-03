@@ -307,16 +307,7 @@ function pickRandomTestCase(): TestCaseFile {
   return picked;
 }
 
-// ubuntu-bare: the harness plays exactly one fixture WAV (ci-e2e/fixture.wav
-// = test-03 "good morning") — pin the case to it instead of random pick.
-const CURRENT_TEST = (() => {
-  const picked = pickRandomTestCase();
-  if (ENV !== "ubuntu-bare") return picked;
-  const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
-  const pinned = (data["test-cases"] as TestCaseFile[]).find(c => c.file.includes("test-03-hello"));
-  console.log(`  ubuntu-bare: pinned case to harness fixture: ${pinned!.file}`);
-  return pinned!;
-})();
+const CURRENT_TEST = pickRandomTestCase();
 const EXPECTED_TEXT = CURRENT_TEST.expected;
 /** Fail fast when the VM base image is missing. */
 async function preflight(): Promise<void> {
@@ -1024,69 +1015,106 @@ async function runBareMode(): Promise<void> {
       `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${argsJson}`,
     );
 
-  // Phase 1 fixture streaming: the service reads VOICE_TO_TEXT_DEBUG_FILE at
-  // record start (src/voice_to_text/debug.py:52), so the suite swaps the case
-  // WAV in before each StartRecording.
+  // Matrix loop: all transcription cases × output methods. The service reads
+  // VOICE_TO_TEXT_DEBUG_FILE at record start (src/voice_to_text/debug.py:52),
+  // so the suite swaps the case WAV in before each StartRecording.
   const debugFile = process.env.VOICE_TO_TEXT_DEBUG_FILE;
   const fixturesDir = join(import.meta.dir, "fixtures");
-  if (debugFile) {
-    await run(`cp '${join(fixturesDir, CURRENT_TEST.file)}' '${debugFile}'`);
-    console.log(`  staged fixture: ${CURRENT_TEST.file} -> ${debugFile}`);
-  }
-
-  await gdbus(
-    "StartRecording",
-    `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: "mutter-commit" })}'`,
-  );
-  console.log("  recording started; polling for transcription...");
-
-  // Service log location: the bare harness redirects service stdout to
-  // $HOME/service.log (isolated HOME); the VM path uses /tmp/voice-service.log.
   const serviceLog = process.env.VOX_CI_E2E_SERVICE_LOG ?? "/tmp/voice-service.log";
-  let transcription = "";
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline && !transcription) {
-    try {
-      const out = await transport.exec(
-        `grep -oP 'Transcription result: \\K.*' ${serviceLog} 2>/dev/null | tail -1`,
-        5_000,
-      );
-      const trimmed = out.stdout.trim();
-      if (trimmed) transcription = trimmed;
-    } catch {
-      // poll again
-    }
-    if (!transcription) await Bun.sleep(500);
-  }
-  try {
-    await gdbus("StopRecording");
-  } catch (e) {
-    console.log(`  StopRecording warning: ${e}`);
-  }
+  const allCases: TestCaseFile[] = (() => {
+    const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
+    const cases = data["test-cases"] as TestCaseFile[];
+    if (!SELECTED_CASE) return cases;
+    const picked = cases.filter(c => c.file.includes(SELECTED_CASE));
+    if (picked.length === 0) throw new Error(`case '${SELECTED_CASE}' not found`);
+    return picked;
+  })();
+  // Phase 3 will add "type" behind the uinput gate; for now mutter methods only.
+  const outputMethods = ["mutter-commit", "mutter-virtual"];
 
-  // Typed text: prefer the service log result; fall back to the capture file
-  // written by the extension's headless CommitText path.
-  let typed = transcription;
-  if (!typed) {
-    try {
-      typed = readFileSync(textFile, "utf-8").trim();
-    } catch {
-      // capture file absent
+  interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
+  const results: BareResult[] = [];
+  const normalize = (s: string) =>
+    s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
+
+  for (const bareCase of allCases) {
+    for (const method of outputMethods) {
+      const label = `${bareCase.file}/${method}`;
+      console.log(`\n=== ${label} ===`);
+      try {
+        // Log-window marker: only lines appended during THIS cell count.
+        const offsetOut = await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`);
+        const offset = parseInt(offsetOut.trim()) || 0;
+        const logSince = (pattern: string) =>
+          transport.exec(
+            `tail -c +$(( ${offset} + 1 )) '${serviceLog}' 2>/dev/null | grep -m1 -oP '${pattern}'`,
+            5_000,
+          ).then(r => r.stdout.trim());
+
+        if (debugFile) {
+          await run(`cp '${join(fixturesDir, bareCase.file)}' '${debugFile}'`);
+        }
+        await gdbus(
+          "StartRecording",
+          `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: method })}'`,
+        );
+        console.log("  recording started; polling for transcription...");
+
+        let transcription = "";
+        const deadline = Date.now() + 90_000;
+        while (Date.now() < deadline && !transcription) {
+          transcription = await logSince("Transcription result: \\K.*");
+          if (!transcription) await Bun.sleep(500);
+        }
+        try {
+          await gdbus("StopRecording");
+        } catch (e) {
+          console.log(`  StopRecording warning: ${e}`);
+        }
+
+        // Typed text: prefer the service log result; fall back to the capture
+        // file written by the extension's headless CommitText path.
+        let typed = transcription;
+        if (!typed) {
+          try {
+            typed = readFileSync(textFile, "utf-8").trim();
+          } catch {
+            // capture file absent
+          }
+        }
+        const errorLine = await logSince("ERROR|Traceback");
+        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine;
+        console.log(`  expected: '${bareCase.expected}'`);
+        console.log(`  typed:    '${typed}'`);
+        if (errorLine) console.log(`  error in log: ${errorLine}`);
+        console.log(passed ? "  PASS" : "  FAIL");
+        results.push({ file: bareCase.file, method, status: passed ? "pass" : "fail", typed, note: errorLine || undefined });
+
+        // Per-case after-screenshot via the shell's Screenshot D-Bus API.
+        const shotBase = process.env.VOX_CI_E2E_SHOT_AFTER;
+        if (shotBase) {
+          const caseShot = shotBase.replace(/\.png$/, `-${bareCase.file.replace(/\.wav$/, "")}-${method}.png`);
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${caseShot}'`,
+            10_000,
+          ).catch(() => console.log("  WARN: case screenshot failed"));
+        }
+      } catch (e) {
+        console.log(`  FAIL (exception): ${e}`);
+        results.push({ file: bareCase.file, method, status: "fail", typed: "", note: String(e) });
+        // Recover the service for the next cell if this one wedged it.
+        await gdbus("StopRecording").catch(() => {});
+      }
     }
   }
   endSpan();
 
-  const normalize = (s: string) =>
-    s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
-  const passed = typed.length > 0 && normalize(typed).includes(normalize(EXPECTED_TEXT));
-  console.log(`  expected: '${EXPECTED_TEXT}'`);
-  console.log(`  typed:    '${typed}'`);
-  console.log(passed ? "  PASS: ubuntu-bare end-to-end (no SSH)" : "  FAIL: typed text mismatch or absent");
-
-  const startedAt = Date.now();
-  writeFileSync(join(outputDir, "result.txt"), typed);
-  console.log(`\nTotal: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
-  process.exit(passed ? 0 : 1);
+  console.log("\n=== bare-mode summary ===");
+  for (const r of results) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.file} ${r.method}${r.note ? `  (${r.note})` : ""}`);
+  const failed = results.filter(r => r.status === "fail").length;
+  console.log(`\n${results.length - failed}/${results.length} passed`);
+  writeFileSync(join(outputDir, "results.json"), JSON.stringify(results, null, 2));
+  process.exit(failed === 0 ? 0 : 1);
 }
 
 /** Entry point: parse flags, boot VM, run flow or prefs tests. */
