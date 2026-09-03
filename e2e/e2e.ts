@@ -1072,8 +1072,12 @@ async function runBareMode(): Promise<void> {
         let transcription = "";
         const deadline = Date.now() + 90_000;
         while (Date.now() < deadline && !transcription) {
-          transcription = await logSince("Transcription result: \\K.*");
-          if (!transcription) await Bun.sleep(500);
+          // "(empty)" marks a completed-but-empty Parakeet response — waiting
+          // longer cannot help, bail immediately (CI run 33726981834 burned
+          // 4x90s on these).
+          const res = await logSince("Transcription result: \\K.*|Transcription result: \(empty\)");
+          if (res === "(empty)") break;
+          transcription = res;
         }
         try {
           await gdbus("StopRecording");
