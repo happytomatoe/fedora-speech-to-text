@@ -9,7 +9,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { ATSPI_PY, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
@@ -1175,15 +1175,17 @@ for i in range(d.get_child_count()):
 ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       console.log(`  a11y apps after P01: ${t0.split("\n").filter(l => l.startsWith("APP:")).join(", ")}`);
       prefsRow("P01 prefs-window-opens", true);
-      // Add-Word dialog: open, set text, add, verify row appears (real UI round-trip)
+      // Add-Word dialog flow runs in ONE python process — cross-process a11y
+      // walks saw inconsistent tree state (dialog missing between calls).
       await doAtspiAction(execLike, "Add Word", "click");
-      await waitForAtspiNode(execLike, { name: "Enter a word or phrase:" });
-      // The dialog Gtk.Entry is unnamed (only placeholder text) — target the
-      // first 'text'-role node instead of by name.
-      await setAtspiTextByRole(execLike, "entry", "E2E");
-      await doAtspiAction(execLike, "Add", "click");
-      await waitForAtspiNode(execLike, { name: "E2E", role: "list item" });
-      prefsRow("P02 add-word-roundtrip", true);
+      const rt = await transport.exec(
+        `python3 - <<'ATSPIEOF'
+${ATSPI_PY}
+print("RESULT:" + str(add_word_roundtrip("E2E") or ""))
+ATSPIEOF`, 30_000);
+      const rtOut = rt.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
+      console.log(`  add-word roundtrip: ${rtOut}`);
+      prefsRow("P02 add-word-roundtrip", rtOut === "ok", rtOut === "ok" ? undefined : rtOut);
       // Screenshot for artifact/debug (presence only, no pixel compare)
       await transport.exec(
         `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-bare.png'`,

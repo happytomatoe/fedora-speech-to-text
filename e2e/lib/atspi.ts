@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 // Python helpers live in atspi.py next to this file; loaded once and prepended
 // to every one-shot script sent over SSH (python3 - reads the heredoc stdin).
-const ATSPI_PY = await Bun.file(join(import.meta.dir, "atspi.py")).text();
+export const ATSPI_PY = await Bun.file(join(import.meta.dir, "atspi.py")).text();
 
 export interface AtspiNode {
   name: string;

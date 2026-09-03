@@ -107,3 +107,78 @@ def dump_tree(max_nodes=200):
     for i in range(d.get_child_count()):
         walk(d.get_child_at_index(i))
     return ";".join(out)
+
+
+def add_word_roundtrip(word):
+    """Single-process Add-Word flow: wait for dialog entry (editable text node
+    inside the Add Custom Word window), set text, click Add, verify row.
+    One process so the a11y tree is walked once with consistent state."""
+    import time
+
+    def find_frame():
+        def pred(n, r, node):
+            return n == "Add Custom Word" and r == "frame"
+        def act(n, r, node):
+            return node
+        return walk_tree(pred, act)
+
+    dlg = None
+    for _ in range(20):
+        dlg = find_frame()
+        if dlg:
+            break
+        time.sleep(0.5)
+    if not dlg:
+        return "no-dialog"
+
+    entry = None
+    for _ in range(20):
+        for i in range(dlg.get_child_count()):
+            try:
+                w = dlg.get_child_at_index(i)
+                if w.get_role_name() in ("text", "text entry"):
+                    entry = w
+                    break
+            except Exception:
+                pass
+        if entry:
+            break
+        time.sleep(0.5)
+    if not entry:
+        return "no-entry"
+
+    for _ in range(10):
+        try:
+            if entry.query_text().set_text_contents(word):
+                break
+        except Exception:
+            pass
+        time.sleep(0.3)
+    try:
+        if entry.query_text().get_text(0, -1) != word:
+            return "set-failed"
+    except Exception:
+        return "set-failed"
+
+    # Click the Add button (suggested-action) inside the dialog
+    add_btn = None
+
+    def pred(n, r, node):
+        return n == "Add" and r == "push button"
+    def act(n, r, node):
+        node.do_action(0)
+        return "clicked"
+    result = walk_tree(pred, act)
+    if not result:
+        return "no-add-button"
+
+    # Verify word row appears in prefs window
+    def pred2(n, r, node):
+        return n == word and r in ("list item", "label")
+    def act2(n, r, node):
+        return "found"
+    for _ in range(20):
+        if walk_tree(pred2, act2):
+            return "ok"
+        time.sleep(0.5)
+    return "row-not-found"
