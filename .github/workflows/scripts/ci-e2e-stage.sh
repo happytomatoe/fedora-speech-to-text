@@ -60,14 +60,15 @@ fi
 
 # Persist a session bus across workflow steps: steps cannot inherit
 # dbus-run-session, so run the daemon directly and export its address.
-eval "$(dbus-launch --sh-syntax)"
+DBUS_SESSION_BUS_ADDRESS="unix:path=$ISOLATED/.runtime/session-bus"
+dbus-daemon --session --fork --address="$DBUS_SESSION_BUS_ADDRESS" --print-pid > "$ISOLATED/.runtime/dbus.pid"
+
 mkdir -p "$ISOLATED/.runtime"
 {
   echo "CI_E2E_ISOLATED=$ISOLATED"
   echo "CI_E2E_ASSETS=$ASSETS"
   echo "CI_E2E_SCREENSHOT=$REPO_ROOT/ci-e2e-screenshot-2604.png"
   echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
-  echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID"
   echo "CI_E2E_WIDTH=${WIDTH:-960}"
   echo "CI_E2E_HEIGHT=${HEIGHT:-540}"
 } >> "${GITHUB_ENV:-/dev/null}"

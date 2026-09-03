@@ -30,6 +30,17 @@ set -euo pipefail
 
 ASSETS="${CI_E2E_ASSETS:?CI_E2E_ASSETS not set}"
 REPO_ROOT="${GITHUB_WORKSPACE:-$PWD}"
+HOME="${CI_E2E_ISOLATED:?}"
+export HOME
+XDG_CONFIG_HOME="$HOME/.config"
+XDG_DATA_HOME="$HOME/.local/share"
+XDG_DATA_DIRS="$HOME/.local/share:/usr/local/share:/usr/share"
+XDG_CACHE_HOME="$HOME/.cache"
+XDG_RUNTIME_DIR="$HOME/.runtime"
+export XDG_CONFIG_HOME XDG_DATA_HOME XDG_DATA_DIRS XDG_CACHE_HOME XDG_RUNTIME_DIR
+WIDTH="${CI_E2E_WIDTH:-960}"
+HEIGHT="${CI_E2E_HEIGHT:-540}"
+export WIDTH HEIGHT
 
 # --- GSettings schemas ------------------------------------------------------
 schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"

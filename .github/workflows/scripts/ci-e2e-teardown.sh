@@ -8,23 +8,24 @@ REPO_ROOT="${GITHUB_WORKSPACE:-$PWD}"
 
 # --- Tear down -----------------------------------------------------------------------
 mkdir -p "$REPO_ROOT/output"
-if [ -n "$SCREENCAST_HOLDER_PID" ] && kill -0 "$SCREENCAST_HOLDER_PID" 2>/dev/null; then
-  kill -TERM "$SCREENCAST_HOLDER_PID" 2>/dev/null || true
-  for _ in $(seq 1 10); do kill -0 "$SCREENCAST_HOLDER_PID" 2>/dev/null || break; sleep 0.5; done
-  kill -9 "$SCREENCAST_HOLDER_PID" 2>/dev/null || true
+if [ -f "$CI_E2E_ISOLATED/screencast-holder.pid" ]; then
+  HPID="$(cat "$CI_E2E_ISOLATED/screencast-holder.pid")"
+  kill -TERM "$HPID" 2>/dev/null || true
+  for _ in $(seq 1 10); do kill -0 "$HPID" 2>/dev/null || break; sleep 0.5; done
+  kill -9 "$HPID" 2>/dev/null || true
 fi
 sleep 1
 # recording%d.webm with a single session lands at recording0.webm
-for f in "$HOME"/recording*.webm; do
+for f in "$CI_E2E_ISOLATED"/recording*.webm; do
   if [ -s "$f" ]; then
     cp "$f" "$REPO_ROOT/output/recording.webm" 2>/dev/null || true
     break
   fi
 done
 # Logs + prefs shot for debugging
-cp "$HOME/service.log" "$REPO_ROOT/output/service.log" 2>/dev/null || true
-cp "$HOME/shell.log" "$REPO_ROOT/output/shell.log" 2>/dev/null || true
-cp "$HOME/screencast.log" "$REPO_ROOT/output/screencast.log" 2>/dev/null || true
+cp "$CI_E2E_ISOLATED/service.log" "$REPO_ROOT/output/service.log" 2>/dev/null || true
+cp "$CI_E2E_ISOLATED/shell.log" "$REPO_ROOT/output/shell.log" 2>/dev/null || true
+cp "$CI_E2E_ISOLATED/screencast.log" "$REPO_ROOT/output/screencast.log" 2>/dev/null || true
 # Suite output dir (results.json, prefs shots) — rescue whole dir
 if [ -d "$ASSETS/e2e/output/ubuntu-bare" ]; then
   cp -r "$ASSETS/e2e/output/ubuntu-bare/." "$REPO_ROOT/output/" 2>/dev/null || true
@@ -49,11 +50,10 @@ if command -v ffmpeg >/dev/null 2>&1 && [ -s "$REPO_ROOT/output/recording.webm" 
   rm -f "$REPO_ROOT/output/cells"/*/window.txt
 fi
 
-HOME_ISOLATED="${CI_E2E_ISOLATED:?}"
 for pidfile in service shell wireplumber pipewire screencast-holder dbus; do
-  [ -f "$HOME_ISOLATED/$pidfile.pid" ] && kill "$(cat "$HOME_ISOLATED/$pidfile.pid")" 2>/dev/null || true
+    [ -f "$CI_E2E_ISOLATED/$pidfile.pid" ] && kill "$(cat "$CI_E2E_ISOLATED/$pidfile.pid")" 2>/dev/null || true
 done
 
 TEST_EXIT=1
-[ -f "$HOME_ISOLATED/test-exit-code" ] && TEST_EXIT="$(cat "$HOME_ISOLATED/test-exit-code")"
+[ -f "$CI_E2E_ISOLATED/test-exit-code" ] && TEST_EXIT="$(cat "$CI_E2E_ISOLATED/test-exit-code")"
 exit "$TEST_EXIT"

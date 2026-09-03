@@ -2,6 +2,14 @@
 # Run phase: execute the TypeScript suite; record exit code for teardown.
 set -euo pipefail
 ASSETS="${CI_E2E_ASSETS:?}"
+HOME="${CI_E2E_ISOLATED:?}"
+export HOME
+XDG_CONFIG_HOME="$HOME/.config"
+XDG_DATA_HOME="$HOME/.local/share"
+XDG_DATA_DIRS="$HOME/.local/share:/usr/local/share:/usr/share"
+XDG_CACHE_HOME="$HOME/.cache"
+XDG_RUNTIME_DIR="$HOME/.runtime"
+export XDG_CONFIG_HOME XDG_DATA_HOME XDG_DATA_DIRS XDG_CACHE_HOME XDG_RUNTIME_DIR
 DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:?}"
 export DBUS_SESSION_BUS_ADDRESS
 
