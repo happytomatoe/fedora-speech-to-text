@@ -132,12 +132,23 @@ def verify_word_added(word):
         return "no-dialog"
 
     def pred(n, r, node):
-        return n == "Add" and r == "push button"
+        return n in ("Add", "Add…") and "button" in r
     def act(n, r, node):
-        node.do_action(0)
-        return "clicked"
+        try:
+            node.do_action(next(i for i in range(node.get_n_actions()) if node.get_action_name(i) == "click"))
+            return "clicked"
+        except Exception:
+            node.do_action(0)
+            return "clicked"
     if not walk_tree(pred, act):
-        return "no-add-button"
+        def dpred(n, r, node):
+            return n or r
+        def dact(n, r, node):
+            out.append(f"{n}|{r}")
+            return None
+        out = []
+        walk_tree(dpred, dact)
+        return "no-add-button tree=" + ";".join(out[:60])
 
     def pred2(n, r, node):
         return n == word and r in ("list item", "label")
