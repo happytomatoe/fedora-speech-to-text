@@ -1146,6 +1146,66 @@ async function runBareMode(): Promise<void> {
 
   console.log("\n=== bare-mode summary ===");
 
+  // Prefs suite — runs BEFORE config/error rows (user ordering: prefs first).
+  // AT-SPI-driven via LocalTransport (same ExecLike shape as the SSH deployer
+  // in VM mode), no dotool needed. Screenshot via Shell.Screenshot D-Bus.
+  const prefsRows: Array<{ id: string; status: "pass" | "fail" | "skip"; note?: string }> = [];
+  const prefsRow = (id: string, ok: boolean, note?: string) =>
+    prefsRows.push({ id, status: ok ? "pass" : "fail", note });
+  const prefsSkip = (id: string, why: string) => prefsRows.push({ id, status: "skip", note: why });
+  const atspiReady = await transport.exec(
+    "python3 -c 'import gi; gi.require_version(\"Atspi\", \"2.0\"); from gi.repository import Atspi' 2>&1 && echo OK",
+    10_000,
+  ).then(r => r.stdout.trim().endsWith("OK"));
+  if (atspiReady) {
+    try {
+      await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
+      await run(`gnome-extensions prefs voice-to-text@happytomatoe.com & sleep 0.1`, 10_000);
+      const execLike = { exec: (cmd: string, opts?: Record<string, unknown>) => transport.exec(cmd, (opts?.timeout as number) ?? 15_000) };
+      await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame" });
+      prefsRow("P01 prefs-window-opens", true);
+      // Add-Word dialog: open, set text, add, verify row appears (real UI round-trip)
+      await doAtspiAction(execLike, "Add Word", "click");
+      await waitForAtspiNode(execLike, { name: "Enter a word or phrase:" });
+      await setAtspiText(execLike, "Enter a word or phrase:", "E2E");
+      await doAtspiAction(execLike, "Add", "click");
+      await waitForAtspiNode(execLike, { name: "E2E", role: "list item" });
+      prefsRow("P02 add-word-roundtrip", true);
+      // Screenshot for artifact/debug (presence only, no pixel compare)
+      await transport.exec(
+        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-bare.png'`,
+        10_000,
+      ).catch(() => {});
+      // Close: prefs window has no guaranteed a11y close action — kill its process
+      await run(`pkill -f 'gnome-extension-prefs|Gjs.*prefs' || true`, 5_000);
+      await Bun.sleep(1000);
+      const gone = await transport.exec(
+        `python3 - <<'ATSPIEOF'
+from gi.repository import Atspi
+d = Atspi.get_desktop(0)
+found = "no"
+for i in range(d.get_child_count()):
+    app = d.get_child_at_index(i)
+    for j in range(app.get_child_count()):
+        w = app.get_child_at_index(j)
+        if (w.get_name() or "").strip() == "Voice to Text":
+            found = "yes"
+print("RESULT:" + found)
+ATSPIEOF`,
+        10_000,
+      ).then(r => r.stdout.includes("RESULT:no"));
+      prefsRow("P03 prefs-closes", gone);
+    } catch (e) {
+      prefsRow("P01 prefs-window-opens", false, String(e));
+      prefsRow("P02 add-word-roundtrip", false, "skipped — P01 failed");
+      prefsRow("P03 prefs-closes", false, "skipped — P01 failed");
+    }
+  } else {
+    prefsSkip("P01 prefs-window-opens", "no python3 Atspi bindings");
+    prefsSkip("P02 add-word-roundtrip", "no python3 Atspi bindings");
+    prefsSkip("P03 prefs-closes", "no python3 Atspi bindings");
+  }
+
   // Phase 4: config + error cases — no screen, no input; D-Bus + config-file
   // assertions through the same transport.
   const configPath = "$HOME/.config/voice-to-text/config.yaml";
@@ -1348,16 +1408,18 @@ async function runBareMode(): Promise<void> {
   }
 
   console.log("\n=== config/error rows ===");
+  for (const r of prefsRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
   for (const r of hotkeyUiRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
   for (const r of configRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
+  const prefsFailed = prefsRows.filter(r => r.status === "fail").length;
   const configFailed = configRows.filter(r => r.status === "fail").length;
   const failed = results.filter(r => r.status === "fail").length;
   const hotkeyUiFailed = hotkeyUiRows.filter(r => r.status === "fail").length;
-  const totalFailed = failed + configFailed + hotkeyUiFailed;
+  const totalFailed = failed + configFailed + hotkeyUiFailed + prefsFailed;
   const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: no uinput)` : "";
   writeFileSync(
     join(outputDir, "results.json"),
-    JSON.stringify({ transcription: results, configError: configRows, hotkeyUi: hotkeyUiRows }, null, 2),
+    JSON.stringify({ transcription: results, prefs: prefsRows, configError: configRows, hotkeyUi: hotkeyUiRows }, null, 2),
   );
   process.exit(totalFailed === 0 ? 0 : 1);
 }

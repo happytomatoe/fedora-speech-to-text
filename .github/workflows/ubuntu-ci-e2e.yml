@@ -35,6 +35,7 @@ jobs:
             mesa-utils libgl1-mesa-dri libgbm1 \
             dconf-gsettings-backend gsettings-desktop-schemas \
             libportaudio2 \
+            gir1.2-atspi-2.0 python3-gi \
             pipewire pipewire-bin wireplumber \
             imagemagick \
             tmux \
