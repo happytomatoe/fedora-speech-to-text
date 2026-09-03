@@ -12,7 +12,7 @@ export GSETTINGS_BACKEND
 
 #!/usr/bin/env bash
 # Inner harness for the CI headless E2E test. Runs INSIDE `dbus-run-session`
-# (started by ci-e2e-headless.sh) with an isolated HOME/XDG environment.
+# Runs as its own workflow step with env from ci-e2e-stage.sh (GITHUB_ENV).
 #
 # Responsibilities:
 #   1. Compile GSettings schemas (system + extension) into isolated tree

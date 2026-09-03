@@ -5,14 +5,14 @@
 #
 # Architecture:
 #   outer (this file): isolation env, asset staging, Parakeet container,
-#                      dbus-run-session → ci-e2e-headless-inner.sh
+Isolated env + private dbus session, exported to later steps via GITHUB_ENV.
 #   inner:             schemas, extension deploy, service start, boot wait,
 #                      test runner, screenshot, teardown
 #
 # See poc-headless-shell.yml history for the quoting constraints that led to
 # splitting inner/outer (each cost a CI run to learn).
 #
-# Usage: ci-e2e-headless.sh <output-png> [width] [height]
+
 set -euo pipefail
 
 REPO_ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
