@@ -1169,7 +1169,7 @@ async function runBareMode(): Promise<void> {
       await waitForAtspiNode(execLike, { name: "Enter a word or phrase:" });
       // The dialog Gtk.Entry is unnamed (only placeholder text) — target the
       // first 'text'-role node instead of by name.
-      await setAtspiTextByRole(execLike, "text", "E2E");
+      await setAtspiTextByRole(execLike, "entry", "E2E");
       await doAtspiAction(execLike, "Add", "click");
       await waitForAtspiNode(execLike, { name: "E2E", role: "list item" });
       prefsRow("P02 add-word-roundtrip", true);

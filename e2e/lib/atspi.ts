@@ -165,7 +165,7 @@ export async function setAtspiTextByRole(
   text: string
 ): Promise<void> {
   const script = `${ATSPI_PY}
-print("RESULT:" + str(set_text_by_role('${pyQuote(role)}', '${pyQuote(text)}') or ""))
+print("RESULT:" + str(set_text_by_role(['text', 'text entry', 'entry'], '${pyQuote(text)}') or ""))
 `;
   const out = await execPython(deployer, script);
   if (parseResult(out) !== "ok") {
