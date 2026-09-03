@@ -68,3 +68,18 @@ def set_text_by_role(roles, text):
         return None
 
     return walk_tree(predicate, action)
+
+
+def dump_text_nodes():
+    """List name|role for every node exposing a Text interface (debug)."""
+    def predicate(n, r, node):
+        try:
+            node.query_text()
+            return True
+        except Exception:
+            return False
+
+    def action(n, r, node):
+        return f"{n}|{r}"
+
+    return walk_tree(predicate, action)
