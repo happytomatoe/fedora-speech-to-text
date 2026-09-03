@@ -1180,7 +1180,7 @@ async function runBareMode(): Promise<void> {
     const { cmdline, cwd } = await svcCmdline(svcPid, transport.exec.bind(transport));
     console.log(`  svcPid='${svcPid}' cmdline='${cmdline.slice(0, 120)}' cwd='${cwd}'`);
     if (!cmdline) throw new Error(`restart skipped: no cmdline for pid '${svcPid}'`);
-    await run(`kill ${svcPid} 2>/dev/null; sleep 1`);
+    await run(`pkill -f voice-to-text-dbus; sleep 1`);
     if (cmdline) {
       // replaying the cmdline from the harness cwd breaks uv's relative
       // `--project .` — must run from the original service cwd (CI C01-C03).
@@ -1227,7 +1227,9 @@ async function runBareMode(): Promise<void> {
     // the restarted service accept the call (E06 false-fail + VOXTRAL
     // fallback crash — regression 2026-09-03 run8-10).
     if (pidAlive) {
-      await run(`kill -9 ${svcPid}`);
+      // cmdline is the `uv run` wrapper — killing the pid alone leaves the
+      // python child alive and owning the bus name. Kill the whole tree.
+      await run(`pkill -9 -f voice-to-text-dbus; sleep 1`);
       // Wait until the bus name is actually gone before probing — the killed
       // process's name lingers briefly and the probe would hit a dying owner
       // (E06 false-fail — regression 2026-09-03 run8-11).
