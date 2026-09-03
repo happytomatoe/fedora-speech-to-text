@@ -83,3 +83,27 @@ def dump_text_nodes():
         return f"{n}|{r}"
 
     return walk_tree(predicate, action)
+
+
+def dump_tree(max_nodes=200):
+    """List first max_nodes nodes as name|role (debug; no early exit)."""
+    out = []
+    d = Atspi.get_desktop(0)
+
+    def walk(node, depth=0):
+        if node is None or depth > 35 or len(out) >= max_nodes:
+            return
+        try:
+            out.append(f"{(node.get_name() or '').strip()[:40]}|{node.get_role_name()}")
+        except Exception:
+            return
+        try:
+            n = node.get_child_count()
+        except Exception:
+            return
+        for i in range(n):
+            walk(node.get_child_at_index(i), depth + 1)
+
+    for i in range(d.get_child_count()):
+        walk(d.get_child_at_index(i))
+    return ";".join(out)

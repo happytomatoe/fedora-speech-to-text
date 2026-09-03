@@ -171,9 +171,9 @@ print("RESULT:" + str(set_text_by_role(['text', 'text entry', 'entry'], '${pyQuo
   if (parseResult(out) !== "ok") {
     // Debug: list Text-interface nodes so role mismatches are diagnosable
     const dump = await execPython(deployer, `${ATSPI_PY}
-print("RESULT:" + str(dump_text_nodes() or ""))
+print("RESULT:" + str(dump_tree() or ""))
 `);
-    throw new Error(`AT-SPI: no '${role}' node to set '${text}' — text nodes: ${parseResult(dump)}`);
+    throw new Error(`AT-SPI: no '${role}' node to set '${text}' — tree: ${parseResult(dump).slice(0, 2000)}`);
   }
 }
 
