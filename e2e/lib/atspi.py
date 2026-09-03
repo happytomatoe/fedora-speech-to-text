@@ -145,7 +145,8 @@ def add_word_roundtrip(word):
         return "no-entry"
 
     set_ok = False
-    for _ in range(10):
+    set_err = ""
+    for _ in range(3):
         try:
             entry.query_component().grab_focus()
             time.sleep(0.2)
@@ -155,17 +156,17 @@ def add_word_roundtrip(word):
             if entry.query_text().set_text_contents(word):
                 set_ok = True
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            set_err = repr(e)
         try:
             if entry.query_editable_text().set_text_contents(word):
                 set_ok = True
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            set_err = repr(e)
         time.sleep(0.3)
     if not set_ok:
-        return "set-failed"
+        return f"set-failed roles={entry.get_role_name()} states={entry.get_state_set()} err={set_err[:120]}"
     try:
         if entry.query_text().get_text(0, -1) != word:
             return "set-failed"
