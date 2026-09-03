@@ -1173,10 +1173,15 @@ async function runBareMode(): Promise<void> {
   // E06: service down → StartRecording must fail cleanly
   try {
     const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
-    const restoreCmd = svcPid
+    // C01-C03 above may have left the pid stale via `pgrep` matching leftovers;
+    // verify the pid still exists before reading /proc — a dead pid yields no
+    // cmdline and the restore below becomes a no-op (regression 2026-09-03).
+    const pidAlive = svcPid && /^\d+$/.test(svcPid) &&
+      (await transport.exec(`test -d /proc/${svcPid} && echo yes || echo no`, 5_000)).stdout.trim() === "yes";
+    const restoreCmd = pidAlive
       ? (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim()
       : "";
-    if (svcPid) await run(`kill ${svcPid}; sleep 1`);
+    if (pidAlive) await run(`kill ${svcPid}; sleep 1`);
     const e06 = await transport.exec(
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
       10_000,
