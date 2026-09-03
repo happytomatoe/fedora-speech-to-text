@@ -1178,6 +1178,8 @@ async function runBareMode(): Promise<void> {
     );
     const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
     const { cmdline, cwd } = await svcCmdline(svcPid, transport.exec.bind(transport));
+    console.log(`  svcPid='${svcPid}' cmdline='${cmdline.slice(0, 120)}' cwd='${cwd}'`);
+    if (!cmdline) throw new Error(`restart skipped: no cmdline for pid '${svcPid}'`);
     await run(`kill ${svcPid} 2>/dev/null; sleep 1`);
     if (cmdline) {
       // replaying the cmdline from the harness cwd breaks uv's relative
