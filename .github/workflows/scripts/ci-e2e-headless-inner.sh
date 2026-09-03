@@ -204,6 +204,7 @@ fi
 
 # Service log path for the ported suite's transcription poll
 export VOX_CI_E2E_SERVICE_LOG="$HOME/service.log"
+export VOX_CI_E2E_SHELL_LOG="$HOME/shell.log"
 
 # --- Run the test runner ----------------------------------------------------------
 # Ported suite (e2e/e2e.ts --env ubuntu-bare): local D-Bus flow, no SSH.
