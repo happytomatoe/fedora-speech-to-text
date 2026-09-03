@@ -57,9 +57,11 @@ jobs:
 
       - name: Install + start PulseAudio with virtual devices (headless)
         run: |
-          # pulseaudio installed in the dependencies step above
-          # Runner has no sound hardware; daemon must run with null devices
-          # so PortAudio's PulseAudio host API can initialize.
+          # Cached apt install skips postinst: recreate runtime state the
+          # daemon expects (group membership + runtime dirs).
+          sudo groupadd -f audio
+          sudo usermod -aG audio "$USER" || true
+          mkdir -p /run/user/$(id -u)/pulse
           pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
             --load="module-null-sink sink_name=virtual_sink" \
             --load="module-null-source source_name=virtual_mic"
