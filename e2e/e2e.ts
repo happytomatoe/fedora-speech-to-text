@@ -1197,7 +1197,7 @@ ATSPIEOF`, 40_000);
       // Close: prefs window has no guaranteed a11y close action — the Adw
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
-      await run(`pkill -f 'org.gnome.Shell.Extensions' || true`, 5_000);
+      await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
       await Bun.sleep(2000);
       const gone = await transport.exec(
         `python3 - <<'ATSPIEOF'
