@@ -180,17 +180,21 @@ export async function installDependencies(
     // Continue — GDM install may fail on some images
   }
 
+  // installDependencies is reached only from local VM flows (main() returns
+  // before VM setup for --env ubuntu-bare), so these tools are hard
+  // requirements here — a failed install fails the run instead of being
+  // swallowed and resurfacing as a confusing test failure later.
   if (env.os === "ubuntu") {
     // ghostty + tmux (ghostty is the terminal used in E2E; apt has a ghostty
     // package on Ubuntu 26.04)
-    try {
-      const termCheck = sshExec("which ghostty tmux 2>/dev/null | wc -l", _sshKey, _sshPort, _sshUser);
-      if (!termCheck.includes("2")) {
-        console.log("  Installing ghostty + tmux...");
-        sshExec(env.pkgInstall("ghostty tmux") + " || " + env.pkgInstall("tmux"), _sshKey, _sshPort, _sshUser);
+    const termCheck = sshExec("which ghostty tmux 2>/dev/null | wc -l", _sshKey, _sshPort, _sshUser);
+    if (!termCheck.includes("2")) {
+      console.log("  Installing ghostty + tmux...");
+      sshExec(env.pkgInstall("ghostty tmux") + " || " + env.pkgInstall("tmux"), _sshKey, _sshPort, _sshUser);
+      const after = sshExec("which ghostty tmux 2>/dev/null | wc -l", _sshKey, _sshPort, _sshUser);
+      if (!after.includes("2")) {
+        throw new Error("ghostty + tmux are required for local VM E2E but could not be installed");
       }
-    } catch {
-      // Continue — tmux may work without a terminal emulator depending on flow
     }
     // dotool: no Ubuntu apt package — bundled prebuilt binaries
     // (built from git.sr.ht/~geb/dotool v1.6)
@@ -203,8 +207,9 @@ export async function installDependencies(
         }
         sshExec("sudo install -m755 /tmp/dotool /tmp/dotoolc /tmp/dotoold /usr/local/bin/ && rm -f /tmp/dotool /tmp/dotoolc /tmp/dotoold", _sshKey, _sshPort, _sshUser);
       }
-    } catch {
-      // Continue — dotoold start may fail with clear error
+    } catch (e) {
+      console.error("dotool install failed:", e);
+      throw new Error("dotool is required for local VM E2E (type output method) but could not be installed");
     }
     // uv (Python package manager, used to run the voice service)
     try {
@@ -213,8 +218,9 @@ export async function installDependencies(
         console.log("  Installing uv...");
         sshExec("curl -LsSf https://astral.sh/uv/install.sh | sh > /tmp/uv-install.log 2>&1", _sshKey, _sshPort, _sshUser);
       }
-    } catch {
-      // Continue — service start will surface a clear error if uv is missing
+    } catch (e) {
+      console.error("uv install failed:", e);
+      throw new Error("uv is required to run the voice service in the VM but could not be installed");
     }
     console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
     return;
@@ -222,15 +228,13 @@ export async function installDependencies(
 
   // --- Fedora path ---
 
-  // Install gnome-terminal if not present (needed for tmux in E2E tests)
-  try {
-    const termCheck = sshExec("which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
-    if (termCheck.includes("missing")) {
-      console.log("  Installing gnome-terminal...");
-      sshExec(env.pkgInstall("gnome-terminal"), _sshKey, _sshPort, _sshUser);
+  const terminalCheck = sshExec("which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser);
+  if (terminalCheck.includes("missing")) {
+    console.log("  Installing gnome-terminal...");
+    sshExec(env.pkgInstall("gnome-terminal"), _sshKey, _sshPort, _sshUser);
+    if (sshExec("which gnome-terminal 2>/dev/null || echo missing", _sshKey, _sshPort, _sshUser).includes("missing")) {
+      throw new Error("gnome-terminal is required for local VM E2E (tmux host) but could not be installed");
     }
-  } catch {
-    // Continue — tmux may work without it depending on test flow
   }
   // Install Ghostty via COPR (for testing mutter-paste clipboard behavior)
   try {
@@ -239,8 +243,10 @@ export async function installDependencies(
       console.log("  Installing Ghostty via COPR...");
       sshExec("sudo dnf copr enable -y scottames/ghostty 2>/dev/null && " + env.pkgInstall("ghostty"), _sshKey, _sshPort, _sshUser);
     }
-  } catch {
-    // Continue — Ghostty install may fail, fall back to gnome-terminal
+  } catch (e) {
+    // Ghostty is optional on Fedora (gnome-terminal is the required terminal;
+    // Ghostty is for mutter-paste clipboard testing only)
+    console.error("Ghostty COPR install failed (non-fatal):", e);
   }
   console.log(`  dependencies total: ${Date.now() - t0}ms [time]`);
 }
