@@ -1181,8 +1181,14 @@ async function runBareMode(): Promise<void> {
     await run(`kill ${svcPid} 2>/dev/null; sleep 1`);
     if (cmdline) {
       // replaying the cmdline from the harness cwd breaks uv's relative
-      // `--project .` — must run from the original service cwd (CI C01-C03)
-      await transport.exec(`cd '${cwd}' && nohup ${cmdline} >> '${serviceLog}' 2>&1 &`, 5_000);
+      // `--project .` — must run from the original service cwd (CI C01-C03).
+      // nohup'd child inherits stdout/stderr pipes; redirect them so exec's
+      // pipe drain doesn't block, and log the restart for forensics.
+      const rr = await transport.exec(
+        `cd '${cwd}' && nohup ${cmdline} >> '${serviceLog}' 2>&1 < /dev/null & sleep 2; pgrep -f voice-to-text-dbus | head -1`,
+        15_000,
+      );
+      console.log(`  service restart: code=${rr.code} pid=${rr.stdout.trim()} stderr=${rr.stderr.slice(0, 200)}`);
     }
     await pollForCommandOutput(
       (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
@@ -1234,7 +1240,11 @@ async function runBareMode(): Promise<void> {
     row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
     await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
     if (restoreCmd) {
-      await transport.exec(`cd '${restoreCwd}' && nohup ${restoreCmd} >> '${serviceLog}' 2>&1 &`, 5_000);
+      const rr = await transport.exec(
+        `cd '${restoreCwd}' && nohup ${restoreCmd} >> '${serviceLog}' 2>&1 < /dev/null & sleep 2; pgrep -f voice-to-text-dbus | head -1`,
+        15_000,
+      );
+      console.log(`  service restore: code=${rr.code} pid=${rr.stdout.trim()} stderr=${rr.stderr.slice(0, 200)}`);
       await pollForCommandOutput(
         (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
         "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
