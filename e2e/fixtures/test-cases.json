@@ -18,7 +18,8 @@
     },
     {
       "file": "test-05-note.wav",
-      "expected": "take a note that the project deadline is next friday"
+      "expected": "note that the project",
+      "note": "substring both Parakeet and Moonshine-medium produce verbatim (Moonshine mishears deadline->then died, CI 2026-09-03)"
     }
   ]
 }

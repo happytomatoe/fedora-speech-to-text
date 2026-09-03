@@ -1080,7 +1080,7 @@ async function runBareMode(): Promise<void> {
         }
         await gdbus(
           "StartRecording",
-          `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: method })}'`,
+          `'${JSON.stringify({ provider: process.env.VOX_CI_E2E_PROVIDER || "moonshine", language: "en", output_method: method })}'`,
         );
         console.log("  recording started; polling for transcription...");
 
@@ -1391,13 +1391,12 @@ ATSPIEOF`,
   await gdbus("StopRecording").catch(() => {});
   // E02: invalid endpoint → error in log, service stays alive
   try {
-    // Parakeet reads http_endpoint from the provider section (config.py
-    // get_provider_config: <provider> block overrides global), so patch there.
+    // In-process moonshine has no HTTP endpoint to break — force the
+    // failure via a nonexistent model instead (engine logs the load error).
     await run(`cp ${configPath} ${configPath}.bak`);
-    await run(`grep -q '^  http_endpoint:' ${configPath} || printf 'parakeet:\\n  http_endpoint: http://localhost:59999\\n' >> ${configPath}`);
-    await run(`sed -i 's|http_endpoint:.*|http_endpoint: http://localhost:59999|' ${configPath}`);
+    await run(`sed -i 's/^model:.*/model: nonexistent_model/' ${configPath}`);
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
-    await gdbus("StartRecording", `'${JSON.stringify({ provider: "parakeet", language: "en" })}'`).catch(() => {});
+    await gdbus("StartRecording", `'${JSON.stringify({ provider: "moonshine", language: "en" })}'`).catch(() => {});
     // httpx connect retries can outlast a fixed sleep — poll for the error
     // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
     let errHit = "0";

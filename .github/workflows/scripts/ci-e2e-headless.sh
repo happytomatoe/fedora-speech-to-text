@@ -42,61 +42,8 @@ find "$REPO_ROOT/e2e" -maxdepth 1 ! -name e2e ! -name '*.qcow2' ! -name node_mod
 # The debug file must live inside the isolated tree: the service runs with HOME
 # pointed at $ISOLATED.
 
-# --- Parakeet container --------------------------------------------------------
-# NOTE: no volume mount — the achetronic/parakeet image bakes the models into
-# /models at build time (see its Dockerfile). Mounting an empty host dir HIDES
-# the baked models and the server fails with "open /models/config.json: no such file".
-CONTAINER_NAME="parakeet-ci-e2e"
-# Local dev: an already-healthy Parakeet on :5092 is reused instead of
-# starting a second one (port conflict). CI runners have none, so they boot one.
-if curl -sf http://localhost:5092/health > /dev/null 2>&1; then
-  echo "Parakeet already healthy on :5092 — reusing it"
-  RUNTIME=skip
-elif command -v docker > /dev/null 2>&1; then
-  RUNTIME=docker
-elif command -v podman > /dev/null 2>&1; then
-  RUNTIME=podman
-else
-  echo "FATAL: neither docker nor podman found" >&2
-  exit 1
-fi
+# --- Parakeet container removed — CI uses in-process Moonshine provider (src/voice_to_text/providers/moonshine.py) ---
 
-if [ "$RUNTIME" != "skip" ]; then
-  echo "Starting Parakeet container ($RUNTIME)..."
-  # GHCR blob pulls are flaky on CI (connection reset mid-pull); retry a few
-  # times before giving up — run 33726716165 died on a transient reset.
-  # Pin by digest + use the fp32 (non-quantized) model image: the int8 models
-  # in :latest produce empty/corrupt transcriptions on some CPUs — ONNX Runtime
-  # int8 results differ across AVX2/AVX-512 (onnxruntime #6004, #14642), and
-  # GH runners don't guarantee CPU features (runner-images #3390). Verified
-  # locally: :latest int8 mangles 3/5 fixtures, :latest-fp32 transcribes all 5
-  # perfectly. Digest = amd64 platform manifest of latest-fp32.
-  PARAKEET_IMAGE="ghcr.io/achetronic/parakeet@sha256:46bf3ccb62dcc5d997edb20ed812125e19a33ab2774b2c59ba639bbfeb9d548b"
-  pulled=0
-  for attempt in 1 2 3; do
-    $RUNTIME pull "$PARAKEET_IMAGE" && pulled=1 && break
-    echo "WARN: image pull attempt $attempt failed, retrying in 5s..." >&2
-    sleep 5
-  done
-  [ "$pulled" = 1 ] || { echo "FATAL: could not pull Parakeet image" >&2; exit 1; }
-  $RUNTIME run -d --name "$CONTAINER_NAME" -p 5092:5092 "$PARAKEET_IMAGE"
-fi
-
-PARAKEET_READY=0
-for i in $(seq 1 150); do
-  if curl -sf http://localhost:5092/health > /dev/null 2>&1; then
-    echo "Parakeet ready after ~$((i * 2))s"
-    PARAKEET_READY=1
-    break
-  fi
-  sleep 2
-done
-if [ "$PARAKEET_READY" -ne 1 ]; then
-  echo "FATAL: Parakeet not ready after 300s" >&2
-  $RUNTIME logs "$CONTAINER_NAME" | tail -50
-  $RUNTIME rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-  exit 1
-fi
 
 # dotoold must be running before the service tries dotool type output
 # (only possible when /dev/uinput exists — CI runners usually lack it).
@@ -135,10 +82,6 @@ TEST_EXIT=$?
 set -e
 
 # --- Teardown + result -----------------------------------------------------------
-if [ "$RUNTIME" != "skip" ]; then
-  echo "Stopping Parakeet container..."
-  $RUNTIME rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-fi
 
 # Always surface logs for triage, then exit with the test's code.
 echo "--- service.log ---";  cat "$ISOLATED/service.log"  2>/dev/null || true
