@@ -183,12 +183,6 @@ gdbus call --session --dest org.gnome.Shell \
   --method org.gnome.Shell.Eval 'Main.overview.hide();' > /dev/null 2>&1 || true
 sleep 1
 
-# P01 support: open the extension prefs dialog in-process via the nested
-# shell's ExtensionsJS proxy (gjs --module cannot resolve resource:///org/gnome/Shell/Extensions).
-gdbus call --session --dest org.gnome.Shell.Extensions \
-  --object-path /org/gnome/Shell/Extensions \
-  --method org.gnome.Shell.Extensions.OpenExtensionPrefs \
-  'voice-to-text@happytomatoe.com' '' '{}' > /dev/null 2>&1 || true
 gdbus call --session \
   --dest org.gnome.Shell.Screenshot \
   --object-path /org/gnome/Shell/Screenshot \
@@ -203,23 +197,22 @@ else
 fi
 
 # Service log path for the ported suite's transcription poll
+export VOX_CI_E2E_HEADLESS=1
 export VOX_CI_E2E_SERVICE_LOG="$HOME/service.log"
 export VOX_CI_E2E_SHELL_LOG="$HOME/shell.log"
 
 # --- Screencast (one per run) -------------------------------------------------------
-# GNOME Shell records the session via the Screencast D-Bus API. Started before
-# the suite, stopped after; the file template must contain %d (GIO requirement).
-SCREENCAST_TEMPLATE="$HOME/recording-%d.webm"
-SCREENCAST_STARTED=0
-SCREENCAST_OUT=$(gdbus call --session \
-  --dest org.gnome.Shell.Screencast \
-  --object-path /org/gnome/Shell/Screencast \
-  --method org.gnome.Shell.Screencast.Screencast "$SCREENCAST_TEMPLATE" '{}' 2>/dev/null || true)
-if echo "$SCREENCAST_OUT" | grep -q "true"; then
-  SCREENCAST_STARTED=1
-  echo "screencast started"
+# GNOME Shell aborts a screencast with "Sender has vanished" when the D-Bus
+# caller disconnects, so a one-shot `gdbus call` produces only a file header.
+# The holder keeps the bus connection open until SIGTERM.
+SCREENCAST_TEMPLATE="$HOME/recording%d.webm"
+SCREENCAST_HOLDER_PID=""
+python3 "$REPO_ROOT/e2e/lib/screencast-holder.py" "$SCREENCAST_TEMPLATE" > "$HOME/screencast.log" 2>&1 &
+SCREENCAST_HOLDER_PID=$!
+if sleep 1 && kill -0 "$SCREENCAST_HOLDER_PID" 2>/dev/null; then
+  echo "screencast holder started (pid $SCREENCAST_HOLDER_PID)"
 else
-  echo "WARN: screencast start failed: $SCREENCAST_OUT"
+  echo "WARN: screencast holder exited: $(cat "$HOME/screencast.log" 2>/dev/null)"
 fi
 
 # --- Run the test runner ----------------------------------------------------------
@@ -240,24 +233,27 @@ gdbus call --session \
   true false "$AFTER_SHOT" || echo "WARN: after-screenshot failed"
 
 # --- Tear down -----------------------------------------------------------------------
-if [ "$SCREENCAST_STARTED" = "1" ]; then
-  gdbus call --session --dest org.gnome.Shell.Screencast \
-    --object-path /org/gnome/Shell/Screencast \
-    --method org.gnome.Shell.Screencast.StopScreencast >/dev/null 2>&1 || true
-  sleep 1
+mkdir -p "$REPO_ROOT/output"
+if [ -n "$SCREENCAST_HOLDER_PID" ] && kill -0 "$SCREENCAST_HOLDER_PID" 2>/dev/null; then
+  kill -TERM "$SCREENCAST_HOLDER_PID" 2>/dev/null || true
+  for _ in $(seq 1 10); do kill -0 "$SCREENCAST_HOLDER_PID" 2>/dev/null || break; sleep 0.5; done
+  kill -9 "$SCREENCAST_HOLDER_PID" 2>/dev/null || true
 fi
-# The file template is recording-%d.webm; with a single session it lands at recording-0.webm
-for f in "$HOME"/recording-*.webm "$HOME/recording.webm"; do
+sleep 1
+# recording%d.webm with a single session lands at recording0.webm
+for f in "$HOME"/recording*.webm; do
   if [ -s "$f" ]; then
-    mkdir -p "$REPO_ROOT/output"
     cp "$f" "$REPO_ROOT/output/recording.webm" 2>/dev/null || true
     break
   fi
 done
-# results.json lands in the staged e2e tree's output dir — rescue to repo output/
-if [ -f "$ASSETS/e2e/output/ubuntu-bare/results.json" ]; then
-  mkdir -p "$REPO_ROOT/output"
-  cp "$ASSETS/e2e/output/ubuntu-bare/results.json" "$REPO_ROOT/output/results.json" 2>/dev/null || true
+# Logs + prefs shot for debugging
+cp "$HOME/service.log" "$REPO_ROOT/output/service.log" 2>/dev/null || true
+cp "$HOME/shell.log" "$REPO_ROOT/output/shell.log" 2>/dev/null || true
+cp "$HOME/screencast.log" "$REPO_ROOT/output/screencast.log" 2>/dev/null || true
+# Suite output dir (results.json, prefs shots) — rescue whole dir
+if [ -d "$ASSETS/e2e/output/ubuntu-bare" ]; then
+  cp -r "$ASSETS/e2e/output/ubuntu-bare/." "$REPO_ROOT/output/" 2>/dev/null || true
 fi
 kill "$SERVICE_PID" 2>/dev/null || true
 kill "$SHELL_PID" 2>/dev/null || true

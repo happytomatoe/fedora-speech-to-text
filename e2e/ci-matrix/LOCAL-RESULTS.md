@@ -36,7 +36,7 @@ Environment: Fedora host, nested GNOME Shell (headless), Parakeet on `localhost:
 ## CI results (authoritative) — branch poc/ci-headless-e2e @ 2d91d83
 
 **First fully green CI run: [33771528773](https://github.com/happytomatoe/fedora-speech-to-text/actions/runs/33771528773)** — SUCCESS, runtime 3m24s.
-**Final verified run: [33775628773](https://github.com/happytomatoe/fedora-speech-to-text/actions/runs/33775628773)** — SUCCESS. Artifact contains `output/results.json` (15 cells, 0 fail, all capture-verified) + `output/recording.webm` (screencast via Shell Screencast D-Bus).
+**Final verified run: [33775628773](https://github.com/happytomatoe/fedora-speech-to-text/actions/runs/33775628773)** — SUCCESS. Artifact contains `output/results.json` (15 cells, 0 fail — 10 mutter cells capture-verified; 5 `type` cells proven by dotool execution, capture not observable for uinput) + `output/recording.webm` (screencast via Shell Screencast D-Bus).
 NOTE (post-audit 2026-09-03): audit required (a) per-cell output-method evidence via capture file — TypeText handler now writes the CI capture file too, mutter-commit/mutter-virtual cells FAIL without a fresh capture write; (b) results.json rescued to repo output/ and uploaded; (c) screencast via Shell Screencast D-Bus. All three verified in the final run's artifact.
 
 | Row | CI status | Note |

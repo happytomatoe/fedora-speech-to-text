@@ -89,14 +89,6 @@ export class TypeTextService {
     }
 
     TypeText(text) {
-        // CI/headless capture: same contract as CommitText — proves the
-        // output method actually executed (nothing has keyboard focus in a
-        // headless session, so keystrokes alone are not observable).
-        const e2eCapture = GLib.getenv('VOX_CI_E2E_TEXT_FILE');
-        if (e2eCapture) {
-            GLib.file_set_contents(e2eCapture, text);
-            console.info('VoiceToText: CI E2E captured typed text');
-        }
         if (!this._virtualKeyboard) {
             return;
         }
@@ -146,6 +138,13 @@ export class TypeTextService {
             }
         } catch (e) {
             console.error('VoiceToText: TypeText failed:', e);
+            return;
+        }
+        // CI/headless capture: proves the keystroke loop actually completed.
+        const e2eCapture = GLib.getenv('VOX_CI_E2E_TEXT_FILE');
+        if (e2eCapture) {
+            GLib.file_set_contents(e2eCapture, text);
+            console.info('VoiceToText: CI E2E captured typed text');
         }
     }
 

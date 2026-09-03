@@ -1125,7 +1125,11 @@ async function runBareMode(): Promise<void> {
         // the headless CommitText/TypeText path. dotool 'type' injects via
         // uinput with no observable capture; its execution is proven by the
         // recording flow completing without error.
-        const captureRequired = method !== "type";
+        // Capture is provable only in the headless CI harness (no focused
+        // input, extension takes the fallback path). On a dev desktop the
+        // focused-input path commits for real and writes no capture file,
+        // so requiring it there would false-FAIL every mutter cell.
+        const captureRequired = process.env.VOX_CI_E2E_HEADLESS === "1" && method !== "type";
         const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || !captureRequired);
         console.log(`  expected: '${bareCase.expected}'`);
         console.log(`  typed:    '${typed}'`);
