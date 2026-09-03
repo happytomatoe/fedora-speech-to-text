@@ -41,6 +41,8 @@ export XDG_CONFIG_HOME XDG_DATA_HOME XDG_DATA_DIRS XDG_CACHE_HOME XDG_RUNTIME_DI
 WIDTH="${CI_E2E_WIDTH:-960}"
 HEIGHT="${CI_E2E_HEIGHT:-540}"
 export WIDTH HEIGHT
+PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
+export PULSE_SERVER
 
 # --- GSettings schemas ------------------------------------------------------
 schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"
