@@ -7,6 +7,8 @@ set -euo pipefail
 ASSETS="${CI_E2E_ASSETS:?CI_E2E_ASSETS not set}"
 DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:?bus not staged}"
 export DBUS_SESSION_BUS_ADDRESS
+GSETTINGS_BACKEND=keyfile
+export GSETTINGS_BACKEND
 
 #!/usr/bin/env bash
 # Inner harness for the CI headless E2E test. Runs INSIDE `dbus-run-session`

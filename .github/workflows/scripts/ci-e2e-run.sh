@@ -17,6 +17,8 @@ PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
 export VOICE_TO_TEXT_DEBUG_FILE VOX_CI_E2E_TEXT_FILE DOTOOL_PIPE PULSE_SERVER
 DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:?}"
 export DBUS_SESSION_BUS_ADDRESS
+GSETTINGS_BACKEND=keyfile
+export GSETTINGS_BACKEND
 
 # --- Run the test runner ----------------------------------------------------------
 # Ported suite (e2e/e2e.ts --env ubuntu-bare): local D-Bus flow, no SSH.
