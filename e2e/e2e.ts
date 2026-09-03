@@ -1199,6 +1199,9 @@ async function runBareMode(): Promise<void> {
   } catch (e) {
     row("E06 service-down-clean-error", false, String(e));
   }
+  // E06 leftover: a StartRecording '{}' can land after the service restarted
+  // (racing gdbus timeout) and leave the engine in a bad state — reset it.
+  await gdbus("StopRecording").catch(() => {});
   // E02: invalid endpoint → error in log, service stays alive
   try {
     // Parakeet reads http_endpoint from the provider section (config.py
