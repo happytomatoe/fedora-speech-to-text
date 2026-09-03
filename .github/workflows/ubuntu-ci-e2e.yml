@@ -17,7 +17,6 @@ on:
       - ".github/workflows/ubuntu-ci-e2e.yml"
       - ".github/workflows/scripts/ci-e2e-headless.sh"
       - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
-      - "ci-e2e/**"
       - "gnome-ext/**"
       - "src/voice_to_text/**"
 
@@ -71,7 +70,7 @@ jobs:
           fi
 
       - name: Install test-runner dependencies
-        run: cd ci-e2e && bun install
+        run: cd e2e && bun install
 
       - name: Start Parakeet + boot headless GNOME Shell + run E2E
         run: |

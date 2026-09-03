@@ -869,6 +869,16 @@ async function compareWithReference(name: string, captured: string, run: RunCont
  * Run preferences screenshot tests.
  * Opens preferences and takes screenshots of each section.
  */
+// Read the service's cmdline AND cwd from /proc — replaying the cmdline from a
+// different cwd silently breaks commands with relative paths (uv --project .).
+async function svcCmdline(svcPid: string): Promise<{ cmdline: string; cwd: string }> {
+  const pidOk = svcPid && /^\d+$/.test(svcPid) && (await transport.exec(`test -d /proc/${svcPid}`, 5_000)).stdout.includes("yes");
+  if (!pidOk) return { cmdline: "", cwd: "" };
+  const cmdline = (await transport.exec(`tr '\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
+  const cwd = (await transport.exec(`readlink /proc/${svcPid}/cwd 2>/dev/null`)).stdout.trim() || "";
+  return { cmdline, cwd };
+}
+
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
   console.log("\n📸 Running preferences screenshot tests...");
   
@@ -1210,7 +1220,7 @@ async function runBareMode(): Promise<void> {
     row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
     await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
     if (restoreCmd) {
-      await transport.exec(`nohup ${restoreCmd} >> '${serviceLog}' 2>&1 &`, 5_000);
+      await transport.exec(`cd '${restoreCwd}' && nohup ${restoreCmd} >> '${serviceLog}' 2>&1 &`, 5_000);
       await pollForCommandOutput(
         (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
         "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
