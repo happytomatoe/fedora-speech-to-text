@@ -875,7 +875,7 @@ async function svcCmdline(
   svcPid: string,
   exec: (cmd: string, timeout?: number) => Promise<{ stdout: string }>,
 ): Promise<{ cmdline: string; cwd: string }> {
-  const pidOk = svcPid && /^\d+$/.test(svcPid) && (await exec(`test -d /proc/${svcPid}`, 5_000)).stdout.includes("yes");
+  const pidOk = svcPid && /^\d+$/.test(svcPid) && (await exec(`test -d /proc/${svcPid} && echo yes`, 5_000)).stdout.includes("yes");
   if (!pidOk) return { cmdline: "", cwd: "" };
   const cmdline = (await exec(`tr '\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
   const cwd = (await exec(`readlink /proc/${svcPid}/cwd 2>/dev/null`)).stdout.trim() || "";
