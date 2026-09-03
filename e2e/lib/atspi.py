@@ -109,6 +109,59 @@ def dump_tree(max_nodes=200):
     return ";".join(out)
 
 
+def focus_add_word_entry():
+    """Grab keyboard focus on the Add-Word dialog entry (for dotool typing)."""
+    import time
+
+    def find_frame():
+        def pred(n, r, node):
+            return n == "Add Custom Word" and r == "frame"
+        def act(n, r, node):
+            return node
+        return walk_tree(pred, act)
+
+    dlg = None
+    for _ in range(20):
+        dlg = find_frame()
+        if dlg:
+            break
+        time.sleep(0.5)
+    if not dlg:
+        return "no-dialog"
+
+    def find_entry(node, depth=0):
+        if node is None or depth > 30:
+            return None
+        try:
+            if node.get_role_name() in ("text", "text entry") and node.get_state_set().contains(Atspi.StateType.SHOWING):
+                return node
+        except Exception:
+            return None
+        try:
+            n = node.get_child_count()
+        except Exception:
+            return None
+        for i in range(n):
+            found = find_entry(node.get_child_at_index(i), depth + 1)
+            if found:
+                return found
+        return None
+
+    entry = None
+    for _ in range(20):
+        entry = find_entry(dlg)
+        if entry:
+            break
+        time.sleep(0.5)
+    if not entry:
+        return "no-entry"
+    try:
+        entry.grab_focus()
+        return "focused"
+    except Exception:
+        return "focus-failed"
+
+
 def verify_word_added(word):
     """After keyboard input lands in the focused entry: click Add, verify row.
     (Text set via AT-SPI is refused by GTK4 in this headless dialog — input

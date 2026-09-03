@@ -1179,6 +1179,12 @@ ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       // in this headless dialog), click Add, verify row. Verification runs in
       // one python process — cross-process a11y walks saw inconsistent state.
       await doAtspiAction(execLike, "Add Word", "click");
+      const gf = await transport.exec(
+        `python3 - <<'ATSPIEOF'
+${ATSPI_PY}
+print("RESULT:" + str(focus_add_word_entry() or ""))
+ATSPIEOF`, 20_000);
+      console.log(`  entry focus: ${gf.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result"}`);
       await transport.exec(
         `pgrep -x dotoold >/dev/null || nohup '${join(import.meta.dir, "bin", "dotoold")}' >/dev/null 2>&1 & sleep 0.3; printf 'text E2E\n' | '${join(import.meta.dir, "bin", "dotool")}'`,
         10_000,
