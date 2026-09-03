@@ -74,6 +74,8 @@ if [ -d "$EXT_DIR/schemas" ]; then
   glib-compile-schemas --strict "$EXT_DIR/schemas"
 fi
 gsettings set org.gnome.shell disable-user-extensions false
+# Suppress notification banners (unsafe-mode warning pollutes screenshots)
+gsettings set org.gnome.desktop.notifications show-banners false
 
 # Bridge apps onto the accessibility bus so AT-SPI assertions can see prefs
 # windows (org.a11y.Bus service comes from at-spi2-core).
