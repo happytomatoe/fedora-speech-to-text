@@ -1194,9 +1194,11 @@ ATSPIEOF`, 40_000);
         `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-bare.png'`,
         10_000,
       ).catch(() => {});
-      // Close: prefs window has no guaranteed a11y close action — kill its process
-      await run(`pkill -f '[g]nome-extension-prefs' || true`, 5_000);
-      await Bun.sleep(1000);
+      // Close: prefs window has no guaranteed a11y close action — the Adw
+      // window lives in the org.gnome.Shell.Extensions process; kill it and
+      // verify the window leaves the a11y tree.
+      await run(`pkill -f 'org.gnome.Shell.Extensions' || true`, 5_000);
+      await Bun.sleep(2000);
       const gone = await transport.exec(
         `python3 - <<'ATSPIEOF'
 from gi.repository import Atspi
