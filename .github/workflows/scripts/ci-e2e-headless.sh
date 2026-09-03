@@ -86,8 +86,9 @@ fi
 
 # dotoold must be running before the service tries dotool type output
 # (only possible when /dev/uinput exists — CI runners usually lack it).
+# dotoold shell wrapper execs `dotool` by name — needs the bin dir on PATH.
 if [[ -w /dev/uinput ]] && [[ -x "$ASSETS/e2e/bin/dotoold" ]]; then
-  pgrep -x dotoold >/dev/null || nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
+  PATH="$ASSETS/e2e/bin:$PATH" nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
 fi
 
 # --- Run the inner harness inside a private session bus -------------------------
