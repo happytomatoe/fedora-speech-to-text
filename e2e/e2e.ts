@@ -1213,15 +1213,64 @@ async function runBareMode(): Promise<void> {
   skipRow("E03 network-timeout", "deferred");
   skipRow("E05 config-dir-readonly", "deferred");
 
+  // Phase 5: hotkey + UI suites — entirely uinput-gated. Hotkey press via
+  // dotool replaces the D-Bus StartRecording trigger; UI cases verify the
+  // preferences window lifecycle.
+  const hotkeyUiRows: Array<{ id: string; status: "pass" | "fail" | "skip"; note?: string }> = [];
+  const dotoolBin = join(import.meta.dir, "bin", "dotool");
+  if (canUseDotool) {
+    await transport.exec(
+      `pgrep -x dotoold >/dev/null || nohup '${dotoolBin.replace(/dotool$/, "dotoold")}' >/dev/null 2>&1 &`,
+      5_000,
+    );
+    const dtool = (script: string) =>
+      run(`printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | '${dotoolBin}'`);
+    try {
+      const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
+      const since = (pattern: string) =>
+        transport.exec(
+          `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -m1 -ioP '${pattern}'`,
+          5_000,
+        ).then(r => r.stdout.trim());
+      await dtool("key ctrl+alt+r");
+      await Bun.sleep(1000);
+      const started = await since("Recording|recording started|DEBUG MODE");
+      await dtool("key ctrl+alt+r");
+      await Bun.sleep(1000);
+      hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: started ? "pass" : "fail", note: started ? undefined : "no recording evidence in log" });
+    } catch (e) {
+      hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: "fail", note: String(e) });
+      await gdbus("StopRecording").catch(() => {});
+    }
+    try {
+      const gjs = "gjs --module $HOME/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com/prefs.js";
+      await transport.exec(`nohup ${gjs} >/dev/null 2>&1 & echo $! > /tmp/prefs.pid`, 10_000);
+      await Bun.sleep(3000);
+      const alive = (await transport.exec("kill -0 $(cat /tmp/prefs.pid) 2>/dev/null && echo alive || echo dead")).stdout.trim();
+      hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: alive === "alive" ? "pass" : "fail" });
+      await transport.exec("kill $(cat /tmp/prefs.pid) 2>/dev/null");
+    } catch (e) {
+      hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: "fail", note: String(e) });
+    }
+  } else {
+    hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: "skip", note: "no uinput" });
+    hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: "skip", note: "no uinput" });
+  }
+  for (const id of ["H03 custom-hotkey", "H04 hotkey-conflict", "H05 global-hotkey", "P02 close", "P03 tabs", "P05 save", "P06 cancel"]) {
+    hotkeyUiRows.push({ id, status: "skip", note: "deferred" });
+  }
+
   console.log("\n=== config/error rows ===");
+  for (const r of hotkeyUiRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
   for (const r of configRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
   const configFailed = configRows.filter(r => r.status === "fail").length;
   const failed = results.filter(r => r.status === "fail").length;
-  const totalFailed = failed + configFailed;
+  const hotkeyUiFailed = hotkeyUiRows.filter(r => r.status === "fail").length;
+  const totalFailed = failed + configFailed + hotkeyUiFailed;
   const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: no uinput)` : "";
   writeFileSync(
     join(outputDir, "results.json"),
-    JSON.stringify({ transcription: results, configError: configRows }, null, 2),
+    JSON.stringify({ transcription: results, configError: configRows, hotkeyUi: hotkeyUiRows }, null, 2),
   );
   process.exit(totalFailed === 0 ? 0 : 1);
 }
