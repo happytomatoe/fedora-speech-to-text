@@ -1192,7 +1192,7 @@ ATSPIEOF`, 30_000);
         10_000,
       ).catch(() => {});
       // Close: prefs window has no guaranteed a11y close action — kill its process
-      await run(`pkill -f 'gnome-extension-prefs|Gjs.*prefs' || true`, 5_000);
+      await run(`pkill -f '[g]nome-extension-prefs' || true`, 5_000);
       await Bun.sleep(1000);
       const gone = await transport.exec(
         `python3 - <<'ATSPIEOF'

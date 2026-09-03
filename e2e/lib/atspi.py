@@ -133,14 +133,11 @@ def add_word_roundtrip(word):
 
     entry = None
     for _ in range(20):
-        for i in range(dlg.get_child_count()):
-            try:
-                w = dlg.get_child_at_index(i)
-                if w.get_role_name() in ("text", "text entry"):
-                    entry = w
-                    break
-            except Exception:
-                pass
+        def pred(n, r, node):
+            return r in ("text", "text entry")
+        def act(n, r, node):
+            return node
+        entry = walk_tree(pred, act)
         if entry:
             break
         time.sleep(0.5)
