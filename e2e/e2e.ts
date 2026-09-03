@@ -1029,8 +1029,17 @@ async function runBareMode(): Promise<void> {
     if (picked.length === 0) throw new Error(`case '${SELECTED_CASE}' not found`);
     return picked;
   })();
-  // Phase 3 will add "type" behind the uinput gate; for now mutter methods only.
-  const outputMethods = ["mutter-commit", "mutter-virtual"];
+  // "type" (dotool) needs /dev/uinput — probe at runtime; absent runners skip
+  // those cells. VOX_E2E_FORCE_NO_UINPUT=1 simulates absence for testing.
+  const canUseDotool = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
+    (await transport.exec(
+      `test -c /dev/uinput && test -w /dev/uinput && test -x '${join(import.meta.dir, "bin", "dotool")}' && echo OK`,
+    ).then(r => r.stdout.trim() === "OK"));
+  console.log(`  uinput/dotool: ${canUseDotool ? "PRESENT" : "ABSENT — type cells skipped"}`);
+  const outputMethods = canUseDotool
+    ? ["mutter-commit", "mutter-virtual", "type"]
+    : ["mutter-commit", "mutter-virtual"];
+  const skippedTypeCells = canUseDotool ? 0 : allCases.length;
 
   interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
   const results: BareResult[] = [];
@@ -1112,7 +1121,8 @@ async function runBareMode(): Promise<void> {
   console.log("\n=== bare-mode summary ===");
   for (const r of results) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.file} ${r.method}${r.note ? `  (${r.note})` : ""}`);
   const failed = results.filter(r => r.status === "fail").length;
-  console.log(`\n${results.length - failed}/${results.length} passed`);
+  const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: no uinput)` : "";
+  console.log(`\n${results.length - failed}/${results.length} passed${skippedNote}`);
   writeFileSync(join(outputDir, "results.json"), JSON.stringify(results, null, 2));
   process.exit(failed === 0 ? 0 : 1);
 }
