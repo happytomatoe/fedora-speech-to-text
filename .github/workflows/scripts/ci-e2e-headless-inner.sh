@@ -249,7 +249,8 @@ fi
 # The file template is recording-%d.webm; with a single session it lands at recording-0.webm
 for f in "$HOME"/recording-*.webm "$HOME/recording.webm"; do
   if [ -s "$f" ]; then
-    cp "$f" "/home/$(id -un)/$(basename "$f" | sed 's/-[0-9]*\.webm/.webm/')" 2>/dev/null || true
+    mkdir -p "$REPO_ROOT/output"
+    cp "$f" "$REPO_ROOT/output/recording.webm" 2>/dev/null || true
     break
   fi
 done

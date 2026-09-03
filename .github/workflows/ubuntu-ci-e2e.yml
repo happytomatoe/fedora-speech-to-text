@@ -96,7 +96,7 @@ jobs:
           path: |
             ci-e2e-screenshot-2604.png
             ci-e2e-screenshot-2604-*.png
-            recording.webm
+            output/recording.webm
             output/results.json
           if-no-files-found: warn
           retention-days: 7
