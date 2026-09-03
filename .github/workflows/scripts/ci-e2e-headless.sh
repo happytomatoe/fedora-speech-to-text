@@ -65,9 +65,13 @@ if [ "$RUNTIME" != "skip" ]; then
   echo "Starting Parakeet container ($RUNTIME)..."
   # GHCR blob pulls are flaky on CI (connection reset mid-pull); retry a few
   # times before giving up — run 33726716165 died on a transient reset.
-  # Pin by digest: CI run 33726981834 showed :latest returning wrong/empty
-  # transcriptions where the locally cached (older) image was correct.
-  PARAKEET_IMAGE="ghcr.io/achetronic/parakeet@sha256:00f8a02ec0ca6a7d6d5ee9f959060d8498b14f741a25e914941d22547a3f37f4"
+  # Pin by digest + use the fp32 (non-quantized) model image: the int8 models
+  # in :latest produce empty/corrupt transcriptions on some CPUs — ONNX Runtime
+  # int8 results differ across AVX2/AVX-512 (onnxruntime #6004, #14642), and
+  # GH runners don't guarantee CPU features (runner-images #3390). Verified
+  # locally: :latest int8 mangles 3/5 fixtures, :latest-fp32 transcribes all 5
+  # perfectly. Digest = amd64 platform manifest of latest-fp32.
+  PARAKEET_IMAGE="ghcr.io/achetronic/parakeet@sha256:46bf3ccb62dcc5d997edb20ed812125e19a33ab2774b2c59ba639bbfeb9d548b"
   pulled=0
   for attempt in 1 2 3; do
     $RUNTIME pull "$PARAKEET_IMAGE" && pulled=1 && break

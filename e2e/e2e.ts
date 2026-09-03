@@ -1082,6 +1082,11 @@ async function runBareMode(): Promise<void> {
         );
         console.log("  recording started; polling for transcription...");
 
+        // Capture file mtime at cell start — the fallback below must only
+        // trust it if the extension wrote it DURING this cell (a stale file
+        // from the previous cell caused test-05 to see test-04's text).
+        const textFileMtime0 = await run(`stat -c %Y '${textFile}' 2>/dev/null || echo 0`);
+
         let transcription = "";
         const deadline = Date.now() + 90_000;
         while (Date.now() < deadline && !transcription) {
@@ -1099,11 +1104,15 @@ async function runBareMode(): Promise<void> {
         }
 
         // Typed text: prefer the service log result; fall back to the capture
-        // file written by the extension's headless CommitText path.
+        // file written by the extension's headless CommitText path, but only
+        // if it was modified after this cell started.
         let typed = transcription;
         if (!typed) {
           try {
-            typed = readFileSync(textFile, "utf-8").trim();
+            const mtime = await run(`stat -c %Y '${textFile}' 2>/dev/null || echo 0`);
+            if (parseInt(mtime.trim()) > parseInt(textFileMtime0.trim())) {
+              typed = readFileSync(textFile, "utf-8").trim();
+            }
           } catch {
             // capture file absent
           }
