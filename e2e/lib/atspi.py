@@ -109,10 +109,10 @@ def dump_tree(max_nodes=200):
     return ";".join(out)
 
 
-def add_word_roundtrip(word):
-    """Single-process Add-Word flow: wait for dialog entry (editable text node
-    inside the Add Custom Word window), set text, click Add, verify row.
-    One process so the a11y tree is walked once with consistent state."""
+def verify_word_added(word):
+    """After keyboard input lands in the focused entry: click Add, verify row.
+    (Text set via AT-SPI is refused by GTK4 in this headless dialog — input
+    comes from dotool keystrokes instead.)"""
     import time
 
     def find_frame():
@@ -131,84 +131,14 @@ def add_word_roundtrip(word):
     if not dlg:
         return "no-dialog"
 
-    def find_entry(node, depth=0):
-        # Search within the dialog subtree only; require a mapped (SHOWING)
-        # editable text node — global walk matched hidden shell text nodes.
-        if node is None or depth > 30:
-            return None
-        try:
-            if node.get_role_name() in ("text", "text entry") and node.get_state_set().contains(Atspi.StateType.SHOWING):
-                return node
-        except Exception:
-            return None
-        try:
-            n = node.get_child_count()
-        except Exception:
-            return None
-        for i in range(n):
-            found = find_entry(node.get_child_at_index(i), depth + 1)
-            if found:
-                return found
-        return None
-
-    entry = None
-    for _ in range(20):
-        entry = find_entry(dlg)
-        if entry:
-            break
-        time.sleep(0.5)
-    if not entry:
-        return "no-entry"
-
-    st = entry.get_state_set()
-    state_names = [str(s) for s in (Atspi.StateType.EDITABLE, Atspi.StateType.FOCUSABLE, Atspi.StateType.FOCUSED, Atspi.StateType.ENABLED, Atspi.StateType.SHOWING) if st.contains(s)]
-    entry_states = ",".join(state_names)
-    try:
-        iface_methods = ",".join(m for m in dir(entry) if "text" in m.lower() or "edit" in m.lower())
-    except Exception:
-        iface_methods = "?"
-    set_ok = False
-    set_err = ""
-    for _ in range(6):
-        try:
-            entry.grab_focus()
-            time.sleep(0.2)
-        except Exception:
-            pass
-        try:
-            if entry.set_text_contents(word):
-                set_ok = True
-                break
-        except Exception as e:
-            set_err = repr(e)
-        try:
-            if entry.insert_text(0, word, len(word)):
-                set_ok = True
-                break
-        except Exception as e:
-            set_err = repr(e)
-        time.sleep(0.3)
-    if not set_ok:
-        return f"set-failed states={entry_states} methods={iface_methods} err={set_err[:160]}"
-    try:
-        if entry.query_text().get_text(0, -1) != word:
-            return "set-failed"
-    except Exception:
-        return "set-failed"
-
-    # Click the Add button (suggested-action) inside the dialog
-    add_btn = None
-
     def pred(n, r, node):
         return n == "Add" and r == "push button"
     def act(n, r, node):
         node.do_action(0)
         return "clicked"
-    result = walk_tree(pred, act)
-    if not result:
+    if not walk_tree(pred, act):
         return "no-add-button"
 
-    # Verify word row appears in prefs window
     def pred2(n, r, node):
         return n == word and r in ("list item", "label")
     def act2(n, r, node):

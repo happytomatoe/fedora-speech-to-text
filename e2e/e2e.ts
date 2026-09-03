@@ -1175,13 +1175,18 @@ for i in range(d.get_child_count()):
 ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       console.log(`  a11y apps after P01: ${t0.split("\n").filter(l => l.startsWith("APP:")).join(", ")}`);
       prefsRow("P01 prefs-window-opens", true);
-      // Add-Word dialog flow runs in ONE python process — cross-process a11y
-      // walks saw inconsistent tree state (dialog missing between calls).
+      // Add-Word dialog: open, type via dotool (GTK4 refuses AT-SPI text-set
+      // in this headless dialog), click Add, verify row. Verification runs in
+      // one python process — cross-process a11y walks saw inconsistent state.
       await doAtspiAction(execLike, "Add Word", "click");
+      await transport.exec(
+        `pgrep -x dotoold >/dev/null || nohup '${join(import.meta.dir, "bin", "dotoold")}' >/dev/null 2>&1 & sleep 0.3; printf 'text E2E\n' | '${join(import.meta.dir, "bin", "dotool")}'`,
+        10_000,
+      );
       const rt = await transport.exec(
         `python3 - <<'ATSPIEOF'
 ${ATSPI_PY}
-print("RESULT:" + str(add_word_roundtrip("E2E") or ""))
+print("RESULT:" + str(verify_word_added("E2E") or ""))
 ATSPIEOF`, 30_000);
       const rtOut = rt.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
       console.log(`  add-word roundtrip: ${rtOut}`);
