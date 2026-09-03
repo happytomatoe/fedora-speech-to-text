@@ -12,6 +12,16 @@ on:
         description: 'Open an SSH (tmate) session on the runner for live debugging'
         required: false
         default: false
+      cases:
+        type: string
+        description: 'Comma-separated test-case substrings (empty = all), e.g. "test-01" or "test-01,test-03"'
+        required: false
+        default: ''
+      skip_prefs:
+        type: boolean
+        description: 'Skip the preferences tests'
+        required: false
+        default: false
   pull_request:
     paths:
       - ".github/workflows/ubuntu-ci-e2e.yml"
@@ -76,6 +86,9 @@ jobs:
         run: cd e2e && bun install
 
       - name: Start Parakeet + boot headless GNOME Shell + run E2E
+        env:
+          E2E_CASES: ${{ github.event.inputs.cases }}
+          E2E_SKIP_PREFS: ${{ github.event.inputs.skip_prefs }}
         run: |
           bash .github/workflows/scripts/ci-e2e-headless.sh \
             "$PWD/ci-e2e-screenshot-2604.png"

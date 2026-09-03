@@ -225,7 +225,17 @@ mkdir -p "$REPO_ROOT/output/cells"
 # root's e2e/ sources.
 TEST_EXIT=0
 echo "running ported suite: e2e/e2e.ts --env ubuntu-bare"
-(cd "$ASSETS/e2e" && bun run e2e.ts --env ubuntu-bare) || TEST_EXIT=$?
+SUITE_ARGS=(--env ubuntu-bare)
+if [ -n "${E2E_CASES:-}" ]; then
+  # comma-separated substrings → repeated --case flags
+  IFS=',' read -ra CASES <<< "$E2E_CASES"
+  for c in "${CASES[@]}"; do SUITE_ARGS+=(--case "$c"); done
+fi
+if [ "${E2E_SKIP_PREFS:-}" = "true" ]; then
+  SUITE_ARGS+=(--no-prefs)
+fi
+echo "suite args: ${SUITE_ARGS[*]}"
+(cd "$ASSETS/e2e" && bun run e2e.ts "${SUITE_ARGS[@]}") || TEST_EXIT=$?
 echo "test runner exit: $TEST_EXIT"
 
 # --- Screenshot (post-run state) ---------------------------------------------------

@@ -130,6 +130,7 @@ const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
+const NO_PREFS = args.includes("--no-prefs");
 const SKIP_PREFS_GATE = !TEST_PREFS && !args.includes("--no-skip-prefs");
 // Anything whose change affects the prefs screenshots: rendered UI, deployed
 // values (config fixture, dconf seeds), deploy pipeline.
@@ -1186,6 +1187,11 @@ async function runBareMode(): Promise<void> {
   const prefsRow = (id: string, ok: boolean, note?: string) =>
     prefsRows.push({ id, status: ok ? "pass" : "fail", note });
   const prefsSkip = (id: string, why: string) => prefsRows.push({ id, status: "skip", note: why });
+  if (NO_PREFS) {
+    prefsSkip("P01 prefs-window-opens", "skipped — --no-prefs");
+    prefsSkip("P02 add-word-structure", "skipped — --no-prefs");
+    prefsSkip("P03 prefs-closes", "skipped — --no-prefs");
+  } else {
   const atspiReady = await transport.exec(
     "python3 -c 'import gi; gi.require_version(\"Atspi\", \"2.0\"); from gi.repository import Atspi' 2>&1 && echo OK",
     10_000,
@@ -1257,6 +1263,7 @@ ATSPIEOF`,
     prefsSkip("P01 prefs-window-opens", "no python3 Atspi bindings");
     prefsSkip("P02 add-word-roundtrip", "no python3 Atspi bindings");
     prefsSkip("P03 prefs-closes", "no python3 Atspi bindings");
+  }
   }
 
   // Phase 4: config + error cases — no screen, no input; D-Bus + config-file
