@@ -1103,27 +1103,39 @@ async function runBareMode(): Promise<void> {
           console.log(`  StopRecording warning: ${e}`);
         }
 
-        // Typed text: prefer the service log result; fall back to the capture
-        // file written by the extension's headless CommitText path, but only
-        // if it was modified after this cell started.
+        // Typed text: transcription from the service log; the output method
+        // is verified separately — the extension's headless CommitText path
+        // writes the capture file + logs "CI E2E captured typed text" in the
+        // shell log. A cell PASSes only if the output method actually ran
+        // (fresh capture write), so silently-failing typing FAILs the cell.
         let typed = transcription;
-        if (!typed) {
-          try {
-            const mtime = await run(`stat -c %Y '${textFile}' 2>/dev/null || echo 0`);
-            if (parseInt(mtime.trim()) > parseInt(textFileMtime0.trim())) {
-              typed = readFileSync(textFile, "utf-8").trim();
-            }
-          } catch {
-            // capture file absent
+        let captureHit = false;
+        try {
+          const mtime = await run(`stat -c %Y '${textFile}' 2>/dev/null || echo 0`);
+          if (parseInt(mtime.trim()) > parseInt(textFileMtime0.trim())) {
+            captureHit = true;
+            if (!typed) typed = readFileSync(textFile, "utf-8").trim();
           }
+        } catch {
+          // capture file absent
         }
         const errorLine = await logSince("ERROR|Traceback");
-        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine;
+        // Extension-mediated methods (mutter-commit/mutter-virtual) must
+        // prove execution via the capture file — the extension writes it in
+        // the headless CommitText/TypeText path. dotool 'type' injects via
+        // uinput with no observable capture; its execution is proven by the
+        // recording flow completing without error.
+        const captureRequired = method !== "type";
+        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || !captureRequired);
         console.log(`  expected: '${bareCase.expected}'`);
         console.log(`  typed:    '${typed}'`);
+        console.log(`  output method exercised (capture file written): ${captureHit}${captureRequired ? " (required)" : " (optional for dotool)"}`);
         if (errorLine) console.log(`  error in log: ${errorLine}`);
         console.log(passed ? "  PASS" : "  FAIL");
-        results.push({ file: bareCase.file, method, status: passed ? "pass" : "fail", typed, note: errorLine || undefined });
+        results.push({
+          file: bareCase.file, method, status: passed ? "pass" : "fail", typed,
+          note: !captureHit && captureRequired ? "output method did not run (no capture file write)" : errorLine || undefined,
+        });
 
         // Per-case after-screenshot via the shell's Screenshot D-Bus API.
         const shotBase = process.env.VOX_CI_E2E_SHOT_AFTER;

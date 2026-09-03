@@ -206,6 +206,22 @@ fi
 export VOX_CI_E2E_SERVICE_LOG="$HOME/service.log"
 export VOX_CI_E2E_SHELL_LOG="$HOME/shell.log"
 
+# --- Screencast (one per run) -------------------------------------------------------
+# GNOME Shell records the session via the Screencast D-Bus API. Started before
+# the suite, stopped after; the file template must contain %d (GIO requirement).
+SCREENCAST_TEMPLATE="$HOME/recording-%d.webm"
+SCREENCAST_STARTED=0
+SCREENCAST_OUT=$(gdbus call --session \
+  --dest org.gnome.Shell.Screencast \
+  --object-path /org/gnome/Shell/Screencast \
+  --method org.gnome.Shell.Screencast.Screencast "$SCREENCAST_TEMPLATE" '{}' 2>/dev/null || true)
+if echo "$SCREENCAST_OUT" | grep -q "true"; then
+  SCREENCAST_STARTED=1
+  echo "screencast started"
+else
+  echo "WARN: screencast start failed: $SCREENCAST_OUT"
+fi
+
 # --- Run the test runner ----------------------------------------------------------
 # Ported suite (e2e/e2e.ts --env ubuntu-bare): local D-Bus flow, no SSH.
 # The suite dir is staged into the isolated tree; run it with the project
@@ -224,9 +240,23 @@ gdbus call --session \
   true false "$AFTER_SHOT" || echo "WARN: after-screenshot failed"
 
 # --- Tear down -----------------------------------------------------------------------
-# Rescue the screencast recording before the isolated HOME vanishes.
-if [ -s "$HOME/recording.webm" ]; then
-  cp "$HOME/recording.webm" /home/$(id -un)/recording.webm 2>/dev/null || true
+if [ "$SCREENCAST_STARTED" = "1" ]; then
+  gdbus call --session --dest org.gnome.Shell.Screencast \
+    --object-path /org/gnome/Shell/Screencast \
+    --method org.gnome.Shell.Screencast.StopScreencast >/dev/null 2>&1 || true
+  sleep 1
+fi
+# The file template is recording-%d.webm; with a single session it lands at recording-0.webm
+for f in "$HOME"/recording-*.webm "$HOME/recording.webm"; do
+  if [ -s "$f" ]; then
+    cp "$f" "/home/$(id -un)/$(basename "$f" | sed 's/-[0-9]*\.webm/.webm/')" 2>/dev/null || true
+    break
+  fi
+done
+# results.json lands in the staged e2e tree's output dir — rescue to repo output/
+if [ -f "$ASSETS/e2e/output/ubuntu-bare/results.json" ]; then
+  mkdir -p "$REPO_ROOT/output"
+  cp "$ASSETS/e2e/output/ubuntu-bare/results.json" "$REPO_ROOT/output/results.json" 2>/dev/null || true
 fi
 kill "$SERVICE_PID" 2>/dev/null || true
 kill "$SHELL_PID" 2>/dev/null || true

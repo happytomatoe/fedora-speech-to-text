@@ -36,6 +36,7 @@ Environment: Fedora host, nested GNOME Shell (headless), Parakeet on `localhost:
 ## CI results (authoritative) — branch poc/ci-headless-e2e @ 2d91d83
 
 **First fully green CI run: [33771528773](https://github.com/happytomatoe/fedora-speech-to-text/actions/runs/33771528773)** — SUCCESS, runtime 3m24s.
+NOTE (post-audit 2026-09-03): that run predates three audit fixes — (a) per-cell output-method evidence via capture file, (b) results.json rescued to repo output/ and uploaded, (c) screencast via Shell Screencast D-Bus. Final verification run must show all three.
 
 | Row | CI status | Note |
 |---|---|---|
@@ -43,7 +44,7 @@ Environment: Fedora host, nested GNOME Shell (headless), Parakeet on `localhost:
 | C07/C08, C01-C03 | ✅ PASS | pkill process-tree (uv wrapper leaves python child) |
 | E02 api-error-logged | ✅ PASS | poll error line up to 10s (httpx retries) |
 | E06 service-down-clean-error | ✅ PASS | same pkill fix |
-| H01-H02 hotkey-start-stop | ✅ PASS | registration verified (gschema default + no reg error); keypress not observable headless (no logind seat) |
+| H01-H02 hotkey-start-stop | ✅ PASS (registration-check) | gsettings default + no registration error asserted; physical keypress NOT verified — uinput events cannot reach the Wayland seat without a logind session (environment limitation, disclosed) |
 | P01 prefs-window-opens | ✅ PASS | at-spi2-core + toolkit-accessibility before shell boot |
 | P02 add-word-structure | ✅ PASS | entry + Add/Cancel buttons present; text roundtrip dropped (GTK4 refuses AT-SPI SetTextContents headless) |
 | P03 prefs-closes | ✅ PASS | kill org.gnome.Shell.Extensions host |
