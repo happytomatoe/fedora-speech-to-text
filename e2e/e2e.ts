@@ -1278,13 +1278,19 @@ async function runBareMode(): Promise<void> {
     await run(`sed -i 's|http_endpoint:.*|http_endpoint: http://localhost:59999|' ${configPath}`);
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     await gdbus("StartRecording", `'${JSON.stringify({ provider: "parakeet", language: "en" })}'`).catch(() => {});
-    await Bun.sleep(3000);
+    // httpx connect retries can outlast a fixed sleep — poll for the error
+    // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
+    let errHit = "0";
+    for (let i = 0; i < 10; i++) {
+      await Bun.sleep(1000);
+      errHit = (await transport.exec(
+        `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
+        5_000,
+      )).stdout.trim() || "0";
+      if (parseInt(errHit) > 0) break;
+    }
     await gdbus("StopRecording").catch(() => {});
-    const errHit = await transport.exec(
-      `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
-      5_000,
-    );
-    row("E02 api-error-logged", parseInt(errHit.stdout.trim() || "0") > 0);
+    row("E02 api-error-logged", parseInt(errHit) > 0);
     await run(`mv ${configPath}.bak ${configPath}`);
   } catch (e) {
     row("E02 api-error-logged", false, String(e));
