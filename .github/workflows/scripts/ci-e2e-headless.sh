@@ -84,12 +84,18 @@ if [ "$PARAKEET_READY" -ne 1 ]; then
   exit 1
 fi
 
+# dotoold must be running before the service tries dotool type output
+# (only possible when /dev/uinput exists — CI runners usually lack it).
+if [[ -w /dev/uinput ]] && [[ -x "$ASSETS/e2e/bin/dotoold" ]]; then
+  pgrep -x dotoold >/dev/null || nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
+fi
+
 # --- Run the inner harness inside a private session bus -------------------------
 # env --ignore-environment: nothing leaks except what we pass explicitly.
 set +e
 env --ignore-environment \
   HOME="$ISOLATED" \
-  PATH="$PATH" \
+  PATH="$ASSETS/e2e/bin:$PATH" \
   LANG=C.UTF-8 \
   CI_E2E_ASSETS="$ASSETS" \
   SCREENSHOT="$SCREENSHOT" \
