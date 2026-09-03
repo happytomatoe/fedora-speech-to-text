@@ -1,7 +1,7 @@
 name: Mutation Testing
 
 # mutmut runs take ~6 min on current suite size.
-# Only runs on PRs touching src/tests/deps; weekly full run via schedule.
+# Only runs on PRs touching src/tests/deps.
 # mutants/ is cached so incremental runs only re-test changed mutants.
 on:
   pull_request:
@@ -10,8 +10,6 @@ on:
       - "tests/**"
       - "pyproject.toml"
       - "uv.lock"
-  schedule:
-    - cron: "0 3 * * 1" # weekly full run
   workflow_dispatch:
 
 concurrency:
