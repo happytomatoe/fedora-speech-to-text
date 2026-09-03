@@ -33,9 +33,10 @@ mkdir -p "$ASSETS/voice-to-text-python"
 cp -r "$REPO_ROOT/src" "$REPO_ROOT/pyproject.toml" "$REPO_ROOT/uv.lock" "$ASSETS/voice-to-text-python/"
 cp -r "$REPO_ROOT/ci-e2e" "$ASSETS/ci-e2e"
 cp -r "$REPO_ROOT/e2e" "$ASSETS/e2e"
-# Fixtures must live inside the isolated tree: the service runs with HOME
-# pointed at $ISOLATED and reads the debug WAV from there.
-cp "$REPO_ROOT/ci-e2e/fixture.wav" "$ISOLATED/fixture.wav"
+# Fixture WAVs: the suite (e2e/e2e.ts) copies each case's WAV from the staged
+# e2e/fixtures/ dir into VOICE_TO_TEXT_DEBUG_FILE before each StartRecording.
+# The debug file must live inside the isolated tree: the service runs with HOME
+# pointed at $ISOLATED.
 
 # --- Parakeet container --------------------------------------------------------
 # NOTE: no volume mount — the achetronic/parakeet image bakes the models into
@@ -81,7 +82,7 @@ env --ignore-environment \
   CI_E2E_ASSETS="$ASSETS" \
   SCREENSHOT="$SCREENSHOT" \
   VOX_CI_E2E_TEXT_FILE="$ISOLATED/typed-text.txt" \
-  VOICE_TO_TEXT_DEBUG_FILE="$ISOLATED/fixture.wav" \
+  VOICE_TO_TEXT_DEBUG_FILE="$ISOLATED/current-fixture.wav" \
   WIDTH="$WIDTH" \
   HEIGHT="$HEIGHT" \
   HEIGHT="$HEIGHT" \

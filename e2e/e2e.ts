@@ -1024,6 +1024,16 @@ async function runBareMode(): Promise<void> {
       `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${argsJson}`,
     );
 
+  // Phase 1 fixture streaming: the service reads VOICE_TO_TEXT_DEBUG_FILE at
+  // record start (src/voice_to_text/debug.py:52), so the suite swaps the case
+  // WAV in before each StartRecording.
+  const debugFile = process.env.VOICE_TO_TEXT_DEBUG_FILE;
+  const fixturesDir = join(import.meta.dir, "fixtures");
+  if (debugFile) {
+    await run(`cp '${join(fixturesDir, CURRENT_TEST.file)}' '${debugFile}'`);
+    console.log(`  staged fixture: ${CURRENT_TEST.file} -> ${debugFile}`);
+  }
+
   await gdbus(
     "StartRecording",
     `'${JSON.stringify({ provider: "parakeet", language: "en", output_method: "mutter-commit" })}'`,
