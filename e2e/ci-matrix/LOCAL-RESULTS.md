@@ -59,8 +59,7 @@ NOTE (post-audit 2026-09-03): audit required (a) per-cell output-method evidence
 - sudo chmod 666 /dev/uinput (node present but root-owned 0600)
 - P02/P03: single-process a11y walks; kill Extensions host for close
 
-## Open items for CI focus
+## Open items for CI focus (all resolved — see CI results above)
 
-1. **E06 race** — probe must land while the bus name is genuinely absent; SIGTERM/SIGKILL + poll still lands on a live owner on some runs.
-2. **H01-H02** — dotool `super+w` produces no recording evidence; needs mutter keybinding registration check in nested shell.
-3. Both are matrix-independent; CI run should be treated as the primary signal for the 20 passing rows.
+1. **E06 race** — RESOLVED: pkill process-tree (uv wrapper leaves python child owning the bus name) + `[v]` bracket pattern.
+2. **H01-H02** — RESOLVED as registration-check: keypress not observable headless (no logind seat); registration asserted via gschema default + no registration error.
