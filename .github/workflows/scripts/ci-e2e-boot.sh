@@ -45,6 +45,8 @@ HEIGHT="${CI_E2E_HEIGHT:-540}"
 export WIDTH HEIGHT
 PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
 export PULSE_SERVER
+PATH="$ASSETS/e2e/bin:$PATH"
+export PATH
 VOICE_TO_TEXT_DEBUG_FILE="$HOME/current-fixture.wav"
 VOX_CI_E2E_TEXT_FILE="$HOME/typed-text.txt"
 DOTOOL_PIPE="$HOME/.runtime/dotool-pipe"

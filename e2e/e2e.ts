@@ -1035,33 +1035,49 @@ async function runBareMode(): Promise<void> {
   const debugFile = process.env.VOICE_TO_TEXT_DEBUG_FILE;
   const fixturesDir = join(import.meta.dir, "fixtures");
   const serviceLog = process.env.VOX_CI_E2E_SERVICE_LOG ?? "/tmp/voice-service.log";
-  const allCases: TestCaseFile[] = (() => {
-    const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
-    const cases = data["test-cases"] as TestCaseFile[];
-    if (!SELECTED_CASE) return cases;
-    const picked = cases.filter(c => c.file.includes(SELECTED_CASE));
-    if (picked.length === 0) throw new Error(`case '${SELECTED_CASE}' not found`);
-    return picked;
-  })();
-  // "type" (dotool) needs /dev/uinput — probe at runtime; absent runners skip
-  // those cells. VOX_E2E_FORCE_NO_UINPUT=1 simulates absence for testing.
-  const canUseDotool = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
-    (await transport.exec(
-      `test -c /dev/uinput && test -w /dev/uinput && test -x '${join(import.meta.dir, "bin", "dotool")}' && echo OK`,
-    ).then(r => r.stdout.trim() === "OK"));
-  console.log(`  uinput/dotool: ${canUseDotool ? "PRESENT" : "ABSENT — type cells skipped"}`);
-  const outputMethods = canUseDotool
-    ? ["mutter-commit", "mutter-virtual", "type"]
-    : ["mutter-commit", "mutter-virtual"];
-  const skippedTypeCells = canUseDotool ? 0 : allCases.length;
+  // Cells come from the test matrix (case → output-method pairs), not a
+  // hardcoded cross-product. --case filters by audio filename substring.
+  const matrix = loadTestMatrix()["test-suites"].transcription;
+  const audioById = new Map<string, { file: string; expected: string }>(
+    matrix.matrix["audio-files"].map((a: any) => [a.id, { file: a.file, expected: a.expected }]),
+  );
+  const enabledMethods = new Set(
+    matrix.matrix["output-methods"].filter((m: any) => m.enabled).map((m: any) => m.id),
+  );
+  const methodRequires: Record<string, string[]> = Object.fromEntries(
+    matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
+  );
+  const allCases: (TestCaseFile & { method: string })[] = matrix["test-cases"]
+    .map((tc: any) => {
+      const audio = audioById.get(tc.audio);
+      if (!audio) throw new Error(`matrix case ${tc.id}: unknown audio '${tc.audio}'`);
+      return { file: audio.file, expected: audio.expected, method: tc["output-method"] };
+    })
+    .filter((c: any) => !SELECTED_CASE || c.file.includes(SELECTED_CASE));
+  if (allCases.length === 0) throw new Error(`no matrix cases match '${SELECTED_CASE ?? "(all)"}'`);
+  const uinputOk = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
+    (await transport.exec(`test -c /dev/uinput && test -w /dev/uinput`).then(r => r.code === 0));
+  const canUseDotool = uinputOk;
 
   interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
   const results: BareResult[] = [];
   const normalize = (s: string) =>
     s.trim().toLowerCase().replace(/\.+$/, "").replace(/(\d)\s+(am|pm)\b/g, "$1$2").replace(/\s+/g, " ");
 
+  const requireOk: Record<string, boolean> = {
+    dotoolc: uinputOk,
+    "gnome-extension": true,
+  };
   for (const bareCase of allCases) {
-    for (const method of outputMethods) {
+    const method = bareCase.method;
+    {
+      if (!enabledMethods.has(method) || (methodRequires[method] ?? []).some(r => !requireOk[r])) {
+        const reason = !enabledMethods.has(method) ? "disabled in matrix" : `unmet: ${methodRequires[method].join(",")}`;
+        console.log(`\n=== ${bareCase.file}/${method} ===`);
+        console.log(`  SKIP (${reason})`);
+        results.push({ file: bareCase.file, method, status: "fail", typed: "", note: `skipped — ${reason}` });
+        continue;
+      }
       const label = `${bareCase.file}/${method}`;
       console.log(`\n=== ${label} ===`);
       try {
@@ -1391,10 +1407,12 @@ ATSPIEOF`,
   await gdbus("StopRecording").catch(() => {});
   // E02: invalid endpoint → error in log, service stays alive
   try {
-    // In-process moonshine has no HTTP endpoint to break — force the
-    // failure via a nonexistent model instead (engine logs the load error).
+    // In-process moonshine has no HTTP endpoint to break. A nonexistent
+    // model is also unreliable — the transcriber caches the loaded model, so
+    // no reload happens and no error is logged. Unknown provider name raises
+    // in get_batch_provider before any caching.
     await run(`cp ${configPath} ${configPath}.bak`);
-    await run(`sed -i 's/^model:.*/model: nonexistent_model/' ${configPath}`);
+    await run(`sed -i 's/^provider:.*/provider: nonexistent_provider/' ${configPath}`);
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     await gdbus("StartRecording", `'${JSON.stringify({ provider: "moonshine", language: "en" })}'`).catch(() => {});
     // httpx connect retries can outlast a fixed sleep — poll for the error
@@ -1495,7 +1513,8 @@ ATSPIEOF`,
   const failed = results.filter(r => r.status === "fail").length;
   const hotkeyUiFailed = hotkeyUiRows.filter(r => r.status === "fail").length;
   const totalFailed = failed + configFailed + hotkeyUiFailed + prefsFailed;
-  const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: no uinput)` : "";
+  const skippedTypeCells = results.filter(r => r.method === "type" && r.note?.includes("skipped")).length;
+  const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: unmet requirements)` : "";
   writeFileSync(
     join(outputDir, "results.json"),
     JSON.stringify({ transcription: results, prefs: prefsRows, configError: configRows, hotkeyUi: hotkeyUiRows }, null, 2),

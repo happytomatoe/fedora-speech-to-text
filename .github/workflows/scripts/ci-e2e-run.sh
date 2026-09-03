@@ -10,6 +10,8 @@ XDG_DATA_DIRS="$HOME/.local/share:/usr/local/share:/usr/share"
 XDG_CACHE_HOME="$HOME/.cache"
 XDG_RUNTIME_DIR="$HOME/.runtime"
 export XDG_CONFIG_HOME XDG_DATA_HOME XDG_DATA_DIRS XDG_CACHE_HOME XDG_RUNTIME_DIR
+PATH="$ASSETS/e2e/bin:$PATH"
+export PATH
 VOICE_TO_TEXT_DEBUG_FILE="$HOME/current-fixture.wav"
 VOX_CI_E2E_TEXT_FILE="$HOME/typed-text.txt"
 DOTOOL_PIPE="$HOME/.runtime/dotool-pipe"
