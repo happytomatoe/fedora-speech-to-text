@@ -208,6 +208,7 @@ export VOX_CI_E2E_SHELL_LOG="$HOME/shell.log"
 # The holder keeps the bus connection open until SIGTERM.
 SCREENCAST_TEMPLATE="$HOME/recording%d.webm"
 SCREENCAST_HOLDER_PID=""
+SCREENCAST_START_EPOCH=$(date -u +%s)
 python3 "$REPO_ROOT/e2e/lib/screencast-holder.py" "$SCREENCAST_TEMPLATE" > "$HOME/screencast.log" 2>&1 &
 SCREENCAST_HOLDER_PID=$!
 if sleep 1 && kill -0 "$SCREENCAST_HOLDER_PID" 2>/dev/null; then
@@ -260,7 +261,7 @@ if [ -d "$ASSETS/e2e/output/ubuntu-bare" ]; then
 fi
 # Split the run screencast into per-cell clips using each cell's time window
 if command -v ffmpeg >/dev/null 2>&1 && [ -s "$REPO_ROOT/output/recording.webm" ]; then
-  RUN_START=$(stat -c %Y "$REPO_ROOT/output/recording.webm" | cut -d' ' -f1)
+  RUN_START="$SCREENCAST_START_EPOCH"
   for w in "$REPO_ROOT/output/cells"/*/window.txt; do
     [ -f "$w" ] || continue
     cellDir=$(dirname "$w")
