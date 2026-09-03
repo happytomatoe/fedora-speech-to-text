@@ -1196,7 +1196,11 @@ async function runBareMode(): Promise<void> {
   }
   // E02: invalid endpoint → error in log, service stays alive
   try {
-    await run(`cp ${configPath} ${configPath}.bak && sed -i 's|http_endpoint:.*|http_endpoint: http://localhost:59999|' ${configPath}`);
+    // Parakeet reads http_endpoint from the provider section (config.py
+    // get_provider_config: <provider> block overrides global), so patch there.
+    await run(`cp ${configPath} ${configPath}.bak`);
+    await run(`grep -q '^  http_endpoint:' ${configPath} || printf 'parakeet:\\n  http_endpoint: http://localhost:59999\\n' >> ${configPath}`);
+    await run(`sed -i 's|http_endpoint:.*|http_endpoint: http://localhost:59999|' ${configPath}`);
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     await gdbus("StartRecording", `'${JSON.stringify({ provider: "parakeet", language: "en" })}'`).catch(() => {});
     await Bun.sleep(3000);
