@@ -1181,15 +1181,17 @@ async function runBareMode(): Promise<void> {
     const restoreCmd = pidAlive
       ? (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim()
       : "";
-    if (pidAlive) await run(`kill ${svcPid}; sleep 1`);
-    // The gdbus call must fail BEFORE the service is restored, otherwise the
-    // restarted service accepts the call (E06 false-fail + VOXTRAL fallback
-    // crash — regression 2026-09-03 run8/9).
+    // The gdbus call must fail while the service is down AND stay down until
+    // the probe returned — a lingering old process re-owning the name makes
+    // the restarted service accept the call (E06 false-fail + VOXTRAL
+    // fallback crash — regression 2026-09-03 run8-10).
+    if (pidAlive) await run(`kill -9 ${svcPid}; sleep 1`);
     const e06 = await transport.exec(
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
       10_000,
     );
     row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
+    if (pidAlive) await run(`sleep 1`);
     await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
     if (restoreCmd) {
       await transport.exec(`nohup ${restoreCmd} >> '${serviceLog}' 2>&1 &`, 5_000);
