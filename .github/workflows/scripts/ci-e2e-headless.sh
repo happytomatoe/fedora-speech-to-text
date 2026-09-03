@@ -48,7 +48,12 @@ find "$REPO_ROOT/e2e" -maxdepth 1 ! -name e2e ! -name '*.qcow2' ! -name node_mod
 # /models at build time (see its Dockerfile). Mounting an empty host dir HIDES
 # the baked models and the server fails with "open /models/config.json: no such file".
 CONTAINER_NAME="parakeet-ci-e2e"
-if command -v docker > /dev/null 2>&1; then
+# Local dev: an already-healthy Parakeet on :5092 is reused instead of
+# starting a second one (port conflict). CI runners have none, so they boot one.
+if curl -sf http://localhost:5092/health > /dev/null 2>&1; then
+  echo "Parakeet already healthy on :5092 — reusing it"
+  RUNTIME=skip
+elif command -v docker > /dev/null 2>&1; then
   RUNTIME=docker
 elif command -v podman > /dev/null 2>&1; then
   RUNTIME=podman
@@ -57,9 +62,11 @@ else
   exit 1
 fi
 
-echo "Starting Parakeet container ($RUNTIME)..."
-$RUNTIME run -d --name "$CONTAINER_NAME" -p 5092:5092 \
-  ghcr.io/achetronic/parakeet:latest
+if [ "$RUNTIME" != "skip" ]; then
+  echo "Starting Parakeet container ($RUNTIME)..."
+  $RUNTIME run -d --name "$CONTAINER_NAME" -p 5092:5092 \
+    ghcr.io/achetronic/parakeet:latest
+fi
 
 PARAKEET_READY=0
 for i in $(seq 1 150); do
@@ -102,8 +109,10 @@ TEST_EXIT=$?
 set -e
 
 # --- Teardown + result -----------------------------------------------------------
-echo "Stopping Parakeet container..."
-$RUNTIME rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
+if [ "$RUNTIME" != "skip" ]; then
+  echo "Stopping Parakeet container..."
+  $RUNTIME rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
+fi
 
 # Always surface logs for triage, then exit with the test's code.
 echo "--- service.log ---";  cat "$ISOLATED/service.log"  2>/dev/null || true
