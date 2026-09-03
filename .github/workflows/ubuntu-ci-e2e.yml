@@ -55,13 +55,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gnome-shell gnome-shell-common gnome-session glib2.0-bin dbus \
-            mesa-utils libgl1-mesa-dri libgbm1 \
+            libgl1-mesa-dri libgbm1 \
             dconf-gsettings-backend gsettings-desktop-schemas \
             libportaudio2 \
             gir1.2-atspi-2.0 python3-gi at-spi2-core \
             pipewire pipewire-bin wireplumber \
             pulseaudio pulseaudio-utils \
-            imagemagick ffmpeg \
+            ffmpeg \
             tmux \
             curl
 
