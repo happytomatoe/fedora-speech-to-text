@@ -37,6 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Cache apt archives
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-26.04-${{ hashFiles('.github/workflows/ubuntu-ci-e2e.yml') }}
+          restore-keys: apt-${{ runner.os }}-26.04-
+
       - name: Install GNOME Shell + harness dependencies (no VM, no container)
         run: |
           sudo apt-get update
@@ -47,14 +54,14 @@ jobs:
             libportaudio2 \
             gir1.2-atspi-2.0 python3-gi at-spi2-core \
             pipewire pipewire-bin wireplumber \
+            pulseaudio pulseaudio-utils \
             imagemagick \
             tmux \
             curl
 
       - name: Install + start PulseAudio with virtual devices (headless)
         run: |
-          sudo apt-get install -y --no-install-recommends \
-            pulseaudio pulseaudio-utils
+          # pulseaudio installed in the dependencies step above
           # Runner has no sound hardware; daemon must run with null devices
           # so PortAudio's PulseAudio host API can initialize.
           pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
@@ -71,6 +78,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          cache: true
+          cache-dependency-path: e2e/bun.lock
 
       - name: Risk check — /dev/uinput presence (dotool viability)
         run: |
