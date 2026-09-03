@@ -1163,6 +1163,17 @@ async function runBareMode(): Promise<void> {
       await run(`gnome-extensions prefs voice-to-text@happytomatoe.com & sleep 0.1`, 10_000);
       const execLike = { exec: (cmd: string, opts?: Record<string, unknown>) => transport.exec(cmd, (opts?.timeout as number) ?? 15_000) };
       await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame" });
+      const t0 = await transport.exec(
+        `python3 - <<'ATSPIEOF'
+import gi
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+d = Atspi.get_desktop(0)
+for i in range(d.get_child_count()):
+    a = d.get_child_at_index(i)
+    print("APP:" + str(a.get_name()))
+ATSPIEOF`, 10_000).then(r => r.stdout.trim());
+      console.log(`  a11y apps after P01: ${t0.split("\n").filter(l => l.startsWith("APP:")).join(", ")}`);
       prefsRow("P01 prefs-window-opens", true);
       // Add-Word dialog: open, set text, add, verify row appears (real UI round-trip)
       await doAtspiAction(execLike, "Add Word", "click");
