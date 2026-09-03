@@ -43,6 +43,13 @@ HEIGHT="${CI_E2E_HEIGHT:-540}"
 export WIDTH HEIGHT
 PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
 export PULSE_SERVER
+# Fixed-path model cache (workflow-cached); the service runs with an isolated
+# HOME whose cache would be re-downloaded (~90s) every run otherwise.
+MOONSHINE_VOICE_CACHE=/home/runner/moonshine-model
+export MOONSHINE_VOICE_CACHE
+mkdir -p "$MOONSHINE_VOICE_CACHE"
+cd "$ASSETS/voice-to-text-python"
+uv run --project . python -c "import asyncio; from voice_to_text.providers.moonshine import MoonshineProvider; p = MoonshineProvider({'provider': 'moonshine', 'model': 'medium', 'language': 'en'}); print(asyncio.run(p.transcribe_file('/dev/null', 'en')))" > "$HOME/moonshine-prewarm.log" 2>&1 || echo "WARN: moonshine prewarm failed — first transcription may download the model"
 
 # --- GSettings schemas ------------------------------------------------------
 schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"

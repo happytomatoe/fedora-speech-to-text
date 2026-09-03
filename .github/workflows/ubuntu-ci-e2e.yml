@@ -37,6 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Cache Moonshine model
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/moonshine-model
+          key: moonshine-medium-en-quantized
+
       - name: Cache apt archives
         uses: actions/cache@v4
         with:
@@ -55,7 +61,7 @@ jobs:
             gir1.2-atspi-2.0 python3-gi at-spi2-core \
             pipewire pipewire-bin wireplumber \
             pulseaudio pulseaudio-utils \
-            imagemagick \
+            imagemagick ffmpeg \
             tmux \
             curl
 
