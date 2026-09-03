@@ -1057,7 +1057,7 @@ async function runBareMode(): Promise<void> {
   interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
   const results: BareResult[] = [];
   const normalize = (s: string) =>
-    s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
+    s.trim().toLowerCase().replace(/\.+$/, "").replace(/(\d)\s+(am|pm)\b/g, "$1$2").replace(/\s+/g, " ");
 
   for (const bareCase of allCases) {
     for (const method of outputMethods) {
