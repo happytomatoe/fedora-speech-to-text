@@ -1173,15 +1173,17 @@ async function runBareMode(): Promise<void> {
   // E06: service down → StartRecording must fail cleanly
   try {
     const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
+    const restoreCmd = svcPid
+      ? (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim()
+      : "";
     if (svcPid) await run(`kill ${svcPid}; sleep 1`);
     const e06 = await transport.exec(
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
       10_000,
     );
     row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
-    if (svcPid) {
-      const cmdline = (await transport.exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
-      if (cmdline) await transport.exec(`nohup ${cmdline} >> '${serviceLog}' 2>&1 &`, 5_000);
+    if (restoreCmd) {
+      await transport.exec(`nohup ${restoreCmd} >> '${serviceLog}' 2>&1 &`, 5_000);
       await pollForCommandOutput(
         (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
         "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",

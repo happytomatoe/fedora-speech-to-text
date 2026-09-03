@@ -65,6 +65,8 @@ echo "extensions deployed: $EXT_UUID + $SHOT_UUID"
 
 # --- Service config ----------------------------------------------------------
 mkdir -p "$HOME/.config/voice-to-text"
+# 0600: the product requires user-only-readable config (E2E C08 asserts it).
+touch "$HOME/.config/voice-to-text/config.yaml" && chmod 600 "$HOME/.config/voice-to-text/config.yaml"
 cat > "$HOME/.config/voice-to-text/config.yaml" <<YEOF
 provider: parakeet
 http_endpoint: http://localhost:5092
