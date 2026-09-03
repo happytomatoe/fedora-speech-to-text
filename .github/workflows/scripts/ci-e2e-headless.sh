@@ -88,7 +88,8 @@ fi
 # (only possible when /dev/uinput exists — CI runners usually lack it).
 # dotoold shell wrapper execs `dotool` by name — needs the bin dir on PATH.
 if [[ -w /dev/uinput ]] && [[ -x "$ASSETS/e2e/bin/dotoold" ]]; then
-  PATH="$ASSETS/e2e/bin:$PATH" nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
+  PATH="$ASSETS/e2e/bin:$PATH" DOTOOL_PIPE="$ISOLATED/.runtime/dotool-pipe" \
+  nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
 fi
 
 # --- Run the inner harness inside a private session bus -------------------------
@@ -111,6 +112,7 @@ env --ignore-environment \
   XDG_CACHE_HOME="$ISOLATED/.cache" \
   XDG_RUNTIME_DIR="$ISOLATED/.runtime" \
   PULSE_SERVER="unix:${XDG_RUNTIME_DIR_RUNNER:-/run/user/$(id -u)}/pulse/native" \
+  DOTOOL_PIPE="$ISOLATED/.runtime/dotool-pipe" \
   dbus-run-session -- bash "$REPO_ROOT/.github/workflows/scripts/ci-e2e-headless-inner.sh"
 TEST_EXIT=$?
 set -e
