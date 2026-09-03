@@ -171,18 +171,18 @@ def add_word_roundtrip(word):
     set_err = ""
     for _ in range(6):
         try:
-            entry.query_component().grab_focus()
+            entry.grab_focus()
             time.sleep(0.2)
         except Exception:
             pass
         try:
-            if entry.query_text().set_text_contents(word):
+            if entry.set_text_contents(word):
                 set_ok = True
                 break
         except Exception as e:
             set_err = repr(e)
         try:
-            if entry.query_editable_text().set_text_contents(word):
+            if entry.insert_text(0, word, len(word)):
                 set_ok = True
                 break
         except Exception as e:
