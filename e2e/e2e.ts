@@ -9,7 +9,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { doAtspiAction, findAtspiExtents, setAtspiText, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
@@ -1167,7 +1167,9 @@ async function runBareMode(): Promise<void> {
       // Add-Word dialog: open, set text, add, verify row appears (real UI round-trip)
       await doAtspiAction(execLike, "Add Word", "click");
       await waitForAtspiNode(execLike, { name: "Enter a word or phrase:" });
-      await setAtspiText(execLike, "Enter a word or phrase:", "E2E");
+      // The dialog Gtk.Entry is unnamed (only placeholder text) — target the
+      // first 'text'-role node instead of by name.
+      await setAtspiTextByRole(execLike, "text", "E2E");
       await doAtspiAction(execLike, "Add", "click");
       await waitForAtspiNode(execLike, { name: "E2E", role: "list item" });
       prefsRow("P02 add-word-roundtrip", true);

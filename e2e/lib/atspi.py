@@ -55,3 +55,16 @@ def set_text_by_name(name, text):
         return "ok"
 
     return walk_tree(predicate, action)
+
+
+def set_text_by_role(role, text):
+    """Set text contents on the first node with the given role (e.g. Gtk.Entry -> 'text')."""
+    def predicate(n, r, node):
+        return r == role
+
+    def action(n, r, node):
+        if node.query_text().set_text_contents(text):
+            return "ok"
+        return None
+
+    return walk_tree(predicate, action)

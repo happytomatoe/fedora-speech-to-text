@@ -159,6 +159,20 @@ export async function waitForAtspiText(
 }
 
 /** Set text contents on the first Text-interface node matching name. */
+export async function setAtspiTextByRole(
+  deployer: ExecLike,
+  role: string,
+  text: string
+): Promise<void> {
+  const script = `${ATSPI_PY}
+print("RESULT:" + str(set_text_by_role('${pyQuote(role)}', '${pyQuote(text)}') or ""))
+`;
+  const out = await execPython(deployer, script);
+  if (parseResult(out) !== "ok") {
+    throw new Error(`AT-SPI: no '${role}' node to set '${text}'`);
+  }
+}
+
 export async function setAtspiText(
   deployer: ExecLike,
   name: string,
