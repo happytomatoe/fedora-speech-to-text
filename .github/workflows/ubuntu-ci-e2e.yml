@@ -100,5 +100,6 @@ jobs:
             output/results.json
             output/*.log
             output/prefs-*.png
+            output/cells/*/*
           if-no-files-found: warn
           retention-days: 7

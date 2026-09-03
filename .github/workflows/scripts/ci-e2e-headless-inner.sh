@@ -167,6 +167,7 @@ DURING_SHOT="$SHOT_BASE-during.png"
 AFTER_SHOT="$SHOT_BASE-after.png"
 export VOX_CI_E2E_SHOT_DURING="$DURING_SHOT"
 export VOX_CI_E2E_SHOT_AFTER="$AFTER_SHOT"
+export VOX_CI_E2E_CELLS_DIR="$REPO_ROOT/output/cells"
 export VOX_CI_E2E_SCREENCAST="$HOME/recording.webm"
 
 # PipeWire bridge for the screencast: gnome-shell resolves pipewire-0 under
@@ -215,6 +216,8 @@ else
   echo "WARN: screencast holder exited: $(cat "$HOME/screencast.log" 2>/dev/null)"
 fi
 
+mkdir -p "$REPO_ROOT/output/cells"
+
 # --- Run the test runner ----------------------------------------------------------
 # Ported suite (e2e/e2e.ts --env ubuntu-bare): local D-Bus flow, no SSH.
 # The suite dir is staged into the isolated tree; run it with the project
@@ -255,6 +258,24 @@ cp "$HOME/screencast.log" "$REPO_ROOT/output/screencast.log" 2>/dev/null || true
 if [ -d "$ASSETS/e2e/output/ubuntu-bare" ]; then
   cp -r "$ASSETS/e2e/output/ubuntu-bare/." "$REPO_ROOT/output/" 2>/dev/null || true
 fi
+# Split the run screencast into per-cell clips using each cell's time window
+if command -v ffmpeg >/dev/null 2>&1 && [ -s "$REPO_ROOT/output/recording.webm" ]; then
+  RUN_START=$(stat -c %Y "$REPO_ROOT/output/recording.webm" | cut -d' ' -f1)
+  for w in "$REPO_ROOT/output/cells"/*/window.txt; do
+    [ -f "$w" ] || continue
+    cellDir=$(dirname "$w")
+    startIso=$(head -1 "$w")
+    endIso=$(tail -1 "$w")
+    startSec=$(python3 -c "import sys,datetime; t=datetime.datetime.fromisoformat(sys.argv[1].replace('Z','+00:00')); print(t.timestamp())" "$startIso" 2>/dev/null) || continue
+    endSec=$(python3 -c "import sys,datetime; t=datetime.datetime.fromisoformat(sys.argv[1].replace('Z','+00:00')); print(t.timestamp())" "$endIso" 2>/dev/null) || continue
+    recStart=$(python3 -c "import sys,datetime; print(datetime.datetime.fromtimestamp(int(sys.argv[1]), datetime.timezone.utc).timestamp())" "$RUN_START")
+    ss=$(python3 -c "print(max(0, $startSec - $recStart))")
+    to=$(python3 -c "print(max(0, $endSec - $recStart))")
+    ffmpeg -y -ss "$ss" -to "$to" -i "$REPO_ROOT/output/recording.webm" -c copy "$cellDir/clip.webm" >/dev/null 2>&1 || true
+  done
+  rm -f "$REPO_ROOT/output/cells"/*/window.txt
+fi
+
 kill "$SERVICE_PID" 2>/dev/null || true
 kill "$SHELL_PID" 2>/dev/null || true
 kill "$WIREPLUMBER_PID" "$PIPEWIRE_PID" 2>/dev/null || true

@@ -1067,6 +1067,7 @@ async function runBareMode(): Promise<void> {
         // Log-window marker: only lines appended during THIS cell count.
         const offsetOut = await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`);
         const offset = parseInt(offsetOut.trim()) || 0;
+        const cellStartIso = new Date().toISOString();
         const logSince = (pattern: string) =>
           transport.exec(
             `tail -c +$(( ${offset} + 1 )) '${serviceLog}' 2>/dev/null | grep -m1 -oP '${pattern}'`,
@@ -1141,7 +1142,23 @@ async function runBareMode(): Promise<void> {
           note: !captureHit && captureRequired ? "output method did not run (no capture file write)" : errorLine || undefined,
         });
 
-        // Per-case after-screenshot via the shell's Screenshot D-Bus API.
+        // Per-cell artifact dir: screenshot + log slices + recording window
+        // marker, so each test gets a self-contained evidence folder.
+        const shellLog = process.env.VOX_CI_E2E_SHELL_LOG ?? "";
+        const cellLabel = `${bareCase.file.replace(/\.wav$/, "")}-${method}`;
+        const cellsDir = process.env.VOX_CI_E2E_CELLS_DIR;
+        if (cellsDir) {
+          await transport.exec(`mkdir -p '${cellsDir}/${cellLabel}'`, 5_000).catch(() => {});
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${cellsDir}/${cellLabel}/after.png'`,
+            10_000,
+          ).catch(() => console.log("  WARN: case screenshot failed"));
+          await transport.exec(`tail -c +$(( ${offset} + 1 )) '${serviceLog}' > '${cellsDir}/${cellLabel}/service.log' 2>/dev/null || true`, 5_000);
+          if (shellLog) {
+            await transport.exec(`tail -c +$(( ${offset} + 1 )) '${shellLog}' > '${cellsDir}/${cellLabel}/shell.log' 2>/dev/null || true`, 5_000);
+          }
+          await transport.exec(`printf '%s\n%s\n' '${cellStartIso}' "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" > '${cellsDir}/${cellLabel}/window.txt'`, 5_000);
+        }
         const shotBase = process.env.VOX_CI_E2E_SHOT_AFTER;
         if (shotBase) {
           const caseShot = shotBase.replace(/\.png$/, `-${bareCase.file.replace(/\.wav$/, "")}-${method}.png`);
