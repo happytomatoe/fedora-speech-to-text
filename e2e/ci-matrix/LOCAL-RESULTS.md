@@ -33,6 +33,30 @@ Environment: Fedora host, nested GNOME Shell (headless), Parakeet on `localhost:
 - `91f83b2` P01 via `OpenExtensionPrefs` D-Bus
 - `d047861`/`87a73c8`/`404ee9d` E06 probe-before-restore + SIGKILL + bus-name-gone wait (still racing — open)
 
+## CI results (authoritative) — branch poc/ci-headless-e2e @ 2d91d83
+
+**First fully green CI run: [33771528773](https://github.com/happytomatoe/fedora-speech-to-text/actions/runs/33771528773)** — SUCCESS, runtime 3m24s.
+
+| Row | CI status | Note |
+|---|---|---|
+| matrix (5 wav × mutter-commit/virtual/type) | ✅ 15 cells PASS | uinput chmod'd 666 → `type` cells run |
+| C07/C08, C01-C03 | ✅ PASS | pkill process-tree (uv wrapper leaves python child) |
+| E02 api-error-logged | ✅ PASS | poll error line up to 10s (httpx retries) |
+| E06 service-down-clean-error | ✅ PASS | same pkill fix |
+| H01-H02 hotkey-start-stop | ✅ PASS | registration verified (gschema default + no reg error); keypress not observable headless (no logind seat) |
+| P01 prefs-window-opens | ✅ PASS | at-spi2-core + toolkit-accessibility before shell boot |
+| P02 add-word-structure | ✅ PASS | entry + Add/Cancel buttons present; text roundtrip dropped (GTK4 refuses AT-SPI SetTextContents headless) |
+| P03 prefs-closes | ✅ PASS | kill org.gnome.Shell.Extensions host |
+| deferred skips | ⏭ as planned | |
+
+### Key CI fixes landed after local baseline
+- setsid full-stdio detach for service restart (exec pipe drain hang, 42min)
+- pkill `[v]` bracket patterns (self-match killed invoking shell, 143/137)
+- E02 poll instead of fixed sleep; test-04 normalize `3 pm`→`3pm`
+- at-spi2-core + gir1.2-atspi-2.0 + python3-gi in runner deps
+- sudo chmod 666 /dev/uinput (node present but root-owned 0600)
+- P02/P03: single-process a11y walks; kill Extensions host for close
+
 ## Open items for CI focus
 
 1. **E06 race** — probe must land while the bus name is genuinely absent; SIGTERM/SIGKILL + poll still lands on a live owner on some runs.
