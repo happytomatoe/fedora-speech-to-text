@@ -1185,13 +1185,25 @@ async function runBareMode(): Promise<void> {
     // the probe returned — a lingering old process re-owning the name makes
     // the restarted service accept the call (E06 false-fail + VOXTRAL
     // fallback crash — regression 2026-09-03 run8-10).
-    if (pidAlive) await run(`kill -9 ${svcPid}; sleep 1`);
+    if (pidAlive) {
+      await run(`kill -9 ${svcPid}`);
+      // Wait until the bus name is actually gone before probing — the killed
+      // process's name lingers briefly and the probe would hit a dying owner
+      // (E06 false-fail — regression 2026-09-03 run8-11).
+      // pollForCommandOutput only supports substring matching, so poll with
+      // `grep -c` wrapped to yield "0" when the name is gone.
+      await pollForCommandOutput(
+        (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout.trim()),
+        "until [ \"$(busctl --user list 2>/dev/null | grep -c 'com.happytomatoe.[V]oiceToText')\" = \"0\" ]; do sleep 0.5; done; echo GONE",
+        "GONE",
+        15_000,
+      ).catch(() => {});
+    }
     const e06 = await transport.exec(
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
       10_000,
     );
     row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
-    if (pidAlive) await run(`sleep 1`);
     await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
     if (restoreCmd) {
       await transport.exec(`nohup ${restoreCmd} >> '${serviceLog}' 2>&1 &`, 5_000);
