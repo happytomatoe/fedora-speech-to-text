@@ -1411,7 +1411,7 @@ ATSPIEOF`,
       await Bun.sleep(1000);
       const started = await since("Recording|recording started|DEBUG MODE");
       await dtool("key super+w");
-      const hotkeyVal = await run(`gsettings get org.gnome.shell.extensions.voice-to-text hotkey 2>/dev/null || echo none`);
+      const hotkeyVal = await run(`gsettings get org.gnome.shell.extensions.voice-to-text hotkey 2>&1 || echo none`);
       const regErr = await transport.exec(
         `tail -c +$(( ${shellLogOffset} + 1 )) '${shellLog}' 2>/dev/null | grep -c 'failed to register hotkey'`,
         5_000,
