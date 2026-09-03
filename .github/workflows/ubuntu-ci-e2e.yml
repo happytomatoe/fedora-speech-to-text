@@ -65,6 +65,8 @@ jobs:
       - name: Risk check — /dev/uinput presence (dotool viability)
         run: |
           if [[ -c /dev/uinput ]]; then
+            # Node is root-owned 0600; runner sudo makes it writable for dotool
+            sudo chmod 666 /dev/uinput
             echo "uinput check: PRESENT — dotool input injection available"
           else
             echo "uinput check: ABSENT — SKIP synthetic-input phases; D-Bus/capture-file assertions only"
