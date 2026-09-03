@@ -32,7 +32,12 @@ cp -r "$REPO_ROOT/gnome-ext" "$ASSETS/gnome-ext"
 mkdir -p "$ASSETS/voice-to-text-python"
 cp -r "$REPO_ROOT/src" "$REPO_ROOT/pyproject.toml" "$REPO_ROOT/uv.lock" "$ASSETS/voice-to-text-python/"
 cp -r "$REPO_ROOT/ci-e2e" "$ASSETS/ci-e2e"
-cp -r "$REPO_ROOT/e2e" "$ASSETS/e2e"
+# e2e/ contains multi-GB qcow2 golden images and node_modules the bare runner
+# never uses — /tmp is a small tmpfs and a full copy blows the quota.
+mkdir -p "$ASSETS/e2e"
+find "$REPO_ROOT/e2e" -maxdepth 1 ! -name e2e ! -name '*.qcow2' ! -name node_modules \
+  ! -name output ! -name vm-run ! -name qemu-images \
+  -exec cp -r {} "$ASSETS/e2e/" \;
 # Fixture WAVs: the suite (e2e/e2e.ts) copies each case's WAV from the staged
 # e2e/fixtures/ dir into VOICE_TO_TEXT_DEBUG_FILE before each StartRecording.
 # The debug file must live inside the isolated tree: the service runs with HOME
