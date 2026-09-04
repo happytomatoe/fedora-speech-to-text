@@ -44,19 +44,21 @@ def main() -> int:
     cmd, *rest = sys.argv[1:]
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 
-    rd_path = call(bus, RD_NAME, RD_PATH, RD_IFACE, "CreateSession", "()")[0][0]
+    # call_sync unpacks single-value replies as 1-tuples: ('/path',), not
+    # nested — [0][0] would slice the first character ('/') off the path.
+    rd_path = call(bus, RD_NAME, RD_PATH, RD_IFACE, "CreateSession", "()")[0]
     session_id = call(bus, RD_NAME, rd_path,
                       "org.freedesktop.DBus.Properties.Get", "Get",
-                      "(ss)", RD_SESS_IFACE, "SessionId")[1][0]
+                      "(ss)", RD_SESS_IFACE, "SessionId")[0][0]
 
     sc_path = call(bus, SC_NAME, SC_PATH, SC_IFACE, "CreateSession",
                    "(a{sv})", {"remote-desktop-session-id":
-                               GLib.Variant("s", session_id)})[0][0]
+                               GLib.Variant("s", session_id)})[0]
     # RecordMonitor(""): mutter selects the primary monitor — the nested
     # headless virtual monitor's connector name varies, empty string is
     # canonical (meta_monitor_manager_get_primary_monitor).
     stream_path = call(bus, SC_NAME, sc_path, SC_SESS_IFACE, "RecordMonitor",
-                       "(sa{sv})", "", {})[0][0]
+                       "(sa{sv})", "", {})[0]
 
     call(bus, RD_NAME, rd_path, RD_SESS_IFACE, "Start", "()")
 
