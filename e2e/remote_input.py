@@ -34,8 +34,8 @@ BTN_LEFT = 0x110
 
 
 def call(bus, dest, path, iface, method, args_type, *args):
-    res = bus.call_sync(dest, path, iface, method, None,
-                        GLib.Variant(args_type, list(args)),
+    res = bus.call_sync(dest, path, iface, method,
+                        GLib.Variant(args_type, list(args)), None,
                         Gio.DBusCallFlags.NONE, -1, None)
     return res.unpack()
 
