@@ -208,6 +208,7 @@ provider: moonshine
 model: medium
 YEOF
 echo "config perms after write: $(stat -c '%a' "$HOME/.config/voice-to-text/config.yaml")"
+CFG="$HOME/.config/voice-to-text/config.yaml"
 
 # --- Install + start the Python service ---------------------------------------
 # uv run resolves the project's own dependencies; no pip needed.
@@ -215,6 +216,8 @@ cd "$ASSETS/voice-to-text-python"
 uv run --project . voice-to-text-dbus > "$HOME/service.log" 2>&1 &
 SERVICE_PID=$!
 echo "$SERVICE_PID" > "$HOME/service.pid"
+for i in $(seq 1 60); do grep -q "D-Bus service\|service ready\|listening" "$HOME/service.log" 2>/dev/null && break; sleep 1; done
+echo "config perms after service start: $(stat -c '%a' "$CFG" 2>/dev/null || echo missing) inode=$(stat -c '%i' "$CFG" 2>/dev/null)"
 
 # --- PipeWire + WirePlumber (required for shell screencast) -------------------
 # gnome-shell's screencast needs a PipeWire connection. The isolated

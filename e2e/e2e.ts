@@ -1480,6 +1480,7 @@ ATSPIEOF`,
   } catch (e) {
     row("config.yaml exists and parses", false, String(e));
   }
+  console.log(`  debug: config inode=$(stat -c '%i' $HOME/.config/voice-to-text/config.yaml) perms=$(stat -c '%a' $HOME/.config/voice-to-text/config.yaml) birth=$(stat -c '%w' $HOME/.config/voice-to-text/config.yaml)`);
   // 0600 permissions
   try {
     const perms = (await run(`stat -c '%a' ${configPath}`)).trim();
