@@ -141,6 +141,9 @@ const Iface = `
     <method name="Wheel">
       <arg type="i" name="ticks" direction="in"/>
     </method>
+    <method name="ActivateWindow">
+      <arg type="s" name="title" direction="in"/>
+    </method>
   </interface>
 </node>`;
 
@@ -198,6 +201,21 @@ export default class E2EInput {
                 Clutter.ScrollSource.WHEEL
             );
         }
+    }
+
+    ActivateWindow(title) {
+        // Keyboard focus in headless nested sessions never reaches GTK windows
+        // on its own — mutter must send wl_keyboard.enter. Raise+activate the
+        // MetaWindow so GTK assigns an initial focus widget (Tab/keys then work).
+        const actor = global.get_window_actors().find(
+            a => (a.meta_window.get_title() || '').includes(title)
+        );
+        if (!actor) {
+            console.error(`E2EInput: no window titled '${title}'`);
+            return;
+        }
+        actor.meta_window.raise();
+        actor.meta_window.activate(global.get_current_time());
     }
 
     _key(keyval) {

@@ -1354,6 +1354,8 @@ ATSPIEOF`;
           await shot("prefs-scroll-before");
           // Pointer wheel scroll via the helper extension's virtual pointer —
           // same mechanism as the after-add scroll below.
+          await typeTextDbus("ActivateWindow", "Voice to Text");
+          await Bun.sleep(300);
           const pw = await screenCenter("Voice to Text");
           await clickDbus(pw.nx, pw.ny + 0.2);
           await Bun.sleep(400);
@@ -1425,9 +1427,10 @@ ATSPIEOF`;
         // call. Fallback: Tab-focus walk (GTK auto-scrolls focused widgets).
         try {
           // Pointer scroll via the helper extension's virtual pointer:
-          // click into the prefs list (focuses the viewport), then wheel
-          // down. Deterministic — Tab walks never moved GTK focus here
-          // (run 33910157059: focus stuck on 'Main stage' for 25 tabs).
+          // activate the window (mutter wl_keyboard.enter) so it's the
+          // focused/topmost surface, click into the list, then wheel down.
+          await typeTextDbus("ActivateWindow", "Voice to Text");
+          await Bun.sleep(300);
           const pw = await screenCenter("Voice to Text");
           await clickDbus(pw.nx, pw.ny + 0.2);
           await Bun.sleep(400);
