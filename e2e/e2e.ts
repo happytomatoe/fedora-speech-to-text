@@ -1022,9 +1022,10 @@ async function runBareMode(): Promise<void> {
   const run = async (cmd: string, timeoutMs = 15_000) => {
     const r = await transport.exec(cmd, timeoutMs);
     if (r.code !== 0) {
-      console.error(`Command failed: ${cmd}`);
+      console.error(`Command failed (${r.code}): ${cmd}`);
+      console.error(`stdout: ${r.stdout}`);
       console.error(`stderr: ${r.stderr}`);
-      throw new Error(`command failed (${r.code}): ${cmd}\n${r.stderr}`);
+      throw new Error(`command failed (${r.code}): ${cmd}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`);
     }
     return r.stdout;
   };
