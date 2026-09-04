@@ -65,6 +65,7 @@ jobs:
             pulseaudio pulseaudio-utils \
             ffmpeg \
             tmux \
+            ghostty \
             curl \
             gnome-shell-extension-prefs
 
