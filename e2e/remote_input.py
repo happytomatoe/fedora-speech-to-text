@@ -48,8 +48,8 @@ def main() -> int:
     # nested — [0][0] would slice the first character ('/') off the path.
     rd_path = call(bus, RD_NAME, RD_PATH, RD_IFACE, "CreateSession", "()")[0]
     session_id = call(bus, RD_NAME, rd_path,
-                      "org.freedesktop.DBus.Properties.Get", "Get",
-                      "(ss)", RD_SESS_IFACE, "SessionId")[0][0]
+                      "org.freedesktop.DBus.Properties", "Get",
+                      "(ss)", RD_SESS_IFACE, "SessionId")[0]
 
     sc_path = call(bus, SC_NAME, SC_PATH, SC_IFACE, "CreateSession",
                    "(a{sv})", {"remote-desktop-session-id":
