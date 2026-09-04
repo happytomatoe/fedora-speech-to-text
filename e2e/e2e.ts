@@ -1323,6 +1323,17 @@ ATSPIEOF`;
             10_000,
           ).catch(() => {});
         };
+        // Pixel-diff two screenshots via ffmpeg PSNR (no ImageMagick on the
+        // runner); identical frames → PSNR=inf. Threshold ~30dB: clock churns
+        // a few pixels, real scrolling changes thousands.
+        const pxChanged = async (a: string, b: string) => {
+          const out = await transport.exec(
+            `ffmpeg -v info -i '${outputDir}/${a}.png' -i '${outputDir}/${b}.png' -filter_complex psnr -f null - 2>&1 | grep -oP 'average:\\K[0-9.inf]+'`,
+            20_000,
+          ).then(r => r.stdout.trim()).catch(() => "err");
+          console.log(`  scroll diff ${a} vs ${b}: PSNR=${out}`);
+          return out;
+        };
         try {
           const p = await screenCenter("Voice to Text");
           await shot("prefs-scroll-before");
@@ -1333,18 +1344,15 @@ ATSPIEOF`;
           }
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
-          const diff = await run(
-            `compare -metric AE '${outputDir}/prefs-scroll-before.png' '${outputDir}/prefs-scroll-after.png' null: 2>&1 || true`, 15_000);
-          const changed = parseInt(diff.trim()) || 0;
-          console.log(`  prefs scroll: ${changed > 1000 ? `scrolled ✅ (${changed} px changed)` : `NOT scrolled ❌ (${changed} px changed)`}`);
-          if (changed <= 1000) {
+          const psnr = await pxChanged("prefs-scroll-before", "prefs-scroll-after");
+          const scrolled = psnr !== "inf" && psnr !== "err" && parseFloat(psnr) < 30;
+          console.log(`  prefs scroll: ${scrolled ? "scrolled ✅" : "NOT scrolled ❌"}`);
+          if (!scrolled) {
             console.log("  retrying scroll with Page_Down over the list...");
             await dtool("key Page_Down");
             await Bun.sleep(800);
             await shot("prefs-scroll-after2");
-            const diff2 = await run(
-              `compare -metric AE '${outputDir}/prefs-scroll-before.png' '${outputDir}/prefs-scroll-after2.png' null: 2>&1 || true`, 15_000);
-            console.log(`  prefs scroll retry: ${diff2.trim()} px changed`);
+            await pxChanged("prefs-scroll-before", "prefs-scroll-after2");
           }
         } catch (e) {
           console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
