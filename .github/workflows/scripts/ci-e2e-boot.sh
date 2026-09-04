@@ -120,7 +120,7 @@ cat > "$INPUT_DIR/metadata.json" <<MEOF
   "shell-version": ["45", "46", "47", "48", "49", "50"]
 }
 MEOF
-cat > "$INPUT_DIR/extension.js" <<JEOF
+cat > "$INPUT_DIR/extension.js" <<'JEOF'
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
