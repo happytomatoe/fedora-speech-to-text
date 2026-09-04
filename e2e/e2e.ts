@@ -1348,7 +1348,7 @@ ATSPIEOF`;
           // extension); uinput/dotool never reaches GTK windows in the nested
           // headless shell.
           for (let i = 0; i < 6; i++) {
-            await typeTextDbus("TypeKey", "Page_Down");
+            await typeTextDbus("TypeKey", "0xff56"); // Page_Down
             await Bun.sleep(400);
           }
           await Bun.sleep(500);

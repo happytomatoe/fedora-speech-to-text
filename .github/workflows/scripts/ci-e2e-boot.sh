@@ -170,7 +170,7 @@ export default class E2EInput {
     }
 
     _key(keyval) {
-        const t = Clutter.get_current_event_time() * 1000;
+        let t = Clutter.get_current_event_time() * 1000;
         this._kbd.notify_keyval(t++, keyval, Clutter.KeyState.PRESSED);
         this._kbd.notify_keyval(t++, keyval, Clutter.KeyState.RELEASED);
     }
@@ -183,11 +183,13 @@ export default class E2EInput {
         }
     }
 
-    TypeKey(key) {
+    TypeKey(keyvalStr) {
         if (!this._kbd) return;
-        const kv = Clutter.keyval_from_name(key);
-        if (!kv) {
-            console.error(`E2EInput: unknown keysym '${key}'`);
+        // Takes a numeric keysym (e.g. '0xff56' = Page_Down) — GJS Clutter
+        // has no keyval_from_name.
+        const kv = Number(keyvalStr);
+        if (!Number.isFinite(kv) || kv <= 0) {
+            console.error(`E2EInput: bad keysym '${keyvalStr}'`);
             return;
         }
         this._key(kv);
