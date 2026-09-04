@@ -60,7 +60,18 @@ fi
 
 # Persist a session bus across workflow steps: steps cannot inherit
 # dbus-run-session, so run the daemon directly and export its address.
+# D-Bus-activated services (org.gnome.Shell.Extensions prefs app, etc.)
+# inherit the DAEMON's environment — so it must carry the isolated HOME/XDG
+# env or activated children get the runner's real profile and die instantly
+# (exited with status 1, no output).
 DBUS_SESSION_BUS_ADDRESS="unix:path=$ISOLATED/.runtime/session-bus"
+HOME="$ISOLATED" \
+XDG_CONFIG_HOME="$ISOLATED/.config" \
+XDG_DATA_HOME="$ISOLATED/.local/share" \
+XDG_DATA_DIRS="$ISOLATED/.local/share:/usr/local/share:/usr/share" \
+XDG_CACHE_HOME="$ISOLATED/.cache" \
+XDG_RUNTIME_DIR="$ISOLATED/.runtime" \
+WAYLAND_DISPLAY=wayland-0 \
 dbus-daemon --session --fork --address="$DBUS_SESSION_BUS_ADDRESS" --print-pid > "$ISOLATED/.runtime/dbus.pid"
 
 mkdir -p "$ISOLATED/.runtime"
