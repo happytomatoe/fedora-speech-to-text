@@ -254,6 +254,7 @@ export VOX_CI_E2E_SHELL_LOG="$HOME/shell.log"
 SCREENCAST_TEMPLATE="$HOME/recording%d.webm"
 SCREENCAST_HOLDER_PID=""
 SCREENCAST_START_EPOCH=$(date -u +%s)
+echo "SCREENCAST_START_EPOCH=$SCREENCAST_START_EPOCH" >> "${GITHUB_ENV:-/dev/null}"
 python3 "$REPO_ROOT/e2e/lib/screencast-holder.py" "$SCREENCAST_TEMPLATE" > "$HOME/screencast.log" 2>&1 &
 SCREENCAST_HOLDER_PID=$!
 echo "$SCREENCAST_HOLDER_PID" > "$HOME/screencast-holder.pid"
