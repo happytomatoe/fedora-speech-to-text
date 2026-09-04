@@ -63,7 +63,8 @@ jobs:
             pulseaudio pulseaudio-utils \
             ffmpeg \
             tmux \
-            curl
+            curl \
+            gnome-shell-extension-prefs
 
       - name: Install + start PulseAudio with virtual devices (headless)
         run: |
