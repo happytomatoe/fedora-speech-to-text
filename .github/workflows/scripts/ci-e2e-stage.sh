@@ -4,8 +4,8 @@
 # and a Parakeet container; then runs the D-Bus-driving test suite.
 #
 # Architecture:
-#   outer (this file): isolation env, asset staging, Parakeet container,
-Isolated env + private dbus session, exported to later steps via GITHUB_ENV.
+#   outer (this file): isolation env, asset staging, dotoold start (isolated
+#                      env + private dbus session exported via GITHUB_ENV).
 #   inner:             schemas, extension deploy, service start, boot wait,
 #                      test runner, screenshot, teardown
 #
@@ -44,15 +44,9 @@ find "$REPO_ROOT/e2e" -maxdepth 1 ! -name e2e ! -name '*.qcow2' ! -name node_mod
 # --- Parakeet container removed — CI uses in-process Moonshine provider (src/voice_to_text/providers/moonshine.py) ---
 
 
-# dotoold must be running before the service tries dotool type output
-# (only possible when /dev/uinput exists — CI runners usually lack it).
+# dotoold must be running before the suite/types any dotoolc input (only
+# possible when /dev/uinput exists — CI runners usually lack it).
 # dotoold shell wrapper execs `dotool` by name — needs the bin dir on PATH.
-if [[ -w /dev/uinput ]] && [[ -x "$ASSETS/e2e/bin/dotoold" ]]; then
-  PATH="$ASSETS/e2e/bin:$PATH" DOTOOL_PIPE="$ISOLATED/.runtime/dotool-pipe" \
-  nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
-fi
-
-# dotoold must be running before the service tries dotool type output
 if [[ -w /dev/uinput ]] && [[ -x "$ASSETS/e2e/bin/dotoold" ]]; then
   PATH="$ASSETS/e2e/bin:$PATH" DOTOOL_PIPE="$ISOLATED/.runtime/dotool-pipe" \
   nohup "$ASSETS/e2e/bin/dotoold" >/dev/null 2>&1 &
