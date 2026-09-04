@@ -1021,11 +1021,7 @@ async function runBareMode(): Promise<void> {
   // inheriting the dbus-run-session env) — the same interface the SSH envs use.
   const run = async (cmd: string, timeoutMs = 15_000) => {
     const r = await transport.exec(cmd, timeoutMs);
-    if (r.code !== 0) {
-      console.error(`Command failed: ${cmd}`);
-      console.error(`stderr: ${r.stderr}`);
-      throw new Error(`command failed (${r.code}): ${cmd}\n${r.stderr}`);
-    }
+    if (r.code !== 0) throw new Error(`command failed (${r.code}): ${cmd}\n${r.stderr}`);
     return r.stdout;
   };
   const gdbus = (method: string, argsJson = "") =>
@@ -1214,11 +1210,12 @@ async function runBareMode(): Promise<void> {
   if (atspiReady) {
     try {
       await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
-      // Open prefs via the shell's Extensions D-Bus API directly — the
-      // gnome-extensions CLI exits 2 with swallowed stderr under this harness
-      // (bare invocation = its normal usage error, so probes were useless).
-      // OpenExtensionPrefs signature: (s uuid, a{sv} options).
-      await run(`gdbus call --session --dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions --method org.gnome.Shell.Extensions.OpenExtensionPrefs "voice-to-text@happytomatoe.com" "{}" 2>&1`, 15_000);
+      await Bun.sleep(1000);
+      const prefsResult = await run(`DISPLAY=:0 gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
+      if (prefsResult.code !== 0) {
+        console.error(`gnome-extensions prefs failed (code ${prefsResult.code}): ${prefsResult.stderr}`);
+      }
+      await Bun.sleep(500);
       const execLike = { exec: (cmd: string, opts?: Record<string, unknown>) => transport.exec(cmd, (opts?.timeout as number) ?? 15_000) };
       await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame", timeoutMs: 20000 });
       const t0 = await transport.exec(
