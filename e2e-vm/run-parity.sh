@@ -55,11 +55,22 @@ $SSH 'rm -rf /tmp/tmp.??????????/ 2>/dev/null; true'
 #     org.gnome.Shell.Screenshot — see step 6. -display none makes monitor
 #     screendumps blank.)
 
-# 5. Run the CI harness unchanged (GITHUB_WORKSPACE required: the script's
-#    dirname fallback breaks because we invoke it via its repo-relative path
-#    from the VM's home, not from the repo checkout)
-$SSH 'cd ~/repo && export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH && GITHUB_WORKSPACE=$HOME/repo bash .github/workflows/scripts/ci-e2e-headless.sh ~/parity-screenshot.png 2>&1' | tee "$OUT/harness.log"
-TEST_EXIT=${PIPESTATUS[0]}
+# 5. Run the CI harness unchanged — now split into stage/boot/run/teardown
+#    steps (mirrors ubuntu-ci-e2e.yml). GITHUB_WORKSPACE required: the
+#    scripts' dirname fallback breaks when invoked via repo-relative path
+#    from the VM's home. GITHUB_ENV is emulated with a plain file the steps
+#    append to (stage.sh exports CI_E2E_* vars that boot/run/teardown read).
+$SSH 'cd ~/repo && export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH && \
+    export GITHUB_WORKSPACE=$HOME/repo GITHUB_ENV=$HOME/parity-github-env && \
+    : > $GITHUB_ENV && \
+    bash .github/workflows/scripts/ci-e2e-stage.sh 2>&1 && \
+    set -a; source $GITHUB_ENV; set +a && \
+    bash .github/workflows/scripts/ci-e2e-boot.sh 2>&1 && \
+    bash .github/workflows/scripts/ci-e2e-run.sh 2>&1; \
+    echo PARITY_TEST_EXIT=$?; \
+    bash .github/workflows/scripts/ci-e2e-teardown.sh 2>&1 || true' | tee "$OUT/harness.log"
+TEST_EXIT=$(grep -oP 'PARITY_TEST_EXIT=\K[0-9]+' "$OUT/harness.log" | tail -1)
+TEST_EXIT=${TEST_EXIT:-1}
 
 # 6. Pull harness-side screenshots (in-shell org.gnome.Shell.Screenshot —
 #    the VM runs with -display none, so QEMU monitor screendumps are blank).
