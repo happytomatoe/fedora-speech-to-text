@@ -207,6 +207,7 @@ cat > "$HOME/.config/voice-to-text/config.yaml" <<YEOF
 provider: moonshine
 model: medium
 YEOF
+echo "config perms after write: $(stat -c '%a' "$HOME/.config/voice-to-text/config.yaml")"
 
 # --- Install + start the Python service ---------------------------------------
 # uv run resolves the project's own dependencies; no pip needed.

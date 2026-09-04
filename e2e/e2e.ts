@@ -1597,10 +1597,13 @@ ATSPIEOF`,
     // provider from the StartRecording payload (default 'voxtral'), NOT from
     // config.yaml — so the unknown provider must be in the payload itself
     // (CI run 33882468020: config-only patch silently tested voxtral instead).
+    // Offset must be captured BEFORE StartRecording — the engine raises
+    // synchronously in get_batch_provider, so the error can land in the log
+    // before a later wc runs (run 33906572002: offset-after missed it).
+    const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch(() => {});
     // Engine raises synchronously in get_batch_provider — poll briefly for the
     // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
-    const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     let errHit = "0";
     for (let i = 0; i < 10; i++) {
       await Bun.sleep(1000);
