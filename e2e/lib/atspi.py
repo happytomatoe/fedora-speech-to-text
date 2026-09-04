@@ -267,12 +267,15 @@ def read_add_word_entry():
             ti = entry.query_text()
             return str(ti.get_text(0, ti.get_character_count()))
         except AttributeError:
-            # Newer pygobject merges the Text interface into Accessible, but
-            # binds it via the interface proxy: call through get_interface()
-            ti = entry.get_interface(Atspi.Interface.TEXT) if hasattr(entry, "get_interface") else None
-            if ti is not None:
-                return str(ti.get_text(0, ti.get_character_count()))
-            return str(entry.get_text(0, entry.get_character_count()))
+            # pygobject 3.5x: no query_text; try interface proxies / bare call
+            if hasattr(entry, "get_interface"):
+                ti = entry.get_interface(Atspi.Interface.TEXT)
+                if ti is not None:
+                    try:
+                        return str(ti.get_text(0, ti.get_character_count()))
+                    except Exception:
+                        pass
+            return str(entry.get_text())
     except Exception as e:
         return f"error:{e}"
 

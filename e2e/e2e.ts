@@ -1314,25 +1314,38 @@ ATSPIEOF`;
         const atspiPy = (body: string, timeout = 30_000) =>
           transport.exec(`python3 - <<'ATSPIEOF'\n${ATSPI_PY}\n${body}\nATSPIEOF`, timeout)
             .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+        // GTK4 reports SHOWING even for viewport-clipped rows, so AT-SPI can't
+        // prove scrolling — pixel-compare screenshots instead (user-visible
+        // evidence, which is what this check is for).
+        const shot = async (name: string) => {
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
+            10_000,
+          ).catch(() => {});
+        };
         try {
           const p = await screenCenter("Voice to Text");
+          await shot("prefs-scroll-before");
           await dtool(`mouseto ${p.nx} ${p.ny}`);
-          // wheel AMOUNT is in wheel clicks; several smaller ticks scroll
-          // more reliably than one huge event (compositors may clamp).
           for (let i = 0; i < 10; i++) {
             await dtool("wheel -10");
             await Bun.sleep(300);
           }
-          // Verify the scroll actually revealed the bottom of the list —
-          // wheel events can silently miss (wrong window/surface).
-          for (let i = 0; i < 6; i++) {
-            const showing = await atspiPy(`print("RESULT:" + node_showing("Edit Configuration File"))`, 15_000);
-            if (showing === "yes") break;
-            await dtool("wheel -10");
-            await Bun.sleep(500);
+          await Bun.sleep(500);
+          await shot("prefs-scroll-after");
+          const diff = await run(
+            `compare -metric AE '${outputDir}/prefs-scroll-before.png' '${outputDir}/prefs-scroll-after.png' null: 2>&1 || true`, 15_000);
+          const changed = parseInt(diff.trim()) || 0;
+          console.log(`  prefs scroll: ${changed > 1000 ? `scrolled ✅ (${changed} px changed)` : `NOT scrolled ❌ (${changed} px changed)`}`);
+          if (changed <= 1000) {
+            console.log("  retrying scroll with Page_Down over the list...");
+            await dtool("key Page_Down");
+            await Bun.sleep(800);
+            await shot("prefs-scroll-after2");
+            const diff2 = await run(
+              `compare -metric AE '${outputDir}/prefs-scroll-before.png' '${outputDir}/prefs-scroll-after2.png' null: 2>&1 || true`, 15_000);
+            console.log(`  prefs scroll retry: ${diff2.trim()} px changed`);
           }
-          const scrolled = await atspiPy(`print("RESULT:" + node_showing("Edit Configuration File"))`, 15_000);
-          console.log(`  prefs scroll: bottom row ${scrolled === "yes" ? "visible ✅" : "NOT visible ❌ (wheel missed?)"}`);
         } catch (e) {
           console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
         }
@@ -1575,15 +1588,14 @@ ATSPIEOF`,
     // In-process moonshine has no HTTP endpoint to break. A nonexistent
     // model is also unreliable — the transcriber caches the loaded model, so
     // no reload happens and no error is logged. Unknown provider name raises
-    // in get_batch_provider before any caching.
-    await run(`cp ${configPath} ${configPath}.bak`);
-    await run(`sed -i 's/^provider:.*/provider: nonexistent_provider/' ${configPath}`);
-    const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
-    // No provider in the payload here: the patched config (nonexistent
-    // provider) must govern, that is the error being tested.
-    await gdbus("StartRecording", `'${JSON.stringify({ language: "en" })}'`).catch(() => {});
+    // in get_batch_provider before any caching. NOTE: the engine reads the
+    // provider from the StartRecording payload (default 'voxtral'), NOT from
+    // config.yaml — so the unknown provider must be in the payload itself
+    // (CI run 33882468020: config-only patch silently tested voxtral instead).
+    await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch(() => {});
     // Engine raises synchronously in get_batch_provider — poll briefly for the
     // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
+    const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     let errHit = "0";
     for (let i = 0; i < 10; i++) {
       await Bun.sleep(1000);
@@ -1595,7 +1607,6 @@ ATSPIEOF`,
     }
     await gdbus("StopRecording").catch(() => {});
     row("E02 api-error-logged", parseInt(errHit) > 0);
-    await run(`mv ${configPath}.bak ${configPath}`);
   } catch (e) {
     row("E02 api-error-logged", false, String(e));
   }
