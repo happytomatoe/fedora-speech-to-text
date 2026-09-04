@@ -1432,9 +1432,20 @@ ATSPIEOF`;
             .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
           console.log(`  atspi scroll_to: ${st}`);
           if (st !== "yes") {
-            for (let i = 0; i < 25 && st !== "yes"; i++) {
+            // GTK4's AT-SPI backend doesn't implement Component.scroll_to
+            // (run 33910909267: no-api). Tab-walk instead, breaking when the
+            // last widget ("Open Editor") gets focus — GTK auto-scrolls it
+            // into view. Cap at 25 tabs (focus cycle length) to avoid
+            // wrapping back to the top like run 33910909267 did.
+            let reachedBottom = false;
+            for (let i = 0; i < 25 && !reachedBottom; i++) {
               await typeTextDbus("TypeKey", "0xff09"); // Tab
               await Bun.sleep(400);
+              const focused = await transport.exec(
+                `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
+                .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
+              console.log(`  scroll-to-bottom tab ${i + 1}: focus='${focused}'`);
+              if (focused.includes("Open Editor") || focused.includes("E2E") || focused.includes("Add Word")) reachedBottom = true;
             }
           }
         } catch (e) {
