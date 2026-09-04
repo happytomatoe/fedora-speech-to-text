@@ -43,17 +43,27 @@ jobs:
           path: /home/runner/moonshine-model
           key: moonshine-medium-en-quantized
 
-      - name: Install GNOME Shell + harness dependencies (cached installed state)
-        uses: awalsh128/cache-apt-pkgs-action@v1
+      - name: Cache apt archives
+        uses: actions/cache@v4
         with:
-          packages: gnome-shell gnome-shell-common gnome-session glib2.0-bin dbus libgl1-mesa-dri libgbm1 dconf-gsettings-backend gsettings-desktop-schemas libportaudio2 gir1.2-atspi-2.0 python3-gi at-spi2-core pipewire pipewire-bin wireplumber pulseaudio pulseaudio-utils ffmpeg tmux curl
-          version: "1"
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-26.04-${{ hashFiles('.github/workflows/ubuntu-ci-e2e.yml') }}
+          restore-keys: apt-${{ runner.os }}-26.04-
 
-      - name: Refresh linker + font caches (skipped by cached install)
+      - name: Install GNOME Shell + harness dependencies (no VM, no container)
         run: |
-          sudo ldconfig
-          sudo fc-cache -f || true
-
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gnome-shell gnome-shell-common gnome-session glib2.0-bin dbus \
+            libgl1-mesa-dri libgbm1 \
+            dconf-gsettings-backend gsettings-desktop-schemas \
+            libportaudio2 \
+            gir1.2-atspi-2.0 python3-gi at-spi2-core \
+            pipewire pipewire-bin wireplumber \
+            pulseaudio pulseaudio-utils \
+            ffmpeg \
+            tmux \
+            curl
 
       - name: Install + start PulseAudio with virtual devices (headless)
         run: |
