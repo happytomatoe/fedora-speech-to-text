@@ -1378,6 +1378,12 @@ ATSPIEOF`;
       // SetTextContents, and uinput doesn't reach GTK here), click Add via
       // AT-SPI, verify the row appears.
       await doAtspiAction(execLike, "Add Word", "click");
+      // The modal dialog doesn't reliably get keyboard focus in the headless
+      // nested shell when the virtual pointer is parked over the prefs list —
+      // activate it explicitly (same wl_keyboard.enter issue as the prefs
+      // window; without this, TypeText keystrokes never reach the entry).
+      await typeTextDbus("ActivateWindow", "Add Custom Word");
+      await Bun.sleep(500);
       {
         const readEntry = () =>
           transport.exec(
