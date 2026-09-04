@@ -6,6 +6,7 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio'; // eslint-disable-line no-unused-vars -- used in JSDoc
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {readCustomProviderNames} from './config-sync.js';
 
 /**
  * Create the provider/mode settings rows.
@@ -20,6 +21,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const providerCombo = new Gtk.ComboBoxText();
+    // Built-in provider types…
     providerCombo.append('deepgram', 'Deepgram');
     providerCombo.append('groq', 'Groq');
     providerCombo.append('voxtral', 'Voxtral');
@@ -27,6 +29,16 @@ export function createProviderRows(settings, syncAllToConfig) {
     providerCombo.append('60db', '60db');
     providerCombo.append('elevenlabs', 'ElevenLabs');
     providerCombo.append('moonshine', 'Moonshine');
+    // …plus named custom providers from config.yaml (e.g. type: template
+    // sections). Their section names are valid transcription.provider values,
+    // so selecting one selects that exact provider.
+    const builtinIds = ['deepgram', 'groq', 'voxtral', 'parakeet', '60db', 'elevenlabs', 'moonshine'];
+    const customProviders = readCustomProviderNames().filter(
+        name => !builtinIds.includes(name) && name !== 'template'
+    );
+    for (const name of customProviders) {
+        providerCombo.append(name, `${name} (custom)`);
+    }
     providerCombo.set_active_id(settings.get_string('provider'));
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();

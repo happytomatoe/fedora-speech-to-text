@@ -56,6 +56,24 @@ function readConfigYaml() {
     }
 }
 
+/**
+ * Names of user-defined provider sections in config.yaml (any dict section
+ * other than the reserved top-level keys). These are valid
+ * transcription.provider values and are shown as "name (custom)" entries.
+ * @returns {string[]}
+ */
+export function readCustomProviderNames() {
+    const config = readConfigYaml();
+    if (!config) return [];
+    return Object.entries(config)
+        .filter(
+            ([key, value]) =>
+                value !== null && typeof value === 'object' && !Array.isArray(value)
+        )
+        .map(([key]) => key)
+        .filter(key => key !== 'transcription');
+}
+
 function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     const parent = file.get_parent();

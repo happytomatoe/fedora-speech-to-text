@@ -50,6 +50,11 @@ Local:
 - Parakeet. You can install it in podman container using [this script](./parakeet-v2.sh)
 - Moonshine (streaming + batch, CPU-only)
 
+Custom:
+- [Template provider](docs/providers/template.md) — define your own provider in
+  `config.yaml` for any OpenAI-compatible or custom HTTP STT server. Step-by-step
+  guide: [add-custom-provider.md](docs/providers/add-custom-provider.md)
+
 ## Requirements
 
 - Python 3.13+

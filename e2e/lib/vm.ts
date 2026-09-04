@@ -32,6 +32,7 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  configFixture?: string;
 }
 
 export class VmManager {

@@ -14,6 +14,7 @@ export interface RunConfig {
   testAudioFile: string;
   recordMode: boolean;
   updateMode: boolean;
+  configFixture?: string;
 }
 
 export class RunContext {
