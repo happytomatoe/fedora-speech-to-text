@@ -105,9 +105,6 @@ export default class PocScreenshot {
     }
 }
 JEOF
-gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID', '$SHOT_UUID', '$INPUT_UUID']"
-echo "extensions deployed: $EXT_UUID + $SHOT_UUID + $INPUT_UUID"
-
 # Input injector: test-only second extension exposes TypeText/TypeKey over
 # D-Bus using the compositor's own Clutter virtual keyboard — uinput (dotool)
 # events never reach GTK windows in the nested headless shell, but virtual-
@@ -197,6 +194,8 @@ export default class E2EInput {
     }
 }
 JEOF
+gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID', '$SHOT_UUID', '$INPUT_UUID']"
+echo "extensions deployed: $EXT_UUID + $SHOT_UUID + $INPUT_UUID"
 
 # --- Service config ----------------------------------------------------------
 mkdir -p "$HOME/.config/voice-to-text"
