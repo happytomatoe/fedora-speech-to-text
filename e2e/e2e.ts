@@ -1021,7 +1021,11 @@ async function runBareMode(): Promise<void> {
   // inheriting the dbus-run-session env) — the same interface the SSH envs use.
   const run = async (cmd: string, timeoutMs = 15_000) => {
     const r = await transport.exec(cmd, timeoutMs);
-    if (r.code !== 0) throw new Error(`command failed (${r.code}): ${cmd}\n${r.stderr}`);
+    if (r.code !== 0) {
+      console.error(`Command failed: ${cmd}`);
+      console.error(`stderr: ${r.stderr}`);
+      throw new Error(`command failed (${r.code}): ${cmd}\n${r.stderr}`);
+    }
     return r.stdout;
   };
   const gdbus = (method: string, argsJson = "") =>
