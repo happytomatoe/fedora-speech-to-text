@@ -6,6 +6,7 @@ import {
 import {VoiceIndicator} from './indicator.js';
 import {registerHotkey, unregisterHotkey} from './hotkey.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {ExtensionState} from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
 import {TypeTextService} from './type-text-service.js';
@@ -29,6 +30,9 @@ const VoiceToTextIface = `
     </signal>
     <signal name="StateChanged">
       <arg type="s" name="state"/>
+    </signal>
+    <signal name="OpenPrefsRequested">
+      <arg type="s" name="kind"/>
     </signal>
   </interface>
 </node>`;
@@ -242,6 +246,15 @@ export default class VoiceToTextExtension extends Extension {
             );
             this._signalIds.push(errorId);
 
+            const prefsId = this._proxy.connectSignal(
+                'OpenPrefsRequested',
+                () => {
+                    console.debug('[VoiceToText] OpenPrefsRequested — opening preferences');
+                    this._openPreferences();
+                }
+            );
+            this._signalIds.push(prefsId);
+
             // Sync state on (re)enable — engine may already be recording
             const proxyRef = this._proxy;
             this._proxy
@@ -432,6 +445,21 @@ export default class VoiceToTextExtension extends Extension {
     }
 
     _openPreferences() {
+        // openPreferences() runs inside the shell — no external process, so it
+        // works in headless sessions where spawning gnome-extensions CLI dies
+        // (D-Bus-activated child has no display).
+        try {
+            // @ts-expect-error
+            const ext = Main.extensionManager.lookup(this.uuid); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+            // @ts-expect-error
+            if (ext && ext.state === ExtensionState.ACTIVE) {
+                // @ts-expect-error
+                ext.openPreferences();
+                return;
+            }
+        } catch (e) {
+            console.error('VoiceToText: openPreferences failed:', e);
+        }
         try {
             const launcher = new Gio.SubprocessLauncher();
             // @ts-expect-error

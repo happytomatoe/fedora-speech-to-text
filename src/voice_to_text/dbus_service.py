@@ -163,6 +163,17 @@ class VoiceToTextInterface(ServiceInterface):
         self._spawn(self._engine.cancel())
 
     @method()
+    def OpenPrefs(self) -> None:  # noqa: N802
+        """Ask the shell extension to open its preferences dialog.
+
+        The extension runs inside gnome-shell, so its openPreferences() path
+        is immune to the D-Bus-activation environment problems that break the
+        gnome-extensions CLI in headless CI sessions.
+        """
+        logger.info("D-Bus OpenPrefs received")
+        self.OpenPrefsRequested()
+
+    @method()
     def GetStatus(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
         """Return current state: idle/recording/processing."""
         return self._state
@@ -194,3 +205,8 @@ class VoiceToTextInterface(ServiceInterface):
     def StateChanged(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
         """Emit state change (idle/recording/processing)."""
         return self._state
+
+    @signal()
+    def OpenPrefsRequested(self) -> "s":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
+        """Signal the extension to open its preferences dialog."""
+        return "prefs"
