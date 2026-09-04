@@ -1346,7 +1346,12 @@ ATSPIEOF`;
           await shot("prefs-scroll-before");
           // TypeKey = compositor-level virtual keyboard (e2e-input@local helper
           // extension); uinput/dotool never reaches GTK windows in the nested
-          // headless shell.
+          // headless shell. The scrolled list needs keyboard focus first —
+          // Tab moves focus into the prefs content, then Page_Down scrolls.
+          await typeTextDbus("TypeKey", "0xff09"); // Tab
+          await Bun.sleep(300);
+          await typeTextDbus("TypeKey", "0xff09"); // Tab
+          await Bun.sleep(300);
           for (let i = 0; i < 6; i++) {
             await typeTextDbus("TypeKey", "0xff56"); // Page_Down
             await Bun.sleep(400);
@@ -1387,12 +1392,18 @@ ATSPIEOF`;
         console.log(`  entry text: '${entryText}'`);
         if (entryText.includes("E2E")) {
           await doAtspiAction(execLike, "Add", "click");
-          const wa = await transport.exec(
-            `python3 - <<'ATSPIEOF'
-${ATSPI_PY}
-print("RESULT:" + str(verify_word_added("E2E") or ""))
-ATSPIEOF`, 60_000);
-          addWordRt = wa.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
+          // The Add click closes the dialog on success — wait for the new row
+          // in the custom-words list directly (verify_word_added expects the
+          // dialog to still exist and returns no-dialog here).
+          let rowFound = "no";
+          for (let i = 0; i < 20; i++) {
+            rowFound = await transport.exec(
+              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_name_present("E2E"))\nATSPIEOF`, 15_000)
+              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
+            if (rowFound === "yes") break;
+            await Bun.sleep(500);
+          }
+          addWordRt = rowFound === "yes" ? "ok" : "row-not-found";
         } else {
           addWordRt = `entry-text='${entryText}' (keystrokes never reached the entry)`;
         }

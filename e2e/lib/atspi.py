@@ -287,3 +287,12 @@ def node_showing(name):
     def act(n, r, node):
         return "yes"
     return "yes" if walk_tree(pred, act) else "no"
+
+
+def node_name_present(name):
+    """True if any node with this exact name exists anywhere in the tree."""
+    def pred(n, r, node):
+        return n == name
+    def act(n, r, node):
+        return "yes"
+    return "yes" if walk_tree(pred, act) else "no"
