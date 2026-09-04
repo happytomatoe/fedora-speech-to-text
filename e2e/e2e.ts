@@ -1279,10 +1279,6 @@ ATSPIEOF`, 40_000);
       // Close: prefs window has no guaranteed a11y close action — the Adw
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
-      await transport.exec(
-        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
-        10_000,
-      ).catch(() => {});
       await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
       await Bun.sleep(2000);
       const gone = await transport.exec(
@@ -1301,6 +1297,12 @@ ATSPIEOF`,
         10_000,
       ).then(r => r.stdout.includes("RESULT:no"));
       prefsRow("P03 prefs-closes", gone);
+      // End-state screenshot AFTER the close step — shows the prefs window
+      // gone (desktop/terminal only), visually distinct from prefs-open.png.
+      await transport.exec(
+        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
+        10_000,
+      ).catch(() => {});
     } catch (e) {
       prefsRow("P01 prefs-window-opens", false, String(e));
       prefsRow("P02 add-word-roundtrip", false, "skipped — P01 failed");
