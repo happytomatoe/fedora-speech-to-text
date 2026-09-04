@@ -32,7 +32,15 @@ export function createProviderRows(settings, syncAllToConfig) {
     // …plus named custom providers from config.yaml (e.g. type: template
     // sections). Their section names are valid transcription.provider values,
     // so selecting one selects that exact provider.
-    const builtinIds = ['deepgram', 'groq', 'voxtral', 'parakeet', '60db', 'elevenlabs', 'moonshine'];
+    const builtinIds = [
+        'deepgram',
+        'groq',
+        'voxtral',
+        'parakeet',
+        '60db',
+        'elevenlabs',
+        'moonshine',
+    ];
     const customProviders = readCustomProviderNames().filter(
         name => !builtinIds.includes(name) && name !== 'template'
     );

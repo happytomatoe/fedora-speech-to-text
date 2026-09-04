@@ -60,8 +60,12 @@ class TemplateProvider(BatchProvider):
         self.api_key = resolve_api_key(config, "TEMPLATE_API_KEY", provider_name="template") if wants_key else ""
         # NativeEnvironment renders {{ CUSTOM_WORDS }} to a real list in JSON bodies
         self.env: Environment = NativeEnvironment()
+        # Headers templating on an unset API_KEY (e.g. "Bearer {{ API_KEY }}")
+        # would render to "Bearer " — an illegal header. Skip those entirely.
         self._header_tmpl: dict[str, Template] = {
-            k: self.env.from_string(str(v)) for k, v in config.get("headers", {}).items()
+            k: self.env.from_string(str(v))
+            for k, v in config.get("headers", {}).items()
+            if not (self.api_key == "" and "API_KEY" in str(v))
         }
         self._form_tmpl: dict[str, Template] = {
             k: self.env.from_string(str(v)) for k, v in config.get("form", {}).items()

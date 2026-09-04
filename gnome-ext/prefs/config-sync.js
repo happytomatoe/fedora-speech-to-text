@@ -68,7 +68,9 @@ export function readCustomProviderNames() {
     return Object.entries(config)
         .filter(
             ([key, value]) =>
-                value !== null && typeof value === 'object' && !Array.isArray(value)
+                value !== null &&
+                typeof value === 'object' &&
+                !Array.isArray(value)
         )
         .map(([key]) => key)
         .filter(key => key !== 'transcription');
