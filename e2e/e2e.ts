@@ -1226,9 +1226,9 @@ async function runBareMode(): Promise<void> {
     prefsRows.push({ id, status: ok ? "pass" : "fail", note });
   const prefsSkip = (id: string, why: string) => prefsRows.push({ id, status: "skip", note: why });
   if (NO_PREFS) {
-    prefsSkip("P01 prefs-window-opens", "skipped — --no-prefs");
-    prefsSkip("P02 add-word-structure", "skipped — --no-prefs");
-    prefsSkip("P03 prefs-closes", "skipped — --no-prefs");
+    prefsSkip("prefs window opens", "skipped — --no-prefs");
+    prefsSkip("add-word roundtrip (type, click Add, row appears)", "skipped — --no-prefs");
+    prefsSkip("prefs window closes", "skipped — --no-prefs");
   } else {
   const atspiReady = await transport.exec(
     "python3 -c 'import gi; gi.require_version(\"Atspi\", \"2.0\"); from gi.repository import Atspi' 2>&1 && echo OK",
@@ -1258,7 +1258,7 @@ for i in range(d.get_child_count()):
     print("APP:" + str(a.get_name()))
 ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       console.log(`  a11y apps after P01: ${t0.split("\n").filter(l => l.startsWith("APP:")).join(", ")}`);
-      prefsRow("P01 prefs-window-opens", true);
+      prefsRow("prefs window opens", true);
       // Scroll the prefs window to the bottom (mouse wheel over the list via
       // dotool — same approach as the local VM suite), so the scrolled state
       // and the Add Word button are reached like a real user would.
@@ -1411,7 +1411,7 @@ ATSPIEOF`;
           addWordRt = `entry-text='${entryText}' (keystrokes never reached the entry)`;
         }
         console.log(`  add-word roundtrip: ${addWordRt}`);
-        prefsRow("P02 add-word-structure", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
+        prefsRow("add-word roundtrip (type, click Add, row appears)", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
       }
       // Screenshot AFTER the word was added — shows the new "E2E" row in the
       // custom words list (user feedback: the add must be visible in evidence,
@@ -1446,7 +1446,7 @@ print("RESULT:" + found)
 ATSPIEOF`,
         10_000,
       ).then(r => r.stdout.includes("RESULT:no"));
-      prefsRow("P03 prefs-closes", gone);
+      prefsRow("prefs window closes", gone);
       // End-state screenshot AFTER the close step — shows the prefs window
       // gone (desktop/terminal only), visually distinct from prefs-open.png.
       await transport.exec(
@@ -1454,14 +1454,14 @@ ATSPIEOF`,
         10_000,
       ).catch(() => {});
     } catch (e) {
-      prefsRow("P01 prefs-window-opens", false, String(e));
-      prefsRow("P02 add-word-roundtrip", false, "skipped — P01 failed");
-      prefsRow("P03 prefs-closes", false, "skipped — P01 failed");
+      prefsRow("prefs window opens", false, String(e));
+      prefsRow("add-word roundtrip (type, click Add, row appears)", false, "skipped — P01 failed");
+      prefsRow("prefs window closes", false, "skipped — P01 failed");
     }
   } else {
-    prefsSkip("P01 prefs-window-opens", "no python3 Atspi bindings");
-    prefsSkip("P02 add-word-roundtrip", "no python3 Atspi bindings");
-    prefsSkip("P03 prefs-closes", "no python3 Atspi bindings");
+    prefsSkip("prefs window opens", "no python3 Atspi bindings");
+    prefsSkip("add-word roundtrip (type, click Add, row appears)", "no python3 Atspi bindings");
+    prefsSkip("prefs window closes", "no python3 Atspi bindings");
   }
   }
 
@@ -1476,16 +1476,16 @@ ATSPIEOF`,
   // C07: config exists + parses as YAML (service started, so it must)
   try {
     const c07 = await run(`cat ${configPath}`);
-    row("C07 config-exists-parses", c07.includes("provider"));
+    row("config.yaml exists and parses", c07.includes("provider"));
   } catch (e) {
-    row("C07 config-exists-parses", false, String(e));
+    row("config.yaml exists and parses", false, String(e));
   }
-  // C08: permissions 0600
+  // 0600 permissions
   try {
     const perms = (await run(`stat -c '%a' ${configPath}`)).trim();
-    row("C08 config-perms-600", perms === "600", `got ${perms}`);
+    row("config.yaml has 0600 permissions", perms === "600", `got ${perms}`);
   } catch (e) {
-    row("C08 config-perms-600", false, String(e));
+    row("config.yaml has 0600 permissions", false, String(e));
   }
   // C01/C02/C03: write provider/output-method/language into config, restart
   // service, verify bus name returns (service picked the file up cleanly).
@@ -1522,13 +1522,13 @@ ATSPIEOF`,
       "com.happytomatoe.VoiceToText",
       30_000,
     );
-    row("C01-C03 config-reload-restart", true);
+    row("config change picked up after service restart", true);
   } catch (e) {
-    row("C01-C03 config-reload-restart", false, String(e));
+    row("config change picked up after service restart", false, String(e));
   }
-  skipRow("C04 hotkey-dconf", "needs synthetic input (phase 5)");
-  skipRow("C05 debug-toggle", "low priority");
-  skipRow("C06 api-key-keyring", "no keyring on runner");
+  skipRow("hotkey stored in dconf", "needs synthetic input (phase 5)");
+  skipRow("debug logging toggle", "low priority");
+  skipRow("API key from keyring", "no keyring on runner");
 
   // E06: service down → StartRecording must fail cleanly
   try {
@@ -1565,7 +1565,7 @@ ATSPIEOF`,
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
       10_000,
     );
-    row("E06 service-down-clean-error", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
+    row("clean error when service is down", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
     await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
     if (restoreCmd) {
       transport.exec(
@@ -1583,12 +1583,12 @@ ATSPIEOF`,
       );
     }
   } catch (e) {
-    row("E06 service-down-clean-error", false, String(e));
+    row("clean error when service is down", false, String(e));
   }
   // E06 leftover: a StartRecording '{}' can land after the service restarted
   // (racing gdbus timeout) and leave the engine in a bad state — reset it.
   await gdbus("StopRecording").catch(() => {});
-  // E02: invalid endpoint → error in log, service stays alive
+  // Unknown provider → error in log, service stays alive
   try {
     // In-process moonshine has no HTTP endpoint to break. A nonexistent
     // model is also unreliable — the transcriber caches the loaded model, so
@@ -1614,14 +1614,14 @@ ATSPIEOF`,
       if (parseInt(errHit) > 0) break;
     }
     await gdbus("StopRecording").catch(() => {});
-    row("E02 api-error-logged", parseInt(errHit) > 0);
+    row("unknown provider logs a clear error", parseInt(errHit) > 0);
   } catch (e) {
-    row("E02 api-error-logged", false, String(e));
+    row("unknown provider logs a clear error", false, String(e));
   }
-  skipRow("E07 parallel-recording", "deferred");
-  skipRow("E01 no-audio-device", "deferred");
-  skipRow("E03 network-timeout", "deferred");
-  skipRow("E05 config-dir-readonly", "deferred");
+  skipRow("parallel recordings rejected cleanly", "deferred");
+  skipRow("no audio device handled", "deferred");
+  skipRow("network timeout handled", "deferred");
+  skipRow("read-only config dir handled", "deferred");
 
   // Phase 5: hotkey + UI suites — entirely uinput-gated. Hotkey press via
   // dotool replaces the D-Bus StartRecording trigger; UI cases verify the
@@ -1668,9 +1668,9 @@ ATSPIEOF`,
         5_000,
       );
       const registered = (hotkeyVal.includes("Super") || dconfOverride.stdout.includes("Super")) && (parseInt(regErr.stdout.trim() || "0") === 0);
-      hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : `hotkey unregistered val=${hotkeyVal.trim()} regErr=${regErr.stdout.trim()}` });
+      hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : `hotkey unregistered val=${hotkeyVal.trim()} regErr=${regErr.stdout.trim()}` });
     } catch (e) {
-      hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: "fail", note: String(e) });
+      hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "fail", note: String(e) });
       await gdbus("StopRecording").catch(() => {});
     }
     try {
@@ -1678,15 +1678,15 @@ ATSPIEOF`,
       // org.gnome.Shell.Extensions — the dialog runs inside the nested shell
       // process, so "process alive" == nested gnome-shell still running.
       const shellAlive = (await transport.exec("pgrep -f 'gnome-shell' | head -1 | xargs -I{} test -d /proc/{} && echo alive || echo dead")).stdout.trim();
-      hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: shellAlive === "alive" ? "pass" : "fail" });
+      hotkeyUiRows.push({ id: "prefs window opens", status: shellAlive === "alive" ? "pass" : "fail" });
     } catch (e) {
-      hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: "fail", note: String(e) });
+      hotkeyUiRows.push({ id: "prefs window opens", status: "fail", note: String(e) });
     }
   } else {
-    hotkeyUiRows.push({ id: "H01-H02 hotkey-start-stop", status: "skip", note: "no uinput" });
-    hotkeyUiRows.push({ id: "P01 prefs-window-opens", status: "skip", note: "no uinput" });
+    hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "skip", note: "no uinput" });
+    hotkeyUiRows.push({ id: "prefs window opens", status: "skip", note: "no uinput" });
   }
-  for (const id of ["H03 custom-hotkey", "H04 hotkey-conflict", "H05 global-hotkey", "P02 close", "P03 tabs", "P05 save", "P06 cancel"]) {
+  for (const id of ["custom hotkey binding", "hotkey conflict handling", "global hotkey registration", "prefs close button", "prefs tabs navigation", "prefs save persists settings", "prefs cancel discards changes"]) {
     hotkeyUiRows.push({ id, status: "skip", note: "deferred" });
   }
 
