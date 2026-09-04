@@ -1211,7 +1211,7 @@ async function runBareMode(): Promise<void> {
     try {
       await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
       await Bun.sleep(1000);
-      const prefsResult = await run(`gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
+      const prefsResult = await run(`DISPLAY=:0 gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
       if (prefsResult.code !== 0) {
         console.error(`gnome-extensions prefs failed (code ${prefsResult.code}): ${prefsResult.stderr}`);
       }
