@@ -1314,10 +1314,12 @@ ATSPIEOF`;
         try {
           const p = await screenCenter("Voice to Text");
           await dtool(`mouseto ${p.nx} ${p.ny}`);
-          await dtool("wheel -50");
-          await Bun.sleep(1000);
-          await dtool("wheel -50");
-          await Bun.sleep(1000);
+          // wheel AMOUNT is in wheel clicks; -50 clicks is enough to reach
+          // the bottom of the prefs list in one pass.
+          for (let i = 0; i < 5; i++) {
+            await dtool("wheel -10");
+            await Bun.sleep(400);
+          }
           console.log("  scrolled prefs to bottom via dotool wheel");
         } catch (e) {
           console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
