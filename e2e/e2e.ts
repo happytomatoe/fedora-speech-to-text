@@ -1263,14 +1263,57 @@ ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       // dotool — same approach as the local VM suite), so the scrolled state
       // and the Add Word button are reached like a real user would.
       let addWordRt = "structure-only";
+      // dotool helpers shared by the scroll and add-word steps. mouseto takes
+      // normalized 0..1 screen coords; extents must be screen-absolute
+      // (CoordType.SCREEN — WINDOW coords are window-relative and land near 0,0).
+      const dtool = (script: string) => run(
+        `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
+      // Virtual monitor geometry: exported by the stage script (default 1280x720).
+      const CI_WIDTH = parseInt(process.env.CI_E2E_WIDTH ?? "1280", 10);
+      const CI_HEIGHT = parseInt(process.env.CI_E2E_HEIGHT ?? "720", 10);
+      const extentsScript = (name: string) => `python3 - <<'ATSPIEOF'
+import gi
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+
+def walk(node, depth=0):
+    if node is None or depth > 35:
+        return None
+    try:
+        if (node.get_name() or "").strip() == "${name}":
+            e = node.get_component().get_extents(Atspi.CoordType.SCREEN)
+            return f"{e.x},{e.y},{e.width},{e.height}"
+    except Exception:
+        return None
+    try:
+        n = node.get_child_count()
+    except Exception:
+        return None
+    for i in range(n):
+        r = walk(node.get_child_at_index(i), depth + 1)
+        if r:
+            return r
+    return None
+
+d = Atspi.get_desktop(0)
+out = None
+for i in range(d.get_child_count()):
+    out = walk(d.get_child_at_index(i))
+    if out:
+        break
+print("RESULT:" + str(out))
+ATSPIEOF`;
+      const screenCenter = async (name: string) => {
+        const r = await transport.exec(extentsScript(name), 15_000);
+        const res = r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "";
+        const [x, y, w, h] = res.split(",").map(Number);
+        if ([x, y, w, h].some(v => Number.isNaN(v))) throw new Error(`no SCREEN extents for '${name}': '${res}'`);
+        return { nx: (x + w / 2) / CI_WIDTH, ny: (y + h / 2) / CI_HEIGHT };
+      };
       if (canUseDotool) {
         try {
-          const ext = await findAtspiExtents(execLike, "Add Word");
-          const mx = (ext.x + ext.width / 2) / 1920, my = (ext.y + ext.height / 2) / 1080;
-          const dtool = (script: string) => run(
-            `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
-          // mouseto takes normalized 0..1 coords (mousemove takes absolute pixels)
-          await dtool(`mouseto ${mx} ${my}`);
+          const p = await screenCenter("Voice to Text");
+          await dtool(`mouseto ${p.nx} ${p.ny}`);
           await dtool("wheel -50");
           await Bun.sleep(1000);
           await dtool("wheel -50");
@@ -1287,8 +1330,17 @@ ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       await doAtspiAction(execLike, "Add Word", "click");
       if (canUseDotool) {
         await Bun.sleep(1500);
-        const dtool = (script: string) => run(
-          `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
+        try {
+          // The entry usually gets focus when the dialog opens, but click it
+          // explicitly — keystrokes go to whatever has keyboard focus.
+          const ep = await screenCenter("Enter a word or phrase:");
+          await dtool(`mouseto ${ep.nx} ${ep.ny}`);
+          await dtool("buttondown 1");
+          await dtool("buttonup 1");
+          await Bun.sleep(500);
+        } catch (e) {
+          console.log(`  WARN: entry click failed (${e}) — typing to focused widget`);
+        }
         await dtool("type E2E");
         await Bun.sleep(500);
         const wa = await transport.exec(
