@@ -53,6 +53,7 @@ jobs:
       - name: Install GNOME Shell + harness dependencies (no VM, no container)
         run: |
           sudo mkdir -p /var/cache/apt/archives && sudo chmod 777 /var/cache/apt/archives
+          mkdir -p "$HOME/.cache/apt/archives/partial"
           sudo apt-get update -o Dir::Cache::archives=$HOME/.cache/apt/archives
           sudo apt-get install -y --no-install-recommends -o Dir::Cache::archives=$HOME/.cache/apt/archives \
             gnome-shell gnome-shell-common gnome-session glib2.0-bin dbus \
