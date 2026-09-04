@@ -75,6 +75,10 @@ TEST_EXIT=${TEST_EXIT:-1}
 # 6. Pull harness-side screenshots (in-shell org.gnome.Shell.Screenshot —
 #    the VM runs with -display none, so QEMU monitor screendumps are blank).
 #    before = 01-desktop, during = 04-recording-started, after = 05-transcription-received
+# Suite-side shots (prefs lifecycle, cells) rescued by teardown into ~/repo/output
+rsync -az -e "ssh -p 2222 -i $VM_DIR/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+  "testuser@localhost:~/repo/output/" "$OUT/suite-output/" 2>/dev/null \
+  || echo "WARN: no suite output"
 for pair in "before 01-desktop" "during 04-recording-started" "after 05-transcription-received"; do
   set -- $pair
   scp -q -P 2222 -i "$VM_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
