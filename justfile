@@ -18,6 +18,16 @@ setup:
 run *args:
     PYTHONPATH=src .venv/bin/python -m voice_to_text.__main__ {{ args }}
 
+# @category dev
+# Dry-run a template provider's request blueprint (or --send --audio <path>)
+provider-test *args:
+    PYTHONPATH=src .venv/bin/python -m voice_to_text.provider_test {{ args }}
+
+# @category dev
+# Validate config.yaml (dry — no network, no key resolution)
+config-check *args:
+    PYTHONPATH=src .venv/bin/python -m voice_to_text.config_check {{ args }}
+
 test:
     uv run pytest -n auto
 
