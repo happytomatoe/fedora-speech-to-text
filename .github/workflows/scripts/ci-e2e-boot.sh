@@ -134,6 +134,10 @@ const Iface = `
     <method name="TypeKey">
       <arg type="s" name="key" direction="in"/>
     </method>
+    <method name="Move">
+      <arg type="d" name="x" direction="in"/>
+      <arg type="d" name="y" direction="in"/>
+    </method>
     <method name="Click">
       <arg type="d" name="x" direction="in"/>
       <arg type="d" name="y" direction="in"/>
@@ -189,6 +193,15 @@ export default class E2EInput {
         this._ptr.notify_absolute_motion(t++, x, y);
         this._ptr.notify_button(t++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
         this._ptr.notify_button(t++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
+    }
+
+    Move(x, y) {
+        // Pointer position without button — wheel scrolling only needs the
+        // pointer over the scrolled window; a click can land on row buttons
+        // (Remove/Open Editor) and steal keyboard focus from the dialog.
+        if (!this._ptr) return;
+        this._ptr.notify_absolute_motion(
+            Clutter.get_current_event_time() * 1000, x, y);
     }
 
     Wheel(ticks) {

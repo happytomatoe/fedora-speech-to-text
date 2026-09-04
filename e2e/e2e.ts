@@ -1309,7 +1309,7 @@ ATSPIEOF`;
         const r = await transport.exec(extentsScript(name), 15_000);
         const res = r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "";
         const [x, y, w, h] = res.split(",").map(Number);
-        if ([x, y, w, h].some(v => Number.isNaN(v))) throw new Error(`no SCREEN extents for '${name}': '${res}'`);
+        if ([x, y, w, h].some(v => !Number.isFinite(v))) throw new Error(`no SCREEN extents for '${name}': '${res}'`);
         return { nx: (x + w / 2) / CI_WIDTH, ny: (y + h / 2) / CI_HEIGHT };
       };
       // Synthetic input into GTK windows: dotool/uinput events never reach
@@ -1320,8 +1320,8 @@ ATSPIEOF`;
       const typeTextDbus = (method: string, arg: string) => run(
         `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.${method} "'${arg.replace(/'/g, "'\\''")}'"`,
         10_000);
-      const clickDbus = (nx: number, ny: number) => run(
-        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Click ${Math.round(nx * CI_WIDTH)} ${Math.round(ny * CI_HEIGHT)}`,
+      const moveDbus = (nx: number, ny: number) => run(
+        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Move ${Math.round(nx * CI_WIDTH)} ${Math.round(ny * CI_HEIGHT)}`,
         10_000);
       const wheelDbus = (ticks: number) => run(
         `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Wheel ${ticks}`,
@@ -1357,7 +1357,7 @@ ATSPIEOF`;
           await typeTextDbus("ActivateWindow", "Voice to Text");
           await Bun.sleep(300);
           const pw = await screenCenter("Voice to Text");
-          await clickDbus(pw.nx, pw.ny + 0.2);
+          await moveDbus(pw.nx, pw.ny + 0.2);
           await Bun.sleep(400);
           await wheelDbus(8);
           await Bun.sleep(500);
@@ -1427,12 +1427,12 @@ ATSPIEOF`;
         // call. Fallback: Tab-focus walk (GTK auto-scrolls focused widgets).
         try {
           // Pointer scroll via the helper extension's virtual pointer:
-          // activate the window (mutter wl_keyboard.enter) so it's the
-          // focused/topmost surface, click into the list, then wheel down.
+          // activate the window, hover over the list, then wheel down.
+          // No click — one can land on row buttons and steal focus.
           await typeTextDbus("ActivateWindow", "Voice to Text");
           await Bun.sleep(300);
           const pw = await screenCenter("Voice to Text");
-          await clickDbus(pw.nx, pw.ny + 0.2);
+          await moveDbus(pw.nx, pw.ny + 0.2);
           await Bun.sleep(400);
           await wheelDbus(15);
           await Bun.sleep(600);
