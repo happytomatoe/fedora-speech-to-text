@@ -141,7 +141,9 @@ jobs:
             output/recording.webm
             output/results.json
             output/*.log
-            output/prefs-*.png
-            output/cells/*/*
+            output/prefs-open.png
+            output/prefs-scroll-after.png
+            output/prefs-after-add.png
+            output/cells/*/clip.webm
           if-no-files-found: warn
           retention-days: 7

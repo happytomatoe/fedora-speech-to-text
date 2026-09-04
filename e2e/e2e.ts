@@ -1200,7 +1200,9 @@ async function runBareMode(): Promise<void> {
         }
         const shotBase = process.env.VOX_CI_E2E_SHOT_AFTER;
         if (shotBase) {
-          const caseShot = shotBase.replace(/\.png$/, `-${bareCase.file.replace(/\.wav$/, "")}-${method}.png`);
+          // Per-cell after-shot only — the top-level -after-<cell>.png copy was
+          // byte-identical to the cell's own after.png (duplicate artifact).
+          const caseShot = `${cellsDir}/${cellLabel}/after.png`;
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${caseShot}'`,
             10_000,
@@ -1348,9 +1350,9 @@ ATSPIEOF`;
           // extension); uinput/dotool never reaches GTK windows in the nested
           // headless shell. Blind Page_Down doesn't scroll (focus may sit on a
           // non-scrollable widget — run 33906165538 landed on the Stop Timeout
-          // spinbutton). Tab through and watch AT-SPI until a Custom Words row
+          // spinbutton). Tab through and watch AT-SPI until the Add Word row
           // has focus — GTK then auto-scrolls the list to keep it visible.
-          for (let i = 0; i < 15; i++) {
+          for (let i = 0; i < 20; i++) {
             await typeTextDbus("TypeKey", "0xff09"); // Tab
             await Bun.sleep(400);
             const focused = await transport.exec(
@@ -1378,6 +1380,12 @@ ATSPIEOF`;
           transport.exec(
             `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(read_add_word_entry() or ""))\nATSPIEOF`, 30_000)
             .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+        const shot2 = async (name: string) => {
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
+            10_000,
+          ).catch(() => {});
+        };
         await Bun.sleep(1500);
         // The entry gets default focus when the dialog opens. Type, then READ
         // the text back via AT-SPI — input can silently miss, and clicking Add
@@ -1412,20 +1420,31 @@ ATSPIEOF`;
         }
         console.log(`  add-word roundtrip: ${addWordRt}`);
         prefsRow("add-word roundtrip (type, click Add, row appears)", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
+        // Screenshot AFTER the word was added — must VISUALLY show the new
+        // "E2E" row (user feedback: the add must be visible in evidence, not
+        // just pass an AT-SPI check). The row lives in the Custom Words list
+        // at the bottom of the prefs window, so Tab-focus the list rows until
+        // GTK auto-scrolls them into view, then shoot (replaces the previous
+        // prefs-after-add shot that was byte-identical to prefs-open).
+        {
+          let sawWordsRow = false;
+          try {
+            for (let i = 0; i < 20 && !sawWordsRow; i++) {
+              await typeTextDbus("TypeKey", "0xff09"); // Tab
+              await Bun.sleep(400);
+              const focused = await transport.exec(
+                `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
+                .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
+              console.log(`  scroll-to-words tab ${i + 1}: focus='${focused}'`);
+              if (focused.includes("E2E") || focused.includes("Add Word")) sawWordsRow = true;
+            }
+          } catch (e) {
+            console.log(`  WARN: scroll-to-words failed (${e})`);
+          }
+          await Bun.sleep(500);
+          await shot2("prefs-after-add");
+        }
       }
-      // Screenshot AFTER the word was added — shows the new "E2E" row in the
-      // custom words list (user feedback: the add must be visible in evidence,
-      // not just the dialog opening).
-      await transport.exec(
-        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-after-add.png'`,
-        10_000,
-      ).catch(() => {});
-      // Start-state screenshot: prefs window open (scrolled state if the
-      // scroll above succeeded), before the window is closed.
-      await transport.exec(
-        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-open.png'`,
-        10_000,
-      ).catch(() => {});
       // Close: prefs window has no guaranteed a11y close action — the Adw
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
@@ -1448,7 +1467,7 @@ ATSPIEOF`,
       ).then(r => r.stdout.includes("RESULT:no"));
       prefsRow("prefs window closes", gone);
       // End-state screenshot AFTER the close step — shows the prefs window
-      // gone (desktop/terminal only), visually distinct from prefs-open.png.
+      // gone (desktop/terminal only), visually distinct from prefs-after-add.
       await transport.exec(
         `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
         10_000,
