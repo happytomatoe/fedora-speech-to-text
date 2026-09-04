@@ -1311,16 +1311,28 @@ ATSPIEOF`;
         return { nx: (x + w / 2) / CI_WIDTH, ny: (y + h / 2) / CI_HEIGHT };
       };
       if (canUseDotool) {
+        const atspiPy = (body: string, timeout = 30_000) =>
+          transport.exec(`python3 - <<'ATSPIEOF'\n${ATSPI_PY}\n${body}\nATSPIEOF`, timeout)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
         try {
           const p = await screenCenter("Voice to Text");
           await dtool(`mouseto ${p.nx} ${p.ny}`);
-          // wheel AMOUNT is in wheel clicks; -50 clicks is enough to reach
-          // the bottom of the prefs list in one pass.
-          for (let i = 0; i < 5; i++) {
+          // wheel AMOUNT is in wheel clicks; several smaller ticks scroll
+          // more reliably than one huge event (compositors may clamp).
+          for (let i = 0; i < 10; i++) {
             await dtool("wheel -10");
-            await Bun.sleep(400);
+            await Bun.sleep(300);
           }
-          console.log("  scrolled prefs to bottom via dotool wheel");
+          // Verify the scroll actually revealed the bottom of the list —
+          // wheel events can silently miss (wrong window/surface).
+          for (let i = 0; i < 6; i++) {
+            const showing = await atspiPy(`print("RESULT:" + node_showing("Edit Configuration File"))`, 15_000);
+            if (showing === "yes") break;
+            await dtool("wheel -10");
+            await Bun.sleep(500);
+          }
+          const scrolled = await atspiPy(`print("RESULT:" + node_showing("Edit Configuration File"))`, 15_000);
+          console.log(`  prefs scroll: bottom row ${scrolled === "yes" ? "visible ✅" : "NOT visible ❌ (wheel missed?)"}`);
         } catch (e) {
           console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
         }
@@ -1331,26 +1343,46 @@ ATSPIEOF`;
       // otherwise fall back to the structural check only.
       await doAtspiAction(execLike, "Add Word", "click");
       if (canUseDotool) {
+        const readEntry = () =>
+          transport.exec(
+            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(read_add_word_entry() or ""))\nATSPIEOF`, 30_000)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
         await Bun.sleep(1500);
-        try {
-          // The entry usually gets focus when the dialog opens, but click it
-          // explicitly — keystrokes go to whatever has keyboard focus.
-          const ep = await screenCenter("Enter a word or phrase:");
-          await dtool(`mouseto ${ep.nx} ${ep.ny}`);
-          await dtool("buttondown 1");
-          await dtool("buttonup 1");
-          await Bun.sleep(500);
-        } catch (e) {
-          console.log(`  WARN: entry click failed (${e}) — typing to focused widget`);
+        // Click the entry (it may not have keyboard focus), type, then READ
+        // the text back via AT-SPI — keystrokes can silently miss the dialog,
+        // and clicking Add with an empty entry does nothing (silent no-op).
+        const clickEntryAndType = async () => {
+          try {
+            const ep = await screenCenter("Enter a word or phrase:");
+            await dtool(`mouseto ${ep.nx} ${ep.ny}`);
+            await dtool("buttondown 1");
+            await dtool("buttonup 1");
+            await Bun.sleep(500);
+          } catch (e) {
+            console.log(`  WARN: entry click failed (${e}) — typing to focused widget`);
+          }
+          await dtool("type E2E");
+          await Bun.sleep(800);
+        };
+        await clickEntryAndType();
+        let entryText = await readEntry();
+        if (!entryText.includes("E2E")) {
+          console.log(`  entry text after first type: '${entryText}' — retrying with fresh click`);
+          await clickEntryAndType();
+          entryText = await readEntry();
         }
-        await dtool("type E2E");
-        await Bun.sleep(500);
-        const wa = await transport.exec(
-          `python3 - <<'ATSPIEOF'
+        console.log(`  entry text: '${entryText}'`);
+        if (entryText.includes("E2E")) {
+          await doAtspiAction(execLike, "Add", "click");
+          const wa = await transport.exec(
+            `python3 - <<'ATSPIEOF'
 ${ATSPI_PY}
 print("RESULT:" + str(verify_word_added("E2E") or ""))
 ATSPIEOF`, 60_000);
-        addWordRt = wa.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
+          addWordRt = wa.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
+        } else {
+          addWordRt = `entry-text='${entryText}' (keystrokes never reached the entry)`;
+        }
         console.log(`  add-word roundtrip: ${addWordRt}`);
         prefsRow("P02 add-word-structure", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
       } else {

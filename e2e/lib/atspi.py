@@ -228,3 +228,56 @@ def verify_word_added(word):
             return "ok"
         time.sleep(0.5)
     return "row-not-found"
+
+
+def read_add_word_entry():
+    """Read back the Add-Word dialog entry's text (Text GET works headless
+    even though SetTextContents is refused)."""
+    def fpred(n, r, node):
+        return n == "Add Custom Word" and r == "frame"
+    def fact(n, r, node):
+        return node
+    dlg = walk_tree(fpred, fact)
+    if not dlg:
+        return "no-dialog"
+
+    def fentry(node, depth=0):
+        if node is None or depth > 30:
+            return None
+        try:
+            if node.get_role_name() in ("text", "text entry") and node.get_state_set().contains(Atspi.StateType.SHOWING):
+                return node
+        except Exception:
+            return None
+        try:
+            n = node.get_child_count()
+        except Exception:
+            return None
+        for i in range(n):
+            found = fentry(node.get_child_at_index(i), depth + 1)
+            if found is not None:
+                return found
+        return None
+
+    entry = fentry(dlg)
+    if not entry:
+        return "no-entry"
+    try:
+        t = entry.query_text().get_text(0, -1)
+        return str(t)
+    except Exception as e:
+        return f"error:{e}"
+
+
+def node_showing(name):
+    """True if a node with this exact name is currently SHOWING (on screen)."""
+    def pred(n, r, node):
+        if n == name:
+            try:
+                return bool(node.get_state_set().contains(Atspi.StateType.SHOWING))
+            except Exception:
+                return False
+        return False
+    def act(n, r, node):
+        return "yes"
+    return "yes" if walk_tree(pred, act) else "no"
