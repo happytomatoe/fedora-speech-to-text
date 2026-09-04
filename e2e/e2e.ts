@@ -1062,7 +1062,10 @@ async function runBareMode(): Promise<void> {
   interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
   const results: BareResult[] = [];
   const normalize = (s: string) =>
-    s.trim().toLowerCase().replace(/\.+$/, "").replace(/(\d)\s+(am|pm)\b/g, "$1$2").replace(/\s+/g, " ");
+    s.trim().toLowerCase()
+      .replace(/\b(\d)\s*p\.m\.?\b/g, "$1pm").replace(/\b(\d)\s*a\.m\.?\b/g, "$1am")
+      .replace(/(\d)\s+(am|pm)\b/g, "$1$2")
+      .replace(/\.+$/, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ");
 
   const requireOk: Record<string, boolean> = {
     dotoolc: uinputOk,
@@ -1149,25 +1152,30 @@ async function runBareMode(): Promise<void> {
           // capture file absent
         }
         const errorLine = await logSince("ERROR|Traceback");
-        // Extension-mediated methods (mutter-commit/mutter-virtual) must
-        // prove execution via the capture file — the extension writes it in
-        // the headless CommitText/TypeText path. dotool 'type' injects via
-        // uinput with no observable capture; its execution is proven by the
-        // recording flow completing without error.
-        // Capture is provable only in the headless CI harness (no focused
-        // input, extension takes the fallback path). On a dev desktop the
-        // focused-input path commits for real and writes no capture file,
-        // so requiring it there would false-FAIL every mutter cell.
+        // Output-method evidence for mutter-commit/mutter-virtual, two paths:
+        // 1. capture file — the extension's headless no-focus fallback writes it;
+        // 2. tmux pane — with the ghostty terminal focused (ghostty+tmux
+        //    unification) the commit goes through the real IM path and no
+        //    capture file is written; the text visibly landing in the pane is
+        //    the stronger proof. dotool 'type' injects via uinput with no
+        //    observable capture; its execution is proven by the flow completing
+        //    without error.
         const captureRequired = process.env.VOX_CI_E2E_HEADLESS === "1" && method !== "type";
-        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || !captureRequired);
+        let paneHit = false;
+        if (!captureHit && captureRequired) {
+          const pane = await transport.exec(`tmux capture-pane -t ci-e2e -p 2>/dev/null || true`, 5_000)
+            .then(r => r.stdout).catch(() => "");
+          paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
+        }
+        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || paneHit || !captureRequired);
         console.log(`  expected: '${bareCase.expected}'`);
         console.log(`  typed:    '${typed}'`);
-        console.log(`  output method exercised (capture file written): ${captureHit}${captureRequired ? " (required)" : " (optional for dotool)"}`);
+        console.log(`  output method exercised: capture=${captureHit} pane=${paneHit}${captureRequired ? " (required)" : " (optional for dotool)"}`);
         if (errorLine) console.log(`  error in log: ${errorLine}`);
         console.log(passed ? "  PASS" : "  FAIL");
         results.push({
           file: bareCase.file, method, status: passed ? "pass" : "fail", typed,
-          note: !captureHit && captureRequired ? "output method did not run (no capture file write)" : errorLine || undefined,
+          note: !captureHit && !paneHit && captureRequired ? "output method did not run (no capture file or pane write)" : errorLine || undefined,
         });
 
         // Per-cell artifact dir: screenshot + log slices + recording window
