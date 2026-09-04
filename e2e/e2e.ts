@@ -1269,7 +1269,8 @@ ATSPIEOF`, 10_000).then(r => r.stdout.trim());
           const mx = (ext.x + ext.width / 2) / 1920, my = (ext.y + ext.height / 2) / 1080;
           const dtool = (script: string) => run(
             `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
-          await dtool(`mousemove ${mx} ${my}`);
+          // mouseto takes normalized 0..1 coords (mousemove takes absolute pixels)
+          await dtool(`mouseto ${mx} ${my}`);
           await dtool("wheel -50");
           await Bun.sleep(1000);
           await dtool("wheel -50");
