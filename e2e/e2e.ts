@@ -1028,6 +1028,15 @@ async function runBareMode(): Promise<void> {
     }
     return r.stdout;
   };
+  const runDebug = async (cmd: string, timeoutMs = 15_000) => {
+    const r = await transport.exec(cmd, timeoutMs);
+    console.error(`RUN: ${cmd}`);
+    console.error(`STDOUT: ${r.stdout}`);
+    console.error(`STDERR: ${r.stderr}`);
+    if (r.code !== 0) throw new Error(`command failed (${r.code}): ${cmd}
+${r.stderr}`);
+    return r.stdout;
+  };
   const gdbus = (method: string, argsJson = "") =>
     run(
       `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${argsJson}`,
@@ -1215,10 +1224,10 @@ async function runBareMode(): Promise<void> {
     try {
       await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
       await Bun.sleep(1000);
-      await run(`ls -l /usr/bin/gnome-extensions`, 10_000);
-      await run(`ldd /usr/bin/gnome-extensions`, 10_000);
-      await run(`/usr/bin/gnome-extensions`, 10_000);
-      const prefsResult = await run(`/usr/bin/gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
+      await runDebug(`ls -l /usr/bin/gnome-extensions`, 10_000);
+      await runDebug(`ldd /usr/bin/gnome-extensions`, 10_000);
+      await runDebug(`/usr/bin/gnome-extensions`, 10_000);
+      const prefsResult = await runDebug(`/usr/bin/gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
       if (prefsResult.code !== 0) {
         console.error(`gnome-extensions prefs failed (code ${prefsResult.code}): ${prefsResult.stderr}`);
       }
