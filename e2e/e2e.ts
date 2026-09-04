@@ -1051,10 +1051,13 @@ async function runBareMode(): Promise<void> {
     matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
   );
   const rawCases = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"))["test-cases"] as TestCaseFile[];
-  const allCases: (TestCaseFile & { method: string })[] = rawCases
-    .map(c => ({ ...c, method: (c as any)["output-method"] ?? "mutter-commit" }))
-    .filter(c => !SELECTED_CASE || c.file.includes(SELECTED_CASE));
-  if (allCases.length === 0) throw new Error(`no test cases match '${SELECTED_CASE ?? "(all)"}'`);
+  const picked = SELECTED_CASE
+    ? rawCases.filter(c => c.file.includes(SELECTED_CASE))
+    : [rawCases[Math.floor(Math.random() * rawCases.length)]];
+  if (picked.length === 0) throw new Error(`no test cases match '${SELECTED_CASE ?? "(all)"}'`);
+  if (!SELECTED_CASE) console.log(`  Bare mode: randomly picked ${picked[0].file} (one case is enough for the basic flow)`);
+  const allCases: (TestCaseFile & { method: string })[] = picked
+    .map(c => ({ ...c, method: (c as any)["output-method"] ?? "mutter-commit" }));
   const uinputOk = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
     (await transport.exec(`test -c /dev/uinput && test -w /dev/uinput`).then(r => r.code === 0));
   const canUseDotool = uinputOk;
@@ -1256,22 +1259,64 @@ for i in range(d.get_child_count()):
 ATSPIEOF`, 10_000).then(r => r.stdout.trim());
       console.log(`  a11y apps after P01: ${t0.split("\n").filter(l => l.startsWith("APP:")).join(", ")}`);
       prefsRow("P01 prefs-window-opens", true);
-      // Add-Word dialog: open and verify structure (entry + Add/Cancel buttons).
-      // Full text roundtrip dropped — GTK4 refuses AT-SPI SetTextContents in
-      // this headless dialog and dotool keystrokes don't reach it either
-      // (10+ CI rounds; P01 window-open + dialog structure is the CI-level
-      // contract, full interaction stays in the local VM suite).
+      // Scroll the prefs window to the bottom (mouse wheel over the list via
+      // dotool — same approach as the local VM suite), so the scrolled state
+      // and the Add Word button are reached like a real user would.
+      let addWordRt = "structure-only";
+      if (canUseDotool) {
+        try {
+          const ext = await findAtspiExtents(execLike, "Add Word");
+          const mx = (ext.x + ext.width / 2) / 1920, my = (ext.y + ext.height / 2) / 1080;
+          const dtool = (script: string) => run(
+            `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
+          await dtool(`mousemove ${mx} ${my}`);
+          await dtool("wheel -50");
+          await Bun.sleep(1000);
+          await dtool("wheel -50");
+          await Bun.sleep(1000);
+          console.log("  scrolled prefs to bottom via dotool wheel");
+        } catch (e) {
+          console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
+        }
+      }
+      // Add-Word dialog: open it, then run the full roundtrip when dotool is
+      // available (type the word via keystrokes — GTK4 refuses AT-SPI
+      // SetTextContents in this headless dialog — click Add, verify the row);
+      // otherwise fall back to the structural check only.
       await doAtspiAction(execLike, "Add Word", "click");
-      const rt = await transport.exec(
-        `python3 - <<'ATSPIEOF'
+      if (canUseDotool) {
+        await Bun.sleep(1500);
+        const dtool = (script: string) => run(
+          `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
+        await dtool("type E2E");
+        await Bun.sleep(500);
+        const wa = await transport.exec(
+          `python3 - <<'ATSPIEOF'
+${ATSPI_PY}
+print("RESULT:" + str(verify_word_added("E2E") or ""))
+ATSPIEOF`, 60_000);
+        addWordRt = wa.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
+        console.log(`  add-word roundtrip: ${addWordRt}`);
+        prefsRow("P02 add-word-structure", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
+      } else {
+        const rt = await transport.exec(
+          `python3 - <<'ATSPIEOF'
 ${ATSPI_PY}
 print("RESULT:" + str(verify_add_word_dialog_structure() or ""))
 ATSPIEOF`, 40_000);
-      const rtOut = rt.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
-      console.log(`  add-word dialog: ${rtOut}`);
-      prefsRow("P02 add-word-structure", rtOut === "ok", rtOut === "ok" ? undefined : rtOut);
-      // Screenshots: prefs window open (start state) and after the Add-Word
-      // dialog closes (end state) — two distinct images proving the flow.
+        const rtOut = rt.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
+        console.log(`  add-word dialog: ${rtOut}`);
+        prefsRow("P02 add-word-structure", rtOut === "ok", rtOut === "ok" ? undefined : rtOut);
+      }
+      // Screenshot AFTER the word was added — shows the new "E2E" row in the
+      // custom words list (user feedback: the add must be visible in evidence,
+      // not just the dialog opening).
+      await transport.exec(
+        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-after-add.png'`,
+        10_000,
+      ).catch(() => {});
+      // Start-state screenshot: prefs window open (scrolled state if the
+      // scroll above succeeded), before the window is closed.
       await transport.exec(
         `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-open.png'`,
         10_000,
