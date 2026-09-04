@@ -1421,33 +1421,27 @@ ATSPIEOF`;
         console.log(`  add-word roundtrip: ${addWordRt}`);
         prefsRow("add-word roundtrip (type, click Add, row appears)", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
         // Screenshot AFTER the word was added — must VISUALLY show the new
-        // "E2E" row (user feedback: the add must be visible in evidence, not
-        // just pass an AT-SPI check). The row lives in the Custom Words list
-        // at the bottom of the prefs window, so Tab-focus the list rows until
-        // GTK auto-scrolls them into view, then shoot (replaces the previous
-        // prefs-after-add shot that was byte-identical to prefs-open).
-        {
-          let sawWordsRow = false;
-          try {
-            for (let i = 0; i < 25 && !sawWordsRow; i++) {
+        // "E2E" row AND the bottom of the prefs window (user feedback: the
+        // add must be visible in evidence). Preferred: AT-SPI
+        // Component.scroll_to("Open Editor", BOTTOM_RIGHT) — the native
+        // accessibility scroll API, scrolls the last widget into view in one
+        // call. Fallback: Tab-focus walk (GTK auto-scrolls focused widgets).
+        try {
+          const st = await transport.exec(
+            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(scroll_to("Open Editor")))\nATSPIEOF`, 20_000)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
+          console.log(`  atspi scroll_to: ${st}`);
+          if (st !== "yes") {
+            for (let i = 0; i < 25 && st !== "yes"; i++) {
               await typeTextDbus("TypeKey", "0xff09"); // Tab
               await Bun.sleep(400);
-              const focused = await transport.exec(
-                `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
-                .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
-              console.log(`  scroll-to-words tab ${i + 1}: focus='${focused}'`);
-              // "Open Editor" is the last widget in the window — focusing it
-              // proves the shot covers the true bottom. Fall back to the
-              // words row if focus tracking misses it.
-              if (focused.includes("Open Editor")) sawWordsRow = true;
-              if (i === 24 && (focused.includes("E2E") || focused.includes("Add Word"))) sawWordsRow = true;
             }
-          } catch (e) {
-            console.log(`  WARN: scroll-to-words failed (${e})`);
           }
-          await Bun.sleep(500);
-          await shot2("prefs-after-add");
+        } catch (e) {
+          console.log(`  WARN: scroll-to-bottom failed (${e})`);
         }
+        await Bun.sleep(500);
+        await shot2("prefs-after-add");
       }
       // Close: prefs window has no guaranteed a11y close action — the Adw
       // window lives in the org.gnome.Shell.Extensions process; kill it and

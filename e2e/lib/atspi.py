@@ -308,3 +308,27 @@ def focused_node_name():
     def act(n, r, node):
         return n
     return walk_tree(pred, act) or ""
+
+
+def scroll_to(name, position="BOTTOM_RIGHT"):
+    """Scroll the first node with this name into view via AT-SPI Component.scroll_to.
+
+    Returns "yes" if the API call reported success, "no-api" if the Component
+    interface / scroll_to is unavailable, "no" if the node wasn't found or the
+    call failed.
+    """
+    stype = getattr(Atspi.ScrollType, position, None)
+    if stype is None:
+        return "no-api"
+
+    def pred(n, r, node):
+        return n == name
+
+    def act(n, r, node):
+        try:
+            comp = Atspi.Component
+            return "yes" if comp.scroll_to(node, stype) else "no"
+        except Exception:
+            return "no-api"
+
+    return walk_tree(pred, act) or "no"
