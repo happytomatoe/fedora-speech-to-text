@@ -9,6 +9,7 @@ from .groq import GroqProvider
 from .moonshine import MoonshineProvider
 from .parakeet import ParakeetProvider
 from .sixty import SixtyProvider
+from .template import TemplateProvider
 from .voxtral import VoxtralProvider
 
 _BATCH_PROVIDERS = {
@@ -19,6 +20,7 @@ _BATCH_PROVIDERS = {
     "60db": SixtyProvider,
     "elevenlabs": ElevenLabsProvider,
     "moonshine": MoonshineProvider,
+    "template": TemplateProvider,
 }
 
 _STREAMING_PROVIDERS = {
