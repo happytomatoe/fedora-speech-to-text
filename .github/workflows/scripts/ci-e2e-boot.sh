@@ -134,6 +134,13 @@ const Iface = `
     <method name="TypeKey">
       <arg type="s" name="key" direction="in"/>
     </method>
+    <method name="Click">
+      <arg type="d" name="x" direction="in"/>
+      <arg type="d" name="y" direction="in"/>
+    </method>
+    <method name="Wheel">
+      <arg type="i" name="ticks" direction="in"/>
+    </method>
   </interface>
 </node>`;
 
@@ -144,8 +151,11 @@ export default class E2EInput {
             this._kbd = seat.create_virtual_device(
                 Clutter.InputDeviceType.KEYBOARD_DEVICE
             );
+            this._ptr = seat.create_virtual_device(
+                Clutter.InputDeviceType.POINTER_DEVICE
+            );
         } catch (e) {
-            console.error('E2EInput: virtual keyboard failed:', e);
+            console.error('E2EInput: virtual devices failed:', e);
             return;
         }
         this._ownerId = Gio.bus_own_name(
@@ -167,6 +177,27 @@ export default class E2EInput {
             this._ownerId = null;
         }
         this._kbd = null;
+        this._ptr = null;
+    }
+
+    Click(x, y) {
+        if (!this._ptr) return;
+        let t = Clutter.get_current_event_time() * 1000;
+        this._ptr.notify_absolute_motion(t++, x, y);
+        this._ptr.notify_button(t++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
+        this._ptr.notify_button(t++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
+    }
+
+    Wheel(ticks) {
+        if (!this._ptr) return;
+        const dir = ticks < 0 ? Clutter.ScrollDirection.UP : Clutter.ScrollDirection.DOWN;
+        for (let i = 0; i < Math.abs(ticks); i++) {
+            this._ptr.notify_discrete_scroll(
+                Clutter.get_current_event_time() * 1000,
+                dir,
+                Clutter.ScrollSource.WHEEL
+            );
+        }
     }
 
     _key(keyval) {

@@ -1320,6 +1320,12 @@ ATSPIEOF`;
       const typeTextDbus = (method: string, arg: string) => run(
         `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.${method} "'${arg.replace(/'/g, "'\\''")}'"`,
         10_000);
+      const clickDbus = (nx: number, ny: number) => run(
+        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Click ${Math.round(nx * CI_WIDTH)} ${Math.round(ny * CI_HEIGHT)}`,
+        10_000);
+      const wheelDbus = (ticks: number) => run(
+        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Wheel ${ticks}`,
+        10_000);
       if (canUseDotool) {
         const atspiPy = (body: string, timeout = 30_000) =>
           transport.exec(`python3 - <<'ATSPIEOF'\n${ATSPI_PY}\n${body}\nATSPIEOF`, timeout)
@@ -1346,21 +1352,12 @@ ATSPIEOF`;
         };
         try {
           await shot("prefs-scroll-before");
-          // TypeKey = compositor-level virtual keyboard (e2e-input@local helper
-          // extension); uinput/dotool never reaches GTK windows in the nested
-          // headless shell. Blind Page_Down doesn't scroll (focus may sit on a
-          // non-scrollable widget — run 33906165538 landed on the Stop Timeout
-          // spinbutton). Tab through and watch AT-SPI until the Add Word row
-          // has focus — GTK then auto-scrolls the list to keep it visible.
-          for (let i = 0; i < 20; i++) {
-            await typeTextDbus("TypeKey", "0xff09"); // Tab
-            await Bun.sleep(400);
-            const focused = await transport.exec(
-              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
-              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
-            console.log(`  tab ${i + 1}: focus='${focused}'`);
-            if (focused.includes("Add Word")) break;
-          }
+          // Pointer wheel scroll via the helper extension's virtual pointer —
+          // same mechanism as the after-add scroll below.
+          const pw = await screenCenter("Voice to Text");
+          await clickDbus(pw.nx, pw.ny + 0.2);
+          await Bun.sleep(400);
+          await wheelDbus(8);
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
           const psnr = await pxChanged("prefs-scroll-before", "prefs-scroll-after");
@@ -1427,27 +1424,15 @@ ATSPIEOF`;
         // accessibility scroll API, scrolls the last widget into view in one
         // call. Fallback: Tab-focus walk (GTK auto-scrolls focused widgets).
         try {
-          const st = await transport.exec(
-            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(scroll_to("Open Editor")))\nATSPIEOF`, 20_000)
-            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
-          console.log(`  atspi scroll_to: ${st}`);
-          if (st !== "yes") {
-            // GTK4's AT-SPI backend doesn't implement Component.scroll_to
-            // (run 33910909267: no-api). Tab-walk instead, breaking when the
-            // last widget ("Open Editor") gets focus — GTK auto-scrolls it
-            // into view. Cap at 25 tabs (focus cycle length) to avoid
-            // wrapping back to the top like run 33910909267 did.
-            let reachedBottom = false;
-            for (let i = 0; i < 25 && !reachedBottom; i++) {
-              await typeTextDbus("TypeKey", "0xff09"); // Tab
-              await Bun.sleep(400);
-              const focused = await transport.exec(
-                `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
-                .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
-              console.log(`  scroll-to-bottom tab ${i + 1}: focus='${focused}'`);
-              if (focused.includes("Open Editor") || focused.includes("E2E") || focused.includes("Add Word")) reachedBottom = true;
-            }
-          }
+          // Pointer scroll via the helper extension's virtual pointer:
+          // click into the prefs list (focuses the viewport), then wheel
+          // down. Deterministic — Tab walks never moved GTK focus here
+          // (run 33910157059: focus stuck on 'Main stage' for 25 tabs).
+          const pw = await screenCenter("Voice to Text");
+          await clickDbus(pw.nx, pw.ny + 0.2);
+          await Bun.sleep(400);
+          await wheelDbus(15);
+          await Bun.sleep(600);
         } catch (e) {
           console.log(`  WARN: scroll-to-bottom failed (${e})`);
         }
