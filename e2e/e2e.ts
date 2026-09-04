@@ -1215,6 +1215,7 @@ async function runBareMode(): Promise<void> {
     try {
       await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
       await Bun.sleep(1000);
+      await run(`ls -l /usr/bin/gnome-extensions`, 10_000);
       await run(`/usr/bin/gnome-extensions list`, 10_000);
       const prefsResult = await run(`/usr/bin/gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
       if (prefsResult.code !== 0) {
