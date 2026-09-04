@@ -263,7 +263,12 @@ def read_add_word_entry():
     if not entry:
         return "no-entry"
     try:
-        return str(entry.query_text().get_text(0, entry.query_text().get_character_count()))
+        try:
+            ti = entry.query_text()
+            return str(ti.get_text(0, ti.get_character_count()))
+        except AttributeError:
+            # Newer pygobject merges the Text interface into Accessible
+            return str(entry.get_text(0, entry.get_character_count()))
     except Exception as e:
         return f"error:{e}"
 
