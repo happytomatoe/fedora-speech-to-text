@@ -1429,14 +1429,18 @@ ATSPIEOF`;
         {
           let sawWordsRow = false;
           try {
-            for (let i = 0; i < 20 && !sawWordsRow; i++) {
+            for (let i = 0; i < 25 && !sawWordsRow; i++) {
               await typeTextDbus("TypeKey", "0xff09"); // Tab
               await Bun.sleep(400);
               const focused = await transport.exec(
                 `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
                 .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
               console.log(`  scroll-to-words tab ${i + 1}: focus='${focused}'`);
-              if (focused.includes("E2E") || focused.includes("Add Word")) sawWordsRow = true;
+              // "Open Editor" is the last widget in the window — focusing it
+              // proves the shot covers the true bottom. Fall back to the
+              // words row if focus tracking misses it.
+              if (focused.includes("Open Editor")) sawWordsRow = true;
+              if (i === 24 && (focused.includes("E2E") || focused.includes("Add Word"))) sawWordsRow = true;
             }
           } catch (e) {
             console.log(`  WARN: scroll-to-words failed (${e})`);
