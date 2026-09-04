@@ -1100,6 +1100,17 @@ async function runBareMode(): Promise<void> {
         );
         console.log("  recording started; polling for transcription...");
 
+        // During-recording screenshot: recording widget/badge visible on
+        // the desktop while capture is active.
+        const shotDuring = process.env.VOX_CI_E2E_SHOT_DURING;
+        if (shotDuring) {
+          await Bun.sleep(1500);
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${shotDuring}'`,
+            10_000,
+          ).catch(() => console.log("  WARN: during-screenshot failed"));
+        }
+
         // Capture file mtime at cell start — the fallback below must only
         // trust it if the extension wrote it DURING this cell (a stale file
         // from the previous cell caused test-05 to see test-04's text).
@@ -1251,14 +1262,19 @@ ATSPIEOF`, 40_000);
       const rtOut = rt.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
       console.log(`  add-word dialog: ${rtOut}`);
       prefsRow("P02 add-word-structure", rtOut === "ok", rtOut === "ok" ? undefined : rtOut);
-      // Screenshot for artifact/debug (presence only, no pixel compare)
+      // Screenshots: prefs window open (start state) and after the Add-Word
+      // dialog closes (end state) — two distinct images proving the flow.
       await transport.exec(
-        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-bare.png'`,
+        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-open.png'`,
         10_000,
       ).catch(() => {});
       // Close: prefs window has no guaranteed a11y close action — the Adw
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
+      await transport.exec(
+        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
+        10_000,
+      ).catch(() => {});
       await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
       await Bun.sleep(2000);
       const gone = await transport.exec(
