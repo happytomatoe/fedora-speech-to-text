@@ -65,6 +65,17 @@ function writeConfigYaml(config) {
     const yamlStr = yamlDump(config);
     const encoder = new TextEncoder();
     const bytes = encoder.encode(yamlStr);
+    // REPLACE_DESTINATION recreates the file with default (world-readable)
+    // perms — config can hold API keys, so preserve the existing mode (or
+    // default to 0600 for a fresh file) after the replace.
+    let mode = 0o600;
+    try {
+        const info = file.query_info(Gio.FILE_ATTRIBUTE_UNIX_MODE, Gio.FileQueryInfoFlags.NONE, null);
+        const m = info.get_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE);
+        if (m) mode = m;
+    } catch (e) {
+        // File doesn't exist yet — keep the 0600 default.
+    }
     const [ok] = file.replace_contents(
         bytes,
         null,
@@ -74,6 +85,12 @@ function writeConfigYaml(config) {
     );
     if (!ok) {
         console.error('VoiceToText: failed to write config.yaml');
+        return;
+    }
+    try {
+        file.set_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE, mode, Gio.FileQueryInfoFlags.NONE, null);
+    } catch (e) {
+        console.error('VoiceToText: failed to restore config.yaml mode:', e.message);
     }
 }
 
