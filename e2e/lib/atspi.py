@@ -263,8 +263,7 @@ def read_add_word_entry():
     if not entry:
         return "no-entry"
     try:
-        t = entry.query_text().get_text(0, -1)
-        return str(t)
+        return str(entry.query_text().get_text(0, entry.query_text().get_character_count()))
     except Exception as e:
         return f"error:{e}"
 
