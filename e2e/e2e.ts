@@ -1320,12 +1320,16 @@ ATSPIEOF`;
       const typeTextDbus = (method: string, arg: string) => run(
         `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.${method} "'${arg.replace(/'/g, "'\\''")}'"`,
         10_000);
-      const clickDbus = (nx: number, ny: number) => run(
-        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Click ${Math.round(nx * CI_WIDTH)} ${Math.round(ny * CI_HEIGHT)}`,
-        10_000);
-      const wheelDbus = (ticks: number) => run(
-        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.Wheel ${ticks}`,
-        10_000);
+      // RemoteDesktop variant: inject pointer events through mutter's own
+      // org.gnome.Mutter.RemoteDesktop API (same mechanism GNOME's GTK test
+      // suite uses for headless mutter input tests). Session Notify* calls
+      // must come from the creating peer, so remote_input.py owns the whole
+      // RD+ScreenCast session lifecycle per invocation.
+      const remoteInput = (args: string) => run(
+        `python3 remote_input.py ${args}`, 15_000);
+      const clickDbus = (nx: number, ny: number) => remoteInput(
+        `click ${Math.round(nx * CI_WIDTH)} ${Math.round(ny * CI_HEIGHT)}`);
+      const wheelDbus = (ticks: number) => remoteInput(`wheel ${ticks}`);
       if (canUseDotool) {
         const atspiPy = (body: string, timeout = 30_000) =>
           transport.exec(`python3 - <<'ATSPIEOF'\n${ATSPI_PY}\n${body}\nATSPIEOF`, timeout)
