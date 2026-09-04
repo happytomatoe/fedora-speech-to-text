@@ -6,7 +6,6 @@ import {
 import {VoiceIndicator} from './indicator.js';
 import {registerHotkey, unregisterHotkey} from './hotkey.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {ExtensionState} from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
 import {TypeTextService} from './type-text-service.js';
@@ -450,15 +449,10 @@ export default class VoiceToTextExtension extends Extension {
         // (D-Bus-activated child has no display).
         try {
             // @ts-expect-error
-            const ext = Main.extensionManager.lookup(this.uuid); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
-            // @ts-expect-error
-            if (ext && ext.state === ExtensionState.ACTIVE) {
-                // @ts-expect-error
-                ext.openPreferences();
-                return;
-            }
+            Main.extensionManager.openExtensionPrefs(this.uuid, '', {}); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+            return;
         } catch (e) {
-            console.error('VoiceToText: openPreferences failed:', e);
+            console.error('VoiceToText: openExtensionPrefs failed:', e);
         }
         try {
             const launcher = new Gio.SubprocessLauncher();
