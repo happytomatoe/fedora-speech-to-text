@@ -1211,7 +1211,10 @@ async function runBareMode(): Promise<void> {
     try {
       await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
       await Bun.sleep(1000);
-      await run(`gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
+      const prefsResult = await run(`gnome-extensions prefs voice-to-text@happytomatoe.com`, 10_000);
+      if (prefsResult.code !== 0) {
+        console.error(`gnome-extensions prefs failed (code ${prefsResult.code}): ${prefsResult.stderr}`);
+      }
       await Bun.sleep(500);
       const execLike = { exec: (cmd: string, opts?: Record<string, unknown>) => transport.exec(cmd, (opts?.timeout as number) ?? 15_000) };
       await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame", timeoutMs: 20000 });
