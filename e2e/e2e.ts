@@ -1219,7 +1219,7 @@ async function runBareMode(): Promise<void> {
       // gnome-extensions CLI exits 2 with swallowed stderr under this harness
       // (bare invocation = its normal usage error, so probes were useless).
       // OpenExtensionPrefs signature: (s uuid, a{sv} options).
-      await run(`gdbus call --session --dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions --method org.gnome.Shell.Extensions.OpenExtensionPrefs "voice-to-text@happytomatoe.com" "[]" 2>&1`, 15_000);
+      await run(`gdbus call --session --dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions --method org.gnome.Shell.Extensions.OpenExtensionPrefs "voice-to-text@happytomatoe.com" "@a{sv} {}" 2>&1`, 15_000);
       const execLike = { exec: (cmd: string, opts?: Record<string, unknown>) => transport.exec(cmd, (opts?.timeout as number) ?? 15_000) };
       await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame", timeoutMs: 20000 });
       const t0 = await transport.exec(
