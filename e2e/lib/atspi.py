@@ -296,3 +296,15 @@ def node_name_present(name):
     def act(n, r, node):
         return "yes"
     return "yes" if walk_tree(pred, act) else "no"
+
+
+def focused_node_name():
+    """Name of the node with STATE_FOCUSED, or '' if none."""
+    def pred(n, r, node):
+        try:
+            return bool(node.get_state_set().contains(Atspi.StateType.FOCUSED))
+        except Exception:
+            return False
+    def act(n, r, node):
+        return n
+    return walk_tree(pred, act) or ""

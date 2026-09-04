@@ -1346,15 +1346,18 @@ ATSPIEOF`;
           await shot("prefs-scroll-before");
           // TypeKey = compositor-level virtual keyboard (e2e-input@local helper
           // extension); uinput/dotool never reaches GTK windows in the nested
-          // headless shell. The scrolled list needs keyboard focus first —
-          // Tab moves focus into the prefs content, then Page_Down scrolls.
-          await typeTextDbus("TypeKey", "0xff09"); // Tab
-          await Bun.sleep(300);
-          await typeTextDbus("TypeKey", "0xff09"); // Tab
-          await Bun.sleep(300);
-          for (let i = 0; i < 6; i++) {
-            await typeTextDbus("TypeKey", "0xff56"); // Page_Down
+          // headless shell. Blind Page_Down doesn't scroll (focus may sit on a
+          // non-scrollable widget — run 33906165538 landed on the Stop Timeout
+          // spinbutton). Tab through and watch AT-SPI until a Custom Words row
+          // has focus — GTK then auto-scrolls the list to keep it visible.
+          for (let i = 0; i < 15; i++) {
+            await typeTextDbus("TypeKey", "0xff09"); // Tab
             await Bun.sleep(400);
+            const focused = await transport.exec(
+              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + focused_node_name())\nATSPIEOF`, 15_000)
+              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "");
+            console.log(`  tab ${i + 1}: focus='${focused}'`);
+            if (focused.includes("Add Word")) break;
           }
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
