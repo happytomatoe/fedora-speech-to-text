@@ -105,8 +105,98 @@ export default class PocScreenshot {
     }
 }
 JEOF
-gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID', '$SHOT_UUID']"
-echo "extensions deployed: $EXT_UUID + $SHOT_UUID"
+gsettings set org.gnome.shell enabled-extensions "['$EXT_UUID', '$SHOT_UUID', '$INPUT_UUID']"
+echo "extensions deployed: $EXT_UUID + $SHOT_UUID + $INPUT_UUID"
+
+# Input injector: test-only second extension exposes TypeText/TypeKey over
+# D-Bus using the compositor's own Clutter virtual keyboard — uinput (dotool)
+# events never reach GTK windows in the nested headless shell, but virtual-
+# keyboard events do. Keeps test scaffolding out of the real extension.
+INPUT_UUID="e2e-input@local"
+INPUT_DIR="$HOME/.local/share/gnome-shell/extensions/$INPUT_UUID"
+mkdir -p "$INPUT_DIR"
+cat > "$INPUT_DIR/metadata.json" <<MEOF
+{
+  "uuid": "e2e-input@local",
+  "name": "E2E Input Injector",
+  "description": "Test-only: virtual keyboard injection over D-Bus",
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
+}
+MEOF
+cat > "$INPUT_DIR/extension.js" <<JEOF
+import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+
+const Iface = `
+<node>
+  <interface name="com.happytomatoe.E2EInput">
+    <method name="TypeText">
+      <arg type="s" name="text" direction="in"/>
+    </method>
+    <method name="TypeKey">
+      <arg type="s" name="key" direction="in"/>
+    </method>
+  </interface>
+</node>`;
+
+export default class E2EInput {
+    enable() {
+        try {
+            const seat = Clutter.get_default_backend().get_default_seat();
+            this._kbd = seat.create_virtual_device(
+                Clutter.InputDeviceType.KEYBOARD_DEVICE
+            );
+        } catch (e) {
+            console.error('E2EInput: virtual keyboard failed:', e);
+            return;
+        }
+        this._ownerId = Gio.bus_own_name(
+            Gio.BusType.SESSION,
+            'com.happytomatoe.E2EInput',
+            Gio.BusNameOwnerFlags.NONE,
+            (connection) => {
+                this._impl = Gio.DBusExportedObject.wrapJSObject(Iface, this);
+                this._impl.export(connection, '/com/happytomatoe/E2EInput');
+            },
+            null,
+            null
+        );
+    }
+
+    disable() {
+        if (this._ownerId !== null) {
+            Gio.bus_unown_name(this._ownerId);
+            this._ownerId = null;
+        }
+        this._kbd = null;
+    }
+
+    _key(keyval) {
+        const t = Clutter.get_current_event_time() * 1000;
+        this._kbd.notify_keyval(t++, keyval, Clutter.KeyState.PRESSED);
+        this._kbd.notify_keyval(t++, keyval, Clutter.KeyState.RELEASED);
+    }
+
+    TypeText(text) {
+        if (!this._kbd) return;
+        for (const ch of text) {
+            const kv = Clutter.unicode_to_keysym(ch.codePointAt(0));
+            if (kv !== 0) this._key(kv);
+        }
+    }
+
+    TypeKey(key) {
+        if (!this._kbd) return;
+        const kv = Clutter.keyval_from_name(key);
+        if (!kv) {
+            console.error(`E2EInput: unknown keysym '${key}'`);
+            return;
+        }
+        this._key(kv);
+    }
+}
+JEOF
 
 # --- Service config ----------------------------------------------------------
 mkdir -p "$HOME/.config/voice-to-text"

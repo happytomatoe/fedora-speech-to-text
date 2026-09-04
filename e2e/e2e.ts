@@ -1310,6 +1310,14 @@ ATSPIEOF`;
         if ([x, y, w, h].some(v => Number.isNaN(v))) throw new Error(`no SCREEN extents for '${name}': '${res}'`);
         return { nx: (x + w / 2) / CI_WIDTH, ny: (y + h / 2) / CI_HEIGHT };
       };
+      // Synthetic input into GTK windows: dotool/uinput events never reach
+      // the nested headless shell (runs 33880610703/33903070893: pixel-
+      // identical screenshots, empty entry). The test-only e2e-input@local
+      // helper extension injects through the compositor's own Clutter virtual
+      // keyboard instead — test scaffolding stays out of the product extension.
+      const typeTextDbus = (method: string, arg: string) => run(
+        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.${method} "'${arg.replace(/'/g, "'\\''")}'"`,
+        10_000);
       if (canUseDotool) {
         const atspiPy = (body: string, timeout = 30_000) =>
           transport.exec(`python3 - <<'ATSPIEOF'\n${ATSPI_PY}\n${body}\nATSPIEOF`, timeout)
@@ -1335,62 +1343,46 @@ ATSPIEOF`;
           return out;
         };
         try {
-          const p = await screenCenter("Voice to Text");
           await shot("prefs-scroll-before");
-          await dtool(`mouseto ${p.nx} ${p.ny}`);
-          for (let i = 0; i < 10; i++) {
-            await dtool("wheel -10");
-            await Bun.sleep(300);
+          // TypeKey = compositor-level virtual keyboard (e2e-input@local helper
+          // extension); uinput/dotool never reaches GTK windows in the nested
+          // headless shell.
+          for (let i = 0; i < 6; i++) {
+            await typeTextDbus("TypeKey", "Page_Down");
+            await Bun.sleep(400);
           }
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
           const psnr = await pxChanged("prefs-scroll-before", "prefs-scroll-after");
           const scrolled = psnr !== "inf" && psnr !== "err" && parseFloat(psnr) < 30;
           console.log(`  prefs scroll: ${scrolled ? "scrolled ✅" : "NOT scrolled ❌"}`);
-          if (!scrolled) {
-            console.log("  retrying scroll with Page_Down over the list...");
-            await dtool("key Page_Down");
-            await Bun.sleep(800);
-            await shot("prefs-scroll-after2");
-            await pxChanged("prefs-scroll-before", "prefs-scroll-after2");
-          }
         } catch (e) {
           console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
         }
       }
-      // Add-Word dialog: open it, then run the full roundtrip when dotool is
-      // available (type the word via keystrokes — GTK4 refuses AT-SPI
-      // SetTextContents in this headless dialog — click Add, verify the row);
-      // otherwise fall back to the structural check only.
+      // Add-Word dialog: open it, then run the full roundtrip — type via the
+      // helper extension's virtual keyboard (GTK4 refuses AT-SPI
+      // SetTextContents, and uinput doesn't reach GTK here), click Add via
+      // AT-SPI, verify the row appears.
       await doAtspiAction(execLike, "Add Word", "click");
-      if (canUseDotool) {
+      {
         const readEntry = () =>
           transport.exec(
             `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(read_add_word_entry() or ""))\nATSPIEOF`, 30_000)
             .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
         await Bun.sleep(1500);
-        // Click the entry (it may not have keyboard focus), type, then READ
-        // the text back via AT-SPI — keystrokes can silently miss the dialog,
-        // and clicking Add with an empty entry does nothing (silent no-op).
-        const clickEntryAndType = async () => {
-          try {
-            const ep = await screenCenter("Enter a word or phrase:");
-            await dtool(`mouseto ${ep.nx} ${ep.ny}`);
-            await dtool("buttondown 1");
-            await dtool("buttonup 1");
-            await Bun.sleep(500);
-          } catch (e) {
-            console.log(`  WARN: entry click failed (${e}) — typing to focused widget`);
-          }
-          await dtool("type E2E");
+        // The entry gets default focus when the dialog opens. Type, then READ
+        // the text back via AT-SPI — input can silently miss, and clicking Add
+        // with an empty entry is a silent no-op.
+        const typeAndRead = async () => {
+          await typeTextDbus("TypeText", "E2E");
           await Bun.sleep(800);
+          return readEntry();
         };
-        await clickEntryAndType();
-        let entryText = await readEntry();
+        let entryText = await typeAndRead();
         if (!entryText.includes("E2E")) {
-          console.log(`  entry text after first type: '${entryText}' — retrying with fresh click`);
-          await clickEntryAndType();
-          entryText = await readEntry();
+          console.log(`  entry text after first type: '${entryText}' — retrying`);
+          entryText = await typeAndRead();
         }
         console.log(`  entry text: '${entryText}'`);
         if (entryText.includes("E2E")) {
@@ -1406,15 +1398,6 @@ ATSPIEOF`, 60_000);
         }
         console.log(`  add-word roundtrip: ${addWordRt}`);
         prefsRow("P02 add-word-structure", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
-      } else {
-        const rt = await transport.exec(
-          `python3 - <<'ATSPIEOF'
-${ATSPI_PY}
-print("RESULT:" + str(verify_add_word_dialog_structure() or ""))
-ATSPIEOF`, 40_000);
-        const rtOut = rt.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result";
-        console.log(`  add-word dialog: ${rtOut}`);
-        prefsRow("P02 add-word-structure", rtOut === "ok", rtOut === "ok" ? undefined : rtOut);
       }
       // Screenshot AFTER the word was added — shows the new "E2E" row in the
       // custom words list (user feedback: the add must be visible in evidence,
