@@ -68,6 +68,7 @@ export class VmManager {
       extensionUuid: config.extensionUuid,
       testAudioFile: config.testAudioFile,
       outputMethod: config.outputMethod,
+      configFixture: config.configFixture,
     };
   }
 
