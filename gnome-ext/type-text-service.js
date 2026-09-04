@@ -12,6 +12,9 @@ const TypeTextIface = `
     <method name="CommitText">
       <arg type="s" name="text" direction="in"/>
     </method>
+    <method name="TypeKey">
+      <arg type="s" name="key" direction="in"/>
+    </method>
   </interface>
 </node>`;
 
@@ -145,6 +148,32 @@ export class TypeTextService {
         if (e2eCapture) {
             GLib.file_set_contents(e2eCapture, text);
             console.info('VoiceToText: CI E2E captured typed text');
+        }
+    }
+
+    TypeKey(key) {
+        if (!this._virtualKeyboard) {
+            return;
+        }
+        try {
+            const keyval = Clutter.keyval_from_name(key);
+            if (!keyval) {
+                console.error(`VoiceToText: TypeKey: unknown keysym '${key}'`);
+                return;
+            }
+            let time = Clutter.get_current_event_time() * 1000;
+            this._virtualKeyboard.notify_keyval(
+                time++,
+                keyval,
+                Clutter.KeyState.PRESSED
+            );
+            this._virtualKeyboard.notify_keyval(
+                time++,
+                keyval,
+                Clutter.KeyState.RELEASED
+            );
+        } catch (e) {
+            console.error('VoiceToText: TypeKey failed:', e);
         }
     }
 
