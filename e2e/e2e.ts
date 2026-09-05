@@ -1440,7 +1440,14 @@ ATSPIEOF`;
         // with an empty entry is a silent no-op.
         const typeAndRead = async () => {
           await typeTextDbus("TypeText", "E2E");
-          await Bun.sleep(800);
+          // Keystrokes land asynchronously over D-Bus — poll the AT-SPI
+          // read-back instead of a fixed settle sleep.
+          await pollUntil(
+            "entry contains typed text",
+            async () => (await readEntry()).includes("E2E"),
+            3_000,
+            100,
+          );
           return readEntry();
         };
         let entryText = await typeAndRead();
