@@ -109,6 +109,73 @@ def _last_headers(httpserver) -> dict[str, str]:
     return dict(httpserver.log[-1][0].headers)
 
 
+class TestVariables:
+    def test_custom_variable_renders_in_form(self):
+        provider = TemplateProvider(
+            {
+                "endpoint": "http://stub",
+                "variables": {"MODEL": "whisper-1", "BEAM": 4},
+                "form": {"model": "{{ MODEL }}", "beam_size": "{{ BEAM }}"},
+            }
+        )
+        rendered = provider.render("en", [])
+        fields = dict(rendered["fields"])
+        assert fields["model"] == "whisper-1"
+        assert fields["beam_size"] == "4"
+
+    def test_custom_variable_renders_in_header(self):
+        provider = TemplateProvider(
+            {
+                "endpoint": "http://stub",
+                "api_key": "sk-secret",
+                "variables": {"REGION": "eu"},
+                "headers": {"X-Region": "{{ REGION }}"},
+                "form": {"model": "m"},
+            }
+        )
+        rendered = provider.render()
+        assert rendered["headers"]["X-Region"] == "eu"
+
+    def test_reserved_variable_name_raises(self):
+        with pytest.raises(ValueError, match="conflicts with a built-in"):
+            TemplateProvider(
+                {
+                    "endpoint": "http://stub",
+                    "variables": {"API_KEY": "evil"},
+                    "form": {"model": "m"},
+                }
+            )
+
+    def test_non_scalar_variable_raises(self):
+        with pytest.raises(ValueError, match="scalar"):
+            TemplateProvider(
+                {
+                    "endpoint": "http://stub",
+                    "variables": {"HOST": ["a", "b"]},
+                    "form": {"model": "m"},
+                }
+            )
+
+    @pytest.mark.asyncio
+    async def test_variables_on_wire(self, httpserver, tmp_path):
+        """Variables defined in config must arrive rendered in the multipart body."""
+        httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json(
+            {"text": "ok"}
+        )
+        provider = TemplateProvider(
+            {
+                "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
+                "variables": {"MODEL": "whisper-1", "BEAM": 4},
+                "form": {"model": "{{ MODEL }}", "beam_size": "{{ BEAM }}"},
+            }
+        )
+        result = await provider.transcribe_file(_make_wav(tmp_path), "en", [])
+        assert result == "ok"
+        form = _last_form(httpserver)
+        assert form["model"] == "whisper-1"
+        assert form["beam_size"] == "4"
+
+
 class TestTranscribeFile:
     @pytest.mark.asyncio
     async def test_happy_path_multipart(self, httpserver, tmp_path):

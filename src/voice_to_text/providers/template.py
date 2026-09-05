@@ -118,6 +118,7 @@ class TemplateProvider(BatchProvider):
     def render(self, language: str = "en", custom_words: list[str] | None = None) -> dict[str, Any]:
         """Render the blueprint. Side-effect free; shared by transcribe_file and provider-test."""
         ctx = {
+            **self._variables,
             "API_KEY": self.api_key,
             "LANGUAGE": language,
             "CUSTOM_WORDS": list(custom_words or []),
