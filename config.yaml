@@ -59,7 +59,8 @@ moonshine:
 # crispasr:
 #   type: template
 #   endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
-#   model: whisper-1
+#   variables:
+#     MODEL: whisper-1
 #   headers:
 #     Authorization: "Bearer {{ API_KEY }}"   # omitted when no api_key is set
 #   form:
