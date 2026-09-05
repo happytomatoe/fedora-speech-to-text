@@ -57,7 +57,11 @@ MOONSHINE_VOICE_CACHE="$HOME/moonshine-model"
 export MOONSHINE_VOICE_CACHE
 mkdir -p "$MOONSHINE_VOICE_CACHE"
 cd "$ASSETS/voice-to-text-python"
-uv run --project . python -c "import asyncio; from voice_to_text.providers.moonshine import MoonshineProvider; p = MoonshineProvider({'provider': 'moonshine', 'model': 'medium', 'language': 'en'}); print(asyncio.run(p.transcribe_file('/dev/null', 'en')))" > "$HOME/moonshine-prewarm.log" 2>&1 || echo "WARN: moonshine prewarm failed — first transcription may download the model"
+# Backgrounded so the ~10-20s model load overlaps schema compile + extension deploy.
+uv run --project . python -c "import asyncio; from voice_to_text.providers.moonshine import MoonshineProvider; p = MoonshineProvider({'provider': 'moonshine', 'model': 'medium', 'language': 'en'}); print(asyncio.run(p.transcribe_file('$ASSETS/e2e/fixtures/test-01-weather.wav', 'en')))" > "$HOME/moonshine-prewarm.log" 2>&1 &
+PREWARM_PID=$!
+echo "$PREWARM_PID" > "$HOME/prewarm.pid"
+cd "$REPO_ROOT"
 
 # --- GSettings schemas ------------------------------------------------------
 schema_dir="$XDG_DATA_HOME/glib-2.0/schemas"
@@ -278,7 +282,13 @@ cd "$ASSETS/voice-to-text-python"
 uv run --project . voice-to-text-dbus > "$HOME/service.log" 2>&1 &
 SERVICE_PID=$!
 echo "$SERVICE_PID" > "$HOME/service.pid"
-for i in $(seq 1 60); do grep -q "Service registered:" "$HOME/service.log" 2>/dev/null && break; sleep 1; done
+for i in $(seq 1 60); do
+  gdbus call --session --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.ListNames 2>/dev/null | grep -q com.happytomatoe.VoiceToText && break
+  sleep 0.2
+done
+echo "service bus name up after ~$((i / 5))s"
 echo "config perms after service start: $(stat -c '%a' "$CFG" 2>/dev/null || echo missing) inode=$(stat -c '%i' "$CFG" 2>/dev/null)"
 
 # --- PipeWire + WirePlumber (required for shell screencast) -------------------
