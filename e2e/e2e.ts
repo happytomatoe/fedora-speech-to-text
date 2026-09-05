@@ -994,7 +994,19 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key alt+F4" | dotool`
   );
-  await Bun.sleep(500);
+  // Poll until the prefs window actually leaves the a11y tree (no blind sleep).
+  await pollUntil(
+    "prefs window closed",
+    async () => {
+      const out = await transport.exec(
+        `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_showing("Voice to Text"))\nATSPIEOF`,
+        10_000,
+      ).catch(() => ({ stdout: "RESULT:no" }));
+      return out.stdout.includes("RESULT:no");
+    },
+    5_000,
+    100,
+  );
   
   console.log("  ✅ Preferences tests completed");
 }
