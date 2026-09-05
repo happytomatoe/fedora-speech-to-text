@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "e2e/e2e.ts",
-    "e2e/extensions/*/extension.js",
     "gnome-ext/extension.js",
     "gnome-ext/prefs.js",
     "gnome-ext/type-text-service.js",

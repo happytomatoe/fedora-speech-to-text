@@ -56,7 +56,8 @@ export VOICE_TO_TEXT_DEBUG_FILE VOX_CI_E2E_TEXT_FILE DOTOOL_PIPE
 # cache would be re-downloaded (~90s) every run otherwise. Falls back to the
 # isolated HOME when the cached path isn't writable (e.g. local parity runs).
 MOONSHINE_VOICE_CACHE="/home/runner/moonshine-model"
-mkdir -p "$MOONSHINE_VOICE_CACHE" 2>/dev/null || MOONSHINE_VOICE_CACHE="$HOME/moonshine-model"
+mkdir -p "$MOONSHINE_VOICE_CACHE" 2>/dev/null || true
+[ -w "$MOONSHINE_VOICE_CACHE" ] || MOONSHINE_VOICE_CACHE="$HOME/moonshine-model"
 mkdir -p "$MOONSHINE_VOICE_CACHE"
 export MOONSHINE_VOICE_CACHE
 cd "$ASSETS/voice-to-text-python"

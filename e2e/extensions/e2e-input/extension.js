@@ -74,8 +74,8 @@ export default class E2EInput {
 
     Click(x, y) {
         if (!this._ptr) return;
-        let t = Clutter.get_current_event_time() * 1000;
-        this._ptr.notify_absolute_motion(t++, x, y);
+        let t = Clutter.get_current_event_time();
+        this._ptr.notify_absolute_motion(t, x, y);
         this._ptr.notify_button(t++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
         this._ptr.notify_button(t++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
     }
@@ -86,7 +86,7 @@ export default class E2EInput {
         // (Remove/Open Editor) and steal keyboard focus from the dialog.
         if (!this._ptr) return;
         this._ptr.notify_absolute_motion(
-            Clutter.get_current_event_time() * 1000, x, y);
+            Clutter.get_current_event_time(), x, y);
     }
 
     Wheel(ticks) {
@@ -94,7 +94,7 @@ export default class E2EInput {
         const dir = ticks < 0 ? Clutter.ScrollDirection.UP : Clutter.ScrollDirection.DOWN;
         for (let i = 0; i < Math.abs(ticks); i++) {
             this._ptr.notify_discrete_scroll(
-                Clutter.get_current_event_time() * 1000,
+                Clutter.get_current_event_time(),
                 dir,
                 Clutter.ScrollSource.WHEEL
             );
@@ -117,7 +117,7 @@ export default class E2EInput {
     }
 
     _key(keyval) {
-        let t = Clutter.get_current_event_time() * 1000;
+        let t = Clutter.get_current_event_time();
         this._kbd.notify_keyval(t++, keyval, Clutter.KeyState.PRESSED);
         this._kbd.notify_keyval(t++, keyval, Clutter.KeyState.RELEASED);
     }
@@ -129,6 +129,14 @@ export default class E2EInput {
     TypeText(text) {
         if (!this._kbd) return;
         for (const ch of text) {
+            if (ch === '\n') {
+                this._key(Clutter.KEY_Return);
+                continue;
+            }
+            if (ch === '\b') {
+                this._key(Clutter.KEY_BackSpace);
+                continue;
+            }
             const kv = Clutter.unicode_to_keysym(ch.codePointAt(0));
             if (kv !== 0) this._key(kv);
         }
