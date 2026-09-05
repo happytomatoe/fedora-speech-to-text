@@ -57,7 +57,7 @@ moonshine:
 # Custom template provider — define your own STT provider entirely in config.
 # See docs/providers/add-custom-provider.md for the step-by-step guide.
 # crispasr:
-#   type: template
+#   type: batch_custom
 #   endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
 #   variables:
 #     MODEL: whisper-1

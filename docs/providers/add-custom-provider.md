@@ -10,7 +10,7 @@ This page is both the reference and the step-by-step guide.
 
 ```yaml
 <provider-name>:
-  type: template
+  type: batch_custom
   endpoint: http://host:port/v1/audio/transcriptions   # required, full URL
   headers:                    # optional; values are templates
     Authorization: "Bearer {{ API_KEY }}"
@@ -63,7 +63,7 @@ are declared once instead of being duplicated:
 
 ```yaml
 my-provider:
-  type: template
+  type: batch_custom
   endpoint: "http://{{ HOST }}:{{ PORT }}/v1/audio/transcriptions"
   variables:
     HOST: 192.168.1.50
@@ -118,7 +118,7 @@ response body so you can correct the path.
 
 ## Multiple custom providers
 
-You can define any number of named sections with `type: template` in
+You can define any number of named sections with `type: batch_custom` in
 `config.yaml` (`crispasr:`, `openai-local:`, `weird-vendor:`, …). Each is an
 independent provider; select one with `transcription.provider: <name>`. They
 also appear in the GNOME preferences provider dropdown as "<name> (custom)"
@@ -166,7 +166,7 @@ Add a section to `~/.config/voice-to-text/config.yaml` (or the repo's
 
 ```yaml
 crispasr:
-  type: template
+  type: batch_custom
   endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
   headers:
     Authorization: "Bearer {{ API_KEY }}"        # omitted entirely if no api_key below
@@ -183,7 +183,7 @@ crispasr:
 
 ```yaml
 my-vendor:
-  type: template
+  type: batch_custom
   endpoint: https://api.vendor.example/recognize
   headers:
     X-Api-Key: "{{ API_KEY }}"

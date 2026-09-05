@@ -1,7 +1,7 @@
 """Custom (template-based) transcription provider (batch only).
 
 Users define custom providers in config.yaml under any section name with
-"type: template". The HTTP request is described declaratively as a
+"type: batch_custom". The HTTP request is described declaratively as a
 Jinja2-templated blueprint. Context variables available in templates:
 API_KEY, LANGUAGE, CUSTOM_WORDS, plus any custom variables defined
 per-provider in the "variables" config section.
@@ -79,7 +79,7 @@ class CustomProvider(BatchProvider):
         self.text_path = config.get("response_text_path", "text")
         self._variables = self._validate_variables(config.get("variables", {}))
         wants_key = bool(config.get("api_key") or config.get("api_key_env"))
-        self.api_key = resolve_api_key(config, "TEMPLATE_API_KEY", provider_name="template") if wants_key else ""
+        self.api_key = resolve_api_key(config, "CUSTOM_API_KEY", provider_name="batch_custom") if wants_key else ""
         # NativeEnvironment renders {{ CUSTOM_WORDS }} to a real list in JSON bodies
         self.env: Environment = NativeEnvironment()
 

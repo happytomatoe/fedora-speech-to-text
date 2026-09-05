@@ -125,7 +125,7 @@ const outputMethodIdx = args.indexOf("--output-method");
 const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 
 // Parse --config <fixture-file> (deploy a specific config fixture, e.g.
-// voice-to-text-config-template.yaml to run through the template provider)
+// voice-to-text-config-template.yaml to run through the custom provider)
 const configIdx = args.indexOf("--config");
 const CONFIG_FIXTURE = configIdx >= 0 ? args[configIdx + 1] : "voice-to-text-config.yaml";
 

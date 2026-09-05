@@ -1,6 +1,6 @@
-"""Provider template test CLI: `python -m voice_to_text.provider_test <name>`.
+"""Custom provider test CLI: `python -m voice_to_text.provider_test <name>`.
 
-Dry-runs a template provider's request blueprint with sample context, or sends a
+Dry-runs a custom provider's request blueprint with sample context, or sends a
 real request with `--send --audio <path>`. The authoring feedback loop for
 custom providers.
 """
@@ -25,14 +25,14 @@ SAMPLE_WORDS = ["Sample", "Hotword"]
 
 USAGE = """usage: python -m voice_to_text.provider_test <name> [overrides] [--send --audio <path>]
 
-Context overrides (map to template variables):
+Context overrides (map to blueprint variables):
   --language <code>        LANGUAGE (default: en)
   --custom-words "a,b"     CUSTOM_WORDS as comma-separated list
   --api-key <key>          API_KEY (masked in dry-run output)
   --var NAME=VALUE         override any custom variable from the variables: section
                            (repeatable; VALUE parsed as JSON scalar, falling back to string)
 
-Dry-runs the rendered request blueprint for a template provider, or with
+Dry-runs the rendered request blueprint for a custom provider, or with
 --send performs the real request against the configured endpoint."""
 
 
@@ -76,13 +76,13 @@ def _print_blueprint(name: str, provider: CustomProvider, language: str, words: 
 
     Args:
         name: Provider config section name.
-        provider: Instantiated template provider.
+        provider: Instantiated custom provider.
         language: LANGUAGE context value.
         words: CUSTOM_WORDS context values.
 
     """
     rendered = provider.render(language, words)
-    print(f"Provider '{name}' (template)")
+    print(f"Provider '{name}' (custom)")
     print(f"POST {_mask(provider.endpoint, rendered['ctx'])}")
     if rendered["headers"]:
         print("  headers:")
@@ -162,7 +162,7 @@ def _parse_args(args: list[str]) -> "_Args | int":
 
 
 def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, Any]) -> "CustomProvider | int":
-    """Find and instantiate the named template provider, or return an exit code.
+    """Find and instantiate the named custom provider, or return an exit code.
 
     Args:
         manager: Loaded configuration manager.
@@ -176,8 +176,8 @@ def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, An
         print(f"Unknown provider '{name}'. Configured: {available}", file=sys.stderr)
         return 2
     section = manager.get_provider_config(name)
-    if section.get("type") != "template":
-        print(f"Provider '{name}' is type '{section.get('type')}', not 'template'.", file=sys.stderr)
+    if section.get("type") != "batch_custom":
+        print(f"Provider '{name}' is type '{section.get('type')}', not 'batch_custom'.", file=sys.stderr)
         return 2
     section = dict(section)
     api_key_override = overrides.pop("API_KEY", None)
@@ -188,7 +188,7 @@ def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, An
         variables.update(overrides)
         section["variables"] = variables
     try:
-        provider = get_batch_provider("template", section)
+        provider = get_batch_provider("batch_custom", section)
     except Exception as e:
         print(f"Provider '{name}' failed to initialize: {e}", file=sys.stderr)
         return 1
@@ -200,7 +200,7 @@ def _send(provider: CustomProvider, audio: str, language: str, words: list[str])
     """Send the audio file and print the transcription; returns exit code.
 
     Args:
-        provider: Instantiated template provider.
+        provider: Instantiated custom provider.
         audio: Path to the audio file.
         language: LANGUAGE context value.
         words: CUSTOM_WORDS context values.

@@ -18,7 +18,7 @@ def _make_wav(tmp_path: Path) -> str:
 
 
 CRISPASR_CONFIG = {
-    "type": "template",
+    "type": "batch_custom",
     "endpoint": "http://stub/v1/audio/transcriptions",
     "form": {
         "model": "whisper-1",
@@ -39,9 +39,9 @@ class TestConfigValidation:
             CustomProvider({"endpoint": "http://stub"}, "template")
 
     def test_registry_entry(self):
-        provider = get_batch_provider("template", CRISPASR_CONFIG)
+        provider = get_batch_provider("batch_custom", CRISPASR_CONFIG)
         assert isinstance(provider, CustomProvider)
-        assert provider.name == "template"
+        assert provider.name == "batch_custom"
 
     def test_custom_section_name_in_registry(self):
         provider = get_batch_provider("crispasr", CRISPASR_CONFIG)
@@ -54,9 +54,9 @@ class TestConfigValidation:
         assert p2.name == "openai-local"
         assert p1.name != p2.name
 
-    def test_direct_construction_defaults_to_template(self):
-        provider = CustomProvider(CRISPASR_CONFIG, "template")
-        assert provider.name == "template"
+    def test_direct_construction_name_flows_through(self):
+        provider = CustomProvider(CRISPASR_CONFIG, "crispasr")
+        assert provider.name == "crispasr"
 
 
 class TestRender:

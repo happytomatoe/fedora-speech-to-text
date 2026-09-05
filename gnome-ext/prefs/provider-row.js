@@ -50,7 +50,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const providerCombo = new Gtk.ComboBoxText();
-    // Custom providers from config.yaml (e.g. type: template sections) are
+    // Custom providers from config.yaml (e.g. type: batch_custom sections) are
     // appended after the built-ins. Their section names are valid
     // transcription.provider values, so selecting one selects that provider.
     fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));

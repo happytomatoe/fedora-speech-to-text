@@ -104,22 +104,23 @@ def check_config(manager: ConfigManager) -> list[str]:
     # providers work from env vars alone, and template sections are validated
     # below. A misspelled selected provider with no other sections must still
     # be reported.
-    builtin_providers = set(_BATCH_PROVIDERS) - {"template"}
+    builtin_providers = set(_BATCH_PROVIDERS) - {"batch_custom"}
     if selected not in sections and selected not in builtin_providers:
         findings.append(f"transcription.provider '{selected}' has no config section")
     for name, section in sections.items():
-        if not isinstance(section, dict) or section.get("type") != "template":
+        if not isinstance(section, dict) or section.get("type") != "batch_custom":
             continue
         findings.extend(_findings_for_template_provider(name, section))
-    if selected in sections and isinstance(sections[selected], dict) and sections[selected].get("type") == "template":
-        # Selected template provider must also instantiate via its registry type.
+    selected_section = sections.get(selected)
+    if isinstance(selected_section, dict) and selected_section.get("type") == "batch_custom":
+        # Selected custom provider must also instantiate via its registry type.
         # Neutralize api_key sources: resolve_api_key runs !command substitutions,
         # which must never execute during a supposedly dry validation.
         cfg = dict(manager.get_provider_config(selected))
         cfg.pop("api_key", None)
         cfg.pop("api_key_env", None)
         try:
-            get_batch_provider("template", cfg)
+            get_batch_provider("batch_custom", cfg)
         except Exception as e:
             findings.append(f"provider '{selected}' failed to initialize: {e}")
     return findings

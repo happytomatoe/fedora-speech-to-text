@@ -14,7 +14,7 @@ VALID_TEMPLATE_CONFIG = """
 transcription:
   provider: crispasr
 crispasr:
-  type: template
+  type: batch_custom
   endpoint: http://localhost:5092/v1/audio/transcriptions
   headers:
     Authorization: "Bearer {{ API_KEY }}"
@@ -31,7 +31,7 @@ BROKEN_TEMPLATE_CONFIG = """
 transcription:
   provider: crispasr
 crispasr:
-  type: template
+  type: batch_custom
   form:
     hotwords: "{{ CUSTOM_WORDS | join(', ')"   # unterminated Jinja block
 """
@@ -40,7 +40,7 @@ MISSING_ENDPOINT_CONFIG = """
 transcription:
   provider: crispasr
 crispasr:
-  type: template
+  type: batch_custom
   form:
     hotwords: "{{ CUSTOM_WORDS }}"
 """
@@ -49,7 +49,7 @@ DANGLING_PROVIDER_CONFIG = """
 transcription:
   provider: nosuch
 crispasr:
-  type: template
+  type: batch_custom
   endpoint: http://localhost:5092
   form:
     model: m
@@ -169,7 +169,7 @@ parakeet:
         finally:
             os.unlink(path)
         out = capsys.readouterr().out
-        assert "Provider 'crispasr' (template)" in out
+        assert "Provider 'crispasr' (custom)" in out
         assert "POST http://localhost:5092/v1/audio/transcriptions" in out
         assert "hotwords: Sample, Hotword" in out
         assert "hotwords_boost: 2.0" in out

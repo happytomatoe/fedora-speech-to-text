@@ -20,7 +20,7 @@ _BATCH_PROVIDERS = {
     "60db": SixtyProvider,
     "elevenlabs": ElevenLabsProvider,
     "moonshine": MoonshineProvider,
-    "template": CustomProvider,
+    "batch_custom": CustomProvider,
 }
 
 _STREAMING_PROVIDERS = {

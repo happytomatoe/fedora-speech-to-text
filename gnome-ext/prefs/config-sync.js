@@ -58,7 +58,7 @@ function readConfigYaml() {
 
 /**
  * Names of user-defined provider sections in config.yaml with
- * `type: template`. These are valid transcription.provider values and are
+ * `type: batch_custom`. These are valid transcription.provider values and are
  * shown as "name (custom)" entries.
  * @returns {string[]}
  */
@@ -71,7 +71,7 @@ export function readCustomProviderNames() {
                 value !== null &&
                 typeof value === 'object' &&
                 !Array.isArray(value) &&
-                value.type === 'template'
+                value.type === 'batch_custom'
         )
         .map(([key]) => key);
 }
