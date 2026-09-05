@@ -60,7 +60,7 @@
         "no-empty": [
           "error",
           {
-            "allowEmptyCatch": true
+            "allowEmptyCatch": false
           }
         ],
         "no-redeclare": "error",
