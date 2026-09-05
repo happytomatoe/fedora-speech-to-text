@@ -1,5 +1,6 @@
+# Install everything from local sources via install.sh (extension + Python service)
 install:
-    uv tool install -e .
+    ./install.sh --local gnome-ext --local-service .
 
 uninstall:
     gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true

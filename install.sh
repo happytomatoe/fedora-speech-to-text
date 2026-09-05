@@ -297,6 +297,9 @@ install_config() {
 
   if [ -f "$CONFIG_FILE" ]; then
     echo "Existing config found at $CONFIG_FILE; leaving it unchanged."
+  elif [ -f "config.yaml" ]; then
+    cp config.yaml "$CONFIG_FILE"
+    echo "Default config installed at $CONFIG_FILE."
   else
     echo "Downloading default config..."
     curl -L -o "$CONFIG_FILE" "https://raw.githubusercontent.com/$REPO/$LATEST_TAG/config.yaml" || true
@@ -402,9 +405,17 @@ done
 for ((i=1; i<=$#; i++)); do
   if [ "${!i}" = "--local" ]; then
     next=$((i+1))
+    if [ "$next" -gt "$#" ]; then
+      echo "ERROR: --local requires a directory argument" >&2
+      exit 1
+    fi
     LOCAL_DIR="${!next}"
   elif [ "${!i}" = "--local-service" ]; then
     next=$((i+1))
+    if [ "$next" -gt "$#" ]; then
+      echo "ERROR: --local-service requires a directory argument" >&2
+      exit 1
+    fi
     LOCAL_SERVICE_DIR="${!next}"
   elif [ "${!i}" = "--e2e" ]; then
     E2E=1
@@ -434,7 +445,11 @@ main() {
   fi
   install_prerequisites
   install_uv
-  fetch_latest_tag
+  # A fully-local install (--local + --local-service) needs no release tag:
+  # every $LATEST_TAG consumer below has a local-source fallback.
+  if [ -z "$LOCAL_DIR" ] || [ -z "${LOCAL_SERVICE_DIR:-}" ]; then
+    fetch_latest_tag
+  fi
   install_python_service
   install_dbus_services
   install_gnome_extension
