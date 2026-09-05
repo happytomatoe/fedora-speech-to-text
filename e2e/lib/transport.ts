@@ -35,7 +35,6 @@ export interface SshSessionInfo {
 }
 
 /** Build a short ssh option string (host key off, key auth, port). */
-/** Build a short ssh option string (host key off, key auth, port). */
 function sshOpts(session: SshSessionInfo): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${session.sshKey} -p ${session.sshPort}`;
 }
