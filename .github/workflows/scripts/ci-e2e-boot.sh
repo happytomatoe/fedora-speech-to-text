@@ -278,7 +278,13 @@ cd "$ASSETS/voice-to-text-python"
 uv run --project . voice-to-text-dbus > "$HOME/service.log" 2>&1 &
 SERVICE_PID=$!
 echo "$SERVICE_PID" > "$HOME/service.pid"
-for i in $(seq 1 60); do grep -q "D-Bus service\|service ready\|listening" "$HOME/service.log" 2>/dev/null && break; sleep 1; done
+for i in $(seq 1 60); do
+  gdbus call --session --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.ListNames 2>/dev/null | grep -q com.happytomatoe.VoiceToText && break
+  sleep 0.2
+done
+echo "service bus name up after ~$((i / 5))s"
 echo "config perms after service start: $(stat -c '%a' "$CFG" 2>/dev/null || echo missing) inode=$(stat -c '%i' "$CFG" 2>/dev/null)"
 
 # --- PipeWire + WirePlumber (required for shell screencast) -------------------
