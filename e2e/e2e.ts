@@ -9,7 +9,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { ATSPI_PY, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { ATSPI_PY, atspiScrollToBottom, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
@@ -1358,9 +1358,7 @@ ATSPIEOF`;
           await shot("prefs-scroll-before");
           // Scroll via AT-SPI Value interface on the vertical scrollbar.
           // No pointer/keyboard events, so no seat/focus side-effects.
-          const res = await transport.exec(
-            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(scroll_to_bottom_via_value()))\nATSPIEOF`, 20_000)
-            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+          const res = await atspiScrollToBottom(transport);
           console.log(`  atspi value scroll: ${res}`);
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
@@ -1452,9 +1450,7 @@ ATSPIEOF`;
         try {
           // Scroll via AT-SPI Value interface on the vertical scrollbar —
           // no pointer events, no focus side-effects on the modal.
-          const res2 = await transport.exec(
-            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(scroll_to_bottom_via_value()))\nATSPIEOF`, 20_000)
-            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+          const res2 = await atspiScrollToBottom(transport);
           console.log(`  atspi value scroll: ${res2}`);
           await Bun.sleep(600);
         } catch (e) {
