@@ -50,24 +50,6 @@ jobs:
           uv sync --locked
           bun install --frozen-lockfile
 
-      - name: Get Silero model URL from source
-        run: |
-          MODEL_URL=$(sed -n 's/.*DEFAULT_MODEL_URL = "\([^"]*\)".*/\1/p' src/voice_to_text/vad.py)
-          echo "MODEL_URL=$MODEL_URL" >> $GITHUB_ENV
-
-      - name: Cache Silero VAD model
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/voice-to-text/silero_vad.onnx
-          key: silero-vad-${{ env.MODEL_URL }}
-
-      - name: Download Silero VAD model
-        run: |
-          mkdir -p ~/.cache/voice-to-text
-          if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
-            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx "$MODEL_URL"
-          fi
-
       - name: Run lefthook pre-commit checks
         # --no-auto-install: lefthook 2.x's auto hook-install panics in CI (nil deref, install.go)
         run: npx lefthook run pre-commit --all-files --no-tty --no-auto-install
@@ -95,24 +77,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --locked
-
-      - name: Get Silero model URL from source
-        run: |
-          MODEL_URL=$(sed -n 's/.*DEFAULT_MODEL_URL = "\([^"]*\)".*/\1/p' src/voice_to_text/vad.py)
-          echo "MODEL_URL=$MODEL_URL" >> $GITHUB_ENV
-
-      - name: Cache Silero VAD model
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/voice-to-text/silero_vad.onnx
-          key: silero-vad-${{ env.MODEL_URL }}
-
-      - name: Download Silero VAD model
-        run: |
-          mkdir -p ~/.cache/voice-to-text
-          if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
-            wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx "$MODEL_URL"
-          fi
 
       - name: Run tests
         run: uv run python -m pytest
