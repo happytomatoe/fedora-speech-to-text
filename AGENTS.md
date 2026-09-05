@@ -82,7 +82,7 @@ When modifying files in `gnome-ext/`:
    ```
 
 3. **Visual testing** — if you need to see the UI:
-   - E2E tests: `just e2e` (runs in QEMU VM with `--snapshot` for visual regression)
+   - E2E tests: `just e2e-fedora-local` (runs in QEMU VM with `--snapshot` for visual regression)
 
 ### E2E / Snapshot tests
 
@@ -92,7 +92,7 @@ See `e2e/AGENTS.md` for detailed instructions.
 
 - Update references: `just qemu-e2e-update-ts` or `cd e2e && bun run e2e.ts --update`
 - Run snapshot tests: `cd e2e && bun run e2e.ts --snapshot`
-- Run full E2E (full VM boot): `just e2e` or `cd e2e && bun run e2e.ts`
+- Run full E2E (full VM boot): `just e2e-fedora-local` (or `just e2e-ubuntu-local`/`just e2e-ubuntu-ci`) — `cd e2e && bun run e2e.ts`
 
 ## Semantic Release
 

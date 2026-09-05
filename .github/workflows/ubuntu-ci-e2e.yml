@@ -1,0 +1,149 @@
+# E2E on Ubuntu 26.04 — bare-runner headless path (no VM, no image download).
+# Boots a real GNOME Shell (Wayland, headless virtual monitor) directly on the
+# runner, deploys the extension + Python service, drives a record → transcribe
+# → typed-text assertion via D-Bus, and captures screenshots + screencast.
+name: ubuntu-ci-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Open an SSH (tmate) session on the runner for live debugging'
+        required: false
+        default: false
+      cases:
+        type: string
+        description: 'Comma-separated test-case substrings (empty = all), e.g. "test-01" or "test-01,test-03"'
+        required: false
+        default: ''
+      skip_prefs:
+        type: boolean
+        description: 'Skip the preferences tests'
+        required: false
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/ubuntu-ci-e2e.yml"
+      - ".github/workflows/scripts/ci-e2e-headless.sh"
+      - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
+      - "gnome-ext/**"
+      - "src/voice_to_text/**"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Moonshine model
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/moonshine-model
+          key: moonshine-medium-en-quantized
+
+      - name: Cache apt archives (runner-writable dir; /var/cache/apt is root-owned)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt/archives
+          key: apt-${{ runner.os }}-26.04-${{ hashFiles('.github/workflows/ubuntu-ci-e2e.yml') }}
+          restore-keys: apt-${{ runner.os }}-26.04-
+
+      - name: Install GNOME Shell + harness dependencies (no VM, no container)
+        run: |
+          sudo mkdir -p /var/cache/apt/archives && sudo chmod 777 /var/cache/apt/archives
+          mkdir -p "$HOME/.cache/apt/archives/partial"
+          sudo apt-get update -o Dir::Cache::archives=$HOME/.cache/apt/archives
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::archives=$HOME/.cache/apt/archives \
+            gnome-shell gnome-shell-common gnome-session glib2.0-bin dbus \
+            libgl1-mesa-dri libgbm1 \
+            dconf-gsettings-backend gsettings-desktop-schemas \
+            libportaudio2 \
+            gir1.2-atspi-2.0 python3-gi at-spi2-core \
+            pipewire pipewire-bin wireplumber \
+            pulseaudio pulseaudio-utils \
+            ffmpeg \
+            tmux \
+            ghostty \
+            curl \
+
+      - name: Install + start PulseAudio with virtual devices (headless)
+        run: |
+          # Cached apt install skips postinst: recreate runtime state the
+          # daemon expects (group membership + runtime dirs).
+          sudo groupadd -f audio
+          sudo usermod -aG audio "$USER" || true
+          mkdir -p /run/user/$(id -u)/pulse
+          pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
+            --load="module-null-sink sink_name=virtual_sink" \
+            --load="module-null-source source_name=virtual_mic"
+          # pulseaudio -D returns before the socket is ready; poll for it
+          for i in $(seq 1 20); do
+            pactl info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          pactl list short sinks
+          pactl list short sources
+
+      - uses: astral-sh/setup-uv@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          cache: true
+          cache-dependency-path: e2e/bun.lock
+
+      - name: Risk check — /dev/uinput presence (dotool viability)
+        run: |
+          if [[ -c /dev/uinput ]]; then
+            # Node is root-owned 0600; runner sudo makes it writable for dotool
+            sudo chmod 666 /dev/uinput
+            echo "uinput check: PRESENT — dotool input injection available"
+          else
+            echo "uinput check: ABSENT — SKIP synthetic-input phases; D-Bus/capture-file assertions only"
+          fi
+
+      - name: Install test-runner dependencies
+        run: cd e2e && bun install
+
+      - name: Stage isolated E2E environment
+        run: bash .github/workflows/scripts/ci-e2e-stage.sh
+
+      - name: Boot headless GNOME Shell + voice-to-text service
+        run: bash .github/workflows/scripts/ci-e2e-boot.sh
+
+      - name: Run E2E suite
+        env:
+          E2E_CASES: ${{ github.event.inputs.cases }}
+          E2E_SKIP_PREFS: ${{ github.event.inputs.skip_prefs }}
+        run: bash .github/workflows/scripts/ci-e2e-run.sh
+
+      - name: Teardown + collect artifacts
+        if: always()
+        run: bash .github/workflows/scripts/ci-e2e-teardown.sh
+
+      - name: Setup tmate session (manual debug)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+        timeout-minutes: 6
+        id: tmate
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ubuntu-ci-e2e
+          path: |
+            ci-e2e-screenshot-2604.png
+            ci-e2e-screenshot-2604-*.png
+            output/recording.webm
+            output/results.json
+            output/*.log
+            output/prefs-end.png
+            output/prefs-scroll-after.png
+            output/prefs-after-add.png
+            output/cells/*/clip.webm
+          if-no-files-found: warn
+          retention-days: 7

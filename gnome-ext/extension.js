@@ -10,48 +10,7 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {AudioLevelWidget} from './audio-level-widget.js';
 import {TypeTextService} from './type-text-service.js';
 
-const VoiceToTextIface = `
-<node>
-  <interface name="com.happytomatoe.VoiceToText">
-    <method name="StartRecording">
-      <arg type="s" name="config" direction="in"/>
-    </method>
-    <method name="StopRecording"/>
-    <method name="CancelRecording"/>
-    <method name="GetStatus">
-      <arg type="s" direction="out"/>
-    </method>
-    <signal name="AudioLevel">
-      <arg type="d" name="level"/>
-    </signal>
-    <signal name="Error">
-      <arg type="s" name="message"/>
-    </signal>
-    <signal name="StateChanged">
-      <arg type="s" name="state"/>
-    </signal>
-  </interface>
-</node>`;
-
-const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
-
-const SessionManagerIface =
-    '<node>\
-  <interface name="org.gnome.SessionManager">\
-    <method name="Inhibit">\
-      <arg type="s" direction="in"/>\
-      <arg type="u" direction="in"/>\
-      <arg type="s" direction="in"/>\
-      <arg type="u" direction="in"/>\
-      <arg type="u" direction="out"/>\
-    </method>\
-    <method name="Uninhibit">\
-      <arg type="u" direction="in"/>\
-    </method>\
-  </interface>\
-</node>';
-
-const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);
+import {SessionManagerProxy, VoiceToTextProxy} from './dbus-ifaces.js';
 
 export default class VoiceToTextExtension extends Extension {
     enable() {
@@ -241,6 +200,15 @@ export default class VoiceToTextExtension extends Extension {
                 }
             );
             this._signalIds.push(errorId);
+
+            const prefsId = this._proxy.connectSignal(
+                'OpenPrefsRequested',
+                () => {
+                    console.debug('[VoiceToText] OpenPrefsRequested — opening preferences');
+                    this._openPreferences();
+                }
+            );
+            this._signalIds.push(prefsId);
 
             // Sync state on (re)enable — engine may already be recording
             const proxyRef = this._proxy;
@@ -432,6 +400,16 @@ export default class VoiceToTextExtension extends Extension {
     }
 
     _openPreferences() {
+        // openPreferences() runs inside the shell — no external process, so it
+        // works in headless sessions where spawning gnome-extensions CLI dies
+        // (D-Bus-activated child has no display).
+        try {
+            // @ts-expect-error
+            Main.extensionManager.openExtensionPrefs(this.uuid, '', {}); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+            return;
+        } catch (e) {
+            console.error('VoiceToText: openExtensionPrefs failed:', e);
+        }
         try {
             const launcher = new Gio.SubprocessLauncher();
             // @ts-expect-error

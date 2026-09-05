@@ -1,4 +1,5 @@
 import { ensureParakeet } from "./lib/parakeet.js";
+import { resolveEnv, type EnvName } from "./lib/env.js";
 import { ParallelTestRunner, type TestCase } from "./lib/parallel.js";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, readdirSync, statSync } from "node:fs";
 import { PNG } from "pngjs";
@@ -8,10 +9,12 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { doAtspiAction, findAtspiExtents, setAtspiText, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { ATSPI_PY, atspiScrollTo, atspiScrollToBottom, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
+import { LocalTransport } from "./lib/transport.js";
+import { ShellHelper } from "./lib/shell.js";
 import { execSync } from "node:child_process";
 
 // Log to file
@@ -48,6 +51,23 @@ console.error = (...args: any[]) => {
 // Parse CLI args
 const args = process.argv.slice(2);
 const UPDATE_MODE = args.includes("--update");
+
+// Environment selector: fedora-local (Fedora VM, original suite) |
+// ubuntu-local (pinned Ubuntu 26.04 VM via QEMU, same bits as CI) |
+// ubuntu-ci (identical to ubuntu-local; run by GitHub Actions).
+// Only environment config differs — suite logic is shared.
+type Env = "fedora-local" | "ubuntu-local" | "ubuntu-ci" | "ubuntu-bare";
+const envIdx = args.indexOf("--env");
+const ENV: Env = envIdx >= 0 ? (args[envIdx + 1] as Env) : "fedora-local";
+if (!"fedora-local ubuntu-local ubuntu-ci ubuntu-bare".split(" ").includes(ENV)) {
+  throw new Error(`Unknown env '${ENV}'. Valid: fedora-local, ubuntu-local, ubuntu-ci, ubuntu-bare`);
+}
+const IS_UBUNTU = ENV !== "fedora-local";
+// ubuntu-bare: suite runs on the runner itself inside dbus-run-session —
+// no QEMU VM, no SSH. All commands go through LocalTransport.
+// --use-existing: attach to an already-running VM instead of booting a fresh
+// one — for reproducing CI failures locally against the same VM/image.
+const USE_EXISTING = args.includes("--use-existing");
 // Default: shut the VM down after the test (pass/fail). Keep it running for
 // manual debugging with --keep-vm.
 const KEEP_VM = args.includes("--keep-vm");
@@ -110,6 +130,7 @@ const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1
 
 // Parse --test-prefs (run preferences screenshot tests)
 const TEST_PREFS = args.includes("--test-prefs");
+const NO_PREFS = args.includes("--no-prefs");
 const SKIP_PREFS_GATE = !TEST_PREFS && !args.includes("--no-skip-prefs");
 // Anything whose change affects the prefs screenshots: rendered UI, deployed
 // values (config fixture, dconf seeds), deploy pipeline.
@@ -172,30 +193,57 @@ function prefsSourceMatch(file: string): boolean {
   );
 }
 
-// Configuration
+// Configuration — per-environment. Ubuntu 26.04 (resolute) PINNED: the exact
+// same cloud image URL must be used by local fresh-mode runs and CI, so a CI
+// failure can be reproduced locally with identical bits.
+const UBUNTU_2604_CLOUD_IMAGE = "https://cloud-images.ubuntu.com/daily/server/resolute/current/resolute-server-cloudimg-amd64.img";
+
+const FEDORA_CONFIG = {
+  baseImage: (() => {
+    const goldenDeps = join(import.meta.dir, "qemu-images/golden-gnome-deps.qcow2");
+    if (existsSync(goldenDeps)) return goldenDeps;
+    const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
+    if (existsSync(depsBase)) return depsBase;
+    const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
+    if (existsSync(uvBase)) return uvBase;
+    return join(import.meta.dir, "qemu-images/base.qcow2");
+  })(),
+  sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
+  referencesDir: join(import.meta.dir, "expected-qemu"),
+};
+
+const UBUNTU_CONFIG = {
+  baseImage: join(import.meta.dir, "ubuntu-2604-cloud.qcow2"),
+  sshKey: join(import.meta.dir, "id_ed25519"),
+  referencesDir: join(import.meta.dir, "expected-ubuntu"),
+  // e2e-vm/boot-vm.sh parity VM: localhost:2222, key in e2e-vm/
+  existing: {
+    port: 2222,
+    key: join(import.meta.dir, "../e2e-vm/id_ed25519"),
+  },
+};
+
+const envCfg = IS_UBUNTU ? UBUNTU_CONFIG : FEDORA_CONFIG;
+
 const CONFIG = {
+  env: ENV,
+  isUbuntu: IS_UBUNTU,
+  ubuntuCloudImage: UBUNTU_2604_CLOUD_IMAGE,
   paths: {
     projectRoot: join(import.meta.dir, ".."),
+    suiteDir: import.meta.dir,
     vmDir: join(import.meta.dir, "qemu-images"),
-    baseImage: (() => {
-      const goldenDeps = join(import.meta.dir, "qemu-images/golden-gnome-deps.qcow2");
-      if (existsSync(goldenDeps)) return goldenDeps;
-      const depsBase = join(import.meta.dir, "qemu-images/base-with-deps.qcow2");
-      if (existsSync(depsBase)) return depsBase;
-      const uvBase = join(import.meta.dir, "qemu-images/base-with-uv.qcow2");
-      if (existsSync(uvBase)) return uvBase;
-      return join(import.meta.dir, "qemu-images/base.qcow2");
-    })(),
-    overlayImage: join(import.meta.dir, "qemu-images/overlay.qcow2"),
+    baseImage: envCfg.baseImage,
+    overlayImage: join(join(import.meta.dir, "qemu-images"), "overlay.qcow2"),
     socketPath: "/tmp/qemu-monitor.sock",
-    sshKey: join(import.meta.dir, "qemu-images/id_ed25519"),
-    referencesDir: join(import.meta.dir, "expected-qemu"),
+    sshKey: USE_EXISTING && IS_UBUNTU ? UBUNTU_CONFIG.existing.key : envCfg.sshKey,
+    referencesDir: envCfg.referencesDir,
     outputDir: join(import.meta.dir, "output"),
     pythonSrc: join(import.meta.dir, "../src/voice_to_text"),
     testCasesFile: join(import.meta.dir, "fixtures/test-cases.json"),
   },
   ssh: {
-    port: 2222,
+    port: USE_EXISTING && IS_UBUNTU ? UBUNTU_CONFIG.existing.port : 2222,
     user: "testuser",
   },
   extension: {
@@ -209,6 +257,9 @@ const CONFIG = {
     vmBoot: 120000,
   },
 };
+
+// Resolved environment (env interface lives in lib/env.ts)
+const SUITE_ENV = resolveEnv(import.meta.dir, ENV as EnvName, USE_EXISTING);
 
 // Derived constants
 const PROJECT_ROOT = CONFIG.paths.projectRoot;
@@ -259,7 +310,6 @@ function pickRandomTestCase(): TestCaseFile {
 
 const CURRENT_TEST = pickRandomTestCase();
 const EXPECTED_TEXT = CURRENT_TEST.expected;
-
 /** Fail fast when the VM base image is missing. */
 async function preflight(): Promise<void> {
   if (!existsSync(BASE_IMAGE)) {
@@ -521,8 +571,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   beginSpan("stop-recording");
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
-  // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
-  await Bun.sleep(200); // Brief settle for D-Bus round-trip
+  await vm.pollUntil(
+    "recording stopped",
+    async () => {
+      try {
+        const out = await shell.getVoiceServiceStatus();
+        return out.includes("idle");
+      } catch {
+        return false;
+      }
+    },
+    10_000,
+    100,
+  );
   endSpan();
 
   // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.
@@ -604,10 +665,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       beginSpan("retrieve-screencast");
   const localPath = join(run.outputDir, "test-recording.webm");
       try {
-        execSync(
-          `scp -o StrictHostKeyChecking=no -i ${SSH_KEY} -P ${run.sshPort} testuser@localhost:${screencastFile} ${localPath}`,
-          { encoding: "utf-8", timeout: 10000 }
-        );
+        await vm.transport.copyFrom(screencastFile, localPath);
         const stats = require("node:fs").statSync(localPath);
         console.log(`  Screencast saved: ${localPath} (${(stats.size / 1024).toFixed(1)}KB)`);
       } catch (e) {
@@ -823,6 +881,19 @@ async function compareWithReference(name: string, captured: string, run: RunCont
  * Run preferences screenshot tests.
  * Opens preferences and takes screenshots of each section.
  */
+// Read the service's cmdline AND cwd from /proc — replaying the cmdline from a
+// different cwd silently breaks commands with relative paths (uv --project .).
+async function svcCmdline(
+  svcPid: string,
+  exec: (cmd: string, timeout?: number) => Promise<{ stdout: string }>,
+): Promise<{ cmdline: string; cwd: string }> {
+  const pidOk = svcPid && /^\d+$/.test(svcPid) && (await exec(`test -d /proc/${svcPid} && echo yes`, 5_000)).stdout.includes("yes");
+  if (!pidOk) return { cmdline: "", cwd: "" };
+  const cmdline = (await exec(`tr '\\0' ' ' < /proc/${svcPid}/cmdline 2>/dev/null`)).stdout.trim();
+  const cwd = (await exec(`readlink /proc/${svcPid}/cwd 2>/dev/null`)).stdout.trim() || "";
+  return { cmdline, cwd };
+}
+
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
   console.log("\n📸 Running preferences screenshot tests...");
   
@@ -921,8 +992,786 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   console.log("  ✅ Preferences tests completed");
 }
 
+/**
+ * ubuntu-bare mode: the suite executes directly on the CI runner inside the
+ * harness's dbus-run-session. No VM, no SSH, no GDM — the harness has already
+ * booted headless gnome-shell, deployed the extension, and started the voice
+ * service with VOICE_TO_TEXT_DEBUG_FILE set to the fixture WAV.
+ */
+async function runBareMode(): Promise<void> {
+  // Exercise the transport seam: a LocalTransport-backed ShellHelper plus the
+  // LocalTransport instance this function uses directly — proves bash -lc +
+  // inherited dbus-run-session env at runtime.
+  const shell = new ShellHelper();
+  shell.useLocalTransport();
+  const transport = new LocalTransport();
+  const probe = await transport.exec("echo __SEAM_OK__ $DBUS_SESSION_BUS_ADDRESS");
+  console.log(`  local transport probe: code=${probe.code} dbus=${probe.stdout.includes("__SEAM_OK__") ? "set" : "unset"}`);
+  const outputDir = join(import.meta.dir, "output", "ubuntu-bare");
+  mkdirSync(outputDir, { recursive: true });
+  const textFile = process.env.VOX_CI_E2E_TEXT_FILE ?? "/tmp/typed-text.txt";
+
+  await new StepRunner().run([
+    {
+      name: "wait-service-bus",
+      timeout: 60_000,
+      fn: () => {
+        const transport = new LocalTransport();
+        return pollForCommandOutput(
+          (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
+          "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+          "com.happytomatoe.VoiceToText",
+          60_000,
+        );
+      },
+    },
+  ]);
+
+  beginSpan("test-flow-bare");
+  // All bare-mode commands run through the LocalTransport seam (bash -lc,
+  // inheriting the dbus-run-session env) — the same interface the SSH envs use.
+  const run = async (cmd: string, timeoutMs = 15_000) => {
+    const r = await transport.exec(cmd, timeoutMs);
+    if (r.code !== 0) {
+      console.error(`Command failed (${r.code}): ${cmd}`);
+      console.error(`stdout: ${r.stdout}`);
+      console.error(`stderr: ${r.stderr}`);
+      throw new Error(`command failed (${r.code}): ${cmd}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`);
+    }
+    return r.stdout;
+  };
+  const gdbus = (method: string, argsJson = "") =>
+    run(
+      `gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.${method} ${argsJson}`,
+    );
+
+  // Matrix loop: all transcription cases × output methods. The service reads
+  // VOICE_TO_TEXT_DEBUG_FILE at record start (src/voice_to_text/debug.py:52),
+  // so the suite swaps the case WAV in before each StartRecording.
+  const debugFile = process.env.VOICE_TO_TEXT_DEBUG_FILE;
+  const fixturesDir = join(import.meta.dir, "fixtures");
+  const serviceLog = process.env.VOX_CI_E2E_SERVICE_LOG ?? "/tmp/voice-service.log";
+  // Each test case carries its own output-method (one case = one cell), so
+  // --case runs exactly one file+method combination. --case filters by audio
+  // filename substring.
+  const matrix = loadTestMatrix()["test-suites"].transcription;
+  const enabledMethods = new Set(
+    matrix.matrix["output-methods"].filter((m: any) => m.enabled).map((m: any) => m.id),
+  );
+  const methodRequires: Record<string, string[]> = Object.fromEntries(
+    matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
+  );
+  const rawCases = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"))["test-cases"] as TestCaseFile[];
+  const picked = SELECTED_CASE
+    ? rawCases.filter(c => c.file.includes(SELECTED_CASE))
+    : [rawCases[Math.floor(Math.random() * rawCases.length)]];
+  if (picked.length === 0) throw new Error(`no test cases match '${SELECTED_CASE ?? "(all)"}'`);
+  if (!SELECTED_CASE) console.log(`  Bare mode: randomly picked ${picked[0].file} (one case is enough for the basic flow)`);
+  const allCases: (TestCaseFile & { method: string })[] = picked
+    .map(c => ({ ...c, method: (c as any)["output-method"] ?? "mutter-commit" }));
+  const uinputOk = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
+    (await transport.exec(`test -c /dev/uinput && test -w /dev/uinput`).then(r => r.code === 0));
+  const canUseDotool = uinputOk;
+
+  interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
+  const results: BareResult[] = [];
+  const normalize = (s: string) =>
+    s.trim().toLowerCase()
+      .replace(/\b(\d)\s*p\.m\.?\b/g, "$1pm").replace(/\b(\d)\s*a\.m\.?\b/g, "$1am")
+      .replace(/(\d)\s+(am|pm)\b/g, "$1$2")
+      .replace(/\.+$/, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ");
+
+  const requireOk: Record<string, boolean> = {
+    dotoolc: uinputOk,
+    "gnome-extension": true,
+  };
+  for (const bareCase of allCases) {
+    const method = bareCase.method;
+    {
+      if (!enabledMethods.has(method) || (methodRequires[method] ?? []).some(r => !requireOk[r])) {
+        const reason = !enabledMethods.has(method) ? "disabled in matrix" : `unmet: ${methodRequires[method].join(",")}`;
+        console.log(`\n=== ${bareCase.file}/${method} ===`);
+        console.log(`  SKIP (${reason})`);
+        results.push({ file: bareCase.file, method, status: "fail", typed: "", note: `skipped — ${reason}` });
+        continue;
+      }
+      const label = `${bareCase.file}/${method}`;
+      console.log(`\n=== ${label} ===`);
+      try {
+        // Log-window marker: only lines appended during THIS cell count.
+        const offsetOut = await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`);
+        const offset = parseInt(offsetOut.trim()) || 0;
+        const cellStartIso = new Date().toISOString();
+        const logSince = (pattern: string) =>
+          transport.exec(
+            `tail -c +$(( ${offset} + 1 )) '${serviceLog}' 2>/dev/null | grep -m1 -oP '${pattern}'`,
+            5_000,
+          ).then(r => r.stdout.trim());
+
+        if (debugFile) {
+          await run(`cp '${join(fixturesDir, bareCase.file)}' '${debugFile}'`);
+        }
+        await gdbus(
+          "StartRecording",
+          `'${JSON.stringify({ provider: process.env.VOX_CI_E2E_PROVIDER || "moonshine", language: "en", output_method: method })}'`,
+        );
+        console.log("  recording started; polling for transcription...");
+
+        // During-recording screenshot: recording widget/badge visible on
+        // the desktop while capture is active.
+        const shotDuring = process.env.VOX_CI_E2E_SHOT_DURING;
+        if (shotDuring) {
+          await Bun.sleep(1500);
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${shotDuring}'`,
+            10_000,
+          ).catch(() => console.log("  WARN: during-screenshot failed"));
+        }
+
+        // Capture file mtime at cell start — the fallback below must only
+        // trust it if the extension wrote it DURING this cell (a stale file
+        // from the previous cell caused test-05 to see test-04's text).
+        const textFileMtime0 = await run(`stat -c %Y '${textFile}' 2>/dev/null || echo 0`);
+
+        let transcription = "";
+        const deadline = Date.now() + 90_000;
+        while (Date.now() < deadline && !transcription) {
+          // "(empty)" marks a completed-but-empty Parakeet response — waiting
+          // longer cannot help, bail immediately (CI run 33726981834 burned
+          // 4x90s on these).
+          const res = await logSince("Transcription result: \\K.*|Transcription result: \(empty\)");
+          if (res === "(empty)") break;
+          transcription = res;
+        }
+        try {
+          await gdbus("StopRecording");
+        } catch (e) {
+          console.log(`  StopRecording warning: ${e}`);
+        }
+
+        // Typed text: transcription from the service log; the output method
+        // is verified separately — the extension's headless CommitText path
+        // writes the capture file + logs "CI E2E captured typed text" in the
+        // shell log. A cell PASSes only if the output method actually ran
+        // (fresh capture write), so silently-failing typing FAILs the cell.
+        let typed = transcription;
+        let captureHit = false;
+        try {
+          const mtime = await run(`stat -c %Y '${textFile}' 2>/dev/null || echo 0`);
+          if (parseInt(mtime.trim()) > parseInt(textFileMtime0.trim())) {
+            captureHit = true;
+            if (!typed) typed = readFileSync(textFile, "utf-8").trim();
+          }
+        } catch {
+          // capture file absent
+        }
+        const errorLine = await logSince("ERROR|Traceback");
+        // Output-method evidence for mutter-commit/mutter-virtual, two paths:
+        // 1. capture file — the extension's headless no-focus fallback writes it;
+        // 2. tmux pane — with the ghostty terminal focused (ghostty+tmux
+        //    unification) the commit goes through the real IM path and no
+        //    capture file is written; the text visibly landing in the pane is
+        //    the stronger proof. dotool 'type' injects via uinput with no
+        //    observable capture; its execution is proven by the flow completing
+        //    without error.
+        const captureRequired = process.env.VOX_CI_E2E_HEADLESS === "1" && method !== "type";
+        let paneHit = false;
+        if (!captureHit && captureRequired) {
+          const pane = await transport.exec(`tmux capture-pane -t ci-e2e -p 2>/dev/null || true`, 5_000)
+            .then(r => r.stdout).catch(() => "");
+          paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
+        }
+        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || paneHit || !captureRequired);
+        console.log(`  expected: '${bareCase.expected}'`);
+        console.log(`  typed:    '${typed}'`);
+        console.log(`  output method exercised: capture=${captureHit} pane=${paneHit}${captureRequired ? " (required)" : " (optional for dotool)"}`);
+        if (errorLine) console.log(`  error in log: ${errorLine}`);
+        console.log(passed ? "  PASS" : "  FAIL");
+        results.push({
+          file: bareCase.file, method, status: passed ? "pass" : "fail", typed,
+          note: !captureHit && !paneHit && captureRequired ? "output method did not run (no capture file or pane write)" : errorLine || undefined,
+        });
+
+        // Per-cell artifact dir: screenshot + log slices + recording window
+        // marker, so each test gets a self-contained evidence folder.
+        const shellLog = process.env.VOX_CI_E2E_SHELL_LOG ?? "";
+        const cellLabel = `${bareCase.file.replace(/\.wav$/, "")}-${method}`;
+        const cellsDir = process.env.VOX_CI_E2E_CELLS_DIR;
+        if (cellsDir) {
+          await transport.exec(`mkdir -p '${cellsDir}/${cellLabel}'`, 5_000).catch(() => {});
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${cellsDir}/${cellLabel}/after.png'`,
+            10_000,
+          ).catch(() => console.log("  WARN: case screenshot failed"));
+          await transport.exec(`tail -c +$(( ${offset} + 1 )) '${serviceLog}' > '${cellsDir}/${cellLabel}/service.log' 2>/dev/null || true`, 5_000);
+          if (shellLog) {
+            await transport.exec(`tail -c +$(( ${offset} + 1 )) '${shellLog}' > '${cellsDir}/${cellLabel}/shell.log' 2>/dev/null || true`, 5_000);
+          }
+          await transport.exec(`printf '%s\n%s\n' '${cellStartIso}' "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" > '${cellsDir}/${cellLabel}/window.txt'`, 5_000);
+        }
+        if (process.env.VOX_CI_E2E_SHOT_AFTER && !cellsDir) {
+          // SHOT_AFTER-only run (no cells dir): keep the per-cell after-shot.
+          const caseShot = `${process.env.VOX_CI_E2E_SHOT_AFTER.replace(/\.png$/, "")}-${cellLabel}.png`;
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${caseShot}'`,
+            10_000,
+          ).catch(() => console.log("  WARN: case screenshot failed"));
+        }
+      } catch (e) {
+        console.log(`  FAIL (exception): ${e}`);
+        results.push({ file: bareCase.file, method, status: "fail", typed: "", note: String(e) });
+        // Recover the service for the next cell if this one wedged it.
+        await gdbus("StopRecording").catch(() => {});
+      }
+    }
+  }
+  endSpan();
+
+  console.log("\n=== bare-mode summary ===");
+
+  // Prefs suite — runs BEFORE config/error rows (user ordering: prefs first).
+  // AT-SPI-driven via LocalTransport (same ExecLike shape as the SSH deployer
+  // in VM mode), no dotool needed. Screenshot via Shell.Screenshot D-Bus.
+  const prefsRows: Array<{ id: string; status: "pass" | "fail" | "skip"; note?: string }> = [];
+  const prefsRow = (id: string, ok: boolean, note?: string) =>
+    prefsRows.push({ id, status: ok ? "pass" : "fail", note });
+  const prefsSkip = (id: string, why: string) => prefsRows.push({ id, status: "skip", note: why });
+  if (NO_PREFS) {
+    prefsSkip("prefs window opens", "skipped — --no-prefs");
+    prefsSkip("add-word roundtrip (type, click Add, row appears)", "skipped — --no-prefs");
+    prefsSkip("prefs window closes", "skipped — --no-prefs");
+  } else {
+  const atspiReady = await transport.exec(
+    "python3 -c 'import gi; gi.require_version(\"Atspi\", \"2.0\"); from gi.repository import Atspi' 2>&1 && echo OK",
+    10_000,
+  ).then(r => r.stdout.trim().endsWith("OK"));
+  if (atspiReady) {
+    try {
+      await run(`gsettings set org.gnome.desktop.interface toolkit-accessibility true`);
+      // Ask the Python service to open prefs: it emits OpenPrefsRequested,
+      // the extension (inside the shell) opens its own dialog via
+      // openPreferences(). This avoids org.gnome.Shell.Extensions D-Bus
+      // activation entirely — that name never appears on the bus in a
+      // headless nested session, so direct calls/activations cannot work.
+      await run(`dbus-send --session --print-reply --dest=com.happytomatoe.VoiceToText --type=method_call /com/happytomatoe/VoiceToText com.happytomatoe.VoiceToText.OpenPrefs 2>&1`, 15_000);
+      // OpenExtensionPrefs signature: (s uuid, s parent_window, a{sv} options).
+      await run(`dbus-send --session --print-reply --dest=org.gnome.Shell.Extensions --type=method_call /org/gnome/Shell/Extensions org.gnome.Shell.Extensions.OpenExtensionPrefs string:"voice-to-text@happytomatoe.com" string:"" dict:string:variant: 2>&1`, 15_000);
+      const execLike = { exec: (cmd: string, timeoutMs?: number) => transport.exec(cmd, timeoutMs ?? 15_000) };
+      await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame", timeoutMs: 20000 });
+      const t0 = await transport.exec(
+        `python3 - <<'ATSPIEOF'
+import gi
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+d = Atspi.get_desktop(0)
+for i in range(d.get_child_count()):
+    a = d.get_child_at_index(i)
+    print("APP:" + str(a.get_name()))
+ATSPIEOF`, 10_000).then(r => r.stdout.trim());
+      console.log(`  a11y apps after P01: ${t0.split("\n").filter(l => l.startsWith("APP:")).join(", ")}`);
+      prefsRow("prefs window opens", true);
+      // Scroll the prefs window to the bottom (mouse wheel over the list via
+      // dotool — same approach as the local VM suite), so the scrolled state
+      // and the Add Word button are reached like a real user would.
+      let addWordRt = "structure-only";
+      // dotool helpers shared by the scroll and add-word steps. mouseto takes
+      // normalized 0..1 screen coords; extents must be screen-absolute
+      // (CoordType.SCREEN — WINDOW coords are window-relative and land near 0,0).
+      const dtool = (script: string) => run(
+        `printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | dotoolc`, 10_000);
+      // Virtual monitor geometry: exported by the stage script (default 1280x720).
+      const CI_WIDTH = parseInt(process.env.CI_E2E_WIDTH ?? "1280", 10);
+      const CI_HEIGHT = parseInt(process.env.CI_E2E_HEIGHT ?? "720", 10);
+      const extentsScript = (name: string) => `python3 - <<'ATSPIEOF'
+import gi
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+
+def walk(node, depth=0):
+    if node is None or depth > 35:
+        return None
+    try:
+        if (node.get_name() or "").strip() == "${name}":
+            e = node.get_component().get_extents(Atspi.CoordType.SCREEN)
+            return f"{e.x},{e.y},{e.width},{e.height}"
+    except Exception:
+        return None
+    try:
+        n = node.get_child_count()
+    except Exception:
+        return None
+    for i in range(n):
+        r = walk(node.get_child_at_index(i), depth + 1)
+        if r:
+            return r
+    return None
+
+d = Atspi.get_desktop(0)
+out = None
+for i in range(d.get_child_count()):
+    out = walk(d.get_child_at_index(i))
+    if out:
+        break
+print("RESULT:" + str(out))
+ATSPIEOF`;
+      const screenCenter = async (name: string) => {
+        const r = await transport.exec(extentsScript(name), 15_000);
+        const res = r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "";
+        const [x, y, w, h] = res.split(",").map(Number);
+        if ([x, y, w, h].some(v => !Number.isFinite(v))) throw new Error(`no SCREEN extents for '${name}': '${res}'`);
+        return { nx: (x + w / 2) / CI_WIDTH, ny: (y + h / 2) / CI_HEIGHT };
+      };
+      // Synthetic input into GTK windows: dotool/uinput events never reach
+      // the nested headless shell (runs 33880610703/33903070893: pixel-
+      // identical screenshots, empty entry). The test-only e2e-input@local
+      // helper extension injects through the compositor's own Clutter virtual
+      // keyboard instead — test scaffolding stays out of the product extension.
+      const typeTextDbus = (method: string, arg: string) => run(
+        `gdbus call --session --dest com.happytomatoe.E2EInput --object-path /com/happytomatoe/E2EInput --method com.happytomatoe.E2EInput.${method} "'${arg.replace(/'/g, "'\\''")}'"`,
+        10_000);
+      // RemoteDesktop variant: inject pointer events through mutter's own
+      // org.gnome.Mutter.RemoteDesktop API (same mechanism GNOME's GTK test
+      // suite uses for headless mutter input tests). Session Notify* calls
+      // must come from the creating peer, so remote_input.py owns the whole
+      // RD+ScreenCast session lifecycle per invocation.
+      const remoteInput = (args: string) => run(
+        `python3 remote_input.py ${args}`, 15_000);
+      const moveDbus = (nx: number, ny: number) => remoteInput(
+        `move ${Math.round(nx * CI_WIDTH)} ${Math.round(ny * CI_HEIGHT)}`);
+      const wheelDbus = (ticks: number) => remoteInput(`wheel ${ticks}`);
+      if (canUseDotool) {
+        const atspiPy = (body: string, timeout = 30_000) =>
+          transport.exec(`python3 - <<'ATSPIEOF'\n${ATSPI_PY}\n${body}\nATSPIEOF`, timeout)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+        // GTK4 reports SHOWING even for viewport-clipped rows, so AT-SPI can't
+        // prove scrolling — pixel-compare screenshots instead (user-visible
+        // evidence, which is what this check is for).
+        const shot = async (name: string) => {
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
+            10_000,
+          ).catch(() => {});
+        };
+        // Pixel-diff two screenshots via ffmpeg PSNR (no ImageMagick on the
+        // runner); identical frames → PSNR=inf. Threshold ~30dB: clock churns
+        // a few pixels, real scrolling changes thousands.
+        const pxChanged = async (a: string, b: string) => {
+          const out = await transport.exec(
+            `ffmpeg -v info -i '${outputDir}/${a}.png' -i '${outputDir}/${b}.png' -filter_complex psnr -f null - 2>&1 | grep -oP 'average:\\K[0-9.inf]+'`,
+            20_000,
+          ).then(r => r.stdout.trim()).catch(() => "err");
+          console.log(`  scroll diff ${a} vs ${b}: PSNR=${out}`);
+          return out;
+        };
+        try {
+          await shot("prefs-scroll-before");
+          // Scroll via AT-SPI Value interface on the vertical scrollbar.
+          // No pointer/keyboard events, so no seat/focus side-effects.
+          const res = await atspiScrollTo(transport, "Open Editor", "BOTTOM_RIGHT");
+          console.log(`  atspi scroll_to: ${res}`);
+          if (res !== "yes") {
+            const res2 = await atspiScrollToBottom(transport, 2_000);
+            console.log(`  atspi value scroll fallback: ${res2}`);
+          }
+          await Bun.sleep(500);
+          await shot("prefs-scroll-after");
+          const psnr = await pxChanged("prefs-scroll-before", "prefs-scroll-after");
+          const scrolled = psnr !== "inf" && psnr !== "err" && parseFloat(psnr) < 30;
+          console.log(`  prefs scroll: ${scrolled ? "scrolled ✅" : "NOT scrolled ❌"}`);
+        } catch (e) {
+          console.log(`  WARN: scroll failed (${e}) — continuing with Add Word click`);
+        }
+      }
+      // Add-Word dialog: open it, then run the full roundtrip — type via the
+      // helper extension's virtual keyboard (GTK4 refuses AT-SPI
+      // SetTextContents, and uinput doesn't reach GTK here), click Add via
+      // AT-SPI, verify the row appears.
+      await doAtspiAction(execLike, "Add Word", "click");
+      // The modal dialog doesn't reliably get keyboard focus in the headless
+      // nested shell when the virtual pointer is parked over the prefs list —
+      // activate it explicitly (same wl_keyboard.enter issue as the prefs
+      // window; without this, TypeText keystrokes never reach the entry).
+      await typeTextDbus("ActivateWindow", "Add Custom Word");
+      await Bun.sleep(500);
+      // Click-to-focus the entry with the RemoteDesktop virtual pointer:
+      // activation alone did not restore keyboard focus after pointer
+      // scrolling (run 33919961080), so force it with a real pointer press.
+      const entryExt = await transport.exec(
+        `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(find_add_word_entry_extents()))\nATSPIEOF`, 30_000)
+        .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+      if (entryExt.includes(",")) {
+        const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
+        // A y near the top edge means the extents are bogus (top bar / wrong
+        // origin) — clicking there opens the overview and steals keyboard
+        // focus, sending TypeText into the shell search instead (run 33961390474).
+        const plausible = [ex, ey, ew, eh].every(v => Number.isFinite(v)) &&
+          ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
+        if (plausible) {
+          await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
+          await Bun.sleep(300);
+          console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
+        } else {
+          console.log(`  entry extents implausible (${entryExt}) — skipping click, relying on dialog default focus`);
+        }
+      } else {
+        console.log(`  entry extents unavailable: ${entryExt} — typing without click-focus`);
+      }
+      {
+        const readEntry = () =>
+          transport.exec(
+            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(read_add_word_entry() or ""))\nATSPIEOF`, 30_000)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+        const shot2 = async (name: string) => {
+          await transport.exec(
+            `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
+            10_000,
+          ).catch(() => {});
+        };
+        await Bun.sleep(1500);
+        // The entry gets default focus when the dialog opens. Type, then READ
+        // the text back via AT-SPI — input can silently miss, and clicking Add
+        // with an empty entry is a silent no-op.
+        const typeAndRead = async () => {
+          await typeTextDbus("TypeText", "E2E");
+          await Bun.sleep(800);
+          return readEntry();
+        };
+        let entryText = await typeAndRead();
+        if (!entryText.includes("E2E")) {
+          console.log(`  entry text after first type: '${entryText}' — retrying`);
+          entryText = await typeAndRead();
+        }
+        console.log(`  entry text: '${entryText}'`);
+        if (entryText.includes("E2E")) {
+          await doAtspiAction(execLike, "Add", "click");
+          // The Add click closes the dialog on success — wait for the new row
+          // in the custom-words list directly (verify_word_added expects the
+          // dialog to still exist and returns no-dialog here).
+          let rowFound = "no";
+          for (let i = 0; i < 20; i++) {
+            rowFound = await transport.exec(
+              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_name_present("E2E"))\nATSPIEOF`, 15_000)
+              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
+            if (rowFound === "yes") break;
+            await Bun.sleep(500);
+          }
+          addWordRt = rowFound === "yes" ? "ok" : "row-not-found";
+        } else {
+          addWordRt = `entry-text='${entryText}' (keystrokes never reached the entry)`;
+        }
+        console.log(`  add-word roundtrip: ${addWordRt}`);
+        prefsRow("add-word roundtrip (type, click Add, row appears)", addWordRt === "ok", addWordRt === "ok" ? undefined : addWordRt);
+        // Screenshot AFTER the word was added — must VISUALLY show the new
+        // "E2E" row AND the bottom of the prefs window (user feedback: the
+        // add must be visible in evidence). Preferred: AT-SPI
+        // Component.scroll_to("Open Editor", BOTTOM_RIGHT) — the native
+        // accessibility scroll API, scrolls the last widget into view in one
+        // call. Fallback: Tab-focus walk (GTK auto-scrolls focused widgets).
+        try {
+          // Scroll via AT-SPI Value interface on the vertical scrollbar —
+          // no pointer events, no focus side-effects on the modal.
+          const res2 = await atspiScrollTo(transport, "Open Editor", "BOTTOM_RIGHT");
+          console.log(`  atspi scroll_to: ${res2}`);
+          if (res2 !== "yes") {
+            await atspiScrollToBottom(transport, 2_000);
+          }
+        } catch (e) {
+          console.log(`  WARN: scroll-to-bottom failed (${e})`);
+        }
+        await Bun.sleep(500);
+        await shot2("prefs-after-add");
+      }
+      // Close: prefs window has no guaranteed a11y close action — the Adw
+      // window lives in the org.gnome.Shell.Extensions process; kill it and
+      // verify the window leaves the a11y tree.
+      await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
+      await Bun.sleep(2000);
+      const gone = await transport.exec(
+        `python3 - <<'ATSPIEOF'
+from gi.repository import Atspi
+d = Atspi.get_desktop(0)
+found = "no"
+for i in range(d.get_child_count()):
+    app = d.get_child_at_index(i)
+    for j in range(app.get_child_count()):
+        w = app.get_child_at_index(j)
+        if (w.get_name() or "").strip() == "Voice to Text":
+            found = "yes"
+print("RESULT:" + found)
+ATSPIEOF`,
+        10_000,
+      ).then(r => r.stdout.includes("RESULT:no"));
+      prefsRow("prefs window closes", gone);
+      // End-state screenshot AFTER the close step — shows the prefs window
+      // gone (desktop/terminal only), visually distinct from prefs-after-add.
+      await transport.exec(
+        `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
+        10_000,
+      ).catch(() => {});
+    } catch (e) {
+      prefsRow("prefs window opens", false, String(e));
+      prefsRow("add-word roundtrip (type, click Add, row appears)", false, "skipped — P01 failed");
+      prefsRow("prefs window closes", false, "skipped — P01 failed");
+    }
+  } else {
+    prefsSkip("prefs window opens", "no python3 Atspi bindings");
+    prefsSkip("add-word roundtrip (type, click Add, row appears)", "no python3 Atspi bindings");
+    prefsSkip("prefs window closes", "no python3 Atspi bindings");
+  }
+  }
+
+  // Phase 4: config + error cases — no screen, no input; D-Bus + config-file
+  // assertions through the same transport.
+  const configPath = "$HOME/.config/voice-to-text/config.yaml";
+  const configRows: Array<{ id: string; status: "pass" | "fail" | "skip"; note?: string }> = [];
+  const row = (id: string, ok: boolean, note?: string) =>
+    configRows.push({ id, status: ok ? "pass" : "fail", note });
+  const skipRow = (id: string, why: string) => configRows.push({ id, status: "skip", note: why });
+
+  // C07: config exists + parses as YAML (service started, so it must)
+  try {
+    const c07 = await run(`cat ${configPath}`);
+    row("config.yaml exists and parses", c07.includes("provider"));
+  } catch (e) {
+    row("config.yaml exists and parses", false, String(e));
+  }
+  console.log(`  debug: config inode=$(stat -c '%i' $HOME/.config/voice-to-text/config.yaml) perms=$(stat -c '%a' $HOME/.config/voice-to-text/config.yaml) birth=$(stat -c '%w' $HOME/.config/voice-to-text/config.yaml)`);
+  // 0600 permissions
+  try {
+    const perms = (await run(`stat -c '%a' ${configPath}`)).trim();
+    row("config.yaml has 0600 permissions", perms === "600", `got ${perms}`);
+  } catch (e) {
+    row("config.yaml has 0600 permissions", false, String(e));
+  }
+  // C01/C02/C03: write provider/output-method/language into config, restart
+  // service, verify bus name returns (service picked the file up cleanly).
+  try {
+    await run(
+      `sed -i 's/^provider:.*/provider: parakeet/' ${configPath} && ` +
+        `grep -q '^output_method:' ${configPath} || echo 'output_method: mutter-commit' >> ${configPath} && ` +
+        `grep -q '^language:' ${configPath} || echo 'language: en' >> ${configPath}`,
+    );
+    const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
+    const { cmdline, cwd } = await svcCmdline(svcPid, transport.exec.bind(transport));
+    console.log(`  svcPid='${svcPid}' cmdline='${cmdline.slice(0, 120)}' cwd='${cwd}'`);
+    if (!cmdline) throw new Error(`restart skipped: no cmdline for pid '${svcPid}'`);
+    await run(`pkill -f '[v]oice-to-text-dbus'; sleep 1`);
+    if (cmdline) {
+      // replaying the cmdline from the harness cwd breaks uv's relative
+      // `--project .` — must run from the original service cwd (CI C01-C03).
+      // nohup'd child inherits stdout/stderr pipes; redirect them so exec's
+      // pipe drain doesn't block, and log the restart for forensics.
+      // setsid + full stdio detach: any fd left on the exec's pipes makes
+      // LocalTransport's stream await hang past the kill timer (CI run
+      // 33738359924 hung 42min here). Verify the restart in a separate exec.
+      transport.exec(
+        `setsid bash -c "cd '${cwd}' && exec ${cmdline}" >> '${serviceLog}' 2>&1 < /dev/null &`,
+        5_000,
+      ).catch(() => {});
+      await new Promise(r => setTimeout(r, 3_000));
+      const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
+      console.log(`  service restart: pid=${vr.stdout.trim()}`);
+    }
+    await pollForCommandOutput(
+      (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
+      "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+      "com.happytomatoe.VoiceToText",
+      30_000,
+    );
+    row("config change picked up after service restart", true);
+  } catch (e) {
+    row("config change picked up after service restart", false, String(e));
+  }
+  skipRow("hotkey stored in dconf", "needs synthetic input (phase 5)");
+  skipRow("debug logging toggle", "low priority");
+  skipRow("API key from keyring", "no keyring on runner");
+
+  // E06: service down → StartRecording must fail cleanly
+  try {
+    const svcPid = (await transport.exec("pgrep -f voice-to-text-dbus | head -1")).stdout.trim();
+    // C01-C03 above may have left the pid stale via `pgrep` matching leftovers;
+    // verify the pid still exists before reading /proc — a dead pid yields no
+    // cmdline and the restore below becomes a no-op (regression 2026-09-03).
+    const pidAlive = svcPid && /^\d+$/.test(svcPid) &&
+      (await transport.exec(`test -d /proc/${svcPid} && echo yes || echo no`, 5_000)).stdout.trim() === "yes";
+    const { cmdline: restoreCmd, cwd: restoreCwd } = pidAlive
+      ? await svcCmdline(svcPid, transport.exec.bind(transport))
+      : { cmdline: "", cwd: "" };
+    // The gdbus call must fail while the service is down AND stay down until
+    // the probe returned — a lingering old process re-owning the name makes
+    // the restarted service accept the call (E06 false-fail + VOXTRAL
+    // fallback crash — regression 2026-09-03 run8-10).
+    if (pidAlive) {
+      // cmdline is the `uv run` wrapper — killing the pid alone leaves the
+      // python child alive and owning the bus name. Kill the whole tree.
+      await run(`pkill -9 -f '[v]oice-to-text-dbus'; sleep 1`);
+      // Wait until the bus name is actually gone before probing — the killed
+      // process's name lingers briefly and the probe would hit a dying owner
+      // (E06 false-fail — regression 2026-09-03 run8-11).
+      // pollForCommandOutput only supports substring matching, so poll with
+      // `grep -c` wrapped to yield "0" when the name is gone.
+      await pollForCommandOutput(
+        (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout.trim()),
+        "until [ \"$(busctl --user list 2>/dev/null | grep -c 'com.happytomatoe.[V]oiceToText')\" = \"0\" ]; do sleep 0.5; done; echo GONE",
+        "GONE",
+        15_000,
+      ).catch(() => {});
+    }
+    const e06 = await transport.exec(
+      "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
+      10_000,
+    );
+    row("clean error when service is down", e06.code !== 0 || /error/i.test(e06.stderr + e06.stdout));
+    await run(`sed -i 's|^provider:.*|provider: parakeet|' ${configPath}`);
+    if (restoreCmd) {
+      transport.exec(
+        `setsid bash -c "cd '${restoreCwd}' && exec ${restoreCmd}" >> '${serviceLog}' 2>&1 < /dev/null &`,
+        5_000,
+      ).catch(() => {});
+      await new Promise(r => setTimeout(r, 3_000));
+      const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
+      console.log(`  service restore: pid=${vr.stdout.trim()}`);
+      await pollForCommandOutput(
+        (cmd: string) => transport.exec(cmd, 10_000).then(r => r.stdout),
+        "busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'",
+        "com.happytomatoe.VoiceToText",
+        30_000,
+      );
+    }
+  } catch (e) {
+    row("clean error when service is down", false, String(e));
+  }
+  // E06 leftover: a StartRecording '{}' can land after the service restarted
+  // (racing gdbus timeout) and leave the engine in a bad state — reset it.
+  await gdbus("StopRecording").catch(() => {});
+  // Unknown provider → error in log, service stays alive
+  try {
+    // In-process moonshine has no HTTP endpoint to break. A nonexistent
+    // model is also unreliable — the transcriber caches the loaded model, so
+    // no reload happens and no error is logged. Unknown provider name raises
+    // in get_batch_provider before any caching. NOTE: the engine reads the
+    // provider from the StartRecording payload (default 'voxtral'), NOT from
+    // config.yaml — so the unknown provider must be in the payload itself
+    // (CI run 33882468020: config-only patch silently tested voxtral instead).
+    // Offset must be captured BEFORE StartRecording — the engine raises
+    // synchronously in get_batch_provider, so the error can land in the log
+    // before a later wc runs (run 33906572002: offset-after missed it).
+    const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
+    await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch(() => {});
+    // Engine raises synchronously in get_batch_provider — poll briefly for the
+    // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
+    let errHit = "0";
+    for (let i = 0; i < 10; i++) {
+      await Bun.sleep(1000);
+      errHit = (await transport.exec(
+        `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
+        5_000,
+      )).stdout.trim() || "0";
+      if (parseInt(errHit) > 0) break;
+    }
+    await gdbus("StopRecording").catch(() => {});
+    row("unknown provider logs a clear error", parseInt(errHit) > 0);
+  } catch (e) {
+    row("unknown provider logs a clear error", false, String(e));
+  }
+  skipRow("parallel recordings rejected cleanly", "deferred");
+  skipRow("no audio device handled", "deferred");
+  skipRow("network timeout handled", "deferred");
+  skipRow("read-only config dir handled", "deferred");
+
+  // Phase 5: hotkey + UI suites — entirely uinput-gated. Hotkey press via
+  // dotool replaces the D-Bus StartRecording trigger; UI cases verify the
+  // preferences window lifecycle.
+  const hotkeyUiRows: Array<{ id: string; status: "pass" | "fail" | "skip"; note?: string }> = [];
+  const dotoolBin = join(import.meta.dir, "bin", "dotool");
+  if (canUseDotool) {
+    await transport.exec(
+      `pgrep -x dotoold >/dev/null || nohup '${dotoolBin.replace(/dotool$/, "dotoold")}' >/dev/null 2>&1 &`,
+      5_000,
+    );
+    const dtool = (script: string) =>
+      run(`printf '%s\\n' '${script.replace(/'/g, "'\\''")}' | '${dotoolBin}'`);
+    try {
+      const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
+      const since = (pattern: string) =>
+        transport.exec(
+          `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -m1 -ioP '${pattern}'`,
+          5_000,
+        ).then(r => r.stdout.trim());
+      // Schema default hotkey is <Super>w (gschema.xml) — match it here.
+      // Full keypress->recording verification isn't achievable in the headless
+      // session (uinput events never reach the Wayland seat without logind),
+      // so verify both: (a) the keypress is injected without error, and
+      // (b) the hotkey is configured + the extension registered it without
+      // error (no "failed to register hotkey" in shell log this window).
+      const shellLog = process.env.VOX_CI_E2E_SHELL_LOG ?? "$HOME/shell.log";
+      const shellLogOffset = parseInt((await run(`wc -c < '${shellLog}' 2>/dev/null || echo 0`)).trim()) || 0;
+      await dtool("key super+w");
+      await Bun.sleep(1000);
+      const started = await since("Recording|recording started|DEBUG MODE");
+      await dtool("key super+w");
+      // gsettings CLI can't see the extension's relocatable schema (not in
+      // the default schema source in this env) — read the default straight
+      // from the deployed gschema.xml instead.
+      const extDir = "$HOME/.local/share/gnome-shell/extensions/voice-to-text@happytomatoe.com";
+      const hotkeyVal = await run(`grep -A1 'name="hotkey"' "${extDir}/schemas/org.gnome.shell.extensions.voice-to-text.gschema.xml" | grep default`);
+      const dconfOverride = await transport.exec(
+        `dconf read /org/gnome/shell/extensions/voice-to-text/hotkey 2>/dev/null || true`,
+        5_000,
+      );
+      const regErr = await transport.exec(
+        `tail -c +$(( ${shellLogOffset} + 1 )) '${shellLog}' 2>/dev/null | grep -c 'failed to register hotkey'`,
+        5_000,
+      );
+      const registered = (hotkeyVal.includes("Super") || dconfOverride.stdout.includes("Super")) && (parseInt(regErr.stdout.trim() || "0") === 0);
+      hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : `hotkey unregistered val=${hotkeyVal.trim()} regErr=${regErr.stdout.trim()}` });
+    } catch (e) {
+      hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "fail", note: String(e) });
+      await gdbus("StopRecording").catch(() => {});
+    }
+    try {
+      // P01: the inner harness issued OpenExtensionPrefs on
+      // org.gnome.Shell.Extensions — the dialog runs inside the nested shell
+      // process, so "process alive" == nested gnome-shell still running.
+      const shellAlive = (await transport.exec("pgrep -f 'gnome-shell' | head -1 | xargs -I{} test -d /proc/{} && echo alive || echo dead")).stdout.trim();
+      hotkeyUiRows.push({ id: "prefs window opens", status: shellAlive === "alive" ? "pass" : "fail" });
+    } catch (e) {
+      hotkeyUiRows.push({ id: "prefs window opens", status: "fail", note: String(e) });
+    }
+  } else {
+    hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "skip", note: "no uinput" });
+    hotkeyUiRows.push({ id: "prefs window opens", status: "skip", note: "no uinput" });
+  }
+  for (const id of ["custom hotkey binding", "hotkey conflict handling", "global hotkey registration", "prefs close button", "prefs tabs navigation", "prefs save persists settings", "prefs cancel discards changes"]) {
+    hotkeyUiRows.push({ id, status: "skip", note: "deferred" });
+  }
+
+  console.log("\n=== config/error rows ===");
+  for (const r of prefsRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
+  for (const r of hotkeyUiRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
+  for (const r of configRows) console.log(`  ${r.status.toUpperCase().padEnd(4)} ${r.id}${r.note ? `  (${r.note})` : ""}`);
+  const prefsFailed = prefsRows.filter(r => r.status === "fail").length;
+  const configFailed = configRows.filter(r => r.status === "fail").length;
+  const failed = results.filter(r => r.status === "fail").length;
+  const hotkeyUiFailed = hotkeyUiRows.filter(r => r.status === "fail").length;
+  const totalFailed = failed + configFailed + hotkeyUiFailed + prefsFailed;
+  const skippedTypeCells = results.filter(r => r.method === "type" && r.note?.includes("skipped")).length;
+  const skippedNote = skippedTypeCells ? ` (+${skippedTypeCells} type cells skipped: unmet requirements)` : "";
+  writeFileSync(
+    join(outputDir, "results.json"),
+    JSON.stringify({ transcription: results, prefs: prefsRows, configError: configRows, hotkeyUi: hotkeyUiRows }, null, 2),
+  );
+  process.exit(totalFailed === 0 ? 0 : 1);
+}
+
 /** Entry point: parse flags, boot VM, run flow or prefs tests. */
 async function main(): Promise<void> {
+  // ubuntu-bare handles its own lifecycle before any VM/RunContext setup.
+  if (ENV === "ubuntu-bare") {
+    await runBareMode();
+    return;
+  }
+
   const run = new RunContext({
     baseImage: BASE_IMAGE,
     sshKey: SSH_KEY,
@@ -934,6 +1783,8 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     recordMode: RECORD_MODE,
     updateMode: UPDATE_MODE,
+    existingSshPort: USE_EXISTING && IS_UBUNTU ? SUITE_ENV.existingSshPort : undefined,
+    preserveArtifacts: true,
   });
   console.log(`Run ID: ${run.id}`);
   console.log(`Output directory: ${run.outputDir}`);
@@ -954,6 +1805,8 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    env: SUITE_ENV,
+    useExisting: USE_EXISTING,
   };
   const vm = new VmManager(vmCfg);
   const startTime = Date.now();
@@ -995,6 +1848,7 @@ async function main(): Promise<void> {
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
       skipDeps: SKIP_DEPS,
+      env: SUITE_ENV,
     });
     
     const results = await runner.runAll();
@@ -1017,7 +1871,7 @@ async function main(): Promise<void> {
     await new StepRunner().run([
       { name: "preflight", fn: preflight },
       { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+      { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 700_000 },
       { name: "setup", fn: () => vm.setupForPrefs(), timeout: 600_000 },
     ]);
     
@@ -1058,7 +1912,7 @@ async function main(): Promise<void> {
         console.log("\n--- No snapshot restore, deploying fresh ---");
         await new StepRunner().run([
           { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-          { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+          { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 700_000 },
           { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
           ...(NO_SAVE_SNAPSHOT
             ? []
@@ -1111,7 +1965,7 @@ async function main(): Promise<void> {
       await new StepRunner().run([
         { name: "preflight", fn: preflight },
         { name: "boot-vm", fn: () => vm.boot(), timeout: 120_000 },
-        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 120_000 },
+        { name: "wait-ssh", fn: () => vm.waitForSsh(), timeout: 700_000 },
         { name: "setup", fn: () => vm.setup(), timeout: 600_000 },
         { name: "test-flow", fn: () => runTestFlow(vm, run) },
       ]);

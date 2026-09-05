@@ -1,0 +1,6 @@
+{
+  "uuid": "poc-screenshot@local",
+  "name": "POC Screenshot",
+  "description": "POC: enable unsafe mode",
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
+}

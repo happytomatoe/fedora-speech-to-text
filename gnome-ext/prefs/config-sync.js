@@ -65,6 +65,22 @@ function writeConfigYaml(config) {
     const yamlStr = yamlDump(config);
     const encoder = new TextEncoder();
     const bytes = encoder.encode(yamlStr);
+    // REPLACE_DESTINATION recreates the file with default (world-readable)
+    // perms — config can hold API keys, so preserve the existing mode (or
+    // default to 0600 for a fresh file) after the replace.
+    let mode = 0o600;
+    try {
+        const info = file.query_info(
+            Gio.FILE_ATTRIBUTE_UNIX_MODE,
+            Gio.FileQueryInfoFlags.NONE,
+            null
+        );
+        const m = info.get_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE);
+        // Strip group/other bits: config may hold API keys, never world-readable.
+        if (m) mode = m & 0o600;
+    } catch (e) {
+        // File doesn't exist yet — keep the 0600 default.
+    }
     const [ok] = file.replace_contents(
         bytes,
         null,
@@ -74,6 +90,20 @@ function writeConfigYaml(config) {
     );
     if (!ok) {
         console.error('VoiceToText: failed to write config.yaml');
+        return;
+    }
+    try {
+        file.set_attribute_uint32(
+            Gio.FILE_ATTRIBUTE_UNIX_MODE,
+            mode,
+            Gio.FileQueryInfoFlags.NONE,
+            null
+        );
+    } catch (e) {
+        console.error(
+            'VoiceToText: failed to restore config.yaml mode:',
+            e.message
+        );
     }
 }
 
@@ -97,6 +127,24 @@ function setConfigValue(config, path, value) {
     obj[path[path.length - 1]] = value;
 }
 
+// Type-check a config value against the declared sync type.
+function typeMatches(type, val) {
+    switch (type) {
+        case 'int':
+            return Number.isInteger(val);
+        case 'double':
+            return typeof val === 'number';
+        case 'string':
+            return typeof val === 'string';
+        case 'strv':
+            return Array.isArray(val);
+        case 'boolean':
+            return typeof val === 'boolean';
+        default:
+            return false;
+    }
+}
+
 /**
  * Read config.yaml and seed GSettings for any keys that are empty.
  * @param {Gio.Settings} settings
@@ -111,72 +159,59 @@ export function syncFromConfig(settings) {
         const cfgVal = getConfigValue(config, path);
         if (cfgVal === undefined || cfgVal === null) continue;
 
-        // Type validation before writing
-        if (type === 'int' && !Number.isInteger(cfgVal)) {
+        if (!typeMatches(type, cfgVal)) {
             console.warn(
-                `VoiceToText: skipping ${gkey}: expected int, got ${typeof cfgVal}`
-            );
-            continue;
-        }
-        if (type === 'double' && typeof cfgVal !== 'number') {
-            console.warn(
-                `VoiceToText: skipping ${gkey}: expected number, got ${typeof cfgVal}`
-            );
-            continue;
-        }
-        if (type === 'string' && typeof cfgVal !== 'string') {
-            console.warn(
-                `VoiceToText: skipping ${gkey}: expected string, got ${typeof cfgVal}`
-            );
-            continue;
-        }
-        if (type === 'strv' && !Array.isArray(cfgVal)) {
-            console.warn(
-                `VoiceToText: skipping ${gkey}: expected array, got ${typeof cfgVal}`
+                `VoiceToText: skipping ${gkey}: expected ${type}, got ${typeof cfgVal}`
             );
             continue;
         }
 
-        let gsetVal;
-        if (type === 'strv') {
-            gsetVal = settings.get_strv(gkey);
-            // Only seed from config if GSettings has no user value (not explicitly set)
-            if (
-                settings.get_user_value(gkey) === null &&
-                gsetVal.length === 0 &&
-                cfgVal.length > 0
-            ) {
-                settings.set_strv(gkey, cfgVal);
-                gsetVal = cfgVal;
-            }
-            // Compare sorted arrays
-            const gsetStr = gsetVal.slice().sort().join('\n');
-            const cfgStr = cfgVal.slice().sort().join('\n');
-            if (gsetStr !== cfgStr) drifted.push(gkey);
-        } else if (type === 'int') {
-            gsetVal = settings.get_int(gkey);
-            if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
-                settings.set_int(gkey, cfgVal);
-                gsetVal = cfgVal;
-            }
-            if (gsetVal !== cfgVal) drifted.push(gkey);
-        } else if (type === 'double') {
-            gsetVal = settings.get_double(gkey);
-            if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
-                settings.set_double(gkey, cfgVal);
-                gsetVal = cfgVal;
-            }
-            if (gsetVal !== cfgVal) drifted.push(gkey);
-        } else {
-            gsetVal = settings.get_string(gkey);
-            if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
-                settings.set_string(gkey, cfgVal);
-                gsetVal = cfgVal;
-            }
-            if (gsetVal !== cfgVal) drifted.push(gkey);
+        if (syncSetting(settings, gkey, type, cfgVal)) {
+            drifted.push(gkey);
         }
     }
     return {config, drifted};
+}
+
+// Seed GSettings from a config value when no user value exists; report drift.
+// Returns true if the current GSettings value differs from the config value.
+function syncSetting(settings, gkey, type, cfgVal) {
+    let gsetVal;
+    if (type === 'strv') {
+        gsetVal = settings.get_strv(gkey);
+        // Only seed from config if GSettings has no user value (not explicitly set)
+        if (
+            settings.get_user_value(gkey) === null &&
+            gsetVal.length === 0 &&
+            cfgVal.length > 0
+        ) {
+            settings.set_strv(gkey, cfgVal);
+            gsetVal = cfgVal;
+        }
+        // Compare sorted arrays
+        const gsetStr = gsetVal.slice().sort().join('\n');
+        const cfgStr = cfgVal.slice().sort().join('\n');
+        return gsetStr !== cfgStr;
+    }
+
+    if (type === 'int') {
+        gsetVal = settings.get_int(gkey);
+    } else if (type === 'double') {
+        gsetVal = settings.get_double(gkey);
+    } else if (type === 'boolean') {
+        gsetVal = settings.get_boolean(gkey);
+    } else {
+        gsetVal = settings.get_string(gkey);
+    }
+
+    if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
+        if (type === 'int') settings.set_int(gkey, cfgVal);
+        else if (type === 'double') settings.set_double(gkey, cfgVal);
+        else if (type === 'boolean') settings.set_boolean(gkey, cfgVal);
+        else settings.set_string(gkey, cfgVal);
+        gsetVal = cfgVal;
+    }
+    return gsetVal !== cfgVal;
 }
 
 /**
@@ -196,6 +231,7 @@ export function syncToConfig(settings) {
         if (type === 'strv') value = settings.get_strv(gkey);
         else if (type === 'int') value = settings.get_int(gkey);
         else if (type === 'double') value = settings.get_double(gkey);
+        else if (type === 'boolean') value = settings.get_boolean(gkey);
         else value = settings.get_string(gkey);
         setConfigValue(config, path, value);
     }

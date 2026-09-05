@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 // Python helpers live in atspi.py next to this file; loaded once and prepended
 // to every one-shot script sent over SSH (python3 - reads the heredoc stdin).
-const ATSPI_PY = await Bun.file(join(import.meta.dir, "atspi.py")).text();
+export const ATSPI_PY = await Bun.file(join(import.meta.dir, "atspi.py")).text();
 
 export interface AtspiNode {
   name: string;
@@ -23,7 +23,7 @@ export interface Extents {
 interface ExecLike {
   exec: (
     cmd: string,
-    opts?: Record<string, unknown>
+    timeoutMs?: number
   ) => Promise<string | { stdout: string; stderr: string; code: number }>;
 }
 
@@ -159,6 +159,24 @@ export async function waitForAtspiText(
 }
 
 /** Set text contents on the first Text-interface node matching name. */
+export async function setAtspiTextByRole(
+  deployer: ExecLike,
+  role: string,
+  text: string
+): Promise<void> {
+  const script = `${ATSPI_PY}
+print("RESULT:" + str(set_text_by_role(['text', 'text entry', 'entry'], '${pyQuote(text)}') or ""))
+`;
+  const out = await execPython(deployer, script);
+  if (parseResult(out) !== "ok") {
+    // Debug: list Text-interface nodes so role mismatches are diagnosable
+    const dump = await execPython(deployer, `${ATSPI_PY}
+print("RESULT:" + str(dump_tree() or ""))
+`);
+    throw new Error(`AT-SPI: no '${role}' node to set '${text}' — tree: ${parseResult(dump).slice(0, 2000)}`);
+  }
+}
+
 export async function setAtspiText(
   deployer: ExecLike,
   name: string,
@@ -171,4 +189,44 @@ print("RESULT:" + str(set_text_by_name('${pyQuote(name)}', '${pyQuote(text)}') o
   if (parseResult(out) !== "ok") {
     throw new Error(`AT-SPI: no Text node '${name}' to set '${text}'`);
   }
+}
+
+/** Scroll the first node matching `name` into view via AT-SPI Component.scroll_to.
+ *  Returns "yes" on success, "no"/"no-api"/"no" otherwise. Single attempt, no retry. */
+export async function atspiScrollTo(
+  deployer: ExecLike,
+  name: string,
+  position: "TOP_LEFT" | "BOTTOM_RIGHT" = "BOTTOM_RIGHT"
+): Promise<string> {
+  const script = `${ATSPI_PY}
+print("RESULT:" + str(scroll_to('${pyQuote(name)}', '${pyQuote(position)}')))
+`;
+  const out = await execPython(deployer, script);
+  return parseResult(out) || "no";
+}
+
+/** Scroll the prefs window to the bottom via AT-SPI Value on the vertical
+ *  scrollbar. No pointer events -> no focus pollution of the modal dialog.
+ *  Passes a numeric timeout so it works with LocalTransport (whose exec
+ *  second arg is milliseconds, not an options object). */
+export async function atspiScrollToBottom(
+  deployer: ExecLike,
+  timeoutMs = 15_000
+): Promise<string> {
+  const script = `python3 - <<'ATSPIEOF'
+${ATSPI_PY}
+print("RESULT:" + str(scroll_to_bottom_via_value()))
+ATSPIEOF`;
+  const start = Date.now();
+  let last = "";
+  while (Date.now() - start < timeoutMs) {
+    const out = await deployer.exec(script, 20_000).then(r =>
+      typeof r === "string" ? r : r.stdout
+    );
+    const res = out.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "";
+    if (res === "ok") return res;
+    last = res;
+    await Bun.sleep(500);
+  }
+  throw new Error(`AT-SPI scroll-to-bottom failed: ${last}`);
 }

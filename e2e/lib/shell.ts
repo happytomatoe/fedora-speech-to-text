@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { LocalTransport, SshTransport } from "./transport.js";
 
 /**
  * SSH-backed helper for running commands in the VM and driving the GNOME session.
@@ -24,6 +24,16 @@ export class ShellHelper {
 
   private dbusAddr: string | null = null;
   private _deployer: import("./deploy.js").Deployer | null = null;
+  private _localTransport: LocalTransport | null = null;
+
+  /** Use LocalTransport — all exec() calls run locally via bash -lc. */
+  useLocalTransport(): void {
+    this._localTransport = new LocalTransport();
+  }
+
+  private get isLocal(): boolean {
+    return this._localTransport !== null;
+  }
 
   /** Set deployer for fast persistent SSH commands */
   setDeployer(deployer: import("./deploy.js").Deployer): void {
@@ -51,16 +61,22 @@ export class ShellHelper {
   }
 
   async exec(command: string, timeoutMs = 30000): Promise<string> {
+    // Local transport (ubuntu-bare): run via bash -lc on the host itself.
+    if (this._localTransport) {
+      const r = await this._localTransport.exec(command, timeoutMs);
+      return r.stdout.trim();
+    }
     const sshExecOnce = async (): Promise<string> => {
       if (!this.session) throw new Error("No session");
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
+      const transport = new SshTransport({
+        sshKey: this.session.sshKey,
+        sshPort: this.session.sshPort,
+        sshUser: this.session.sshUser,
+        host: this.session.host,
+      });
       try {
-        return execSync(`ssh ${sshOpts} ${sshHost} ${quote(command)}`, {
-          encoding: "utf-8",
-          timeout: timeoutMs,
-          stdio: ["pipe", "pipe", "pipe"],
-        }).trim();
+        const r = await transport.exec(command, timeoutMs);
+        return r.stdout.trim();
       } catch (err) {
         // Nonzero remote exit (e.g. `grep` with no match) — still return stdout
         const e = err as { stdout?: string; status?: number };
@@ -99,7 +115,7 @@ export class ShellHelper {
     // Escape single quotes in the command for safe shell interpolation
     const escapedCommand = command.replace(/'/g, "'\\''");
     await this.exec(
-      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | /home/testuser/.local/bin/dotoolc`
+      `export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; echo '${escapedCommand}' | dotoolc`
     );
   }
 
@@ -123,13 +139,19 @@ export class ShellHelper {
           `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`
         );
         raw = result.stdout.trim();
+      } else if (this.session) {
+        const transport = new SshTransport({
+          sshKey: this.session.sshKey,
+          sshPort: this.session.sshPort,
+          sshUser: this.session.sshUser,
+          host: this.session.host,
+        });
+        raw = (await transport.exec(
+          `cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-`,
+          5000,
+        )).stdout.trim();
       } else {
-        const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-        const sshHost = `${this.session.sshUser}@${this.session.host}`;
-        raw = execSync(
-          `ssh ${sshOpts} ${sshHost} 'cat /proc/$(pgrep -f gnome-shell | head -1)/environ | xargs -0 -n1 | grep DBUS_SESSION_BUS_ADDRESS | cut -d= -f2-'`,
-          { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-        ).trim();
+        raw = "";
       }
       if (raw) {
         this.dbusAddr = raw;
@@ -158,11 +180,15 @@ export class ShellHelper {
     try {
       const addr = await this.getShellDbusAddr();
       if (!addr) return;
-      const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${this.session.sshKey} -p ${this.session.sshPort}`;
-      const sshHost = `${this.session.sshUser}@${this.session.host}`;
-      execSync(
-        `ssh ${sshOpts} ${sshHost} "DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'" 2>/dev/null`,
-        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      const transport = new SshTransport({
+        sshKey: this.session.sshKey,
+        sshPort: this.session.sshPort,
+        sshUser: this.session.sshUser,
+        host: this.session.host,
+      });
+      await transport.exec(
+        `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'`,
+        5000,
       );
     } catch {
       // Ignore — may already be dismissed
@@ -220,21 +246,18 @@ export class ShellHelper {
    */
   async verifyTerminalFocus(tmuxSession: string, sshKey: string, sshPort: number): Promise<boolean> {
     try {
+      const transport = new SshTransport({ sshKey, sshPort, sshUser: this.session?.sshUser ?? "testuser", host: this.session?.host ?? "localhost" });
+      const captureCmd = `tmux capture-pane -t ${tmuxSession} -p`;
+
       // Get tmux content before
-      const before = execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort} ${this.session?.sshUser}@${this.session?.host} "tmux capture-pane -t ${tmuxSession} -p"`,
-        { encoding: "utf-8", timeout: 5000 }
-      ).trim();
+      const before = (await transport.exec(captureCmd, 5000)).stdout.trim();
 
       // Type a test character
       await this.dotoolCommand("key shift+a"); // 'A' is visible, unlike space
       await Bun.sleep(200);
 
       // Get tmux content after
-      const after = execSync(
-        `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${sshKey} -p ${sshPort} ${this.session?.sshUser}@${this.session?.host} "tmux capture-pane -t ${tmuxSession} -p"`,
-        { encoding: "utf-8", timeout: 5000 }
-      ).trim();
+      const after = (await transport.exec(captureCmd, 5000)).stdout.trim();
 
       return before !== after;
     } catch {
@@ -255,6 +278,7 @@ export class ShellHelper {
   async sendHotkey(): Promise<void> {
     // Use D-Bus instead of dotool - dotool key presses don't propagate through Wayland
     const dbusAddr = await this.getShellDbusAddr();
+    if (!dbusAddr) throw new Error("D-Bus session address unavailable for sendHotkey");
     const dbusBase = `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method`;
 
     if (this.isRecording) {
@@ -264,6 +288,16 @@ export class ShellHelper {
       await this.exec(`${dbusBase} com.happytomatoe.VoiceToText.StartRecording '{"provider":"parakeet","language":"en","output_method":"type"}'`);
       this.isRecording = true;
     }
+  }
+
+  /** Query the voice service's current state via D-Bus (idle/recording/processing). */
+  async getVoiceServiceStatus(): Promise<string> {
+    const dbusAddr = await this.getShellDbusAddr();
+    if (!dbusAddr) return "";
+    const out = await this.exec(
+      `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.GetStatus`,
+    );
+    return out;
   }
 
   /** Reset recording state flag (used after snapshot restore) */
@@ -306,6 +340,14 @@ export class ShellHelper {
     }
 
     throw new Error(`Timeout waiting for transcription (${timeoutMs}ms)`);
+  }
+
+  /** Take a full-screen screenshot via the GNOME Shell Screenshot D-Bus API
+   * (works on --use-existing VMs where we don't own the QEMU monitor socket). */
+  async dbusScreenshot(remotePath: string): Promise<void> {
+    await this.dbusExec(
+      `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${remotePath}'`
+    );
   }
 
   /** Start GNOME Shell screencast via D-Bus. Returns the output filename. */
@@ -351,9 +393,4 @@ export class ShellHelper {
     this.dbusAddr = null; // Invalidate cached address
     this.session = null;
   }
-}
-
-/** Quote a command for the ssh CLI (double-quoted, escaping inner double quotes). */
-function quote(s: string): string {
-  return `"${s.replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`")}"`;
 }

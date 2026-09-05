@@ -39,7 +39,7 @@ E2E tests verify the GNOME extension end-to-end: boot a QEMU VM, deploy the exte
 
 ```bash
 just qemu-e2e-update-ts   # update reference screenshots
-just e2e                   # run tests (~40s with snapshot)
+just e2e-fedora-local      # run tests (~40s with snapshot)
 ```
 
 **Snapshot mode**: First run deploys everything and saves a QEMU snapshot. Subsequent runs restore the snapshot, skipping deployment (~50s saved). The snapshot persists between runs using a fixed overlay in `persistent-run/main/`.

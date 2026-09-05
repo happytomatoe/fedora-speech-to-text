@@ -1031,18 +1031,37 @@ qemu-e2e-update-ts:
     cd e2e && bun run e2e.ts --update
 
 # @category e2e-qemu
-# Run E2E tests (snapshot mode by default, fast ~40s after first run)
+# Unified E2E suite — one command per environment:
+#   just e2e-fedora-local   (default; snapshot mode, fast ~40s after first run)
+#   just e2e-ubuntu-local   (fresh pinned resolute VM)
+#   just e2e-ubuntu-ci      (same bits as ubuntu-local; CI now runs the
+#                            bare-runner headless harness instead — see
+#                            docs/CI-E2E-STATUS.md)
 # Output is always tee'd to /tmp/fedora-speech-to-text-e2e-run.log — tail it to
 # watch progress: tail -f /tmp/fedora-speech-to-text-e2e-run.log
-# Override with args: just e2e --update
-e2e *ARGS:
+# Override with args: just e2e-fedora-local --update
+_e2e-run E2E_ENV *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
     cd e2e
     LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
     : > "$LOG"
-    bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
-    exit ${PIPESTATUS[0]}
+    if [[ "{{ E2E_ENV }}" == "fedora-local" ]]; then
+      bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
+      exit ${PIPESTATUS[0]}
+    else
+      bun run e2e.ts --env "{{ E2E_ENV }}" {{ ARGS }} 2>&1 | tee "$LOG"
+      exit ${PIPESTATUS[0]}
+    fi
+
+e2e-fedora-local *ARGS:
+    just _e2e-run fedora-local {{ ARGS }}
+
+e2e-ubuntu-local *ARGS:
+    just _e2e-run ubuntu-local {{ ARGS }}
+
+e2e-ubuntu-ci *ARGS:
+    just _e2e-run ubuntu-ci {{ ARGS }}
 
 # @category e2e-qemu
 # Run E2E tests in parallel mode
@@ -1146,6 +1165,102 @@ ego-lint:
     ./scripts/ego-lint --show=fail,warn gnome-ext/
     echo ""
     echo "=== EGO Review Complete ==="
+
+# @category e2e-vm
+# Local CI-parity: set up the Ubuntu 26.04 VM (image download + customize)
+ubuntu-vm-setup:
+    ./e2e-vm/setup-vm.sh
+
+# @category e2e
+# First-time setup for the Ubuntu env of the unified suite: pinned resolute
+# cloud image + golden customization + ssh key (same URL/recipe as CI).
+e2e-setup-ubuntu:
+    ./e2e/setup-ubuntu-vm.sh
+
+# @category e2e-ubuntu-ci (LEGACY - CI runs the bare-runner headless harness;
+# this VM-based env is kept for local reproduction of CI failures)
+ubuntu-ci-e2e *args='':
+    just e2e ubuntu-ci {{ args }}
+
+# @category e2e-ubuntu-ci (LEGACY)
+ubuntu-ci-e2e-setup:
+    just e2e-setup-ubuntu
+
+# @category e2e-vm
+# Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent).
+# Overlay persists across runs; `just ubuntu-vm-boot fresh` resets to golden image.
+ubuntu-vm-boot *args='':
+    ./e2e-vm/boot-vm.sh {{ args }}
+
+# @category e2e-vm
+# Local CI-parity: boot the Ubuntu 26.04 VM with a visible desktop window
+# (GTK display instead of headless). Same disk/SSH as ubuntu-vm-boot.
+ubuntu-vm-boot-gui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e-vm
+    if [ -f qemu.pid ] && kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+      echo "VM already running (PID $(cat qemu.pid)) — run 'just ubuntu-vm-kill' first" >&2
+      exit 1
+    fi
+    [ -f golden-ubuntu-2604.qcow2 ] || { echo "Run 'just ubuntu-vm-setup' first" >&2; exit 1; }
+    rm -f overlay.qcow2
+    qemu-img create -f qcow2 -b golden-ubuntu-2604.qcow2 -F qcow2 overlay.qcow2 > /dev/null
+    qemu-system-x86_64 \
+      -enable-kvm -cpu host -m 4096 -smp 2 \
+      -drive file=overlay.qcow2,format=qcow2,if=virtio \
+      -device virtio-vga \
+      -display gtk,gl=off \
+      -monitor unix:qemu-monitor.sock,server,nowait \
+      -serial file:serial.log \
+      -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+      -device virtio-net-pci,netdev=net0 \
+      -daemonize -pidfile qemu.pid
+    echo "Ubuntu 26.04 desktop window open (GDM auto-login: testuser), SSH on :2222"
+
+# @category e2e-vm
+# Full local CI-parity cycle: boot Ubuntu 26.04 VM (if not running) + Parakeet
+# + run the CI harness + stop the VM. Add GUI=1 for a visible desktop window.
+ubuntu-vm-test GUI='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just ubuntu-vm-{{ if GUI == "1" { "boot-gui" } else { "boot" } }}
+    trap 'just ubuntu-vm-kill' EXIT
+    just ubuntu-vm-parakeet
+    just ubuntu-vm-run
+
+# @category e2e-vm
+# Local CI-parity: run the CI harness (ci-e2e-headless.sh) inside the VM.
+# Requires Parakeet on the host: just ubuntu-vm-parakeet
+ubuntu-vm-run:
+    ./e2e-vm/run-parity.sh
+
+# @category e2e-vm
+# Start Parakeet on the host (port 5092) for the Ubuntu VM parity run
+ubuntu-vm-parakeet:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RUNTIME=docker
+    command -v docker >/dev/null 2>&1 || RUNTIME=podman
+    $RUNTIME rm -f parakeet-e2e-parity >/dev/null 2>&1 || true
+    $RUNTIME run -d --name parakeet-e2e-parity --network host \
+      ghcr.io/achetronic/parakeet:latest > /dev/null
+    for i in $(seq 1 60); do
+      curl -sf http://localhost:5092/health >/dev/null && { echo "Parakeet ready"; exit 0; }
+      sleep 2
+    done
+    echo "FATAL: Parakeet not ready" >&2; exit 1
+
+# @category e2e-vm
+# Stop the Ubuntu 26.04 parity VM
+ubuntu-vm-kill:
+    #!/usr/bin/env bash
+    PID_FILE="e2e-vm/qemu.pid"
+    if [ -f "$PID_FILE" ]; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null || true
+      rm -f "$PID_FILE"
+    fi
+    echo "VM stopped"
 
 # @category metrics
 # Run all code-quality metric tools (measurement only, reports in metrics-report/)
