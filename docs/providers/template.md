@@ -1,10 +1,11 @@
-# Template Provider Reference
+# Template Provider — Define a Custom Provider in config.yaml
 
 The `template` provider type lets you define a custom speech-to-text provider
 entirely in `config.yaml` — no Python changes. The HTTP request is described as a
 Jinja2-templated blueprint, rendered fresh for every transcription.
 
-For a step-by-step walkthrough, see [add-custom-provider.md](add-custom-provider.md).
+This page is both the reference and the step-by-step guide. If you just want a
+working example, jump to the [worked example](#worked-example-crispasr-local-parakeet).
 
 ## Config schema
 
@@ -15,13 +16,14 @@ For a step-by-step walkthrough, see [add-custom-provider.md](add-custom-provider
   headers:                    # optional; values are templates
     Authorization: "Bearer {{ API_KEY }}"
   form:                       # multipart form fields; values are templates → strings
-    model: "{{ MODEL }}"
+    model: "whisper-1"
     hotwords: "{{ CUSTOM_WORDS | join(', ') }}"
     hotwords_boost: "2.0"
   json:                       # extra body fields; template values render to native types
     keyterms: "{{ CUSTOM_WORDS }}"     # list → repeated multipart keys
   response_text_path: text    # dotted path to the transcript in the JSON response (default: text)
-  model: whisper-1            # exposed to templates as MODEL (not sent unless templated)
+  variables:                  # optional; custom values exposed to templates
+    BEAM_SIZE: 4
   api_key: "..."              # or api_key_env: NAME; supports !command; exposed as API_KEY
   timeout: 120                # seconds (default 120)
 ```
@@ -30,15 +32,38 @@ At least one of `form` or `json` is required.
 
 ## Context variables
 
-The only "API" of the template system — these variables are available in every
-template (`headers`, `form`, `json`):
+These variables are available in every template (`headers`, `form`, `json`):
 
 | Variable | Type | Value |
 |---|---|---|
 | `API_KEY` | str | Resolved API key, or `""` if none configured |
 | `LANGUAGE` | str | Request language code (e.g. `en`) |
 | `CUSTOM_WORDS` | list[str] | Custom words from GNOME prefs / config; may be empty |
-| `MODEL` | str | The `model` config value |
+| *your own* | any | Any key you define under `variables:` (see below) |
+
+### Custom variables (`variables:`)
+
+Define reusable values once and reference them anywhere in the blueprint:
+
+```yaml
+my-provider:
+  type: template
+  endpoint: "http://{{ HOST }}:{{ PORT }}/v1/audio/transcriptions"
+  variables:
+    HOST: 192.168.1.50
+    PORT: 5092
+    MODEL: whisper-1
+  form:
+    model: "{{ MODEL }}"
+```
+
+Rules:
+
+- Values must be scalars (string, number, or boolean). Use a list in the
+  `json` section directly if you need repeated keys.
+- Names must not shadow the built-in variables (`API_KEY`, `LANGUAGE`,
+  `CUSTOM_WORDS`) — the config check reports this as an error.
+- Values are plain literals; they are not themselves rendered as templates.
 
 Everything else is plain Jinja2 — use built-in filters (`join`, `default`, …),
 conditionals (`{% if %}`), etc. No custom filters exist.
@@ -86,15 +111,141 @@ just config-check                                  # validate all configs (dry)
 
 The dry-run masks API-key-derived values (`Bearer ****`).
 
+## Step-by-step: adding a new provider
+
+### Step 1 — Read the target server's API docs
+
+Identify from the server's documentation:
+
+1. **Endpoint URL** — the full URL to POST audio to
+   (e.g. `http://localhost:8080/v1/audio/transcriptions`).
+2. **Auth scheme** — Bearer token? Custom header? None?
+3. **Required request fields** — model name field? Language? Any vendor-specific
+   parameters (hotwords, punctuation, …)? Are they form fields or JSON?
+4. **Response shape** — where does the transcript text live in the response JSON?
+   (e.g. `{"text": "..."}` → `text`; `{"result": {"transcript": "..."}}` →
+   `result.transcript`)
+
+Servers that speak the OpenAI Whisper contract (`POST /v1/audio/transcriptions`,
+multipart `file` + `model`, `{"text": "..."}` response) need no adaptation —
+see the first example below.
+
+### Step 2 — Write the config block
+
+Add a section to `~/.config/voice-to-text/config.yaml` (or the repo's
+`config.yaml` for development).
+
+**Example A — OpenAI-shaped server (CrispASR with hotwords):**
+
+```yaml
+crispasr:
+  type: template
+  endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
+  headers:
+    Authorization: "Bearer {{ API_KEY }}"        # omitted entirely if no api_key below
+  form:
+    model: "whisper-1"
+    hotwords: "{{ CUSTOM_WORDS | join(', ') }}"  # GNOME custom words → hotwords field
+    hotwords_boost: "2.0"
+    beam_size: "2"
+  api_key: ""                                    # or api_key_env: MY_SERVER_KEY
+  response_text_path: text
+  timeout: 120
+```
+
+**Example B — vendor with a custom auth header and array field:**
+
+```yaml
+my-vendor:
+  type: template
+  endpoint: https://api.vendor.example/recognize
+  headers:
+    X-Api-Key: "{{ API_KEY }}"
+  form:
+    model_id: vendor-large
+  json:
+    keyterms: "{{ CUSTOM_WORDS }}"     # list → repeated multipart keys
+    language: "{{ LANGUAGE }}"
+  api_key_env: VENDOR_API_KEY
+  response_text_path: result.transcript
+```
+
+### Step 3 — Validate: `just config-check`
+
+```sh
+just config-check
+```
+
+Catches missing keys and Jinja syntax errors before anything runs. Expect
+`config OK`. If it reports findings for your section, fix them first.
+
+### Step 4 — Dry-run: `just provider-test <name>`
+
+```sh
+just provider-test crispasr
+```
+
+Prints the exact request blueprint with sample context (`Sample, Hotword` as
+custom words). Compare it against the server's API docs:
+
+- URL and method correct?
+- Auth header present (or correctly absent) with the right value shape?
+- Field names match the docs exactly (`hotwords` vs `hot_words` vs `keywords`)?
+- Array values rendered as expected?
+
+API-key-derived values are masked (`Bearer ****`) in dry-run output. Iterate:
+edit config → rerun → compare. `--words "a,b"` and `--language de` override the
+sample context.
+
+### Step 5 — Live test: `--send --audio`
+
+```sh
+just provider-test crispasr --send --audio /path/to/test.wav
+```
+
+Performs the real request. Verify:
+
+- Status 200 and sensible transcript text.
+- If the response extraction fails, the error includes a snippet of the actual
+  response — adjust `response_text_path` accordingly and retry.
+- `--send` without `--audio` (or with a nonexistent file) exits with a usage
+  error instead of sending anything.
+
+### Step 6 — Enable it
+
+```yaml
+# config.yaml
+transcription:
+  provider: crispasr    # your section name
+```
+
+### Step 7 — GNOME side
+
+1. Open the extension preferences → **Transcription Provider** — your provider
+   appears as `<name> (custom)`.
+2. Add custom words in preferences — they flow into `{{ CUSTOM_WORDS }}` on
+   every request.
+
+## Troubleshooting
+
+| Symptom | Likely cause → fix |
+|---|---|
+| `config-check`: `missing 'endpoint'` | Add the `endpoint` key (full URL). |
+| `config-check`: `template error in form.<k>` | Jinja syntax error in that template — check block closure (`{% endif %}`, quotes). |
+| `provider-test`: header missing | Its template references `API_KEY` but no key is configured → set `api_key`/`api_key_env`, or the header is intentionally omitted. |
+| `--send`: HTTP 401/403 | Auth header wrong or key invalid — verify header name and scheme against the API docs. |
+| `--send`: `response_text_path '...' not found in response: {...}` | Wrong dotted path — copy the correct path from the response snippet shown in the error. |
+| Hotwords not affecting results | Field name mismatch — compare the dry-run blueprint against the server's docs/logs. |
+| Extra fields ignored by server | Vendor doesn't support them — harmless, but remove to keep requests minimal. |
+
 ## Worked example: CrispASR (local Parakeet)
 
 ```yaml
 crispasr:
   type: template
   endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
-  model: whisper-1
   form:
-    model: "{{ MODEL }}"
+    model: "whisper-1"
     hotwords: "{{ CUSTOM_WORDS | join(', ') }}"
     hotwords_boost: "2.0"
     beam_size: "2"

@@ -52,8 +52,8 @@ Local:
 
 Custom:
 - [Template provider](docs/providers/template.md) — define your own provider in
-  `config.yaml` for any OpenAI-compatible or custom HTTP STT server. Step-by-step
-  guide: [add-custom-provider.md](docs/providers/add-custom-provider.md)
+  `config.yaml` for any OpenAI-compatible or custom HTTP STT server, including a
+  step-by-step guide and troubleshooting.
 
 ## Requirements
 
