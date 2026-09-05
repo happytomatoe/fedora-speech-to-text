@@ -1744,19 +1744,30 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     // before a later wc runs (run 33906572002: offset-after missed it).
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
     await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch(() => {});
-    // Engine raises synchronously in get_batch_provider — poll briefly for the
-    // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
-    let errHit = "0";
-    for (let i = 0; i < 10; i++) {
-      await Bun.sleep(1000);
-      errHit = (await transport.exec(
-        `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
-        5_000,
-      )).stdout.trim() || "0";
-      if (parseInt(errHit) > 0) break;
+    // Engine raises synchronously in get_batch_provider — poll for the line
+    // instead of one-shot grepping (CI run 33752963412 E02 false-fail).
+    // 1000ms interval: the service log updates slowly, a tight poll just
+    // burns SSH round-trips.
+    let errHit = 0;
+    try {
+      await pollUntil(
+        "error line in service log",
+        async () => {
+          const out = await transport.exec(
+            `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
+            5_000,
+          );
+          errHit = parseInt(out.stdout.trim()) || 0;
+          return errHit > 0;
+        },
+        10_000,
+        1_000,
+      );
+    } catch {
+      // pollUntil throws on timeout — treat as no error line logged.
     }
     await gdbus("StopRecording").catch(() => {});
-    row("unknown provider logs a clear error", parseInt(errHit) > 0);
+    row("unknown provider logs a clear error", errHit > 0);
   } catch (e) {
     row("unknown provider logs a clear error", false, String(e));
   }
