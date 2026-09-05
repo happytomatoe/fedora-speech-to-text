@@ -29,7 +29,7 @@ download-open-src:
 test:
     uv run pytest -n auto
 
-# @category lint
-# Run all linters (Python + GNOME extension)
+# @category test
+# Run the test suite (pytest)
 test-all: test
 

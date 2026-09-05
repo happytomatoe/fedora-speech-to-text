@@ -1855,6 +1855,7 @@ async function main(): Promise<void> {
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
       skipDeps: SKIP_DEPS,
+      configFixture: CONFIG_FIXTURE,
       env: SUITE_ENV,
     });
     

@@ -17,6 +17,7 @@ export interface ParallelConfig {
   recordMode: boolean;
   updateMode: boolean;
   skipDeps: boolean;
+  configFixture?: string;
   env: import("./env.js").SuiteEnv;
 }
 
@@ -91,7 +92,8 @@ export class ParallelTestRunner {
         extensionUuid: this.config.extensionUuid,
         testAudioFile: "",
         recordMode: this.config.recordMode,
-        updateMode: this.config.updateMode
+        updateMode: this.config.updateMode,
+        configFixture: this.config.configFixture,
       }, runId);
 
       const vmConfig: VmConfig = {
@@ -108,6 +110,7 @@ export class ParallelTestRunner {
         updateMode: this.config.updateMode,
         testAudioFile: "", // Will be set per test
         skipDeps: this.config.skipDeps,
+        configFixture: this.config.configFixture,
         env: this.config.env,
       };
 
@@ -198,10 +201,11 @@ export class ParallelTestRunner {
   /**
    * Run the actual test flow
    */
-  private async runTestFlow(vm: VmManager, testCase: TestCase): Promise<boolean> {
-    // This is a simplified version - in reality, you'd call the actual test flow
-    // For now, we'll just return true
-    return true;
+  private async runTestFlow(_vm: VmManager, _testCase: TestCase): Promise<boolean> {
+    // Not yet implemented — must fail loudly instead of silently reporting a
+    // pass, otherwise e2e-parallel/e2e-all would report success without
+    // testing anything.
+    throw new Error("parallel test flow not implemented — use single-VM mode");
   }
 
   /**

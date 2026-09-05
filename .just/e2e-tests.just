@@ -6,7 +6,7 @@ container-watch:
     POD=$(podman ps --filter ancestor=voice-to-text-e2e --format '{'{'.ID'}'}' | head -1)
     if [ -z "$POD" ]; then
       echo "No running voice-to-text-e2e container found."
-      echo "Start one with: just e2e-full (in background) or podman run..."
+      echo "Start one with: podman run ... (see e2e docs) or podman run..."
       exit 1
     fi
 
