@@ -1446,6 +1446,11 @@ ATSPIEOF`;
           await Bun.sleep(400);
           await wheelDbus(15);
           await Bun.sleep(600);
+          // Park the pointer off-window: a virtual pointer left hovering over
+          // the parent while the modal opens keeps it from receiving keyboard
+          // focus (run 33919592431: entry-text='' after a successful scroll).
+          await moveDbus(0.01, 0.5);
+          await Bun.sleep(300);
         } catch (e) {
           console.log(`  WARN: scroll-to-bottom failed (${e})`);
         }
