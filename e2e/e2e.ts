@@ -1399,13 +1399,35 @@ ATSPIEOF`;
       // activate it explicitly (same wl_keyboard.enter issue as the prefs
       // window; without this, TypeText keystrokes never reach the entry).
       await typeTextDbus("ActivateWindow", "Add Custom Word");
-      await Bun.sleep(500);
       // Click-to-focus the entry with the RemoteDesktop virtual pointer:
       // activation alone did not restore keyboard focus after pointer
       // scrolling (run 33919961080), so force it with a real pointer press.
-      const entryExt = await transport.exec(
-        `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(find_add_word_entry_extents()))\nATSPIEOF`, 30_000)
-        .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+      // Poll until the entry reports plausible extents instead of a fixed
+      // settle sleep — activation may take longer on a loaded runner.
+      let entryExt = "no-result";
+      try {
+        await pollUntil(
+          "add-word entry has plausible extents",
+          async () => {
+            entryExt = await transport.exec(
+              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(find_add_word_entry_extents()))\nATSPIEOF`, 30_000)
+              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+            if (!entryExt.includes(",")) return false;
+            const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
+            // A y near the top edge means the extents are bogus (top bar /
+            // wrong origin) — clicking there opens the overview and steals
+            // keyboard focus, sending TypeText into the shell search instead
+            // (run 33961390474).
+            return [ex, ey, ew, eh].every(v => Number.isFinite(v)) &&
+              ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
+          },
+          10_000,
+          100,
+        );
+      } catch {
+        // Fall through with the last read extents; the branches below handle
+        // missing/implausible values the same way as before.
+      }
       if (entryExt.includes(",")) {
         const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
         // A y near the top edge means the extents are bogus (top bar / wrong
