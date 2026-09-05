@@ -10,7 +10,7 @@ import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
 import { ATSPI_PY, atspiScrollTo, atspiScrollToBottom, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
-import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
+import { pollForCommandOutput, pollFileExists, pollUntil } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
 import { LocalTransport } from "./lib/transport.js";
@@ -482,11 +482,18 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Verifying terminal focus...");
   let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
   if (!isFocused) {
-    console.log("  Terminal not focused, trying click + gio launch...");
-    await shell.clickToFocus(640, 400);
-    await Bun.sleep(500);
-    await shell.focusTerminal();
-    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+    console.log("  Terminal not focused, retrying with click + focus loop...");
+    await pollUntil(
+      "terminal focused",
+      async () => {
+        await shell.clickToFocus(640, 400);
+        await shell.focusTerminal();
+        isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+        return isFocused;
+      },
+      5_000,
+      500,
+    );
     console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {
