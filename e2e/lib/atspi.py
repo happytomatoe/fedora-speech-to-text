@@ -408,13 +408,23 @@ def scroll_to_bottom_via_value(max_attempts=5):
         return "no-scrollbar"
 
     try:
-        val = sb.query_value()
-        max_v = val.get_maximum_value()
-        min_v = val.get_minimum_value()
-        if max_v <= min_v:
-            return "already-at-extreme"
-        val.set_current_value(max_v)
-        return "ok"
+        try:
+            val = sb.query_value()
+            max_v = val.get_maximum_value()
+            min_v = val.get_minimum_value()
+            if max_v <= min_v:
+                return "already-at-extreme"
+            val.set_current_value(max_v)
+            return "ok"
+        except AttributeError:
+            # pygobject 3.5x: query_value may not exist; call the Value
+            # interface methods unbound with the accessible as first argument
+            max_v = Atspi.Value.get_maximum_value(sb)
+            min_v = Atspi.Value.get_minimum_value(sb)
+            if max_v <= min_v:
+                return "already-at-extreme"
+            Atspi.Value.set_current_value(sb, max_v)
+            return "ok"
     except Exception as e:
         return f"error: {e}"
 
