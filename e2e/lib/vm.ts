@@ -97,8 +97,8 @@ export class VmManager {
     try {
       await this.qemu.screendump(path);
       console.log(`  [rec] ${label}`);
-    } catch {
-      // Ignore screendump errors
+    } catch (err) {
+      console.warn(`[vm] screendump failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -126,8 +126,8 @@ export class VmManager {
       try {
         await this.qemu.connect();
         await this.qemu.systemPowerdown();
-      } catch {
-        // Force kill if powerdown fails
+      } catch (err) {
+        console.warn(`[vm] powerdown failed (will force kill): ${err instanceof Error ? err.message : err}`);
       }
       // Wait for QEMU to actually exit (poll, not fixed sleep) before any
       // pkill — the fallback fresh boot must never race a dying QEMU for the
@@ -136,8 +136,8 @@ export class VmManager {
       // Force kill QEMU process if still running, then confirm it is gone.
       try {
         Bun.spawnSync(["pkill", "-f", `qemu-system.*${overlayImage}`]);
-      } catch {
-        // Ignore
+      } catch (err) {
+        console.warn(`[vm] pkill failed: ${err instanceof Error ? err.message : err}`);
       }
       await this.waitQemuGone(10000);
     }
@@ -151,7 +151,8 @@ export class VmManager {
         if (info.exitCode !== 0) return true; // corrupted/unreadable
         const parsed = JSON.parse(info.stdout.toString());
         return !parsed?.['backing-filename']; // missing backing file = corrupt
-      } catch {
+      } catch (err) {
+        console.warn(`[vm] qemu-img inspect failed (assuming stale): ${err instanceof Error ? err.message : err}`);
         return true; // can't inspect = assume stale
       }
     })();
@@ -378,7 +379,8 @@ export class VmManager {
       const result = Bun.spawnSync(["qemu-img", "snapshot", "-l", "-U", this.config.run.overlayImage]);
       const output = result.stdout.toString();
       return output.includes(tag);
-    } catch {
+    } catch (err) {
+      console.warn(`[vm] snapshot check failed: ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }
@@ -490,7 +492,9 @@ export class VmManager {
         return true;
       }
       console.log("  [xvfb] stale /tmp/.X11-unix/X99 socket (no Xvfb process) — removing");
-      try { Bun.spawnSync(["rm", "-f", "/tmp/.X11-unix/X99"]); } catch { /* ignore */ }
+      try { Bun.spawnSync(["rm", "-f", "/tmp/.X11-unix/X99"]); } catch (err) {
+        console.warn(`[vm] stale socket removal failed: ${err instanceof Error ? err.message : err}`);
+      }
     }
 
     this.xvfbProcess = Bun.spawn(
@@ -506,7 +510,9 @@ export class VmManager {
           console.log("  [xvfb] started on :99 (1920x1080)");
           return true;
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn(`[vm] X99 socket check failed: ${err instanceof Error ? err.message : err}`);
+      }
       await Bun.sleep(100);
     }
     console.log("  [xvfb] failed to start");
@@ -531,7 +537,9 @@ export class VmManager {
       const encoders = execSync("ffmpeg -hide_banner -encoders 2>/dev/null", { encoding: "utf-8" });
       if (encoders.includes("libx264")) codec = "libx264";
       else if (encoders.includes("libopenh264") && existsSync("/usr/lib64/libopenh264.so.8") && statSync("/usr/lib64/libopenh264.so.8").size > 100_000) codec = "libopenh264";
-    } catch { /* ffmpeg probe failed — mpeg4 fallback */ }
+    } catch (err) {
+      console.warn(`[vm] ffmpeg encoder probe failed (mpeg4 fallback): ${err instanceof Error ? err.message : err}`);
+    }
     this.recordingFfmpeg = Bun.spawn(
       ["ffmpeg", "-y", "-f", "x11grab", "-draw_mouse", "0", "-i", ":99.0",
         "-framerate", "30", "-c:v", codec, "-pix_fmt", "yuv420p", "-r", "30", videoPath],
@@ -587,8 +595,8 @@ export class VmManager {
       this.qemu.close();
       try {
         await this.shell.close();
-      } catch {
-        // Ignore — connection may already be gone
+      } catch (err) {
+        console.debug(`[vm] shell close failed (should be unreachable): ${err instanceof Error ? err.message : err}`);
       }
       await this.deployer.disconnect();
       return;
@@ -602,8 +610,8 @@ export class VmManager {
       if (await this.hasSnapshot("clean")) {
         await this.qemu.deleteSnapshot("clean");
       }
-    } catch {
-      // Ignore — snapshot may not exist
+    } catch (err) {
+      console.warn(`[vm] snapshot delete failed: ${err instanceof Error ? err.message : err}`);
     }
     
     try {
@@ -613,7 +621,9 @@ export class VmManager {
       await this.waitQemuGone(5000);
     } finally {
       if (this.qemuProcessPid) {
-        try { Bun.spawnSync(["kill", "-9", String(this.qemuProcessPid)]); } catch { /* already gone */ }
+        try { Bun.spawnSync(["kill", "-9", String(this.qemuProcessPid)]); } catch (err) {
+          console.warn(`[vm] kill -9 failed: ${err instanceof Error ? err.message : err}`);
+        }
       }
       this.process?.kill("SIGKILL");
       this.qemu.close();
@@ -673,7 +683,8 @@ export class VmManager {
         sock.on("error", () => { clearTimeout(timer); reject(); });
       });
       return true;
-    } catch {
+    } catch (err) {
+      console.debug(`[vm] port probe failed (stale socket): ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }

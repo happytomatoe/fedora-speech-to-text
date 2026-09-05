@@ -60,7 +60,7 @@
         "no-empty": [
           "error",
           {
-            "allowEmptyCatch": true
+            "allowEmptyCatch": false
           }
         ],
         "no-redeclare": "error",
@@ -133,7 +133,8 @@
         "typescript/no-unsafe-member-access": "off",
         "typescript/no-explicit-any": "off",
         "typescript/ban-ts-comment": "off",
-        "typescript/dot-notation": "error"
+        "typescript/dot-notation": "error",
+        "no-silent-catch/no-silent-catch": "error"
       },
       "globals": {
         "imports": "readonly",
@@ -155,6 +156,9 @@
       "plugins": [
         "promise",
         "typescript"
+      ],
+      "jsPlugins": [
+        "./lint-rules/no-silent-catch.js"
       ]
     },
     {
@@ -162,10 +166,12 @@
         "e2e/**/*.ts"
       ],
       "jsPlugins": [
-        { "name": "jsdoc-js", "specifier": "eslint-plugin-jsdoc" }
+        { "name": "jsdoc-js", "specifier": "eslint-plugin-jsdoc" },
+        "./lint-rules/no-silent-catch.js"
       ],
       "rules": {
         "no-empty": ["error", { "allowEmptyCatch": false }],
+        "no-silent-catch/no-silent-catch": "error",
         "jsdoc-js/require-jsdoc": [
           "error",
           {

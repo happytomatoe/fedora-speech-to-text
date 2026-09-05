@@ -246,7 +246,8 @@ export default class VoiceToTextExtension extends Extension {
             for (const id of this._signalIds) {
                 try {
                     this._proxy.disconnectSignal(id);
-                } catch {
+                } catch (e) {
+                    console.warn(`[extension] signal disconnect failed: ${e instanceof Error ? e.message : e}`);
                     // ignore: signal may already be disconnected or proxy destroyed
                 }
             }

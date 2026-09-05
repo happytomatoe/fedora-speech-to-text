@@ -88,8 +88,8 @@ export function printTimingTree(): void {
   try {
     if (!existsSync(outputDir())) mkdirSync(outputDir(), { recursive: true });
     appendFileSync(dumpPath(), JSON.stringify({ wall, root, unaccounted, ts: new Date().toISOString() }) + "\n");
-  } catch {
-    // ignore: timing dump is best-effort
+  } catch (err) {
+    console.warn(`[timing] dump failed (best-effort): ${err instanceof Error ? err.message : err}`);
   }
 }
 

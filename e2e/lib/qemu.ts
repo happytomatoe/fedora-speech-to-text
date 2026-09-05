@@ -42,6 +42,7 @@ export class QemuMonitor extends EventEmitter {
           lastErr.message.includes("Connection timeout") ||
           lastErr.message.includes("Socket closed before QEMU prompt");
         if (!retryable) throw lastErr;
+        console.warn(`[qemu] connect attempt failed (retrying): ${lastErr.message}`);
         await sleepMs(250);
       }
     }
@@ -130,6 +131,7 @@ export class QemuMonitor extends EventEmitter {
           const result = await this._execute(command, timeoutMs);
           resolve(result);
         } catch (err) {
+          console.warn(`[qemu] command failed: ${err instanceof Error ? err.message : err}`);
           reject(err);
         } finally {
           this.executing = false;

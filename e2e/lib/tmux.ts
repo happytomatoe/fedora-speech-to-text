@@ -36,7 +36,7 @@ export async function capturePane(t: TmuxHelper, sessionName = "e2e"): Promise<s
 export async function killSession(t: TmuxHelper, sessionName = "e2e"): Promise<void> {
   try {
     await tmuxCmd(t, "kill-session", "-t", sessionName);
-  } catch {
-    // Ignore
+  } catch (err) {
+    console.debug(`[tmux] kill-session failed (may already be gone): ${err instanceof Error ? err.message : err}`);
   }
 }

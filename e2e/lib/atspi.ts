@@ -96,6 +96,7 @@ export async function waitForAtspiNode(
       lastErr = "no match";
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e);
+      console.debug(`[atspi] identify attempt failed: ${lastErr}`);
     }
     await Bun.sleep(250);
   }
@@ -177,6 +178,7 @@ print("RESULT:" + str(dump_tree() or ""))
   }
 }
 
+/** Set the text of an accessible node found by name. */
 export async function setAtspiText(
   deployer: ExecLike,
   name: string,
