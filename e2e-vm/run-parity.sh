@@ -67,8 +67,9 @@ $SSH 'cd ~/repo && export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH && \
     set -a; source $GITHUB_ENV; set +a && \
     bash .github/workflows/scripts/ci-e2e-boot.sh 2>&1 && \
     bash .github/workflows/scripts/ci-e2e-run.sh 2>&1; \
-    echo PARITY_TEST_EXIT=$?; \
-    bash .github/workflows/scripts/ci-e2e-teardown.sh 2>&1 || true' | tee "$OUT/harness.log"
+    TEST_EXIT=$?; \
+    bash .github/workflows/scripts/ci-e2e-teardown.sh 2>&1 || true; \
+    echo PARITY_TEST_EXIT=$TEST_EXIT' | tee "$OUT/harness.log"
 TEST_EXIT=$(grep -oP 'PARITY_TEST_EXIT=\K[0-9]+' "$OUT/harness.log" | tail -1)
 TEST_EXIT=${TEST_EXIT:-1}
 
