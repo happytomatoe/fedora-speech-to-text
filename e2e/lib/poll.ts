@@ -51,7 +51,8 @@ export async function pollForProcess(
       try {
         const output = await shellExec(`pgrep -f '${processName}'`);
         return output.trim().length > 0;
-      } catch {
+      } catch (err) {
+        console.warn(`[poll] pgrep failed (still waiting): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },
@@ -72,7 +73,8 @@ export async function pollForCommandOutput(
       try {
         const output = await shellExec(command);
         return output.includes(expected);
-      } catch {
+      } catch (err) {
+        console.warn(`[poll] command failed (still waiting): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },

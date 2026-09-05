@@ -156,17 +156,23 @@ export class ParallelTestRunner {
           await worker.vm.qemu.connect();
           await worker.vm.qemu.systemPowerdown();
           await Bun.sleep(2000);
-        } catch { /* ignore */ }
+        } catch (err) {
+          console.warn(`[parallel] systemPowerdown failed: ${err instanceof Error ? err.message : err}`);
+        }
         try {
           Bun.spawnSync(["pkill", "-f", `qemu-system.*${worker.vm.config.run.overlayImage}`]);
           await Bun.sleep(1000);
-        } catch { /* ignore */ }
+        } catch (err) {
+          console.warn(`[parallel] pkill failed: ${err instanceof Error ? err.message : err}`);
+        }
         worker.vm.booted = false;
       }
 
       // Create fresh overlay for each test (snapshot restore)
       const overlayPath = worker.vm.config.run.overlayImage;
-      try { unlinkSync(overlayPath); } catch { /* ignore if missing */ }
+      try { unlinkSync(overlayPath); } catch (err) {
+        console.warn(`[parallel] overlay unlink failed: ${err instanceof Error ? err.message : err}`);
+      }
 
       // Run the test
       await worker.vm.boot();
@@ -213,8 +219,8 @@ export class ParallelTestRunner {
     for (const worker of this.workers) {
       try {
         await worker.vm.shutdown();
-      } catch {
-        // Ignore shutdown errors
+      } catch (err) {
+        console.warn(`[parallel] worker shutdown failed: ${err instanceof Error ? err.message : err}`);
       }
     }
   }

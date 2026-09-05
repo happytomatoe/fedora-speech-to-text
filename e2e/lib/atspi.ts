@@ -96,6 +96,7 @@ export async function waitForAtspiNode(
       lastErr = "no match";
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e);
+      console.warn(`[atspi] identify attempt failed: ${lastErr}`);
     }
     await Bun.sleep(250);
   }

@@ -104,7 +104,11 @@ export class ShellHelper {
         // Also disconnect the dead deployer so subsequent calls skip it and
         // can lazily reconnect on the next call.
         console.log(`  deployer exec failed (${err instanceof Error ? err.message : err}), retrying via one-shot ssh`);
-        try { await this._deployer.disconnect(); } catch { /* ignore */ }
+        try {
+          await this._deployer.disconnect();
+        } catch (err) {
+          console.warn(`[shell] deployer disconnect failed: ${err instanceof Error ? err.message : err}`);
+        }
         return sshExecOnce();
       }
     }
@@ -157,7 +161,8 @@ export class ShellHelper {
         this.dbusAddr = raw;
       }
       return raw;
-    } catch {
+    } catch (err) {
+      console.warn(`[shell] getShellDbusAddr failed: ${err instanceof Error ? err.message : err}`);
       return "";
     }
   }
@@ -170,7 +175,8 @@ export class ShellHelper {
         `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive`
       );
       return result.includes('(<true>,)');
-    } catch {
+    } catch (err) {
+      console.warn(`[shell] isActivitiesOpen failed: ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }
@@ -190,8 +196,9 @@ export class ShellHelper {
         `DBUS_SESSION_BUS_ADDRESS=${addr} gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive '<false>'`,
         5000,
       );
-    } catch {
-      // Ignore — may already be dismissed
+    } catch (err) {
+      // Ignore — may already be dismissed, but log for diagnosis
+      console.warn(`[shell] dismissActivities failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -260,7 +267,8 @@ export class ShellHelper {
       const after = (await transport.exec(captureCmd, 5000)).stdout.trim();
 
       return before !== after;
-    } catch {
+    } catch (err) {
+      console.warn(`[shell] verifyTerminalFocus failed: ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }

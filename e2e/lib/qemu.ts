@@ -36,6 +36,7 @@ export class QemuMonitor extends EventEmitter {
         return;
       } catch (err) {
         lastErr = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[qemu] connect attempt failed (retrying): ${lastErr.message}`);
         const retryable =
           lastErr.message.includes("ECONNREFUSED") ||
           lastErr.message.includes("ENOENT") ||
@@ -130,6 +131,7 @@ export class QemuMonitor extends EventEmitter {
           const result = await this._execute(command, timeoutMs);
           resolve(result);
         } catch (err) {
+          console.warn(`[qemu] command failed: ${err instanceof Error ? err.message : err}`);
           reject(err);
         } finally {
           this.executing = false;

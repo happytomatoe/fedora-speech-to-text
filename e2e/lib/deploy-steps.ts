@@ -30,6 +30,7 @@ function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "te
       return transport.execSync(command);
     } catch (err) {
       lastErr = err as Error;
+      console.warn(`[deploy] sshExec retry ${i + 1}/${retries} failed: ${lastErr.message}`);
       if (i < retries - 1) {
         execSync(`sleep 2`);
       }
@@ -42,7 +43,8 @@ function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "te
 export async function sshExecAsync(command: string, sshKey: string, sshPort: number, sshUser = "testuser"): Promise<string> {
   try {
     return sshExec(command, sshKey, sshPort, sshUser);
-  } catch {
+  } catch (err) {
+    console.warn(`[deploy] sshExecAsync failed (poll will retry): ${err instanceof Error ? err.message : err}`);
     return ""; // Poll callers treat empty output as "not ready yet"
   }
 }
@@ -103,8 +105,9 @@ export async function ensureGdmAutologin(deployer: Deployer, sshUser: string, en
     await deployer.exec(`echo '${gdmConf}' | sudo tee ${gdmConfPath} > /dev/null`);
     try {
       await deployer.exec(env.os === "ubuntu" ? "sudo systemctl restart gdm3.service || sudo systemctl restart display-manager.service" : "sudo systemctl restart gdm");
-    } catch {
+    } catch (err) {
       // Expected: GDM restart may drop the connection mid-command
+      console.warn(`[deploy] gdm restart dropped connection (expected): ${err instanceof Error ? err.message : err}`);
     }
     // Wait for GDM to come back up
     for (let i = 0; i < 30; i++) {
@@ -176,7 +179,8 @@ export async function installDependencies(
       console.log("  Installing GDM + GNOME Shell...");
       sshExec(env.pkgInstall("gdm gnome-shell gnome-session"), _sshKey, _sshPort, _sshUser);
     }
-  } catch {
+  } catch (err) {
+    console.warn(`[deploy] gdm install failed (continuing): ${err instanceof Error ? err.message : err}`);
     // Continue — GDM install may fail on some images
   }
 
@@ -326,8 +330,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   const gdmConf = `[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=${cfg.sshUser}\nWaylandEnable=true\n\n[security]\n\n[debug]\n`;
   try {
     sshExec(`echo '${gdmConf}' | sudo tee ${cfg.env.gdmConfPath} > /dev/null`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  } catch {
-    // May fail if already configured — continue
+  } catch (err) {
+    console.warn(`[deploy] gdm conf write failed (may already be configured): ${err instanceof Error ? err.message : err}`);
   }
   
   // Install dotool concurrently with the GDM restart loop: it uses one-shot
@@ -357,8 +361,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // gnome-session (Session never registered). A full guest reboot is the
       // reliable way to re-create the autologin session (QEMU runs without
       // -no-reboot for Ubuntu so the guest resets in place).
-      try { sshExec("sudo reboot", cfg.sshKey, cfg.sshPort, cfg.sshUser); } catch {
+      try { sshExec("sudo reboot", cfg.sshKey, cfg.sshPort, cfg.sshUser); } catch (err) {
         // Expected: reboot drops the SSH connection
+        console.warn(`[deploy] reboot ssh drop (expected): ${err instanceof Error ? err.message : err}`);
       }
       // Wait for VM to go down and come back
       const es = (await import("node:child_process")).execSync;
@@ -372,13 +377,15 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
           if (down) break; // went down, then came back — reboot complete
         } catch {
           down = true; // SSH dropped — reboot in progress
+          console.warn(`[deploy] ssh still down at ${Math.round((Date.now() - t0) / 1000)}s of reboot wait`);
         }
       }
     } else {
       try {
         sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-      } catch {
+      } catch (err) {
         // Expected: GDM restart drops the SSH connection mid-command
+        console.warn(`[deploy] gdm restart ssh drop (expected): ${err instanceof Error ? err.message : err}`);
       }
     }
 
@@ -395,7 +402,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         try {
           const result = sshExec(cfg.env.os === "ubuntu" ? "systemctl is-active gdm3.service" : "systemctl is-active gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
           return result.trim() === "active";
-        } catch {
+        } catch (err) {
+          console.warn(`[deploy] gdm is-active probe failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false;
         }
       },
@@ -425,7 +433,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
             `test -S /run/user/$(id -u)/bus && echo ready`
           );
           return result.includes("ready");
-        } catch {
+        } catch (err) {
+          console.warn(`[deploy] user bus probe failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false;
         }
       },
@@ -437,8 +446,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
     const t3 = Date.now();
     try {
       await shell.exec("gdbus wait --session --timeout=60 org.gnome.Shell");
-    } catch {
+    } catch (err) {
       // gdbus wait may fail if shell is already up — check pgrep as fallback
+      console.warn(`[deploy] gdbus wait failed, falling back to pgrep: ${err instanceof Error ? err.message : err}`);
       await pollForProcess(shell.exec.bind(shell), "gnome-shell --mode=user", 30000);
     }
     console.log(`  gnome-shell ready: ${Date.now() - t3}ms [time]`);
@@ -451,7 +461,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
           const result = await shell.exec(`gnome-extensions list 2>&1`);
           // Must contain our extension UUID (not just any text without "error")
           return result.includes(cfg.extensionUuid);
-        } catch {
+        } catch (err) {
+          console.warn(`[deploy] extension list probe failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false;
         }
       },
@@ -469,7 +480,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
             const result = sshExec(`gnome-extensions show ${cfg.extensionUuid} 2>&1`, cfg.sshKey, cfg.sshPort, cfg.sshUser);
             // Extension must exist AND be in ACTIVE state (not just INITIALIZED/ENABLED)
             return result.includes("State: ACTIVE");
-          } catch {
+          } catch (err) {
+            console.warn(`[deploy] extension show probe failed (retrying): ${err instanceof Error ? err.message : err}`);
             return false;
           }
         },
@@ -516,16 +528,17 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   // Fix /dev/uinput permissions so dotoold (running as testuser) can access it
   try {
     await shell.exec("sudo chmod 660 /dev/uinput && sudo chown root:input /dev/uinput 2>/dev/null || true");
-  } catch {
+  } catch (err) {
     // Best effort — may fail if udev rule already set permissions
+    console.warn(`[deploy] uinput chmod failed (best effort): ${err instanceof Error ? err.message : err}`);
   }
   // Kill existing dotoold and remove stale pipe before starting fresh.
   // Kill by process NAME, not -f: pkill -f matches this very bash's own
   // cmdline (the pattern text is in its argv) and SIGKILLs the session.
   try {
     await shell.exec("pkill -f dotoold; rm -f /run/user/$(id -u)/dotool-pipe; sleep 0.5");
-  } catch {
-    // Ignore — may not be running
+  } catch (err) {
+    console.warn(`[deploy] dotoold pkill failed (may not be running): ${err instanceof Error ? err.message : err}`);
   }
   await shell.exec("export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; nohup dotoold &>/tmp/dotoold.log &", 10000).catch(() => {});
   await pollUntilFn(
@@ -534,7 +547,8 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       try {
         const output = await shell.exec("test -p /run/user/$(id -u)/dotool-pipe && echo ready");
         return output.includes("ready");
-      } catch {
+      } catch (err) {
+        console.warn(`[deploy] dotool-pipe probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false; // ssh hiccup — retry
       }
     },
@@ -608,7 +622,8 @@ export async function startVoiceService(
         console.log(`  Installing ${paPkg}...`);
         sshExec(cfg.env.pkgInstall(paPkg), cfg.sshKey, cfg.sshPort, cfg.sshUser);
       }
-    } catch {
+    } catch (err) {
+      console.warn(`[deploy] PA install failed (continuing): ${err instanceof Error ? err.message : err}`);
       // Continue — sounddevice import failure will surface at service start
     }
   }
@@ -622,7 +637,8 @@ export async function startVoiceService(
       try {
         const output = await shell.exec("busctl --user list 2>/dev/null | grep 'com.happytomatoe.[V]oiceToText'");
         return output.trim().length === 0;
-      } catch {
+      } catch (err) {
+        console.warn(`[deploy] dbus probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false; // ssh hiccup during setup — retry
       }
     },
@@ -647,7 +663,7 @@ export async function startVoiceService(
     );
     console.log("  source probe:\n" + probe.trim().split("\n").map((l) => "    " + l).join("\n"));
   } catch (e) {
-    console.log("  (source probe failed: " + (e as Error).message) + ")";
+    console.warn(`  (source probe failed: ${(e as Error).message})`);
   }
 
   // Use $HOME (not ~) — tilde doesn't expand inside a scalar assignment under

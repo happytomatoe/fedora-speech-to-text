@@ -170,8 +170,8 @@ function prefsUiChanged(): boolean {
   let stored: string | null = null;
   try {
     stored = readFileSync(statePath, "utf-8").trim();
-  } catch {
-    // no state file = first run in this worktree
+  } catch (err) {
+    console.warn(`[e2e] no prefs-ui state file (first run in this worktree): ${err instanceof Error ? err.message : err}`);
   }
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(statePath, current);
@@ -344,8 +344,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   let useXvfbRecording = false;
   // Guarantee ffmpeg cleanup on any exit path
   process.on('exit', () => {
-    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
-    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
+    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch (err) { console.warn(`[e2e] ffmpeg cleanup failed: ${err instanceof Error ? err.message : err}`); }
+    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch (err) { console.warn(`[e2e] xvfb cleanup failed: ${err instanceof Error ? err.message : err}`); }
   });
 
   beginSpan("capture-frame");
@@ -386,7 +386,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         try {
           const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
           return output.trim().length > 0;
-        } catch {
+        } catch (err) {
+          console.warn(`[e2e] tmux session probe failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false; // ssh hiccup — retry
         }
       },
@@ -495,7 +496,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         5_000,
         500,
       );
-    } catch {
+    } catch (err) {
+      console.warn(`[e2e] terminal-focus poll timed out — falling back to tolerant warning: ${err instanceof Error ? err.message : err}`);
       // pollUntil throws on timeout — fall back to the tolerant warning below.
     }
     console.log(`  After retry: focused=${isFocused}`);
@@ -533,7 +535,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
             console.log(`  Got from log: ${transcription}`);
             return true;
           }
-        } catch {
+        } catch (err) {
+          console.warn(`[e2e] transcription log read failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false; // ssh hiccup — retry
         }
         return false;
@@ -563,8 +566,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     try {
       const logTail = await shell.exec("tail -n 25 /tmp/voice-service.log 2>/dev/null || echo '(no voice-service log)'");
       console.log("  voice-service log tail:\n" + logTail.trim().split("\n").map((l) => "    " + l).join("\n"));
-    } catch {
-      // diagnostics are best-effort
+    } catch (err) {
+      console.warn(`[e2e] log-tail diagnostics failed (best-effort): ${err instanceof Error ? err.message : err}`);
     }
   }
   endSpan();
@@ -588,7 +591,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       try {
         const out = await shell.getVoiceServiceStatus();
         return out.includes("idle");
-      } catch {
+      } catch (err) {
+        console.warn(`[e2e] voice-service status probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },
@@ -610,7 +614,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         // ssh command's own cmdline (sh -c "...ghostty...").
         const out = await shell.exec("pgrep -f '[g]hostty'; true");
         return out.trim().length === 0;
-      } catch {
+      } catch (err) {
+        console.warn(`[e2e] ghostty pgrep probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },
@@ -783,6 +788,7 @@ async function verifyWithScreenshot(
       try {
         assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
       } catch (err) {
+        console.warn(`[e2e] visual regression (update mode) mismatch: ${(err as Error).message}`);
         return { passed: false, message: (err as Error).message, screenshot };
       }
     }
@@ -794,6 +800,7 @@ async function verifyWithScreenshot(
     try {
       assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
     } catch (err) {
+      console.warn(`[e2e] visual regression mismatch: ${(err as Error).message}`);
       return { passed: false, message: (err as Error).message, screenshot };
     }
   }
@@ -1187,7 +1194,8 @@ async function runBareMode(): Promise<void> {
             captureHit = true;
             if (!typed) typed = readFileSync(textFile, "utf-8").trim();
           }
-        } catch {
+        } catch (err) {
+          console.warn(`[e2e] capture-file read failed (retrying): ${err instanceof Error ? err.message : err}`);
           // capture file absent
         }
         const errorLine = await logSince("ERROR|Traceback");
@@ -1436,7 +1444,8 @@ ATSPIEOF`;
           10_000,
           100,
         );
-      } catch {
+      } catch (err) {
+        console.warn(`[e2e] status-extents poll timed out — using last read extents: ${err instanceof Error ? err.message : err}`);
         // Fall through with the last read extents; the branches below handle
         // missing/implausible values the same way as before.
       }
@@ -1521,7 +1530,8 @@ ATSPIEOF`;
               500,
             );
             rowFound = true;
-          } catch {
+          } catch (err) {
+            console.warn(`[e2e] prefs row poll timed out — treating as row not found: ${err instanceof Error ? err.message : err}`);
             // pollUntil throws on timeout — treat as row not found.
           }
           addWordRt = rowFound ? "ok" : "row-not-found";
@@ -1583,7 +1593,8 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
           10_000,
           500,
         );
-      } catch {
+      } catch (err) {
+        console.warn(`[e2e] prefs window poll timed out — treating as window still present: ${err instanceof Error ? err.message : err}`);
         // pollUntil throws on timeout — treat as window still present.
       }
       prefsRow("prefs window closes", gone);
@@ -1594,6 +1605,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
         10_000,
       ).catch(() => {});
     } catch (e) {
+      console.warn(`[e2e] P01 prefs flow failed: ${String(e)}`);
       prefsRow("prefs window opens", false, String(e));
       prefsRow("add-word roundtrip (type, click Add, row appears)", false, "skipped — P01 failed");
       prefsRow("prefs window closes", false, "skipped — P01 failed");
@@ -1618,6 +1630,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     const c07 = await run(`cat ${configPath}`);
     row("config.yaml exists and parses", c07.includes("provider"));
   } catch (e) {
+    console.warn(`[e2e] config.yaml check failed: ${String(e)}`);
     row("config.yaml exists and parses", false, String(e));
   }
   console.log(`  debug: config inode=$(stat -c '%i' $HOME/.config/voice-to-text/config.yaml) perms=$(stat -c '%a' $HOME/.config/voice-to-text/config.yaml) birth=$(stat -c '%w' $HOME/.config/voice-to-text/config.yaml)`);
@@ -1626,6 +1639,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     const perms = (await run(`stat -c '%a' ${configPath}`)).trim();
     row("config.yaml has 0600 permissions", perms === "600", `got ${perms}`);
   } catch (e) {
+    console.warn(`[e2e] config.yaml stat failed: ${String(e)}`);
     row("config.yaml has 0600 permissions", false, String(e));
   }
   // C01/C02/C03: write provider/output-method/language into config, restart
@@ -1665,6 +1679,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     );
     row("config change picked up after service restart", true);
   } catch (e) {
+    console.warn(`[e2e] config-restart check failed: ${String(e)}`);
     row("config change picked up after service restart", false, String(e));
   }
   skipRow("hotkey stored in dconf", "needs synthetic input (phase 5)");
@@ -1724,6 +1739,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       );
     }
   } catch (e) {
+    console.warn(`[e2e] service-down check failed: ${String(e)}`);
     row("clean error when service is down", false, String(e));
   }
   // E06 leftover: a StartRecording '{}' can land after the service restarted
@@ -1761,12 +1777,14 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
         10_000,
         1_000,
       );
-    } catch {
+    } catch (err) {
+      console.warn(`[e2e] error-line poll timed out — treating as no error logged: ${err instanceof Error ? err.message : err}`);
       // pollUntil throws on timeout — treat as no error line logged.
     }
     await gdbus("StopRecording").catch(() => {});
     row("unknown provider logs a clear error", errHit > 0);
   } catch (e) {
+    console.warn(`[e2e] unknown-provider check failed: ${String(e)}`);
     row("unknown provider logs a clear error", false, String(e));
   }
   skipRow("parallel recordings rejected cleanly", "deferred");
@@ -1825,6 +1843,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       const registered = (hotkeyVal.includes("Super") || dconfOverride.stdout.includes("Super")) && (parseInt(regErr.stdout.trim() || "0") === 0);
       hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : `hotkey unregistered val=${hotkeyVal.trim()} regErr=${regErr.stdout.trim()}` });
     } catch (e) {
+      console.warn(`[e2e] hotkey recording check failed: ${String(e)}`);
       hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "fail", note: String(e) });
       await gdbus("StopRecording").catch(() => {});
     }
@@ -1835,6 +1854,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       const shellAlive = (await transport.exec("pgrep -f 'gnome-shell' | head -1 | xargs -I{} test -d /proc/{} && echo alive || echo dead")).stdout.trim();
       hotkeyUiRows.push({ id: "prefs window opens", status: shellAlive === "alive" ? "pass" : "fail" });
     } catch (e) {
+      console.warn(`[e2e] prefs window open check failed: ${String(e)}`);
       hotkeyUiRows.push({ id: "prefs window opens", status: "fail", note: String(e) });
     }
   } else {
