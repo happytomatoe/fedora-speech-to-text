@@ -85,9 +85,14 @@ def check_config(manager: ConfigManager) -> list[str]:
             continue
         findings.extend(_findings_for_template_provider(name, section))
     if selected in sections and isinstance(sections[selected], dict) and sections[selected].get("type") == "template":
-        # Selected template provider must also instantiate via its registry type
+        # Selected template provider must also instantiate via its registry type.
+        # Neutralize api_key sources: resolve_api_key runs !command substitutions,
+        # which must never execute during a supposedly dry validation.
+        cfg = dict(manager.get_provider_config(selected))
+        cfg.pop("api_key", None)
+        cfg.pop("api_key_env", None)
         try:
-            get_batch_provider("template", manager.get_provider_config(selected))
+            get_batch_provider("template", cfg)
         except Exception as e:
             findings.append(f"provider '{selected}' failed to initialize: {e}")
     return findings
