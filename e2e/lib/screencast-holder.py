@@ -1,10 +1,12 @@
-# Persistent screencast caller for the CI E2E harness.
-#
-# gnome-shell aborts a screencast with "Sender has vanished" when the D-Bus
-# caller disconnects — a one-shot `gdbus call` exits right after the call, so
-# the recording dies. This helper keeps the bus connection open (GLib.MainLoop)
-# until SIGTERM/SIGINT, then stops the screencast gracefully on the same
-# connection. Exit codes: 0 = started+stopped ok, 1 = start failed.
+"""Persistent screencast caller for the CI E2E harness.
+
+gnome-shell aborts a screencast with "Sender has vanished" when the D-Bus
+caller disconnects — a one-shot `gdbus call` exits right after the call, so
+the recording dies. This helper keeps the bus connection open (GLib.MainLoop)
+until SIGTERM/SIGINT, then stops the screencast gracefully on the same
+connection. Exit codes: 0 = started+stopped ok, 1 = start failed.
+"""
+
 import os
 import signal
 import sys
@@ -14,7 +16,7 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
-if len(sys.argv) != 2:
+if len(sys.argv) != 2:  # noqa: PLR2004 -- argv arity check, not a magic threshold
     sys.exit("usage: screencast-holder.py <file-template>")
 
 template = sys.argv[1]
@@ -38,7 +40,7 @@ if not started:
 
 
 def stop_and_exit(_signum: int, _frame: object) -> None:
-
+    """Stop the screencast session on signal, then exit cleanly."""
     try:
         bus.call_sync(
             "org.gnome.Shell.Screencast",
