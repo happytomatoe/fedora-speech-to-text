@@ -27,7 +27,7 @@ build-python:
 # @category service
 # Install the D-Bus service (D-Bus activation only, no systemd)
 service-install:
-    uv tool install -e .
+    uv tool install -e . --force
     mkdir -p ~/.local/share/dbus-1/services/ ~/.local/bin/ ~/.config/systemd/user/
     cp service/com.happytomatoe.VoiceToText.service ~/.local/share/dbus-1/services/
     cp service/com.happytomatoe.VoiceToText.user.service ~/.config/systemd/user/
@@ -37,6 +37,10 @@ service-install:
 # @category service
 # Uninstall the D-Bus service
 service-uninstall:
+    # Stop the running service before removing its files, otherwise an
+    # already-active D-Bus process keeps serving with stale code.
+    systemctl --user stop voice-to-text.service 2>/dev/null || true
+    systemctl --user disable voice-to-text.service 2>/dev/null || true
     rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
     rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.user.service
     rm -f ~/.local/bin/voice-to-text-dbus-wrapper

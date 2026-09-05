@@ -20,8 +20,9 @@ qemu-e2e-kill:
         rm -f "${PID_FILE}"
     fi
     # Also kill any stray QEMU processes
-    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs)
-    pkill -9 -f "qemu-system-x86.*overlay.qcow2" 2>/dev/null || true
+    # Kill only QEMU processes using THIS repo's overlay (not unrelated VMs):
+    # match on the repo-rooted absolute overlay path.
+    pkill -9 -f "$(pwd)/e2e/qemu-images/overlay.qcow2" 2>/dev/null || true
     rm -f e2e/qemu-images/overlay.qcow2 e2e/qemu-images/qemu-monitor.sock
     echo "Done"
 qemu-e2e-vm port='5930':
@@ -397,8 +398,8 @@ e2e-start:
     virsh -c qemu:///session start e2e
 e2e-stop:
     virsh -c qemu:///session destroy e2e
-e2e-record output='e2e/output/recording.mp4':
-    python3 e2e/lib/spice-record.py --host localhost --port 5930 --output {{ output }}
+e2e-record output='e2e/output/recording.mp4' port='5930':
+    python3 e2e/lib/spice-record.py --host localhost --port {{ port }} --output {{ output }}
 
 # @category e2e-vm
 # Local CI-parity: set up the Ubuntu 26.04 VM (image download + customize)
@@ -435,7 +436,17 @@ ubuntu-vm-boot-gui:
       -netdev user,id=net0,hostfwd=tcp::2222-:22 \
       -device virtio-net-pci,netdev=net0 \
       -daemonize -pidfile qemu.pid
-    echo "Ubuntu 26.04 desktop window open (GDM auto-login: testuser), SSH on :2222"
+    # Wait for SSH before returning, mirroring boot-vm.sh, so a cold GUI boot
+    # doesn't fail the parity run on its first ssh command.
+    for i in $(seq 1 60); do
+      if ssh -i id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 testuser@localhost echo ok 2>/dev/null; then
+        echo "Ubuntu 26.04 desktop ready (GDM auto-login: testuser), SSH on :2222"
+        exit 0
+      fi
+      sleep 3
+    done
+    echo "FATAL: SSH not ready after 180s" >&2
+    exit 1
 
 # @category e2e-vm
 # Full local CI-parity cycle: boot Ubuntu 26.04 VM (if not running) + Parakeet
@@ -443,8 +454,10 @@ ubuntu-vm-boot-gui:
 ubuntu-vm-test GUI='':
     #!/usr/bin/env bash
     set -euo pipefail
-    just ubuntu-vm-{{ if GUI == "1" { "boot-gui" } else { "boot" } }}
+    # Install the EXIT trap BEFORE booting, so a failed boot (QEMU up but SSH
+    # never ready) can't leak the VM.
     trap 'just ubuntu-vm-kill' EXIT
+    just ubuntu-vm-{{ if GUI == "1" { "boot-gui" } else { "boot" } }}
     just ubuntu-vm-parakeet
     just ubuntu-vm-run
 
@@ -476,7 +489,12 @@ ubuntu-vm-kill:
     #!/usr/bin/env bash
     PID_FILE="e2e-vm/qemu.pid"
     if [ -f "$PID_FILE" ]; then
-      kill "$(cat "$PID_FILE")" 2>/dev/null || true
+      PID="$(cat "$PID_FILE")"
+      # Verify the PID actually belongs to QEMU before killing — the pid file
+      # may be stale and the PID reused by an unrelated process.
+      if ps -p "$PID" -o comm= 2>/dev/null | grep -q qemu; then
+        kill "$PID" 2>/dev/null || true
+      fi
       rm -f "$PID_FILE"
     fi
     echo "VM stopped"
