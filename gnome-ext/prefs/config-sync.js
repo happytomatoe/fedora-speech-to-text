@@ -70,10 +70,10 @@ export function readCustomProviderNames() {
             ([key, value]) =>
                 value !== null &&
                 typeof value === 'object' &&
-                !Array.isArray(value)
+                !Array.isArray(value) &&
+                value.type === 'template'
         )
-        .map(([key]) => key)
-        .filter(key => key !== 'transcription');
+        .map(([key]) => key);
 }
 
 function writeConfigYaml(config) {
