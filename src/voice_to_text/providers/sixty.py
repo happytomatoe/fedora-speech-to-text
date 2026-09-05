@@ -72,7 +72,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             result = response.json()
             payload = result.get("data", result)
             text = (payload.get("text") or "").strip()
-            logger.info("60db transcription result: %s", text[:100])
+            logger.debug("60db transcription result: %s", text[:100])
             return text
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"

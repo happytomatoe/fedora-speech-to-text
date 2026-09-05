@@ -124,7 +124,7 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         audio_data, sample_rate = self._moonshine.load_wav_file(audio_path)
         transcript = self._transcriber.transcribe_without_streaming(audio_data, sample_rate=sample_rate)
         text = " ".join(line.text for line in transcript.lines).strip()
-        logger.info("Moonshine batch result: %s", text[:100])
+        logger.debug("Moonshine batch result: %s", text[:100])
         return text
 
     @property

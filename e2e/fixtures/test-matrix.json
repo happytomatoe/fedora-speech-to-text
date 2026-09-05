@@ -7,33 +7,33 @@
         "audio-files": [
           {
             "id": "audio-01",
-            "file": "test-01-weather.wav",
-            "expected": "the weather to nadien sunny with a high on 75 degrees",
-            "category": "weather"
+            "file": "test-01-thieves.wav",
+            "expected": "the thieves, for elder was soon joined by burgess, drove together to ben caunt's, the pugilist's, public-house in st. martin's lane",
+            "category": "thieves"
           },
           {
             "id": "audio-02",
-            "file": "test-02-reminder.wav",
-            "expected": "remember to buy groceries after work today",
-            "category": "reminder"
+            "file": "test-02-embassy.wav",
+            "expected": "was quite interested in determining the nature of his contact with the soviet embassy in mexico city, end quote",
+            "category": "embassy"
           },
           {
             "id": "audio-03",
-            "file": "test-03-hello.wav",
-            "expected": "good morning, how are you today?",
-            "category": "greeting"
+            "file": "test-03-jails.wav",
+            "expected": "by other acts local authorities were empowered to construct new jails or hire accommodation in the district",
+            "category": "jails"
           },
           {
             "id": "audio-04",
-            "file": "test-04-calendar.wav",
-            "expected": "our meeting is scheduled for 3pm on monday",
-            "category": "calendar"
+            "file": "test-04-monster.wav",
+            "expected": "let this monster give his name; i am ready to fight him. i am still determined to put myself in the place of mr. fauntleroy",
+            "category": "monster"
           },
           {
             "id": "audio-05",
-            "file": "test-05-note.wav",
-            "expected": "take a note that the project deadline is next friday",
-            "category": "note"
+            "file": "test-05-phial.wav",
+            "expected": "this phial he had managed to retain in his possession in spite of the frequent searches to which he was subjected in newgate",
+            "category": "phial"
           }
         ],
         "output-methods": [
@@ -66,105 +66,105 @@
           "audio": "audio-01",
           "output-method": "type",
           "priority": "high",
-          "description": "Weather transcription with dotool type"
+          "description": "Thieves transcription with dotool type"
         },
         {
           "id": "T02",
           "audio": "audio-01",
           "output-method": "mutter-virtual",
           "priority": "medium",
-          "description": "Weather transcription with mutter virtual"
+          "description": "Thieves transcription with mutter virtual"
         },
         {
           "id": "T03",
           "audio": "audio-01",
           "output-method": "mutter-commit",
           "priority": "medium",
-          "description": "Weather transcription with mutter commit"
+          "description": "Thieves transcription with mutter commit"
         },
         {
           "id": "T04",
           "audio": "audio-02",
           "output-method": "type",
           "priority": "high",
-          "description": "Reminder transcription with dotool type"
+          "description": "Embassy transcription with dotool type"
         },
         {
           "id": "T05",
           "audio": "audio-02",
           "output-method": "mutter-virtual",
           "priority": "medium",
-          "description": "Reminder transcription with mutter virtual"
+          "description": "Embassy transcription with mutter virtual"
         },
         {
           "id": "T06",
           "audio": "audio-02",
           "output-method": "mutter-commit",
           "priority": "medium",
-          "description": "Reminder transcription with mutter commit"
+          "description": "Embassy transcription with mutter commit"
         },
         {
           "id": "T07",
           "audio": "audio-03",
           "output-method": "type",
           "priority": "high",
-          "description": "Hello transcription with dotool type"
+          "description": "Jails transcription with dotool type"
         },
         {
           "id": "T08",
           "audio": "audio-03",
           "output-method": "mutter-virtual",
           "priority": "medium",
-          "description": "Hello transcription with mutter virtual"
+          "description": "Jails transcription with mutter virtual"
         },
         {
           "id": "T09",
           "audio": "audio-03",
           "output-method": "mutter-commit",
           "priority": "medium",
-          "description": "Hello transcription with mutter commit"
+          "description": "Jails transcription with mutter commit"
         },
         {
           "id": "T10",
           "audio": "audio-04",
           "output-method": "type",
           "priority": "high",
-          "description": "Calendar transcription with dotool type"
+          "description": "Monster transcription with dotool type"
         },
         {
           "id": "T11",
           "audio": "audio-04",
           "output-method": "mutter-virtual",
           "priority": "medium",
-          "description": "Calendar transcription with mutter virtual"
+          "description": "Monster transcription with mutter virtual"
         },
         {
           "id": "T12",
           "audio": "audio-04",
           "output-method": "mutter-commit",
           "priority": "medium",
-          "description": "Calendar transcription with mutter commit"
+          "description": "Monster transcription with mutter commit"
         },
         {
           "id": "T13",
           "audio": "audio-05",
           "output-method": "type",
           "priority": "high",
-          "description": "Note transcription with dotool type"
+          "description": "Phial transcription with dotool type"
         },
         {
           "id": "T14",
           "audio": "audio-05",
           "output-method": "mutter-virtual",
           "priority": "medium",
-          "description": "Note transcription with mutter virtual"
+          "description": "Phial transcription with mutter virtual"
         },
         {
           "id": "T15",
           "audio": "audio-05",
           "output-method": "mutter-commit",
           "priority": "medium",
-          "description": "Note transcription with mutter commit"
+          "description": "Phial transcription with mutter commit"
         }
       ]
     },

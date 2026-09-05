@@ -74,9 +74,9 @@ pre-push:
     vulture:
       run: uv run vulture src/ --min-confidence 80
       glob: "*.py"
-    e2e-test:
-      # Runs via `just e2e` so behavior matches manual runs (incl. always-on
-      # tee of full output to /tmp/fedora-speech-to-text-e2e-run.log).
-      # Base image + cloud-init ISO are REQUIRED — fail hard if missing.
-      run: bash -c 'if [ ! -f e2e/qemu-images/base.qcow2 ] || [ ! -f e2e/qemu-images/cloud-init.iso ]; then printf "ERROR - E2E environment not set up (missing e2e/qemu-images/base.qcow2 or e2e/qemu-images/cloud-init.iso)\nRun just qemu-e2e-setup first\n" >&2; exit 1; fi; just e2e'
-      interactive: true
+    # e2e-test:
+    #   # Runs via `just e2e` so behavior matches manual runs (incl. always-on
+    #   # tee of full output to /tmp/fedora-speech-to-text-e2e-run.log).
+    #   # Base image + cloud-init ISO are REQUIRED — fail hard if missing.
+    #   run: bash -c 'if [ ! -f e2e/qemu-images/base.qcow2 ] || [ ! -f e2e/qemu-images/cloud-init.iso ]; then printf "ERROR - E2E environment not set up (missing e2e/qemu-images/base.qcow2 or e2e/qemu-images/cloud-init.iso)\nRun just qemu-e2e-setup first\n" >&2; exit 1; fi; just e2e'
+    #   interactive: true

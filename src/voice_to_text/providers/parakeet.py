@@ -49,7 +49,7 @@ class ParakeetProvider(BatchProvider):
                 logger.error("Response body: %s", e.response.text[:1000])
             raise
         result = response.json().get("text", "").strip()
-        logger.info("Transcription result: %s", result[:100])
+        logger.debug("Transcription result: %s", result[:100])
         return result
 
     @property

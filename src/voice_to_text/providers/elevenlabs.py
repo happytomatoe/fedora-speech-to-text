@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "scribe_v2"
 
 
+# TODO: Add scribe v2 realtime
 class ElevenLabsProvider(BatchProvider):
     """ElevenLabs Scribe batch transcription provider.
 
@@ -67,7 +68,7 @@ class ElevenLabsProvider(BatchProvider):
             response.raise_for_status()
             result = response.json()
             text = (result.get("text") or "").strip()
-            logger.info("Transcription result: %s", text[:100])
+            logger.debug("Transcription result: %s", text[:100])
             return text
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"

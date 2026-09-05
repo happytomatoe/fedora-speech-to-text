@@ -62,7 +62,7 @@ mkdir -p "$MOONSHINE_VOICE_CACHE"
 export MOONSHINE_VOICE_CACHE
 cd "$ASSETS/voice-to-text-python"
 # Backgrounded so the ~10-20s model load overlaps schema compile + extension deploy.
-uv run --project . python -c "import asyncio; from voice_to_text.providers.moonshine import MoonshineProvider; p = MoonshineProvider({'provider': 'moonshine', 'model': 'medium', 'language': 'en'}); print(asyncio.run(p.transcribe_file('$ASSETS/e2e/fixtures/test-01-weather.wav', 'en')))" > "$HOME/moonshine-prewarm.log" 2>&1 &
+uv run --project . python -c "import asyncio; from voice_to_text.providers.moonshine import MoonshineProvider; p = MoonshineProvider({'provider': 'moonshine', 'model': 'medium', 'language': 'en'}); print(asyncio.run(p.transcribe_file('$ASSETS/e2e/fixtures/test-01-thieves.wav', 'en')))" > "$HOME/moonshine-prewarm.log" 2>&1 &
 PREWARM_PID=$!
 echo "$PREWARM_PID" > "$HOME/prewarm.pid"
 cd "$REPO_ROOT"

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def setup_logging() -> None:
     """Configure logging for the service."""
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(sys.stderr),

@@ -95,7 +95,7 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
             response.raise_for_status()
             result = response.json()
             text = result.get("text", "").strip()
-            logger.info("Transcription result: %s", text[:100])
+            logger.debug("Transcription result: %s", text[:100])
             return text
         except httpx.HTTPStatusError as e:
             status = e.response.status_code if e.response is not None else "?"
