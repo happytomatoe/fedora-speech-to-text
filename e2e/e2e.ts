@@ -1397,10 +1397,17 @@ ATSPIEOF`;
         .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
       if (entryExt.includes(",")) {
         const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
-        if ([ex, ey, ew, eh].every(v => Number.isFinite(v)) && ew > 0 && eh > 0) {
+        // A y near the top edge means the extents are bogus (top bar / wrong
+        // origin) — clicking there opens the overview and steals keyboard
+        // focus, sending TypeText into the shell search instead (run 33961390474).
+        const plausible = [ex, ey, ew, eh].every(v => Number.isFinite(v)) &&
+          ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
+        if (plausible) {
           await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
           await Bun.sleep(300);
           console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
+        } else {
+          console.log(`  entry extents implausible (${entryExt}) — skipping click, relying on dialog default focus`);
         }
       } else {
         console.log(`  entry extents unavailable: ${entryExt} — typing without click-focus`);
