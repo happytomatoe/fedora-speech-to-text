@@ -308,7 +308,8 @@ def find_add_word_entry_extents():
     if not entry:
         return None
     try:
-        return entry.get_extents(Atspi.CoordType.SCREEN)
+        e = entry.get_extents(Atspi.CoordType.SCREEN)
+        return f"{e.x},{e.y},{e.width},{e.height}"
     except Exception:
         return None
 
