@@ -34,7 +34,7 @@ _STREAMING_PROVIDERS = {
 def _resolve_provider_class(name: str, config: dict[str, Any]) -> type[BatchProvider] | None:
     """Resolve the batch provider class for a section name.
 
-    Built-in registry names (deepgram, template, …) map directly; custom
+    Built-in registry names (deepgram, batch_custom, …) map directly; custom
     config.yaml sections dispatch on their ``type`` field, so the section
     name itself can be anything.
     """

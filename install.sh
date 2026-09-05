@@ -445,9 +445,12 @@ main() {
   fi
   install_prerequisites
   install_uv
-  # A fully-local install (--local + --local-service) needs no release tag:
-  # every $LATEST_TAG consumer below has a local-source fallback.
-  if [ -z "$LOCAL_DIR" ] || [ -z "${LOCAL_SERVICE_DIR:-}" ]; then
+  # A fully-local install (--local + --local-service) needs no release tag —
+  # but only if every $LATEST_TAG consumer's local fallback file is present.
+  if [ -z "$LOCAL_DIR" ] || [ -z "${LOCAL_SERVICE_DIR:-}" ] ||
+    [ ! -f "service/com.happytomatoe.VoiceToText.service" ] ||
+    [ ! -f "service/com.happytomatoe.VoiceToText.user.service" ] ||
+    { [ ! -f "$HOME/.config/voice-to-text/config.yaml" ] && [ ! -f "config.yaml" ]; }; then
     fetch_latest_tag
   fi
   install_python_service

@@ -1,6 +1,6 @@
 # Template Provider — Define a Custom Provider in config.yaml
 
-The `custom` provider type lets you define a custom speech-to-text provider
+The `batch_custom` provider type lets you define a custom speech-to-text provider
 entirely in `config.yaml` — no Python changes. The HTTP request is described as a
 Jinja2-templated blueprint, rendered fresh for every transcription.
 

@@ -8,7 +8,8 @@ transcription:
 parakeet-template:
   type: batch_custom
   endpoint: http://10.0.2.2:5092/v1/audio/transcriptions
-  model: whisper-1
+  variables:
+    MODEL: whisper-1
   form:
     model: "{{ MODEL }}"
 
