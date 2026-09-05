@@ -12,7 +12,8 @@ import os
 from typing import Any
 
 import httpx
-from jinja2 import ChainableUndefined, Environment, Template
+from jinja2 import Environment, StrictUndefined, Template
+from jinja2.exceptions import UndefinedError
 from jinja2.nativetypes import NativeEnvironment
 
 from .base import BatchProvider, get_shared_client, resolve_api_key
@@ -63,19 +64,23 @@ class TemplateProvider(BatchProvider):
 
         def _usable_header(source: str) -> bool:
             # Key configured → always usable. Without a key, render with
-            # API_KEY left undefined (ChainableUndefined) so `default`
-            # fallbacks resolve; skip the header only if API_KEY would leak
-            # through unresolved or the value collapses to empty.
+            # API_KEY undefined (StrictUndefined): a bare "{{ API_KEY }}"
+            # raises UndefinedError → skip the header (an unfilled "Bearer "
+            # would be an illegal header value), while
+            # "{{ API_KEY | default(...) }}" resolves to its fallback → keep.
             if self.api_key != "":
                 return True
             if "API_KEY" not in source:
                 return True
-            rendered = str(
-                NativeEnvironment(undefined=ChainableUndefined)
-                .from_string(source)
-                .render(LANGUAGE="", MODEL="", CUSTOM_WORDS=[])
-            )
-            return "API_KEY" not in rendered and rendered != ""
+            try:
+                rendered = str(
+                    NativeEnvironment(undefined=StrictUndefined)
+                    .from_string(source)
+                    .render(LANGUAGE="", MODEL="", CUSTOM_WORDS=[])
+                )
+            except UndefinedError:
+                return False
+            return rendered != ""
 
         self._header_tmpl: dict[str, Template] = {
             k: self.env.from_string(v) for k, v in config.get("headers", {}).items() if _usable_header(str(v))
