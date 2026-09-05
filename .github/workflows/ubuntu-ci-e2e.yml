@@ -141,7 +141,7 @@ jobs:
             output/recording.webm
             output/results.json
             output/*.log
-            output/prefs-open.png
+            output/prefs-end.png
             output/prefs-scroll-after.png
             output/prefs-after-add.png
             output/cells/*/clip.webm

@@ -317,10 +317,10 @@ def node_showing(name):
 
 
 def node_name_present(name):
-    """Check whether any node with this exact name exists anywhere in the tree."""
+    """Check whether a list item node with this exact name exists in the tree."""
 
     def pred(n, r, node):
-        return n == name
+        return n == name and r == "list item"
 
     def act(n, r, node):
         return "yes"
