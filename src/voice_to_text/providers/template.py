@@ -44,7 +44,6 @@ class TemplateProvider(BatchProvider):
         response_text_path: dotted path to the transcript in the response (default "text").
         variables: custom key/value pairs exposed to templates (values must be scalars).
         api_key / api_key_env: resolved via resolve_api_key, exposed as API_KEY.
-        timeout: request timeout in seconds (default 120).
     """
 
     def __init__(self, config: dict[str, Any]):
@@ -55,7 +54,6 @@ class TemplateProvider(BatchProvider):
             raise ValueError("template provider requires 'form' or 'json' request body")
         self.spec = config
         self.endpoint = config["endpoint"]
-        self.timeout = config.get("timeout", 120.0)
         self.text_path = config.get("response_text_path", "text")
         self._variables = self._validate_variables(config.get("variables", {}))
         wants_key = bool(config.get("api_key") or config.get("api_key_env"))
@@ -94,7 +92,7 @@ class TemplateProvider(BatchProvider):
             for k, v in config.get("json", {}).items()
         }
         self._client = get_shared_client()
-        logger.info("Template provider: %s (timeout=%.0fs)", self.endpoint, self.timeout)
+        logger.info("Template provider: %s", self.endpoint)
 
     _RESERVED_VARIABLES = ("API_KEY", "LANGUAGE", "CUSTOM_WORDS")
 
@@ -168,7 +166,7 @@ class TemplateProvider(BatchProvider):
                     headers=rendered["headers"],
                     data=data,
                     files=files,
-                    timeout=self.timeout,
+                    timeout=120.0,
                 )
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:

@@ -150,7 +150,7 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 'Seconds to wait for recording process to stop before forcing it'
             ),
             1,
-            120,
+            600,
             1,
             'stop-timeout-seconds'
         );

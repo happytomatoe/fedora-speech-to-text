@@ -69,7 +69,6 @@ moonshine:
 #     hotwords_boost: "2.0"
 #     beam_size: "2"
 #   response_text_path: text    # dotted path to the transcript in the response
-#   timeout: 120
 
 audio:
   sample_rate: 16000

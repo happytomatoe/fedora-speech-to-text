@@ -24,12 +24,16 @@ This page is both the reference and the step-by-step guide.
   variables:                  # optional; custom scalar values exposed to templates
     BEAM_SIZE: 4
   api_key: "..."              # or api_key_env: NAME; supports !command; exposed as API_KEY
-  timeout: 120                # seconds (default 120)
 ```
 
 At least one of `form` or `json` is required — the audio file itself is
 uploaded as the multipart `file` part, so `form`/`json` is how you attach
 everything else the server expects (model name, language, vendor options, …).
+
+The HTTP request timeout is fixed at 120 seconds; the overall stop/transcribe
+deadline is the engine's `stop_timeout` (GNOME preferences →
+"stop-timeout-seconds", default 300). Note that `config-check` rejects a
+`timeout` key in a template provider section — that setting was removed.
 
 **`response_text_path`** tells the provider where the transcript text lives in
 the server's JSON response. It is a dotted path, and *you* supply the whole
@@ -184,7 +188,6 @@ crispasr:
     beam_size: "2"
   api_key: ""                                    # or api_key_env: MY_SERVER_KEY
   response_text_path: text
-  timeout: 120
 ```
 
 **Example B — vendor with a custom auth header and array field:**
