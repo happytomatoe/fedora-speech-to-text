@@ -103,7 +103,7 @@ export class ShellHelper {
         // restart) — fall back to a one-shot ssh call instead of failing.
         // Also disconnect the dead deployer so subsequent calls skip it and
         // can lazily reconnect on the next call.
-        console.log(`  deployer exec failed (${err instanceof Error ? err.message : err}), retrying via one-shot ssh`);
+        console.debug(`[shell] deployer exec failed, retrying via one-shot ssh: ${err instanceof Error ? err.message : err}`);
         try {
           await this._deployer.disconnect();
         } catch (err) {

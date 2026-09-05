@@ -594,7 +594,7 @@ export class VmManager {
       try {
         await this.shell.close();
       } catch (err) {
-        console.warn(`[vm] shell close failed (may already be gone): ${err instanceof Error ? err.message : err}`);
+        console.debug(`[vm] shell close failed (should be unreachable): ${err instanceof Error ? err.message : err}`);
       }
       await this.deployer.disconnect();
       return;
@@ -682,7 +682,7 @@ export class VmManager {
       });
       return true;
     } catch (err) {
-      console.warn(`[vm] port probe failed: ${err instanceof Error ? err.message : err}`);
+      console.debug(`[vm] port probe failed (stale socket): ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }

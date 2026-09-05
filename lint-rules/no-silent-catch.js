@@ -14,6 +14,17 @@ function hasConsoleCall(node) {
   ) {
     return true;
   }
+  // Never descend into nested function/class bodies: a console call inside an
+  // uncalled callback proves nothing about the catch path being loud.
+  if (
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "FunctionExpression" ||
+    node.type === "FunctionDeclaration" ||
+    node.type === "ClassExpression" ||
+    node.type === "ClassDeclaration"
+  ) {
+    return false;
+  }
   for (const key of Object.keys(node)) {
     if (key === "parent" || key === "range" || key === "loc") continue;
     const child = node[key];

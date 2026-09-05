@@ -171,7 +171,7 @@ function prefsUiChanged(): boolean {
   try {
     stored = readFileSync(statePath, "utf-8").trim();
   } catch (err) {
-    console.warn(`[e2e] no prefs-ui state file (first run in this worktree): ${err instanceof Error ? err.message : err}`);
+    console.debug(`[e2e] no prefs-ui state file (first run in this worktree)`);
   }
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(statePath, current);
@@ -592,7 +592,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         const out = await shell.getVoiceServiceStatus();
         return out.includes("idle");
       } catch (err) {
-        console.warn(`[e2e] voice-service status probe failed (retrying): ${err instanceof Error ? err.message : err}`);
+        console.debug(`[e2e] voice-service status probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },

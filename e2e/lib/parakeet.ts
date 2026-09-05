@@ -62,7 +62,7 @@ export async function ensureParakeet(): Promise<void> {
       execSync(`podman rm -f ${containerName} 2>/dev/null || true`, { stdio: "ignore" });
     }
   } catch (err) {
-    console.warn(`[parakeet] podman inspect failed (container may not exist): ${err instanceof Error ? err.message : err}`);
+    console.debug(`[parakeet] container not created yet (first run): ${err instanceof Error ? err.message : err}`);
   }
 
   // Start new container

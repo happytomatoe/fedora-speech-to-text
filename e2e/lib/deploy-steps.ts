@@ -30,7 +30,7 @@ function sshExec(command: string, sshKey: string, sshPort: number, sshUser = "te
       return transport.execSync(command);
     } catch (err) {
       lastErr = err as Error;
-      console.warn(`[deploy] sshExec retry ${i + 1}/${retries} failed: ${lastErr.message}`);
+      console.debug(`[deploy] sshExec retry ${i + 1}/${retries} failed: ${lastErr.message}`);
       if (i < retries - 1) {
         execSync(`sleep 2`);
       }

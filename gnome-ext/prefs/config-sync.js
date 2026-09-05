@@ -83,9 +83,8 @@ function writeConfigYaml(config) {
             // File doesn't exist yet — normal first run, keep the 0600 default.
             console.debug(`[config-sync] no config file yet — using 0600 default`);
         } else {
-            console.warn(
-                `[config-sync] stat failed on config file (using 0600 default): ${e instanceof Error ? e.message : e}`
-            );
+            const msg = e instanceof Gio.IOErrorEnum ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e);
+            console.warn(`[config-sync] stat failed on config file (using 0600 default): ${msg}`);
         }
     }
     const [ok] = file.replace_contents(

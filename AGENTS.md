@@ -117,13 +117,6 @@ This project uses [python-semantic-release](https://python-semantic-release.read
 
 ## JavaScript/TypeScript Error Handling (gnome-ext/)
 
-- **Never leave catch blocks empty.** At minimum, log the error: `catch (e) { console.error(e); }`
-- **If you must intentionally ignore an error**, add a comment explaining WHY it's safe:
-
-  ```js
-  try { await api.call(); } catch { /* ignore: best-effort notification */ }
-  ```
-
-- **Use `catch { }` (no parameter)** when intentionally ignoring — signals intent and avoids unused-variable lint errors.
-- **Don't just swallow errors** — this makes debugging impossible and hides production failures.
-- **Use `finally` for cleanup** (disconnect signals, close connections, release locks).
+- **Never leave catch blocks silent.** Every `catch` block and `.catch()` handler must contain a `console.error`/`console.warn` (expected-path / first-run info may use `console.debug`) or a top-level rethrow. This is enforced by the custom `no-silent-catch` oxlint rule (`.oxlintrc.json` + `lint-rules/no-silent-catch.js`). A comment alone is NOT sufficient.
+- **Poll loops and hot paths:** log only the first failure or use `console.debug`, so retries don't spam CI logs.
+- **Expected teardown conditions** (already-disconnected signals, absent files on first run): use `console.debug` with a short reason.
