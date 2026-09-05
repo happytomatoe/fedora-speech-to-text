@@ -290,6 +290,13 @@ qemu-e2e-create-base:
 # @category e2e-qemu
 qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
+
+# @category e2e-qemu
+# Full setup for a fresh checkout/worktree: e2e deps + QEMU env
+worktree-setup:
+    cd e2e && bun install
+    just qemu-e2e-setup
+
 # @category e2e-qemu
 qemu-e2e-setup:
     #!/usr/bin/env bash
