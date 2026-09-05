@@ -3,13 +3,13 @@
 from typing import Any
 
 from .base import BatchProvider, StreamingProvider
+from .custom import CustomProvider
 from .deepgram import DeepgramProvider
 from .elevenlabs import ElevenLabsProvider
 from .groq import GroqProvider
 from .moonshine import MoonshineProvider
 from .parakeet import ParakeetProvider
 from .sixty import SixtyProvider
-from .template import TemplateProvider
 from .voxtral import VoxtralProvider
 
 _BATCH_PROVIDERS = {
@@ -20,7 +20,7 @@ _BATCH_PROVIDERS = {
     "60db": SixtyProvider,
     "elevenlabs": ElevenLabsProvider,
     "moonshine": MoonshineProvider,
-    "template": TemplateProvider,
+    "template": CustomProvider,
 }
 
 _STREAMING_PROVIDERS = {
@@ -57,9 +57,9 @@ def get_batch_provider(name: str, config: dict[str, Any]) -> BatchProvider:
     provider_cls = _resolve_provider_class(name, config)
     if provider_cls is None:
         raise ValueError(f"Batch provider '{name}' not found. Available: {list(_BATCH_PROVIDERS.keys())}")
-    if provider_cls is TemplateProvider:
-        # TemplateProvider takes the config.yaml section name for log identity.
-        return TemplateProvider(config, name=name)  # type: ignore[abstract]
+    if provider_cls is CustomProvider:
+        # CustomProvider takes the config.yaml section name for log identity.
+        return CustomProvider(config, name=name)  # type: ignore[abstract]
     return provider_cls(config)  # type: ignore[abstract]
 
 

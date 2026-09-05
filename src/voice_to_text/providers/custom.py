@@ -1,9 +1,10 @@
-"""Template-based transcription provider (batch only).
+"""Custom (template-based) transcription provider (batch only).
 
-The HTTP request is described declaratively in config.yaml as a Jinja2-templated
-blueprint. Context variables available in templates: API_KEY, LANGUAGE,
-CUSTOM_WORDS, plus any custom variables defined per-provider in the
-"variables" config section.
+Users define custom providers in config.yaml under any section name with
+"type: template". The HTTP request is described declaratively as a
+Jinja2-templated blueprint. Context variables available in templates:
+API_KEY, LANGUAGE, CUSTOM_WORDS, plus any custom variables defined
+per-provider in the "variables" config section.
 
 Project docs: docs/providers/add-custom-provider.md
 """
@@ -43,7 +44,7 @@ def _extract_response_text(obj: Any, dotted: str) -> Any:
     return obj
 
 
-class TemplateProvider(BatchProvider):
+class CustomProvider(BatchProvider):
     """Generic batch provider driven by a Jinja2-templated request blueprint.
 
     Config keys:
@@ -136,7 +137,7 @@ class TemplateProvider(BatchProvider):
         for name, value in variables.items():
             if not isinstance(name, str) or not name:
                 raise ValueError("template provider 'variables' keys must be non-empty strings")
-            if name in TemplateProvider._RESERVED_VARIABLES:
+            if name in CustomProvider._RESERVED_VARIABLES:
                 raise ValueError(f"template provider variable '{name}' conflicts with a built-in template variable")
             if not isinstance(value, (str, int, float, bool)):
                 raise ValueError(f"template provider variable '{name}' must be a scalar (str/int/float/bool)")

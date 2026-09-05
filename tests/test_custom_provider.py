@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from voice_to_text.providers import get_batch_provider
-from voice_to_text.providers.template import TemplateProvider
+from voice_to_text.providers.custom import CustomProvider
 
 WAV_FIXTURE = str(Path(__file__).parents[1] / "e2e" / "fixtures" / "test-01-weather.wav")
 
@@ -32,15 +32,15 @@ CRISPASR_CONFIG = {
 class TestConfigValidation:
     def test_missing_endpoint_raises(self):
         with pytest.raises(ValueError, match="endpoint"):
-            TemplateProvider({"form": {"model": "x"}}, "template")
+            CustomProvider({"form": {"model": "x"}}, "template")
 
     def test_missing_body_raises(self):
         with pytest.raises(ValueError, match="'form' or 'json'"):
-            TemplateProvider({"endpoint": "http://stub"}, "template")
+            CustomProvider({"endpoint": "http://stub"}, "template")
 
     def test_registry_entry(self):
         provider = get_batch_provider("template", CRISPASR_CONFIG)
-        assert isinstance(provider, TemplateProvider)
+        assert isinstance(provider, CustomProvider)
         assert provider.name == "template"
 
     def test_custom_section_name_in_registry(self):
@@ -55,25 +55,25 @@ class TestConfigValidation:
         assert p1.name != p2.name
 
     def test_direct_construction_defaults_to_template(self):
-        provider = TemplateProvider(CRISPASR_CONFIG, "template")
+        provider = CustomProvider(CRISPASR_CONFIG, "template")
         assert provider.name == "template"
 
 
 class TestRender:
     def test_form_comma_join(self):
-        provider = TemplateProvider(CRISPASR_CONFIG, "template")
+        provider = CustomProvider(CRISPASR_CONFIG, "template")
         rendered = provider.render("en", ["Kubernetes", "ROCm"])
         assert dict(rendered["fields"])["hotwords"] == "Kubernetes, ROCm"
         assert dict(rendered["fields"])["model"] == "whisper-1"
         assert dict(rendered["fields"])["hotwords_boost"] == "2.0"
 
     def test_empty_custom_words(self):
-        provider = TemplateProvider(CRISPASR_CONFIG, "template")
+        provider = CustomProvider(CRISPASR_CONFIG, "template")
         rendered = provider.render("en", [])
         assert dict(rendered["fields"])["hotwords"] == ""
 
     def test_json_section_repeated_keys(self):
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": "http://stub",
                 "json": {"keyterms": "{{ CUSTOM_WORDS }}", "model_id": "scribe_v2"},
@@ -88,7 +88,7 @@ class TestRender:
         ]
 
     def test_headers_with_key(self):
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": "http://stub",
                 "api_key": "sk-secret",
@@ -101,13 +101,13 @@ class TestRender:
         assert rendered["headers"]["Authorization"] == "Bearer sk-secret"
 
     def test_no_key_no_headers(self):
-        provider = TemplateProvider({"endpoint": "http://stub", "form": {"model": "m"}}, "template")
+        provider = CustomProvider({"endpoint": "http://stub", "form": {"model": "m"}}, "template")
         rendered = provider.render()
         assert rendered["headers"] == {}
         assert rendered["ctx"]["API_KEY"] == ""
 
     def test_no_leftover_template_markers(self):
-        provider = TemplateProvider(CRISPASR_CONFIG, "template")
+        provider = CustomProvider(CRISPASR_CONFIG, "template")
         rendered = provider.render("en", ["x"])
         for value in rendered["headers"].values():
             assert "{{" not in str(value)
@@ -128,7 +128,7 @@ def _last_headers(httpserver) -> dict[str, str]:
 
 class TestVariables:
     def test_custom_variable_renders_in_form(self):
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": "http://stub",
                 "variables": {"MODEL": "whisper-1", "BEAM": 4},
@@ -142,7 +142,7 @@ class TestVariables:
         assert fields["beam_size"] == "4"
 
     def test_custom_variable_renders_in_header(self):
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": "http://stub",
                 "api_key": "sk-secret",
@@ -157,7 +157,7 @@ class TestVariables:
 
     def test_reserved_variable_name_raises(self):
         with pytest.raises(ValueError, match="conflicts with a built-in"):
-            TemplateProvider(
+            CustomProvider(
                 {
                     "endpoint": "http://stub",
                     "variables": {"API_KEY": "evil"},
@@ -168,7 +168,7 @@ class TestVariables:
 
     def test_non_scalar_variable_raises(self):
         with pytest.raises(ValueError, match="scalar"):
-            TemplateProvider(
+            CustomProvider(
                 {
                     "endpoint": "http://stub",
                     "variables": {"HOST": ["a", "b"]},
@@ -181,7 +181,7 @@ class TestVariables:
     async def test_variables_on_wire(self, httpserver, tmp_path):
         """Variables defined in config must arrive rendered in the multipart body."""
         httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json({"text": "ok"})
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
                 "variables": {"MODEL": "whisper-1", "BEAM": 4},
@@ -206,7 +206,7 @@ class TestTranscribeFile:
             {"text": "  Hello world.  "}
         )
         config = dict(CRISPASR_CONFIG, endpoint=httpserver.url_for("/v1/audio/transcriptions"))
-        provider = TemplateProvider(config, "template")
+        provider = CustomProvider(config, "template")
         result = await provider.transcribe_file(_make_wav(tmp_path), "en", ["ROCm", "Kubernetes"])
         assert result == "Hello world."
         form = _last_form(httpserver)
@@ -220,7 +220,7 @@ class TestTranscribeFile:
         httpserver.expect_request("/recognize", method="POST").respond_with_json(
             {"result": {"transcript": "nested text"}}
         )
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": httpserver.url_for("/recognize"),
                 "json": {"keyterms": "{{ CUSTOM_WORDS }}"},
@@ -240,7 +240,7 @@ class TestTranscribeFile:
             method="POST",
             headers={"Authorization": "Bearer sk-live"},
         ).respond_with_json({"text": "ok"})
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
                 "api_key": "sk-live",
@@ -255,7 +255,7 @@ class TestTranscribeFile:
     @pytest.mark.asyncio
     async def test_no_auth_header_when_no_key(self, httpserver, tmp_path):
         httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json({"text": "ok"})
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {"endpoint": httpserver.url_for("/v1/audio/transcriptions"), "form": {"model": "m"}},
             "template",
         )
@@ -267,7 +267,7 @@ class TestTranscribeFile:
         httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json(
             {"error": {"message": "bad key"}}, status=401
         )
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
                 "api_key": "wrong",
@@ -282,7 +282,7 @@ class TestTranscribeFile:
     @pytest.mark.asyncio
     async def test_missing_text_path_raises_with_snippet(self, httpserver, tmp_path):
         httpserver.expect_request("/x", method="POST").respond_with_json({"result": {"transcript": "hi"}})
-        provider = TemplateProvider({"endpoint": httpserver.url_for("/x"), "form": {"m": "1"}}, "template")
+        provider = CustomProvider({"endpoint": httpserver.url_for("/x"), "form": {"m": "1"}}, "template")
         with pytest.raises(RuntimeError, match="response_text_path 'text'") as exc_info:
             await provider.transcribe_file(_make_wav(tmp_path))
         assert "transcript" in str(exc_info.value)  # response snippet included
@@ -293,7 +293,7 @@ class TestTranscribeFile:
         httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json(
             {"text": "The weather today is sunny with a high of 75 degrees."}
         )
-        provider = TemplateProvider(
+        provider = CustomProvider(
             {
                 "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
                 "form": {"model": "parakeet-tdt-0.6b", "model_value": "parakeet"},

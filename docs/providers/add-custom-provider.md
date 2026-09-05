@@ -1,6 +1,6 @@
 # Template Provider — Define a Custom Provider in config.yaml
 
-The `template` provider type lets you define a custom speech-to-text provider
+The `custom` provider type lets you define a custom speech-to-text provider
 entirely in `config.yaml` — no Python changes. The HTTP request is described as a
 Jinja2-templated blueprint, rendered fresh for every transcription.
 
@@ -33,7 +33,7 @@ everything else the server expects (model name, language, vendor options, …).
 The HTTP request timeout is fixed at 120 seconds; the overall stop/transcribe
 deadline is the engine's `stop_timeout` (GNOME preferences →
 "stop-timeout-seconds", default 120). Note that `config-check` rejects a
-`timeout` key in a template provider section — that setting was removed.
+`timeout` key in a custom provider section — that setting was removed.
 
 **`response_text_path`** tells the provider where the transcript text lives in
 the server's JSON response. It is a dotted path, and *you* supply the whole
@@ -116,7 +116,7 @@ The path is entirely user-supplied — the provider hardcodes nothing about the
 response shape. A miss raises an error that includes a snippet of the actual
 response body so you can correct the path.
 
-## Multiple template providers
+## Multiple custom providers
 
 You can define any number of named sections with `type: template` in
 `config.yaml` (`crispasr:`, `openai-local:`, `weird-vendor:`, …). Each is an

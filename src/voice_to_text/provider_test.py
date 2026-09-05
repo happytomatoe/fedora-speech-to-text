@@ -17,7 +17,7 @@ import httpx
 
 from voice_to_text.config import ConfigManager
 from voice_to_text.providers import get_batch_provider
-from voice_to_text.providers.template import TemplateProvider
+from voice_to_text.providers.custom import CustomProvider
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _parse_value(raw: str) -> Any:
     return value
 
 
-def _print_blueprint(name: str, provider: TemplateProvider, language: str, words: list[str]) -> None:
+def _print_blueprint(name: str, provider: CustomProvider, language: str, words: list[str]) -> None:
     """Print the dry-run request blueprint with API-key masking.
 
     Args:
@@ -161,7 +161,7 @@ def _parse_args(args: list[str]) -> "_Args | int":
     return parsed
 
 
-def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, Any]) -> "TemplateProvider | int":
+def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, Any]) -> "CustomProvider | int":
     """Find and instantiate the named template provider, or return an exit code.
 
     Args:
@@ -192,11 +192,11 @@ def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, An
     except Exception as e:
         print(f"Provider '{name}' failed to initialize: {e}", file=sys.stderr)
         return 1
-    assert isinstance(provider, TemplateProvider)
+    assert isinstance(provider, CustomProvider)
     return provider
 
 
-def _send(provider: TemplateProvider, audio: str, language: str, words: list[str]) -> int:
+def _send(provider: CustomProvider, audio: str, language: str, words: list[str]) -> int:
     """Send the audio file and print the transcription; returns exit code.
 
     Args:
