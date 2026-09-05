@@ -31,17 +31,36 @@ _STREAMING_PROVIDERS = {
 }
 
 
+def _resolve_provider_class(name: str, config: dict[str, Any]) -> type[BatchProvider] | None:
+    """Resolve the batch provider class for a section name.
+
+    Built-in registry names (deepgram, template, …) map directly; custom
+    config.yaml sections dispatch on their ``type`` field, so the section
+    name itself can be anything.
+    """
+    if name in _BATCH_PROVIDERS:
+        return _BATCH_PROVIDERS[name]
+    type_name = config.get("type")
+    if isinstance(type_name, str) and type_name in _BATCH_PROVIDERS:
+        return _BATCH_PROVIDERS[type_name]
+    return None
+
+
 def get_batch_provider(name: str, config: dict[str, Any]) -> BatchProvider:
     """Get batch provider instance.
 
     Args:
-        name: Provider name.
+        name: Provider name (config.yaml section name for custom providers).
         config: Provider configuration.
 
     """
-    if name not in _BATCH_PROVIDERS:
+    provider_cls = _resolve_provider_class(name, config)
+    if provider_cls is None:
         raise ValueError(f"Batch provider '{name}' not found. Available: {list(_BATCH_PROVIDERS.keys())}")
-    return _BATCH_PROVIDERS[name](config)  # type: ignore[abstract]
+    if provider_cls is TemplateProvider:
+        # TemplateProvider takes the config.yaml section name for log identity.
+        return TemplateProvider(config, name=name)  # type: ignore[abstract]
+    return provider_cls(config)  # type: ignore[abstract]
 
 
 def get_streaming_provider(name: str, config: dict[str, Any]) -> StreamingProvider:

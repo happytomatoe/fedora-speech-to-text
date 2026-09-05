@@ -56,17 +56,19 @@ class TemplateProvider(BatchProvider):
         api_key / api_key_env: resolved via resolve_api_key, exposed as API_KEY.
     """
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any], name: str = "template"):
         """Initialize the template provider from the request blueprint config.
 
         Args:
             config: Provider config section (see class docstring for keys).
+            name: Provider name from config.yaml (used in logs).
 
         Raises:
             ValueError: If 'endpoint' or a request body ('form'/'json') is
                 missing, or the ``variables`` section is invalid.
 
         """
+        self._name = name
         if not config.get("endpoint"):
             raise ValueError("template provider requires 'endpoint'")
         if not (config.get("form") or config.get("json")):
@@ -110,7 +112,7 @@ class TemplateProvider(BatchProvider):
             for k, v in config.get("json", {}).items()
         }
         self._client = get_shared_client()
-        logger.info("Template provider: %s", self.endpoint)
+        logger.info("Custom provider '%s': %s", self._name, self.endpoint)
 
     _RESERVED_VARIABLES = ("API_KEY", "LANGUAGE", "CUSTOM_WORDS")
 
@@ -210,7 +212,7 @@ class TemplateProvider(BatchProvider):
         with open(audio_path, "rb") as f:
             files: list[tuple[str, Any]] = [("file", (os.path.basename(audio_path), f, "audio/wav"))]
             files.extend(repeated)
-            logger.info("Template POST %s (%d form fields)", self.endpoint, len(rendered["fields"]))
+            logger.info("%s: POST %s (%d form fields)", self._name, self.endpoint, len(rendered["fields"]))
             try:
                 response = await self._client.post(
                     self.endpoint,
@@ -237,8 +239,8 @@ class TemplateProvider(BatchProvider):
 
     @property
     def name(self) -> str:
-        """Return the provider name."""
-        return "template"
+        """Return the provider name (the config.yaml section name)."""
+        return self._name
 
     async def close(self) -> None:
         """No persistent resources to close."""

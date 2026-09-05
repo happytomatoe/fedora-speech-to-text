@@ -55,7 +55,9 @@ export function createProviderRows(settings, syncAllToConfig) {
     // transcription.provider values, so selecting one selects that provider.
     fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));
     const customProviders = readCustomProviderNames().filter(
-        name => !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) && name !== 'template'
+        name =>
+            !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) &&
+            name !== 'template'
     );
     for (const name of customProviders) {
         providerCombo.append(name, `${name} (custom)`);

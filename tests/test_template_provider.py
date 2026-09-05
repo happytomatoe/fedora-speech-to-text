@@ -43,6 +43,21 @@ class TestConfigValidation:
         assert isinstance(provider, TemplateProvider)
         assert provider.name == "template"
 
+    def test_custom_section_name_in_registry(self):
+        provider = get_batch_provider("crispasr", CRISPASR_CONFIG)
+        assert provider.name == "crispasr"
+
+    def test_distinct_sections_get_distinct_names(self):
+        p1 = get_batch_provider("crispasr", CRISPASR_CONFIG)
+        p2 = get_batch_provider("openai-local", CRISPASR_CONFIG)
+        assert p1.name == "crispasr"
+        assert p2.name == "openai-local"
+        assert p1.name != p2.name
+
+    def test_direct_construction_defaults_to_template(self):
+        provider = TemplateProvider(CRISPASR_CONFIG)
+        assert provider.name == "template"
+
 
 class TestRender:
     def test_form_comma_join(self):
