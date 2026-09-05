@@ -107,21 +107,22 @@ def check_config(manager: ConfigManager) -> list[str]:
 def main() -> int:
     """Run the config-check CLI; returns the process exit code."""
     logging.basicConfig(level=logging.WARNING)
-    # Validate the raw YAML first: ConfigManager silently swallows parse
-    # errors into an empty config, which would make a broken config file
-    # pass as "config OK" here.
-    path = os.environ.get("VOICE_TO_TEXT_CONFIG")
-    if path and os.path.isfile(path):
-        try:
-            with open(path) as f:
-                yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            print(f"FAIL: config YAML parse error: {e}", file=sys.stderr)
-            return 1
     try:
         manager = _load_manager()
     except Exception as e:
         print(f"FAILED to load config: {e}", file=sys.stderr)
+        return 1
+    # Validate the raw YAML first: ConfigManager silently swallows parse
+    # errors into an empty config, which would make a broken config file
+    # pass as "config OK" here. Parse whatever file the manager actually
+    # resolved (env override or default-discovered).
+    try:
+        with open(manager.config_path) as f:
+            yaml.safe_load(f)
+    except FileNotFoundError:
+        pass
+    except yaml.YAMLError as e:
+        print(f"FAIL: config YAML parse error: {e}", file=sys.stderr)
         return 1
     findings = check_config(manager)
     if findings:
