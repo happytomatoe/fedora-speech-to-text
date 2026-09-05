@@ -1507,15 +1507,24 @@ ATSPIEOF`;
           // The Add click closes the dialog on success — wait for the new row
           // in the custom-words list directly (verify_word_added expects the
           // dialog to still exist and returns no-dialog here).
-          let rowFound = "no";
-          for (let i = 0; i < 20; i++) {
-            rowFound = await transport.exec(
-              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_name_present("E2E"))\nATSPIEOF`, 15_000)
-              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
-            if (rowFound === "yes") break;
-            await Bun.sleep(500);
+          let rowFound = false;
+          try {
+            await pollUntil(
+              "add-word row appears",
+              async () => {
+                const res = await transport.exec(
+                  `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_name_present("E2E"))\nATSPIEOF`, 15_000)
+                  .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
+                return res === "yes";
+              },
+              10_000,
+              500,
+            );
+            rowFound = true;
+          } catch {
+            // pollUntil throws on timeout — treat as row not found.
           }
-          addWordRt = rowFound === "yes" ? "ok" : "row-not-found";
+          addWordRt = rowFound ? "ok" : "row-not-found";
         } else {
           addWordRt = `entry-text='${entryText}' (keystrokes never reached the entry)`;
         }
@@ -1546,11 +1555,15 @@ ATSPIEOF`;
       // verify the window leaves the a11y tree.
       await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
       // Poll until the window leaves the a11y tree (no blind sleep).
-      const gone = await pollUntil(
-        "prefs window gone",
-        async () =>
-          transport.exec(
-            `python3 - <<'ATSPIEOF'
+      let gone = false;
+      try {
+        await pollUntil(
+          "prefs window gone",
+          async () => {
+            // Dead app nodes can linger in the a11y cache after pkill, so also
+            // accept the process itself being gone.
+            const out = await transport.exec(
+              `python3 - <<'ATSPIEOF'
 from gi.repository import Atspi
 d = Atspi.get_desktop(0)
 found = "no"
@@ -1561,12 +1574,19 @@ for i in range(d.get_child_count()):
         if (w.get_name() or "").strip() == "Voice to Text":
             found = "yes"
 print("RESULT:" + found)
-ATSPIEOF`,
-            10_000,
-          ).then(r => r.stdout.includes("RESULT:no")),
-        10_000,
-        500,
-      );
+ATSPIEOF
+pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC:no`,
+              10_000,
+            );
+            gone = out.stdout.includes("RESULT:no") || out.stdout.includes("PROC:no");
+            return gone;
+          },
+          10_000,
+          500,
+        );
+      } catch {
+        // pollUntil throws on timeout — treat as window still present.
+      }
       prefsRow("prefs window closes", gone);
       // End-state screenshot AFTER the close step — shows the prefs window
       // gone (desktop/terminal only), visually distinct from prefs-after-add.
