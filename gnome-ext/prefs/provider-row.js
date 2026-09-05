@@ -6,6 +6,36 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio'; // eslint-disable-line no-unused-vars -- used in JSDoc
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {readCustomProviderNames} from './config-sync.js';
+
+/**
+ * Built-in provider id → display label. Must mirror the Python registry in
+ * src/voice_to_text/providers/__init__.py (_BATCH_PROVIDERS).
+ */
+const BATCH_PROVIDERS = {
+    deepgram: 'Deepgram',
+    groq: 'Groq',
+    voxtral: 'Voxtral',
+    parakeet: 'Parakeet',
+    '60db': '60db',
+    elevenlabs: 'ElevenLabs',
+    moonshine: 'Moonshine',
+};
+
+/**
+ * Providers that support streaming. Must mirror _STREAMING_PROVIDERS in
+ * src/voice_to_text/providers/__init__.py.
+ */
+const STREAMING_PROVIDER_IDS = ['deepgram', 'voxtral', '60db', 'moonshine'];
+
+/**
+ * Fill a ComboBoxText with the given provider ids/labels.
+ * @param {Gtk.ComboBoxText} combo
+ * @param {Array<[string, string]>} entries id/label pairs
+ */
+function fillProviderCombo(combo, entries) {
+    for (const [id, label] of entries) combo.append(id, label);
+}
 
 /**
  * Create the provider/mode settings rows.
@@ -20,13 +50,18 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const providerCombo = new Gtk.ComboBoxText();
-    providerCombo.append('deepgram', 'Deepgram');
-    providerCombo.append('groq', 'Groq');
-    providerCombo.append('voxtral', 'Voxtral');
-    providerCombo.append('parakeet', 'Parakeet');
-    providerCombo.append('60db', '60db');
-    providerCombo.append('elevenlabs', 'ElevenLabs');
-    providerCombo.append('moonshine', 'Moonshine');
+    // Custom providers from config.yaml (e.g. type: batch_custom sections) are
+    // appended after the built-ins. Their section names are valid
+    // transcription.provider values, so selecting one selects that provider.
+    fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));
+    const customProviders = readCustomProviderNames().filter(
+        name =>
+            !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) &&
+            name !== 'template'
+    );
+    for (const name of customProviders) {
+        providerCombo.append(name, `${name} (custom)`);
+    }
     providerCombo.set_active_id(settings.get_string('provider'));
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();
@@ -61,10 +96,12 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const streamingProviderCombo = new Gtk.ComboBoxText();
-    streamingProviderCombo.append('deepgram', 'Deepgram');
-    streamingProviderCombo.append('voxtral', 'Voxtral');
-    streamingProviderCombo.append('60db', '60db');
-    streamingProviderCombo.append('moonshine', 'Moonshine');
+    fillProviderCombo(
+        streamingProviderCombo,
+        Object.entries(BATCH_PROVIDERS).filter(([id]) =>
+            STREAMING_PROVIDER_IDS.includes(id)
+        )
+    );
     streamingProviderCombo.set_active_id(
         settings.get_string('streaming-provider')
     );
@@ -86,13 +123,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const batchProviderCombo = new Gtk.ComboBoxText();
-    batchProviderCombo.append('deepgram', 'Deepgram');
-    batchProviderCombo.append('groq', 'Groq');
-    batchProviderCombo.append('voxtral', 'Voxtral');
-    batchProviderCombo.append('parakeet', 'Parakeet');
-    batchProviderCombo.append('60db', '60db');
-    batchProviderCombo.append('elevenlabs', 'ElevenLabs');
-    batchProviderCombo.append('moonshine', 'Moonshine');
+    fillProviderCombo(batchProviderCombo, Object.entries(BATCH_PROVIDERS));
     batchProviderCombo.set_active_id(settings.get_string('batch-provider'));
     batchProviderCombo.connect('changed', () => {
         const activeId = batchProviderCombo.get_active_id();

@@ -54,6 +54,22 @@ moonshine:
   model: medium
   language: en
 
+# Custom template provider — define your own STT provider entirely in config.
+# See docs/providers/add-custom-provider.md for the step-by-step guide.
+# crispasr:
+#   type: batch_custom
+#   endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
+#   variables:
+#     MODEL: whisper-1
+#   headers:
+#     Authorization: "Bearer {{ API_KEY }}"   # omitted when no api_key is set
+#   form:
+#     model: "{{ MODEL }}"
+#     hotwords: "{{ CUSTOM_WORDS | join(', ') }}"   # GNOME custom words → hotwords
+#     hotwords_boost: "2.0"
+#     beam_size: "2"
+#   response_text_path: text    # dotted path to the transcript in the response
+
 audio:
   sample_rate: 16000
   channels: 1

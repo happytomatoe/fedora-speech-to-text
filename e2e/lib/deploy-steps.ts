@@ -76,6 +76,7 @@ export interface DeployConfig {
   extensionUuid: string;
   testAudioFile: string;
   outputMethod?: string; // Output method to test: type, clipboard, mutter-virtual
+  configFixture?: string; // Config fixture filename (default voice-to-text-config.yaml)
   /** Environment abstraction — OS/package-manager specifics live here. */
   env: SuiteEnv;
 }
@@ -651,7 +652,7 @@ export async function startVoiceService(
   await Bun.sleep(500);
   // Copy config and start service
   sshExec("mkdir -p ~/.config/voice-to-text", cfg.sshKey, cfg.sshPort, cfg.sshUser);
-  scpToVm(join(cfg.fixtureDir, "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
+  scpToVm(join(cfg.fixtureDir, cfg.configFixture ?? "voice-to-text-config.yaml"), "~/.config/voice-to-text/config.yaml", cfg.sshKey, cfg.sshPort, cfg.sshUser);
   
   // Set output method from config (default to 'type')
   const outputMethod = cfg.outputMethod || 'type';
