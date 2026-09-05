@@ -30,7 +30,7 @@ Context overrides (map to template variables):
   --custom-words "a,b"     CUSTOM_WORDS as comma-separated list
   --api-key <key>          API_KEY (masked in dry-run output)
   --var NAME=VALUE         override any custom variable from the variables: section
-                           (repeatable; VALUE is parsed as JSON, falling back to string)
+                           (repeatable; VALUE parsed as JSON scalar, falling back to string)
 
 Dry-runs the rendered request blueprint for a template provider, or with
 --send performs the real request against the configured endpoint."""
@@ -57,11 +57,18 @@ def _mask(value: str, ctx: dict[str, Any]) -> str:
 
 
 def _parse_value(raw: str) -> Any:
-    """Parse a --var value: JSON when it parses, else the raw string."""
+    """Parse a --var value: JSON scalar when it parses, else the raw string."""
     try:
-        return json.loads(raw)
+        value = json.loads(raw)
     except json.JSONDecodeError:
         return raw
+    if value is None or isinstance(value, (list, dict)):
+        print(
+            f"--var: {raw!r} is not a scalar (variables must be str/int/float/bool)",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return value
 
 
 def _print_blueprint(name: str, provider: TemplateProvider, language: str, words: list[str]) -> None:

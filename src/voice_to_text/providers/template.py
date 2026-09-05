@@ -21,7 +21,7 @@ from .base import BatchProvider, get_shared_client, resolve_api_key
 logger = logging.getLogger(__name__)
 
 
-def _dig(obj: Any, dotted: str) -> Any:
+def _extract_response_text(obj: Any, dotted: str) -> Any:
     """Walk a dotted path ('result.transcript' or 'segments.0.text') through nested dicts/lists.
 
     Args:
@@ -227,7 +227,7 @@ class TemplateProvider(BatchProvider):
                     logger.error("Response body: %s", e.response.text[:1000])
                 raise
         try:
-            result = str(_dig(response.json(), self.text_path)).strip()
+            result = str(_extract_response_text(response.json(), self.text_path)).strip()
         except (KeyError, TypeError, IndexError, ValueError) as e:
             raise RuntimeError(
                 f"response_text_path '{self.text_path}' not found in response: {response.text[:500]}"

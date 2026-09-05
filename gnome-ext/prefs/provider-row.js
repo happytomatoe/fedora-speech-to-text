@@ -55,7 +55,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     // transcription.provider values, so selecting one selects that provider.
     fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));
     const customProviders = readCustomProviderNames().filter(
-        name => !(name in BATCH_PROVIDERS) && name !== 'template'
+        name => !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) && name !== 'template'
     );
     for (const name of customProviders) {
         providerCombo.append(name, `${name} (custom)`);
@@ -96,7 +96,9 @@ export function createProviderRows(settings, syncAllToConfig) {
     const streamingProviderCombo = new Gtk.ComboBoxText();
     fillProviderCombo(
         streamingProviderCombo,
-        Object.entries(BATCH_PROVIDERS).filter(([id]) => STREAMING_PROVIDER_IDS.includes(id))
+        Object.entries(BATCH_PROVIDERS).filter(([id]) =>
+            STREAMING_PROVIDER_IDS.includes(id)
+        )
     );
     streamingProviderCombo.set_active_id(
         settings.get_string('streaming-provider')
