@@ -195,7 +195,7 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
     LOG_FILE="$LOG_DIR/gnome-ext-quick-check.log"
     mkdir -p "$LOG_DIR"
     echo "" > "$LOG_FILE"
-
+    export LOG_FILE
     if ! rpm -q mutter-devkit &>/dev/null; then
         echo "mutter-devkit not installed, installing...";
         if command -v rpm-ostree &>/dev/null; then
@@ -232,8 +232,7 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
         sleep 0.5
         gnome-shell --wayland --headless --devkit
       "
-    ' 2>&1 | tee -a "$LOG_FILE"
-    EXIT_CODE=${PIPESTATUS[0]}
+    ' 2>&1 | tee -a "$LOG_FILE"    EXIT_CODE=${PIPESTATUS[0]}
 
     echo ""
     echo "=== Results ==="
@@ -260,8 +259,10 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
 
     echo ""
     echo "Full log: $LOG_FILE"
-gnome-ext-reload:
-    ./gnome-ext/run-dev.sh && gnome-extensions reset voice-to-text@happytomatoe.com && gnome-extensions enable voice-to-text@happytomatoe.com
+gnome-ext-reload: gnome-ext-install
+    gnome-extensions disable voice-to-text@happytomatoe.com 2>/dev/null || true
+    gnome-extensions reset voice-to-text@happytomatoe.com 2>/dev/null || true
+    gnome-extensions enable voice-to-text@happytomatoe.com 2>/dev/null || true
 
 # Pack extension into a ZIP for distribution
 gnome-ext-pack:
@@ -284,7 +285,7 @@ gnome-ext-pack:
 # Watch container via VNC (real-time live view)
 # Usage: just container-watch
 atspi-tree:
-    ./skills/atspi-nested-shell/scripts/atspi-query.sh
+    ./.agents/skills/atspi-nested-shell/scripts/atspi-query.sh
 
 # Find the Voice to Text indicator in the panel via AT-SPI
 atspi-find-indicator:

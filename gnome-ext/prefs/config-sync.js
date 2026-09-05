@@ -57,9 +57,9 @@ function readConfigYaml() {
 }
 
 /**
- * Names of user-defined provider sections in config.yaml (any dict section
- * other than the reserved top-level keys). These are valid
- * transcription.provider values and are shown as "name (custom)" entries.
+ * Names of user-defined provider sections in config.yaml with
+ * `type: template`. These are valid transcription.provider values and are
+ * shown as "name (custom)" entries.
  * @returns {string[]}
  */
 export function readCustomProviderNames() {
