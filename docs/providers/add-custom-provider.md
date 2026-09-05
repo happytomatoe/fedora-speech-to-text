@@ -141,8 +141,10 @@ entries.
 
 ```sh
 just provider-test <name>                          # dry-run: print the rendered blueprint
-just provider-test <name> --words "ROCm,K8s"       # override sample custom words
-just provider-test <name> --language de            # override language
+just provider-test <name> --custom-words "ROCm,K8s"  # override CUSTOM_WORDS
+just provider-test <name> --language de            # override LANGUAGE
+just provider-test <name> --api-key sk-...         # override API_KEY (masked in output)
+just provider-test <name> --var BEAM_SIZE=4        # override any variables: entry (repeatable)
 just provider-test <name> --send --audio test.wav  # real request against the endpoint
 just config-check                                  # validate all configs (dry)
 ```
@@ -231,8 +233,10 @@ custom words). Compare it against the server's API docs:
 - Array values rendered as expected?
 
 API-key-derived values are masked (`Bearer ****`) in dry-run output. Iterate:
-edit config → rerun → compare. `--words "a,b"` and `--language de` override the
-sample context.
+edit config → rerun → compare. Every template context variable can be
+overridden from the CLI: `--custom-words "a,b"` (CUSTOM_WORDS),
+`--language de` (LANGUAGE), `--api-key sk-...` (API_KEY), and `--var NAME=VALUE`
+for anything defined under `variables:`.
 
 ### Step 5 — Live test: `--send --audio`
 
@@ -262,15 +266,3 @@ transcription:
    appears as `<name> (custom)`.
 2. Add custom words in preferences — they flow into `{{ CUSTOM_WORDS }}` on
    every request.
-
-## Troubleshooting
-
-| Symptom | Likely cause → fix |
-|---|---|
-| `config-check`: `missing 'endpoint'` | Add the `endpoint` key (full URL). |
-| `config-check`: `template error in form.<k>` | Jinja syntax error in that template — check block closure (`{% endif %}`, quotes). |
-| `provider-test`: header missing | Its template references `API_KEY` but no key is configured → set `api_key`/`api_key_env`, or the header is intentionally omitted. |
-| `--send`: HTTP 401/403 | Auth header wrong or key invalid — verify header name and scheme against the API docs. |
-| `--send`: `response_text_path '...' not found in response: {...}` | Wrong dotted path — copy the correct path from the response snippet shown in the error. |
-| Hotwords not affecting results | Field name mismatch — compare the dry-run blueprint against the server's docs/logs. |
-| Extra fields ignored by server | Vendor doesn't support them — harmless, but remove to keep requests minimal. |

@@ -190,13 +190,21 @@ parakeet:
         assert "Bearer ****" in out
         assert "super-secret-key-123" not in out
 
-    def test_words_override(self, capsys, monkeypatch):
+    def test_custom_words_override(self, capsys, monkeypatch):
         path = _write_config(VALID_TEMPLATE_CONFIG, monkeypatch)
         try:
-            assert main(["crispasr", "--words", "ROCm,Kubernetes"]) == 0  # type: ignore[arg-type]
+            assert main(["crispasr", "--custom-words", "ROCm,Kubernetes"]) == 0  # type: ignore[arg-type]
         finally:
             os.unlink(path)
         assert "hotwords: ROCm, Kubernetes" in capsys.readouterr().out
+
+    def test_var_override(self, capsys, monkeypatch):
+        path = _write_config(VALID_TEMPLATE_CONFIG, monkeypatch)
+        try:
+            assert main(["crispasr", "--var", "MODEL=vendor-large"]) == 0  # type: ignore[arg-type]
+        finally:
+            os.unlink(path)
+        assert "model: vendor-large" in capsys.readouterr().out
 
     def test_send_against_local_server(self, capsys, monkeypatch, httpserver, tmp_path):
         wav = tmp_path / "test.wav"
