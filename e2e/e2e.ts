@@ -998,9 +998,8 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   await pollUntil(
     "prefs window closed",
     async () => {
-      const out = await transport.exec(
+      const out = await vm.deployer.exec(
         `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_showing("Voice to Text"))\nATSPIEOF`,
-        10_000,
       ).catch(() => ({ stdout: "RESULT:no" }));
       return out.stdout.includes("RESULT:no");
     },
@@ -1449,7 +1448,20 @@ ATSPIEOF`;
           ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
         if (plausible) {
           await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
-          await Bun.sleep(300);
+          // Verify the click landed by polling that the entry is still
+          // reachable via AT-SPI (a stray click could dismiss the dialog or
+          // steal focus) instead of a fixed settle sleep.
+          await pollUntil(
+            "add-word entry reachable after click",
+            async () => {
+              const text = await transport.exec(
+                `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(read_add_word_entry() or ""))\nATSPIEOF`, 30_000)
+                .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-entry");
+              return text !== "no-entry";
+            },
+            5_000,
+            100,
+          );
           console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
         } else {
           console.log(`  entry extents implausible (${entryExt}) — skipping click, relying on dialog default focus`);
