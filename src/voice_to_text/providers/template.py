@@ -12,7 +12,7 @@ import os
 from typing import Any
 
 import httpx
-from jinja2 import Environment, Template
+from jinja2 import ChainableUndefined, Environment, Template
 from jinja2.nativetypes import NativeEnvironment
 
 from .base import BatchProvider, get_shared_client, resolve_api_key
