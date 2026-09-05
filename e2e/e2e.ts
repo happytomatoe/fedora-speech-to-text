@@ -998,7 +998,6 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key alt+F4" | dotool`
   );
-  // Poll until the prefs window actually leaves the a11y tree (no blind sleep).
   await pollUntil(
     "prefs window closed",
     async () => {
@@ -1417,8 +1416,6 @@ ATSPIEOF`;
       // Click-to-focus the entry with the RemoteDesktop virtual pointer:
       // activation alone did not restore keyboard focus after pointer
       // scrolling (run 33919961080), so force it with a real pointer press.
-      // Poll until the entry reports plausible extents instead of a fixed
-      // settle sleep — activation may take longer on a loaded runner.
       let entryExt = "no-result";
       try {
         await pollUntil(
@@ -1429,10 +1426,6 @@ ATSPIEOF`;
               .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
             if (!entryExt.includes(",")) return false;
             const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
-            // A y near the top edge means the extents are bogus (top bar /
-            // wrong origin) — clicking there opens the overview and steals
-            // keyboard focus, sending TypeText into the shell search instead
-            // (run 33961390474).
             return [ex, ey, ew, eh].every(v => Number.isFinite(v)) &&
               ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
           },
@@ -1452,9 +1445,6 @@ ATSPIEOF`;
           ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
         if (plausible) {
           await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
-          // Verify the click landed by polling that the entry is still
-          // reachable via AT-SPI (a stray click could dismiss the dialog or
-          // steal focus) instead of a fixed settle sleep.
           await pollUntil(
             "add-word entry reachable after click",
             async () => {
@@ -1491,7 +1481,6 @@ ATSPIEOF`;
         const typeAndRead = async () => {
           await typeTextDbus("TypeText", "E2E");
           // Keystrokes land asynchronously over D-Bus — poll the AT-SPI
-          // read-back instead of a fixed settle sleep.
           await pollUntil(
             "entry contains typed text",
             async () => (await readEntry()).includes("E2E"),
@@ -1558,7 +1547,6 @@ ATSPIEOF`;
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
       await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
-      // Poll until the window leaves the a11y tree (no blind sleep).
       let gone = false;
       try {
         await pollUntil(
@@ -1751,7 +1739,6 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     // Engine raises synchronously in get_batch_provider — poll for the line
     // instead of one-shot grepping (CI run 33752963412 E02 false-fail).
     // 1000ms interval: the service log updates slowly, a tight poll just
-    // burns SSH round-trips.
     let errHit = 0;
     try {
       await pollUntil(
