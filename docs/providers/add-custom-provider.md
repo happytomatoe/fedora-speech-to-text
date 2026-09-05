@@ -92,7 +92,7 @@ Rules:
   runtime.
 - Values are plain literals; they are not themselves rendered as templates.
 
-Everything else is plain Jinja2 — use built-in filters (`join`, `default`, …),
+Everything else is plain [Jinja2](https://jinja.palletsprojects.com/en/stable/templates/) — use built-in filters (`join`, `default`, …),
 conditionals (`{% if %}`), etc. No custom filters exist. Full syntax reference:
 the [Jinja Template Designer Documentation](https://jinja.palletsprojects.com/en/stable/templates/).
 
