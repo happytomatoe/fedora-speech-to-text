@@ -1,7 +1,7 @@
 # E2E fixture: template provider against the Parakeet container.
 # Same server as voice-to-text-config.yaml but reached through the
 # type: template provider — proves the template path end-to-end.
-# Deploy with VOICE_TO_TEXT_CONFIG pointing at this file (see e2e/e2e.ts).
+# Deploy with `--config voice-to-text-config-template.yaml` (see e2e/e2e.ts arg parsing).
 transcription:
   provider: parakeet-template
 

@@ -70,8 +70,8 @@ metrics-dead-code:
 # Drill-down: type issues + explicit Any occurrences (pyright)
 metrics-types:
     uv run pyright src/ || true
-    echo "--- explicit Any occurrences ---"
-    grep -rn '\bAny\b' src/ || echo "none"
+    echo "--- explicit Any/Unknown occurrences ---"
+    grep -rnoE '\b(Any|Unknown)\b' src/ || echo "none"
 
 # @category metrics
 # Run mutation testing on src/ (long: possibly hours; parallel across cores)

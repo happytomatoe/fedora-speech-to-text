@@ -95,12 +95,15 @@ _e2e-run E2E_ENV *ARGS:
       exit ${PIPESTATUS[0]}
     fi
 
+# @category e2e-qemu
 e2e-fedora-local *ARGS:
     just _e2e-run fedora-local {{ ARGS }}
 
+# @category e2e-qemu
 e2e-ubuntu-local *ARGS:
     just _e2e-run ubuntu-local {{ ARGS }}
 
+# @category e2e-qemu
 e2e-ubuntu-ci *ARGS:
     just _e2e-run ubuntu-ci {{ ARGS }}
 

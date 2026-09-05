@@ -1,8 +1,10 @@
+# @category e2e-qemu
 install-spice-client:
     flatpak install -y flathub org.virt_manager.virt-viewer
     # Block GNOME Shell portal to suppress "Allow inhibiting shortcuts" dialog
     # This prevents the app from requesting shortcut inhibition via the portal
     flatpak override --user --no-talk-name=org.gnome.Shell org.virt_manager.virt-viewer
+# @category e2e-qemu
 qemu-e2e-kill:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -25,6 +27,7 @@ qemu-e2e-kill:
     pkill -9 -f "$(pwd)/e2e/qemu-images/overlay.qcow2" 2>/dev/null || true
     rm -f e2e/qemu-images/overlay.qcow2 e2e/qemu-images/qemu-monitor.sock
     echo "Done"
+# @category e2e-qemu
 qemu-e2e-vm port='5930':
     #!/usr/bin/env bash
     set -euo pipefail
@@ -189,12 +192,14 @@ e2e-test-view spice_port='' ssh_port='':
         printf 'mouseto 0.25 0.5\nclick left\n' | dotool
     fi
     wait $SPICE_PID 2>/dev/null || true
+# @category e2e-qemu
 qemu-install:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Installing QEMU/KVM on host via rpm-ostree..."
     rpm-ostree install qemu-kvm libvirt virt-install qemu-img
     echo "Packages staged. Run 'systemctl reboot' to activate."
+# @category e2e-qemu
 qemu-e2e-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -228,6 +233,13 @@ qemu-e2e-check:
     fi
     echo "✓ SSH key found"
 
+    # Check cloud-init ISO (qemu-e2e-vm always attaches it)
+    if [[ ! -f "e2e/qemu-images/cloud-init.iso" ]]; then
+        echo "❌ cloud-init.iso not found. Run 'just qemu-e2e-create-base' first."
+        exit 1
+    fi
+    echo "✓ cloud-init.iso found"
+
     # Check bun
     if ! command -v bun &>/dev/null; then
         echo "❌ bun not found. Install with: curl -fsSL https://bun.sh/install | bash"
@@ -244,6 +256,7 @@ qemu-e2e-check:
 
     echo ""
     echo "All prerequisites met! Run 'just e2e' to execute tests."
+# @category e2e-qemu
 qemu-e2e-create-base:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -274,8 +287,10 @@ qemu-e2e-create-base:
     echo "  3. Customize image: see docs/e2e-setup.md Step 3"
     echo "  4. Run 'just qemu-e2e-create-uv' to create UV-enhanced image"
     echo "  5. Run 'just qemu-e2e-check' to verify all prerequisites."
+# @category e2e-qemu
 qemu-e2e-create-uv:
     ./e2e/scripts/create-base-with-uv.sh
+# @category e2e-qemu
 qemu-e2e-setup:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -296,6 +311,10 @@ qemu-e2e-setup:
         echo "✓ Copied: $GOLDEN_FILE"
     else
         echo "Downloading golden-gnome-deps.qcow2 from Filen..."
+        if ! command -v filen &>/dev/null; then
+            echo "❌ 'filen' CLI not found. Install it (npm i -g filen) or copy the golden image manually." >&2
+            exit 1
+        fi
         filen download "/golden-gnome-deps.qcow2" "$GOLDEN_FILE"
         echo "✓ Downloaded: $GOLDEN_FILE"
     fi
@@ -366,7 +385,15 @@ qemu-e2e-setup:
         echo "" >> "$TEMP_DIR/cloud-init/user-data"
         echo "runcmd:" >> "$TEMP_DIR/cloud-init/user-data"
         echo "  - systemctl set-default graphical.target" >> "$TEMP_DIR/cloud-init/user-data"
-        mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
+        if ! command -v mkisofs &>/dev/null && ! command -v genisoimage &>/dev/null; then
+            echo "❌ mkisofs/genisoimage not found. Install genisoimage (dnf install genisoimage)." >&2
+            exit 1
+        fi
+        if command -v mkisofs &>/dev/null; then
+            mkisofs -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
+        else
+            genisoimage -output "$CLOUD_INIT" -volid cidata -joliet -rock "$TEMP_DIR/cloud-init" 2>/dev/null
+        fi
         rm -rf "$TEMP_DIR"
         echo "✓ Cloud-init ISO created: $CLOUD_INIT"
     fi
@@ -392,12 +419,16 @@ qemu-e2e-setup:
     echo ""
     echo "  Run tests:  just e2e"
     echo "═══════════════════════════════════════════════════"
+# @category e2e-qemu
 e2e-setup-vm:
     bash e2e/setup-vm.sh
+# @category e2e-qemu
 e2e-start:
     virsh -c qemu:///session start e2e
+# @category e2e-qemu
 e2e-stop:
     virsh -c qemu:///session destroy e2e
+# @category e2e-qemu
 e2e-record output='e2e/output/recording.mp4' port='5930':
     python3 e2e/lib/spice-record.py --host localhost --port {{ port }} --output {{ output }}
 

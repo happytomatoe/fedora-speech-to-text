@@ -17,16 +17,6 @@ def _make_wav(tmp_path: Path) -> str:
     return str(path)
 
 
-@pytest.fixture
-def httpserver_client(httpserver):
-    """Route the shared async httpx client through the pytest-httpserver (werkzeug) transport.
-
-    pytest-httpserver's werkzeug handler is sync-only; without this the async
-    httpx client raises 'Attempted to send a sync request with an AsyncClient'.
-    """
-    return httpserver
-
-
 CRISPASR_CONFIG = {
     "type": "template",
     "endpoint": "http://stub/v1/audio/transcriptions",

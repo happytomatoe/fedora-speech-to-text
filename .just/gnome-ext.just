@@ -230,7 +230,7 @@ gnome-ext-quick-check TIMEOUT='8': reinstall gnome-ext-install
         sleep 0.3
         voice-to-text-dbus >> \"$LOG_FILE\" 2>&1 &
         sleep 0.5
-        gnome-shell --wayland --headless --devkit
+        gnome-shell --wayland --headless $DEVKIT_FLAG
       "
     ' 2>&1 | tee -a "$LOG_FILE"    EXIT_CODE=${PIPESTATUS[0]}
 
