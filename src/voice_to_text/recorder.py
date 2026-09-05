@@ -94,7 +94,7 @@ class AsyncAudioRecorder:
             opened_device,
         )
 
-    def _audio_callback(self, indata: np.ndarray, frames: int, _time_info, status):
+    def _audio_callback(self, indata: np.ndarray, _frames: int, _time_info, status):
         """Handle audio data from the sounddevice callback thread.
 
         Uses ``loop.call_soon_threadsafe`` to safely interact with the
