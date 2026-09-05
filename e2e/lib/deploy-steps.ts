@@ -362,8 +362,9 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
       // reliable way to re-create the autologin session (QEMU runs without
       // -no-reboot for Ubuntu so the guest resets in place).
       try { sshExec("sudo reboot", cfg.sshKey, cfg.sshPort, cfg.sshUser); } catch (err) {
-        // Expected: reboot drops the SSH connection
-        console.warn(`[deploy] reboot ssh drop (expected): ${err instanceof Error ? err.message : err}`);
+        // Expected: reboot drops the SSH connection. Log once at info level —
+        // this happens on every successful Ubuntu run.
+        console.log(`[deploy] reboot issued (ssh drop expected): ${err instanceof Error ? err.message : err}`);
       }
       // Wait for VM to go down and come back
       const es = (await import("node:child_process")).execSync;
@@ -374,10 +375,13 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         await Bun.sleep(1000);
         try {
           t.execSync("true", 8000);
-          if (down) break; // went down, then came back — reboot complete
+          if (down) {
+            console.log(`[deploy] ssh back after reboot (${Math.round((Date.now() - t0) / 1000)}s)`);
+            break; // went down, then came back — reboot complete
+          }
         } catch {
+          if (!down) console.log(`[deploy] ssh down — reboot in progress`);
           down = true; // SSH dropped — reboot in progress
-          console.warn(`[deploy] ssh still down at ${Math.round((Date.now() - t0) / 1000)}s of reboot wait`);
         }
       }
     } else {
@@ -385,7 +389,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
         sshExec("sudo systemctl restart gdm", cfg.sshKey, cfg.sshPort, cfg.sshUser);
       } catch (err) {
         // Expected: GDM restart drops the SSH connection mid-command
-        console.warn(`[deploy] gdm restart ssh drop (expected): ${err instanceof Error ? err.message : err}`);
+        console.log(`[deploy] gdm restart issued (ssh drop expected): ${err instanceof Error ? err.message : err}`);
       }
     }
 

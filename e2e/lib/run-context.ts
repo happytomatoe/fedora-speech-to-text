@@ -73,10 +73,10 @@ export class RunContext {
         execSync(`ss -tlnp | grep :${port}`, { encoding: "utf-8", stdio: "pipe" });
         // Port is in use, try another
         continue;
-      } catch {
-        // ss grep failed = port is free (expected control flow — but per
-        // no-silent-catch policy, keep a log so real failures aren't invisible)
-        console.warn(`[run-context] port ${port} appears free`);
+      } catch (err) {
+        // ss grep failing = port free; log at debug-ish level via console.log
+        // to satisfy no-silent-catch without a scary warn on the happy path
+        console.log(`[run-context] port ${port} free`);
         return port;
       }
     }

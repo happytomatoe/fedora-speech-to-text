@@ -79,10 +79,14 @@ function writeConfigYaml(config) {
         // Strip group/other bits: config may hold API keys, never world-readable.
         if (m) mode = m & 0o600;
     } catch (e) {
-        console.warn(
-            `[config-sync] stat failed on config file (using 0600 default): ${e instanceof Error ? e.message : e}`
-        );
-        // File doesn't exist yet — keep the 0600 default.
+        if (e instanceof Gio.IOErrorEnum && e.code === Gio.IOErrorEnum.NOT_FOUND) {
+            // File doesn't exist yet — normal first run, keep the 0600 default.
+            console.log(`[config-sync] no config file yet — using 0600 default`);
+        } else {
+            console.warn(
+                `[config-sync] stat failed on config file (using 0600 default): ${e instanceof Error ? e.message : e}`
+            );
+        }
     }
     const [ok] = file.replace_contents(
         bytes,

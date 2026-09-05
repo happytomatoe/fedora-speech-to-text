@@ -36,13 +36,13 @@ export class QemuMonitor extends EventEmitter {
         return;
       } catch (err) {
         lastErr = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[qemu] connect attempt failed (retrying): ${lastErr.message}`);
         const retryable =
           lastErr.message.includes("ECONNREFUSED") ||
           lastErr.message.includes("ENOENT") ||
           lastErr.message.includes("Connection timeout") ||
           lastErr.message.includes("Socket closed before QEMU prompt");
         if (!retryable) throw lastErr;
+        console.warn(`[qemu] connect attempt failed (retrying): ${lastErr.message}`);
         await sleepMs(250);
       }
     }

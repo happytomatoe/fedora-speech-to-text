@@ -171,7 +171,9 @@ export class ParallelTestRunner {
       // Create fresh overlay for each test (snapshot restore)
       const overlayPath = worker.vm.config.run.overlayImage;
       try { unlinkSync(overlayPath); } catch (err) {
-        console.warn(`[parallel] overlay unlink failed: ${err instanceof Error ? err.message : err}`);
+        if (!((err as NodeJS.ErrnoException)?.code === "ENOENT")) {
+          console.warn(`[parallel] overlay unlink failed: ${err instanceof Error ? err.message : err}`);
+        }
       }
 
       // Run the test
