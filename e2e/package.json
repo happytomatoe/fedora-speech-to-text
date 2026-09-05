@@ -12,6 +12,7 @@
     "ssh2": "^1.17.0"
   },
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
     "@types/ssh2": "^1.15.5",
     "bun-types": "latest",
     "typescript": "^7.0.2"

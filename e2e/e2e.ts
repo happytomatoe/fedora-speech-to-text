@@ -1356,14 +1356,12 @@ ATSPIEOF`;
         };
         try {
           await shot("prefs-scroll-before");
-          // Pointer wheel scroll via the helper extension's virtual pointer —
-          // same mechanism as the after-add scroll below.
-          await typeTextDbus("ActivateWindow", "Voice to Text");
-          await Bun.sleep(300);
-          const pw = await screenCenter("Voice to Text");
-          await moveDbus(pw.nx, pw.ny + 0.2);
-          await Bun.sleep(400);
-          await wheelDbus(8);
+          // Scroll via AT-SPI Value interface on the vertical scrollbar.
+          // No pointer/keyboard events, so no seat/focus side-effects.
+          const res = await transport.exec(
+            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(scroll_to_bottom_via_value()))\nATSPIEOF`, 20_000)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+          console.log(`  atspi value scroll: ${res}`);
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
           const psnr = await pxChanged("prefs-scroll-before", "prefs-scroll-after");
@@ -1384,6 +1382,22 @@ ATSPIEOF`;
       // window; without this, TypeText keystrokes never reach the entry).
       await typeTextDbus("ActivateWindow", "Add Custom Word");
       await Bun.sleep(500);
+      // Click-to-focus the entry with the RemoteDesktop virtual pointer:
+      // activation alone did not restore keyboard focus after pointer
+      // scrolling (run 33919961080), so force it with a real pointer press.
+      const entryExt = await transport.exec(
+        `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(find_add_word_entry_extents()))\nATSPIEOF`, 30_000)
+        .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+      if (entryExt.includes(",")) {
+        const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
+        if ([ex, ey, ew, eh].every(v => Number.isFinite(v)) && ew > 0 && eh > 0) {
+          await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
+          await Bun.sleep(300);
+          console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
+        }
+      } else {
+        console.log(`  entry extents unavailable: ${entryExt} — typing without click-focus`);
+      }
       {
         const readEntry = () =>
           transport.exec(
@@ -1436,21 +1450,13 @@ ATSPIEOF`;
         // accessibility scroll API, scrolls the last widget into view in one
         // call. Fallback: Tab-focus walk (GTK auto-scrolls focused widgets).
         try {
-          // Pointer scroll via the helper extension's virtual pointer:
-          // activate the window, hover over the list, then wheel down.
-          // No click — one can land on row buttons and steal focus.
-          await typeTextDbus("ActivateWindow", "Voice to Text");
-          await Bun.sleep(300);
-          const pw = await screenCenter("Voice to Text");
-          await moveDbus(pw.nx, pw.ny + 0.2);
-          await Bun.sleep(400);
-          await wheelDbus(15);
+          // Scroll via AT-SPI Value interface on the vertical scrollbar —
+          // no pointer events, no focus side-effects on the modal.
+          const res2 = await transport.exec(
+            `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(scroll_to_bottom_via_value()))\nATSPIEOF`, 20_000)
+            .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+          console.log(`  atspi value scroll: ${res2}`);
           await Bun.sleep(600);
-          // Park the pointer off-window: a virtual pointer left hovering over
-          // the parent while the modal opens keeps it from receiving keyboard
-          // focus (run 33919592431: entry-text='' after a successful scroll).
-          await moveDbus(0.01, 0.5);
-          await Bun.sleep(300);
         } catch (e) {
           console.log(`  WARN: scroll-to-bottom failed (${e})`);
         }
