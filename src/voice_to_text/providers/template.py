@@ -56,7 +56,7 @@ class TemplateProvider(BatchProvider):
         api_key / api_key_env: resolved via resolve_api_key, exposed as API_KEY.
     """
 
-    def __init__(self, config: dict[str, Any], name: str = "template"):
+    def __init__(self, config: dict[str, Any], name: str):
         """Initialize the template provider from the request blueprint config.
 
         Args:
