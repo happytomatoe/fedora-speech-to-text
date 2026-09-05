@@ -12,6 +12,8 @@ import os
 import sys
 from typing import Any
 
+import httpx
+
 from voice_to_text.config import ConfigManager
 from voice_to_text.providers import get_batch_provider
 from voice_to_text.providers.template import TemplateProvider
@@ -44,7 +46,7 @@ def _mask(value: str, ctx: dict[str, Any]) -> str:
 def _print_blueprint(name: str, provider: TemplateProvider, language: str, words: list[str]) -> None:
     rendered = provider.render(language, words)
     print(f"Provider '{name}' (template)")
-    print(f"POST {provider.endpoint}")
+    print(f"POST {_mask(provider.endpoint, rendered['ctx'])}")
     if rendered["headers"]:
         print("  headers:")
         for k, v in rendered["headers"].items():
@@ -145,7 +147,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Audio file not found: {audio}", file=sys.stderr)
         return 2
 
-    result = asyncio.run(provider.transcribe_file(audio, parsed.language, parsed.words))
+    try:
+        result = asyncio.run(provider.transcribe_file(audio, parsed.language, parsed.words))
+    except (httpx.HTTPStatusError, httpx.HTTPError) as exc:
+        print(f"FAILED: request error: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"FAILED: {exc}", file=sys.stderr)
+        return 1
     print("Transcription result:")
     print(result)
     return 0
