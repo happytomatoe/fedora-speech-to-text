@@ -4,8 +4,7 @@ The `template` provider type lets you define a custom speech-to-text provider
 entirely in `config.yaml` — no Python changes. The HTTP request is described as a
 Jinja2-templated blueprint, rendered fresh for every transcription.
 
-This page is both the reference and the step-by-step guide. If you just want a
-working example, jump to the [worked example](#worked-example-crispasr-local-parakeet).
+This page is both the reference and the step-by-step guide.
 
 ## Config schema
 
@@ -15,20 +14,43 @@ working example, jump to the [worked example](#worked-example-crispasr-local-par
   endpoint: http://host:port/v1/audio/transcriptions   # required, full URL
   headers:                    # optional; values are templates
     Authorization: "Bearer {{ API_KEY }}"
-  form:                       # multipart form fields; values are templates → strings
+  form:                       # multipart form fields; values render as strings
     model: "whisper-1"
     hotwords: "{{ CUSTOM_WORDS | join(', ') }}"
     hotwords_boost: "2.0"
-  json:                       # extra body fields; template values render to native types
+  json:                       # extra body fields; template values render to native types (list → repeated fields)
     keyterms: "{{ CUSTOM_WORDS }}"     # list → repeated multipart keys
-  response_text_path: text    # dotted path to the transcript in the JSON response (default: text)
-  variables:                  # optional; custom values exposed to templates
+  response_text_path: text    # dotted path to the transcript in the JSON response (default: text); see "Response extraction"
+  variables:                  # optional; custom scalar values exposed to templates
     BEAM_SIZE: 4
   api_key: "..."              # or api_key_env: NAME; supports !command; exposed as API_KEY
   timeout: 120                # seconds (default 120)
 ```
 
-At least one of `form` or `json` is required.
+At least one of `form` or `json` is required — the audio file itself is
+uploaded as the multipart `file` part, so `form`/`json` is how you attach
+everything else the server expects (model name, language, vendor options, …).
+
+**`response_text_path`** tells the provider where the transcript text lives in
+the server's JSON response. It is a dotted path, and *you* supply the whole
+path — nothing is hardcoded. For example, a response of
+`{"text": "hello"}` needs `text`; `{"result": {"transcript": "hello"}}` needs
+`result.transcript`; `{"segments": [{"text": "hello"}]}` needs
+`segments.0.text` (integers index into lists). If the path doesn't match, the
+error message shows a snippet of the actual response so you can correct it.
+
+**YAML validation:** there is no universally adopted schema standard for YAML
+equivalent to JSON Schema, so this project doesn't ship one. Validation is done
+by `just config-check`, which verifies required keys, value types, and Jinja
+syntax. If you use VS Code, the YAML extension can associate a custom schema
+(via `yaml.schemas` in settings or a modeline) if you want editor
+autocomplete/validation, but none is bundled here. TOML has the same situation.
+
+**Why configure `api_key` here when the provider is chosen in GNOME
+preferences?** The extension preferences only select *which* provider is
+active; they never handle secrets. API keys live in `config.yaml` (or better,
+in an env var via `api_key_env`, or a `!command` lookup) so they stay out of
+the desktop UI, out of dconf, and out of screenshots.
 
 ## Context variables
 
@@ -43,7 +65,10 @@ These variables are available in every template (`headers`, `form`, `json`):
 
 ### Custom variables (`variables:`)
 
-Define reusable values once and reference them anywhere in the blueprint:
+Beyond the three built-in variables, you can define any number of custom
+variables under `variables:` and reference them anywhere in the blueprint
+(`endpoint`, `headers`, `form`, `json`) — so values shared by several fields
+are declared once instead of being duplicated:
 
 ```yaml
 my-provider:
@@ -52,9 +77,8 @@ my-provider:
   variables:
     HOST: 192.168.1.50
     PORT: 5092
-    MODEL: whisper-1
   form:
-    model: "{{ MODEL }}"
+    model: whisper-large-v3
 ```
 
 Rules:
@@ -62,21 +86,29 @@ Rules:
 - Values must be scalars (string, number, or boolean). Use a list in the
   `json` section directly if you need repeated keys.
 - Names must not shadow the built-in variables (`API_KEY`, `LANGUAGE`,
-  `CUSTOM_WORDS`) — the config check reports this as an error.
+  `CUSTOM_WORDS`) — the config check reports this as an error **for the
+  provider you are currently validating** (i.e. the selected one); shadowing
+  in other, unselected sections may pass config-check and only fail at
+  runtime.
 - Values are plain literals; they are not themselves rendered as templates.
 
 Everything else is plain Jinja2 — use built-in filters (`join`, `default`, …),
-conditionals (`{% if %}`), etc. No custom filters exist.
+conditionals (`{% if %}`), etc. No custom filters exist. Full syntax reference:
+the [Jinja Template Designer Documentation](https://jinja.palletsprojects.com/en/stable/templates/).
 
 ## Body styles
 
 Audio is always uploaded as a multipart file part (`file`). Because of that,
-**both `form` and `json` fields are sent as multipart form fields**:
+**both `form` and `json` fields are sent as multipart form fields**, not as a
+raw JSON body. In practice:
 
-- `form` values render to strings.
-- `json` values render to **native Python types** — a template producing a list
-  becomes repeated multipart keys (`keyterms=a&keyterms=b` style), the standard
-  way arrays are sent in multipart form data.
+- `form` values are always rendered as strings (e.g. `"2.0"`, `"en"`).
+- `json` values render to **native Python types** — a template that produces a
+  list is sent as repeated multipart keys (e.g. `keyterms=alpha&keyterms=beta`),
+  the standard way arrays are carried in `multipart/form-data`.
+
+So even though the key is called `json`, nothing is sent as a JSON document —
+it is a way to say "this value may not be a plain string".
 
 ## Auth headers
 
@@ -87,9 +119,11 @@ When a key is configured, it resolves through the standard mechanism:
 
 ## Response extraction
 
-The response JSON is walked along `response_text_path` (dotted segments; integer
-segments index lists, e.g. `segments.0.text`). A miss raises an error that
-includes a snippet of the actual response body so you can correct the path.
+The response must be JSON. It is walked along the `response_text_path` you
+provide (dotted segments; integer segments index lists, e.g. `segments.0.text`).
+The path is entirely user-supplied — the provider hardcodes nothing about the
+response shape. A miss raises an error that includes a snippet of the actual
+response body so you can correct the path.
 
 ## Multiple template providers
 
@@ -164,7 +198,7 @@ my-vendor:
   form:
     model_id: vendor-large
   json:
-    keyterms: "{{ CUSTOM_WORDS }}"     # list → repeated multipart keys
+    keyterms: "{{ CUSTOM_WORDS }}"     # list → 重复的 multipart 字段
     language: "{{ LANGUAGE }}"
   api_key_env: VENDOR_API_KEY
   response_text_path: result.transcript
@@ -237,17 +271,3 @@ transcription:
 | `--send`: `response_text_path '...' not found in response: {...}` | Wrong dotted path — copy the correct path from the response snippet shown in the error. |
 | Hotwords not affecting results | Field name mismatch — compare the dry-run blueprint against the server's docs/logs. |
 | Extra fields ignored by server | Vendor doesn't support them — harmless, but remove to keep requests minimal. |
-
-## Worked example: CrispASR (local Parakeet)
-
-```yaml
-crispasr:
-  type: template
-  endpoint: http://localhost/speech-to-text/v1/audio/transcriptions
-  form:
-    model: "whisper-1"
-    hotwords: "{{ CUSTOM_WORDS | join(', ') }}"
-    hotwords_boost: "2.0"
-    beam_size: "2"
-  response_text_path: text
-```
