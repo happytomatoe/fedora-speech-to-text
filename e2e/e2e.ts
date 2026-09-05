@@ -571,8 +571,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   beginSpan("stop-recording");
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
-  // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
-  await Bun.sleep(200); // Brief settle for D-Bus round-trip
+  await vm.pollUntil(
+    "recording stopped",
+    async () => {
+      try {
+        const out = await shell.getVoiceServiceStatus();
+        return out.includes("idle");
+      } catch {
+        return false;
+      }
+    },
+    10_000,
+    100,
+  );
   endSpan();
 
   // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.

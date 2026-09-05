@@ -289,6 +289,15 @@ export class ShellHelper {
     }
   }
 
+  /** Query the voice service's current state via D-Bus (idle/recording/processing). */
+  async getVoiceServiceStatus(): Promise<string> {
+    const dbusAddr = await this.getShellDbusAddr();
+    const out = await this.exec(
+      `DBUS_SESSION_BUS_ADDRESS='${dbusAddr}' gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.GetStatus`,
+    );
+    return out;
+  }
+
   /** Reset recording state flag (used after snapshot restore) */
   resetRecordingState(): void {
     this.isRecording = false;
