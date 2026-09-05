@@ -1804,8 +1804,12 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       const shellLog = process.env.VOX_CI_E2E_SHELL_LOG ?? "$HOME/shell.log";
       const shellLogOffset = parseInt((await run(`wc -c < '${shellLog}' 2>/dev/null || echo 0`)).trim()) || 0;
       await dtool("key super+w");
-      await Bun.sleep(1000);
-      const started = await since("Recording|recording started|DEBUG MODE");
+      const started = await pollUntil(
+        "recording started after hotkey",
+        async () => (await since("Recording|recording started|DEBUG MODE")).includes("Recording"),
+        5_000,
+        500,
+      ).then(() => true).catch(() => false);
       await dtool("key super+w");
       // gsettings CLI can't see the extension's relocatable schema (not in
       // the default schema source in this env) — read the default straight
