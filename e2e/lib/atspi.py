@@ -275,6 +275,45 @@ def read_add_word_entry():
         return f"error:{e}"
 
 
+def find_add_word_entry_extents():
+    """Screen-absolute extents (x, y, w, h) of the Add-Word dialog entry, or
+    None if not found. Used for RemoteDesktop click-to-focus."""
+    def fpred(n, r, node):
+        return n == "Add Custom Word" and r == "frame"
+    def fact(n, r, node):
+        return node
+    dlg = walk_tree(fpred, fact)
+    if not dlg:
+        return None
+
+    def fentry(node, depth=0):
+        if node is None or depth > 30:
+            return None
+        try:
+            if node.get_role_name() in ("text", "text entry") and node.get_state_set().contains(Atspi.StateType.SHOWING):
+                return node
+        except Exception:
+            return None
+        try:
+            n = node.get_child_count()
+        except Exception:
+            return None
+        for i in range(n):
+            found = fentry(node.get_child_at_index(i), depth + 1)
+            if found is not None:
+                return found
+        return None
+
+    entry = fentry(dlg)
+    if not entry:
+        return None
+    try:
+        return entry.get_extents(Atspi.CoordType.SCREEN)
+    except Exception:
+        return None
+
+
+
 def node_showing(name):
     """True if a node with this exact name is currently SHOWING (on screen)."""
     def pred(n, r, node):
@@ -332,3 +371,52 @@ def scroll_to(name, position="BOTTOM_RIGHT"):
             return "no-api"
 
     return walk_tree(pred, act) or "no"
+
+
+def scroll_to_bottom_via_value(max_attempts=5):
+    """Scroll the prefs window to the bottom by setting CurrentValue on the
+    vertical scrollbar (AT-SPI Value interface) — no pointer events, so no
+    focus side-effects on the subsequently opened modal dialog.
+
+    Walks the a11y tree for a ROLE_SCROLL_BAR node whose extents sit inside
+    the 'Voice to Text' prefs frame, then sets its value to maximum.
+
+    Returns one of: 'ok', 'no-scrollbar', 'no-value-iface', 'refused', 'error'.
+    """
+    import time
+
+    def find_scrollbar():
+        def pred(n, r, node):
+            if r != "scroll bar":
+                return False
+            try:
+                e = node.get_extents(Atspi.CoordType.WINDOW)
+                return e.height > e.width  # vertical
+            except Exception:
+                return False
+        def act(n, r, node):
+            return node
+        return walk_tree(pred, act)
+
+    sb = None
+    for _ in range(10):
+        sb = find_scrollbar()
+        if sb:
+            break
+        time.sleep(0.3)
+    if not sb:
+        return "no-scrollbar"
+
+    try:
+        val = sb.query_value()
+        max_v = val.get_maximum_value()
+        min_v = val.get_minimum_value()
+        if max_v <= min_v:
+            return "already-at-extreme"
+        val.set_current_value(max_v)
+        return "ok"
+    except Exception as e:
+        return f"error: {e}"
+
+
+

@@ -190,3 +190,27 @@ print("RESULT:" + str(set_text_by_name('${pyQuote(name)}', '${pyQuote(text)}') o
     throw new Error(`AT-SPI: no Text node '${name}' to set '${text}'`);
   }
 }
+
+/** Scroll the prefs window to the bottom via AT-SPI Value on the vertical
+ *  scrollbar. No pointer events -> no focus pollution of the modal dialog. */
+export async function atspiScrollToBottom(
+  deployer: ExecLike,
+  timeoutMs = 15_000
+): Promise<string> {
+  const script = `python3 - <<'ATSPIEOF'
+${ATSPI_PY}
+print("RESULT:" + str(scroll_to_bottom_via_value()))
+ATSPIEOF`;
+  const start = Date.now();
+  let last = "";
+  while (Date.now() - start < timeoutMs) {
+    const out = await deployer.exec(script, { timeout: 20_000 }).then(r =>
+      typeof r === "string" ? r : r.stdout
+    );
+    const res = out.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "";
+    if (res === "ok") return res;
+    last = res;
+    await Bun.sleep(500);
+  }
+  throw new Error(`AT-SPI scroll-to-bottom failed: ${last}`);
+}
