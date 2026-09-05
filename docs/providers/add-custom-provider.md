@@ -198,7 +198,7 @@ my-vendor:
   form:
     model_id: vendor-large
   json:
-    keyterms: "{{ CUSTOM_WORDS }}"     # list → 重复的 multipart 字段
+    keyterms: "{{ CUSTOM_WORDS }}"     # list → repeated multipart keys
     language: "{{ LANGUAGE }}"
   api_key_env: VENDOR_API_KEY
   response_text_path: result.transcript
