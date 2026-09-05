@@ -45,13 +45,18 @@ export async function pollForProcess(
   processName: string,
   timeoutMs = 10000
 ): Promise<void> {
+  let firstFailureLogged = false;
   await pollUntil(
     `${processName} running`,
     async () => {
       try {
         const output = await shellExec(`pgrep -f '${processName}'`);
         return output.trim().length > 0;
-      } catch {
+      } catch (err) {
+        if (!firstFailureLogged) {
+          firstFailureLogged = true;
+          console.warn(`[poll] pgrep failed (will keep polling silently): ${err instanceof Error ? err.message : err}`);
+        }
         return false;
       }
     },
@@ -72,7 +77,8 @@ export async function pollForCommandOutput(
       try {
         const output = await shellExec(command);
         return output.includes(expected);
-      } catch {
+      } catch (err) {
+        console.warn(`[poll] command failed (still waiting): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },

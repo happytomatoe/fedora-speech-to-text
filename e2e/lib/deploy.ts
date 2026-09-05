@@ -209,6 +209,7 @@ export class Deployer {
           sftp.end();
           resolve();
         } catch (e) {
+          console.error(`  [sftp] upload failed: ${e instanceof Error ? e.message : e}`);
           sftp.end();
           reject(e);
         }

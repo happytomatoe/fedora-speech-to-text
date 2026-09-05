@@ -41,6 +41,7 @@ export interface SuiteEnv {
   readonly uvSystemInstall: boolean;
 }
 
+/** Build the Fedora VM environment (full GNOME desktop image). */
 function fedoraEnv(suiteDir: string): SuiteEnv {
   const baseImage = (() => {
     const goldenDeps = join(suiteDir, "qemu-images/golden-gnome-deps.qcow2");
@@ -66,6 +67,7 @@ function fedoraEnv(suiteDir: string): SuiteEnv {
   };
 }
 
+/** Build a named Ubuntu VM environment from the shared Ubuntu image. */
 function ubuntuEnv(suiteDir: string, name: EnvName): SuiteEnv {
   return {
     name,
@@ -87,6 +89,7 @@ function ubuntuEnv(suiteDir: string, name: EnvName): SuiteEnv {
   };
 }
 
+/** Build the minimal Ubuntu VM environment used by CI. */
 function ubuntuBareEnv(suiteDir: string): SuiteEnv {
   return {
     name: "ubuntu-bare",
@@ -107,6 +110,7 @@ function ubuntuBareEnv(suiteDir: string): SuiteEnv {
   };
 }
 
+/** Resolve which environment to use from CLI flags, defaulting to fedora. */
 export function resolveEnv(
   suiteDir: string,
   name: EnvName | undefined,

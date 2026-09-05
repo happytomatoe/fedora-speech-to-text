@@ -10,7 +10,7 @@ import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
 import { ATSPI_PY, atspiScrollTo, atspiScrollToBottom, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
-import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
+import { pollForCommandOutput, pollFileExists, pollUntil } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
 import { LocalTransport } from "./lib/transport.js";
@@ -170,8 +170,8 @@ function prefsUiChanged(): boolean {
   let stored: string | null = null;
   try {
     stored = readFileSync(statePath, "utf-8").trim();
-  } catch {
-    // no state file = first run in this worktree
+  } catch (err) {
+    console.debug(`[e2e] no prefs-ui state file (first run in this worktree)`);
   }
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(statePath, current);
@@ -344,8 +344,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   let useXvfbRecording = false;
   // Guarantee ffmpeg cleanup on any exit path
   process.on('exit', () => {
-    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch { /* best-effort */ }
-    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch { /* best-effort */ }
+    try { vm['recordingFfmpeg']?.kill('SIGKILL'); } catch (err) { console.warn(`[e2e] ffmpeg cleanup failed: ${err instanceof Error ? err.message : err}`); }
+    try { vm['xvfbProcess']?.kill('SIGKILL'); } catch (err) { console.warn(`[e2e] xvfb cleanup failed: ${err instanceof Error ? err.message : err}`); }
   });
 
   beginSpan("capture-frame");
@@ -386,7 +386,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         try {
           const output = await shell.exec(`tmux list-sessions 2>/dev/null | grep ${tmuxCfg.session}`);
           return output.trim().length > 0;
-        } catch {
+        } catch (err) {
+          console.warn(`[e2e] tmux session probe failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false; // ssh hiccup — retry
         }
       },
@@ -418,7 +419,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     "echo 'key shift+a' | $D; sleep 0.5",
     "if [ \"$(cap)\" != \"$before\" ]; then echo FOCUSED; else echo NOT_FOCUSED; fi",
   ].join("\n");
-  const focusOut = await shell.exec(`bash -c ${JSON.stringify(focusProbe)}`).catch(() => "");
+  const focusOut = await shell.exec(`bash -c ${JSON.stringify(focusProbe)}`).catch((err: unknown) => { console.warn(`[e2e] focus probe failed: ${err instanceof Error ? err.message : err}`); return ""; });
   if (!focusOut.includes("FOCUSED")) {
     console.log("  WARNING: Terminal may not be focused");
   }
@@ -482,11 +483,23 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   console.log("Verifying terminal focus...");
   let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
   if (!isFocused) {
-    console.log("  Terminal not focused, trying click + gio launch...");
-    await shell.clickToFocus(640, 400);
-    await Bun.sleep(500);
-    await shell.focusTerminal();
-    isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+    console.log("  Terminal not focused, retrying with click + focus loop...");
+    try {
+      await pollUntil(
+        "terminal focused",
+        async () => {
+          await shell.clickToFocus(640, 400);
+          await shell.focusTerminal();
+          isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+          return isFocused;
+        },
+        5_000,
+        500,
+      );
+    } catch (err) {
+      console.warn(`[e2e] terminal-focus poll timed out — falling back to tolerant warning: ${err instanceof Error ? err.message : err}`);
+      // pollUntil throws on timeout — fall back to the tolerant warning below.
+    }
     console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {
@@ -522,7 +535,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
             console.log(`  Got from log: ${transcription}`);
             return true;
           }
-        } catch {
+        } catch (err) {
+          console.warn(`[e2e] transcription log read failed (retrying): ${err instanceof Error ? err.message : err}`);
           return false; // ssh hiccup — retry
         }
         return false;
@@ -552,8 +566,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     try {
       const logTail = await shell.exec("tail -n 25 /tmp/voice-service.log 2>/dev/null || echo '(no voice-service log)'");
       console.log("  voice-service log tail:\n" + logTail.trim().split("\n").map((l) => "    " + l).join("\n"));
-    } catch {
-      // diagnostics are best-effort
+    } catch (err) {
+      console.warn(`[e2e] log-tail diagnostics failed (best-effort): ${err instanceof Error ? err.message : err}`);
     }
   }
   endSpan();
@@ -577,7 +591,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
       try {
         const out = await shell.getVoiceServiceStatus();
         return out.includes("idle");
-      } catch {
+      } catch (err) {
+        console.debug(`[e2e] voice-service status probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },
@@ -599,7 +614,8 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
         // ssh command's own cmdline (sh -c "...ghostty...").
         const out = await shell.exec("pgrep -f '[g]hostty'; true");
         return out.trim().length === 0;
-      } catch {
+      } catch (err) {
+        console.warn(`[e2e] ghostty pgrep probe failed (retrying): ${err instanceof Error ? err.message : err}`);
         return false;
       }
     },
@@ -772,6 +788,7 @@ async function verifyWithScreenshot(
       try {
         assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
       } catch (err) {
+        console.warn(`[e2e] visual regression (update mode) mismatch: ${(err as Error).message}`);
         return { passed: false, message: (err as Error).message, screenshot };
       }
     }
@@ -783,6 +800,7 @@ async function verifyWithScreenshot(
     try {
       assertScreenshotMatches(referencePath, screenshot, run, "Visual regression");
     } catch (err) {
+      console.warn(`[e2e] visual regression mismatch: ${(err as Error).message}`);
       return { passed: false, message: (err as Error).message, screenshot };
     }
   }
@@ -894,6 +912,10 @@ async function svcCmdline(
   return { cmdline, cwd };
 }
 
+/**
+ * Run preferences screenshot tests.
+ * Opens preferences and takes screenshots of each section.
+ */
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
   console.log("\n📸 Running preferences screenshot tests...");
   
@@ -987,7 +1009,17 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
   await vm.deployer.exec(
     `export XDG_RUNTIME_DIR=/run/user/$(id -u); echo "key alt+F4" | dotool`
   );
-  await Bun.sleep(500);
+  await pollUntil(
+    "prefs window closed",
+    async () => {
+      const out = await vm.deployer.exec(
+        `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_showing("Voice to Text"))\nATSPIEOF`,
+      ).catch((err: unknown) => { console.warn(`[e2e] ATSPI node_showing probe failed: ${err instanceof Error ? err.message : err}`); return { stdout: "RESULT:no" }; });
+      return out.stdout.includes("RESULT:no");
+    },
+    5_000,
+    100,
+  );
   
   console.log("  ✅ Preferences tests completed");
 }
@@ -1162,7 +1194,8 @@ async function runBareMode(): Promise<void> {
             captureHit = true;
             if (!typed) typed = readFileSync(textFile, "utf-8").trim();
           }
-        } catch {
+        } catch (err) {
+          console.warn(`[e2e] capture-file read failed (retrying): ${err instanceof Error ? err.message : err}`);
           // capture file absent
         }
         const errorLine = await logSince("ERROR|Traceback");
@@ -1178,7 +1211,7 @@ async function runBareMode(): Promise<void> {
         let paneHit = false;
         if (!captureHit && captureRequired) {
           const pane = await transport.exec(`tmux capture-pane -t ci-e2e -p 2>/dev/null || true`, 5_000)
-            .then(r => r.stdout).catch(() => "");
+            .then(r => r.stdout).catch((err: unknown) => { console.warn(`[e2e] service log read failed: ${err instanceof Error ? err.message : err}`); return ""; });
           paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
         }
         const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || paneHit || !captureRequired);
@@ -1198,7 +1231,7 @@ async function runBareMode(): Promise<void> {
         const cellLabel = `${bareCase.file.replace(/\.wav$/, "")}-${method}`;
         const cellsDir = process.env.VOX_CI_E2E_CELLS_DIR;
         if (cellsDir) {
-          await transport.exec(`mkdir -p '${cellsDir}/${cellLabel}'`, 5_000).catch(() => {});
+          await transport.exec(`mkdir -p '${cellsDir}/${cellLabel}'`, 5_000).catch((err: unknown) => console.warn(`[e2e] mkdir failed: ${err instanceof Error ? err.message : err}`));
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${cellsDir}/${cellLabel}/after.png'`,
             10_000,
@@ -1221,7 +1254,7 @@ async function runBareMode(): Promise<void> {
         console.log(`  FAIL (exception): ${e}`);
         results.push({ file: bareCase.file, method, status: "fail", typed: "", note: String(e) });
         // Recover the service for the next cell if this one wedged it.
-        await gdbus("StopRecording").catch(() => {});
+        await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
       }
     }
   }
@@ -1350,7 +1383,7 @@ ATSPIEOF`;
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
             10_000,
-          ).catch(() => {});
+          ).catch((err: unknown) => console.warn(`[e2e] screenshot ${name} capture failed (best-effort): ${err instanceof Error ? err.message : err}`));
         };
         // Pixel-diff two screenshots via ffmpeg PSNR (no ImageMagick on the
         // runner); identical frames → PSNR=inf. Threshold ~30dB: clock churns
@@ -1359,7 +1392,7 @@ ATSPIEOF`;
           const out = await transport.exec(
             `ffmpeg -v info -i '${outputDir}/${a}.png' -i '${outputDir}/${b}.png' -filter_complex psnr -f null - 2>&1 | grep -oP 'average:\\K[0-9.inf]+'`,
             20_000,
-          ).then(r => r.stdout.trim()).catch(() => "err");
+          ).then(r => r.stdout.trim()).catch((err: unknown) => { console.warn(`[e2e] PSNR probe failed: ${err instanceof Error ? err.message : err}`); return "err"; });
           console.log(`  scroll diff ${a} vs ${b}: PSNR=${out}`);
           return out;
         };
@@ -1392,13 +1425,30 @@ ATSPIEOF`;
       // activate it explicitly (same wl_keyboard.enter issue as the prefs
       // window; without this, TypeText keystrokes never reach the entry).
       await typeTextDbus("ActivateWindow", "Add Custom Word");
-      await Bun.sleep(500);
       // Click-to-focus the entry with the RemoteDesktop virtual pointer:
       // activation alone did not restore keyboard focus after pointer
       // scrolling (run 33919961080), so force it with a real pointer press.
-      const entryExt = await transport.exec(
-        `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(find_add_word_entry_extents()))\nATSPIEOF`, 30_000)
-        .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+      let entryExt = "no-result";
+      try {
+        await pollUntil(
+          "add-word entry has plausible extents",
+          async () => {
+            entryExt = await transport.exec(
+              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(find_add_word_entry_extents()))\nATSPIEOF`, 30_000)
+              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
+            if (!entryExt.includes(",")) return false;
+            const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
+            return [ex, ey, ew, eh].every(v => Number.isFinite(v)) &&
+              ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
+          },
+          10_000,
+          100,
+        );
+      } catch (err) {
+        console.warn(`[e2e] status-extents poll timed out — using last read extents: ${err instanceof Error ? err.message : err}`);
+        // Fall through with the last read extents; the branches below handle
+        // missing/implausible values the same way as before.
+      }
       if (entryExt.includes(",")) {
         const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
         // A y near the top edge means the extents are bogus (top bar / wrong
@@ -1408,7 +1458,21 @@ ATSPIEOF`;
           ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
         if (plausible) {
           await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
-          await Bun.sleep(300);
+          await pollUntil(
+            "add-word entry reachable after click",
+            async () => {
+              const text = await transport.exec(
+                `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + str(read_add_word_entry() or ""))\nATSPIEOF`, 30_000)
+                .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-entry");
+              return text !== "no-entry";
+            },
+            5_000,
+            100,
+          ).catch((err: unknown) => {
+            console.warn(`[e2e] add-word entry not reachable after click — proceeding: ${err instanceof Error ? err.message : err}`);
+            // Entry not reachable after click — proceed anyway; the
+            // type-and-read verification below reports the failure.
+          });
           console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
         } else {
           console.log(`  entry extents implausible (${entryExt}) — skipping click, relying on dialog default focus`);
@@ -1425,7 +1489,7 @@ ATSPIEOF`;
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
             10_000,
-          ).catch(() => {});
+          ).catch((err: unknown) => console.warn(`[e2e] screenshot ${name} capture failed (best-effort): ${err instanceof Error ? err.message : err}`));
         };
         await Bun.sleep(1500);
         // The entry gets default focus when the dialog opens. Type, then READ
@@ -1433,7 +1497,13 @@ ATSPIEOF`;
         // with an empty entry is a silent no-op.
         const typeAndRead = async () => {
           await typeTextDbus("TypeText", "E2E");
-          await Bun.sleep(800);
+          // Keystrokes land asynchronously over D-Bus — poll the AT-SPI
+          await pollUntil(
+            "entry contains typed text",
+            async () => (await readEntry()).includes("E2E"),
+            3_000,
+            100,
+          );
           return readEntry();
         };
         let entryText = await typeAndRead();
@@ -1447,15 +1517,25 @@ ATSPIEOF`;
           // The Add click closes the dialog on success — wait for the new row
           // in the custom-words list directly (verify_word_added expects the
           // dialog to still exist and returns no-dialog here).
-          let rowFound = "no";
-          for (let i = 0; i < 20; i++) {
-            rowFound = await transport.exec(
-              `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_name_present("E2E"))\nATSPIEOF`, 15_000)
-              .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
-            if (rowFound === "yes") break;
-            await Bun.sleep(500);
+          let rowFound = false;
+          try {
+            await pollUntil(
+              "add-word row appears",
+              async () => {
+                const res = await transport.exec(
+                  `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_name_present("E2E"))\nATSPIEOF`, 15_000)
+                  .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no");
+                return res === "yes";
+              },
+              10_000,
+              500,
+            );
+            rowFound = true;
+          } catch (err) {
+            console.warn(`[e2e] prefs row poll timed out — treating as row not found: ${err instanceof Error ? err.message : err}`);
+            // pollUntil throws on timeout — treat as row not found.
           }
-          addWordRt = rowFound === "yes" ? "ok" : "row-not-found";
+          addWordRt = rowFound ? "ok" : "row-not-found";
         } else {
           addWordRt = `entry-text='${entryText}' (keystrokes never reached the entry)`;
         }
@@ -1485,9 +1565,15 @@ ATSPIEOF`;
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
       await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
-      await Bun.sleep(2000);
-      const gone = await transport.exec(
-        `python3 - <<'ATSPIEOF'
+      let gone = false;
+      try {
+        await pollUntil(
+          "prefs window gone",
+          async () => {
+            // Dead app nodes can linger in the a11y cache after pkill, so also
+            // accept the process itself being gone.
+            const out = await transport.exec(
+              `python3 - <<'ATSPIEOF'
 from gi.repository import Atspi
 d = Atspi.get_desktop(0)
 found = "no"
@@ -1498,17 +1584,29 @@ for i in range(d.get_child_count()):
         if (w.get_name() or "").strip() == "Voice to Text":
             found = "yes"
 print("RESULT:" + found)
-ATSPIEOF`,
-        10_000,
-      ).then(r => r.stdout.includes("RESULT:no"));
+ATSPIEOF
+pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC:no`,
+              10_000,
+            );
+            gone = out.stdout.includes("RESULT:no") || out.stdout.includes("PROC:no");
+            return gone;
+          },
+          10_000,
+          500,
+        );
+      } catch (err) {
+        console.warn(`[e2e] prefs window poll timed out — treating as window still present: ${err instanceof Error ? err.message : err}`);
+        // pollUntil throws on timeout — treat as window still present.
+      }
       prefsRow("prefs window closes", gone);
       // End-state screenshot AFTER the close step — shows the prefs window
       // gone (desktop/terminal only), visually distinct from prefs-after-add.
       await transport.exec(
         `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
         10_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] prefs-end screenshot failed (best-effort): ${err instanceof Error ? err.message : err}`));
     } catch (e) {
+      console.warn(`[e2e] P01 prefs flow failed: ${String(e)}`);
       prefsRow("prefs window opens", false, String(e));
       prefsRow("add-word roundtrip (type, click Add, row appears)", false, "skipped — P01 failed");
       prefsRow("prefs window closes", false, "skipped — P01 failed");
@@ -1533,6 +1631,7 @@ ATSPIEOF`,
     const c07 = await run(`cat ${configPath}`);
     row("config.yaml exists and parses", c07.includes("provider"));
   } catch (e) {
+    console.warn(`[e2e] config.yaml check failed: ${String(e)}`);
     row("config.yaml exists and parses", false, String(e));
   }
   console.log(`  debug: config inode=$(stat -c '%i' $HOME/.config/voice-to-text/config.yaml) perms=$(stat -c '%a' $HOME/.config/voice-to-text/config.yaml) birth=$(stat -c '%w' $HOME/.config/voice-to-text/config.yaml)`);
@@ -1541,6 +1640,7 @@ ATSPIEOF`,
     const perms = (await run(`stat -c '%a' ${configPath}`)).trim();
     row("config.yaml has 0600 permissions", perms === "600", `got ${perms}`);
   } catch (e) {
+    console.warn(`[e2e] config.yaml stat failed: ${String(e)}`);
     row("config.yaml has 0600 permissions", false, String(e));
   }
   // C01/C02/C03: write provider/output-method/language into config, restart
@@ -1567,7 +1667,7 @@ ATSPIEOF`,
       transport.exec(
         `setsid bash -c "cd '${cwd}' && exec ${cmdline}" >> '${serviceLog}' 2>&1 < /dev/null &`,
         5_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] service restart exec failed: ${err instanceof Error ? err.message : err}`));
       await new Promise(r => setTimeout(r, 3_000));
       const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
       console.log(`  service restart: pid=${vr.stdout.trim()}`);
@@ -1580,6 +1680,7 @@ ATSPIEOF`,
     );
     row("config change picked up after service restart", true);
   } catch (e) {
+    console.warn(`[e2e] config-restart check failed: ${String(e)}`);
     row("config change picked up after service restart", false, String(e));
   }
   skipRow("hotkey stored in dconf", "needs synthetic input (phase 5)");
@@ -1615,7 +1716,7 @@ ATSPIEOF`,
         "until [ \"$(busctl --user list 2>/dev/null | grep -c 'com.happytomatoe.[V]oiceToText')\" = \"0\" ]; do sleep 0.5; done; echo GONE",
         "GONE",
         15_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] busctl-gone poll failed: ${err instanceof Error ? err.message : err}`));
     }
     const e06 = await transport.exec(
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
@@ -1627,7 +1728,7 @@ ATSPIEOF`,
       transport.exec(
         `setsid bash -c "cd '${restoreCwd}' && exec ${restoreCmd}" >> '${serviceLog}' 2>&1 < /dev/null &`,
         5_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] service restore exec failed: ${err instanceof Error ? err.message : err}`));
       await new Promise(r => setTimeout(r, 3_000));
       const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
       console.log(`  service restore: pid=${vr.stdout.trim()}`);
@@ -1639,11 +1740,12 @@ ATSPIEOF`,
       );
     }
   } catch (e) {
+    console.warn(`[e2e] service-down check failed: ${String(e)}`);
     row("clean error when service is down", false, String(e));
   }
   // E06 leftover: a StartRecording '{}' can land after the service restarted
   // (racing gdbus timeout) and leave the engine in a bad state — reset it.
-  await gdbus("StopRecording").catch(() => {});
+  await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
   // Unknown provider → error in log, service stays alive
   try {
     // In-process moonshine has no HTTP endpoint to break. A nonexistent
@@ -1657,21 +1759,33 @@ ATSPIEOF`,
     // synchronously in get_batch_provider, so the error can land in the log
     // before a later wc runs (run 33906572002: offset-after missed it).
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
-    await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch(() => {});
-    // Engine raises synchronously in get_batch_provider — poll briefly for the
-    // line instead of one-shot grepping (CI run 33752963412 E02 false-fail).
-    let errHit = "0";
-    for (let i = 0; i < 10; i++) {
-      await Bun.sleep(1000);
-      errHit = (await transport.exec(
-        `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
-        5_000,
-      )).stdout.trim() || "0";
-      if (parseInt(errHit) > 0) break;
+    await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch((err: unknown) => console.warn(`[e2e] StartRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
+    // Engine raises synchronously in get_batch_provider — poll for the line
+    // instead of one-shot grepping (CI run 33752963412 E02 false-fail).
+    // 1000ms interval: the service log updates slowly, a tight poll just
+    let errHit = 0;
+    try {
+      await pollUntil(
+        "error line in service log",
+        async () => {
+          const out = await transport.exec(
+            `tail -c +$(( ${logOffset} + 1 )) '${serviceLog}' 2>/dev/null | grep -ciE 'error|failed|exception'`,
+            5_000,
+          );
+          errHit = parseInt(out.stdout.trim()) || 0;
+          return errHit > 0;
+        },
+        10_000,
+        1_000,
+      );
+    } catch (err) {
+      console.warn(`[e2e] error-line poll timed out — treating as no error logged: ${err instanceof Error ? err.message : err}`);
+      // pollUntil throws on timeout — treat as no error line logged.
     }
-    await gdbus("StopRecording").catch(() => {});
-    row("unknown provider logs a clear error", parseInt(errHit) > 0);
+    await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
+    row("unknown provider logs a clear error", errHit > 0);
   } catch (e) {
+    console.warn(`[e2e] unknown-provider check failed: ${String(e)}`);
     row("unknown provider logs a clear error", false, String(e));
   }
   skipRow("parallel recordings rejected cleanly", "deferred");
@@ -1707,8 +1821,12 @@ ATSPIEOF`,
       const shellLog = process.env.VOX_CI_E2E_SHELL_LOG ?? "$HOME/shell.log";
       const shellLogOffset = parseInt((await run(`wc -c < '${shellLog}' 2>/dev/null || echo 0`)).trim()) || 0;
       await dtool("key super+w");
-      await Bun.sleep(1000);
-      const started = await since("Recording|recording started|DEBUG MODE");
+      const started = await pollUntil(
+        "recording started after hotkey",
+        async () => (await since("Recording|recording started|DEBUG MODE")).includes("Recording"),
+        5_000,
+        500,
+      ).then(() => true).catch((err: unknown) => { console.warn(`[e2e] hotkey recording-start poll failed: ${err instanceof Error ? err.message : err}`); return false; });
       await dtool("key super+w");
       // gsettings CLI can't see the extension's relocatable schema (not in
       // the default schema source in this env) — read the default straight
@@ -1726,8 +1844,9 @@ ATSPIEOF`,
       const registered = (hotkeyVal.includes("Super") || dconfOverride.stdout.includes("Super")) && (parseInt(regErr.stdout.trim() || "0") === 0);
       hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: started || registered ? "pass" : "fail", note: started ? "recording started" : registered ? "hotkey registered (keypress not observable headless)" : `hotkey unregistered val=${hotkeyVal.trim()} regErr=${regErr.stdout.trim()}` });
     } catch (e) {
+      console.warn(`[e2e] hotkey recording check failed: ${String(e)}`);
       hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "fail", note: String(e) });
-      await gdbus("StopRecording").catch(() => {});
+      await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
     }
     try {
       // P01: the inner harness issued OpenExtensionPrefs on
@@ -1736,6 +1855,7 @@ ATSPIEOF`,
       const shellAlive = (await transport.exec("pgrep -f 'gnome-shell' | head -1 | xargs -I{} test -d /proc/{} && echo alive || echo dead")).stdout.trim();
       hotkeyUiRows.push({ id: "prefs window opens", status: shellAlive === "alive" ? "pass" : "fail" });
     } catch (e) {
+      console.warn(`[e2e] prefs window open check failed: ${String(e)}`);
       hotkeyUiRows.push({ id: "prefs window opens", status: "fail", note: String(e) });
     }
   } else {

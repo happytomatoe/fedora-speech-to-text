@@ -73,8 +73,10 @@ export class RunContext {
         execSync(`ss -tlnp | grep :${port}`, { encoding: "utf-8", stdio: "pipe" });
         // Port is in use, try another
         continue;
-      } catch {
-        // ss grep failed = port is free
+      } catch (err) {
+        // ss grep failing = port free; log at debug-ish level via console.log
+        // to satisfy no-silent-catch without a scary warn on the happy path
+        console.log(`[run-context] port ${port} free`);
         return port;
       }
     }
@@ -99,8 +101,8 @@ export class RunContext {
       if (!this.runDir.includes('persistent-run')) {
         rmSync(this.runDir, { recursive: true, force: true });
       }
-    } catch {
-      // Ignore cleanup errors
+    } catch (err) {
+      console.warn(`[run-context] cleanup failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -119,8 +121,8 @@ export class RunContext {
       const entryPath = join(persistentRun, entry);
       try {
         rmSync(entryPath, { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
+      } catch (err) {
+        console.warn(`[run-context] cleanup of ${entry} failed: ${err instanceof Error ? err.message : err}`);
       }
     }
   }
