@@ -30,6 +30,10 @@ install_system_pkg() {
     echo "  $pkg already installed, skipping."
     return 0
   fi
+  if dpkg -s "$pkg" &>/dev/null; then
+    echo "  $pkg already installed, skipping."
+    return 0
+  fi
   echo "  Installing $pkg..."
   sudo "$PKG_MGR" install "$pkg"
 }
@@ -40,8 +44,10 @@ detect_os() {
     PKG_MGR="rpm-ostree"
   elif command_exists dnf; then
     PKG_MGR="dnf"
+  elif command_exists apt-get; then
+    PKG_MGR="apt"
   else
-    echo "ERROR: This installer requires Fedora (dnf or rpm-ostree)."
+    echo "ERROR: This installer requires Fedora (dnf/rpm-ostree) or Debian/Ubuntu (apt)."
     exit 1
   fi
   echo "Detected package manager: $PKG_MGR"

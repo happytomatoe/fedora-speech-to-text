@@ -6,9 +6,20 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 function createSpinner(params) {
-    const widget = new St.Widget({...params, reactive: false});
-    widget.set_content(new St.SpinnerContent());
-    return widget;
+    // St.SpinnerContent only exists since GNOME 48; on GNOME 46 neither
+    // SpinnerContent nor St.Spinner is available. The spinner is purely
+    // decorative — older shells fall back to a static icon, which does not
+    // affect E2E assertions.
+    if (St.SpinnerContent) {
+        const widget = new St.Widget({...params, reactive: false});
+        widget.set_content(new St.SpinnerContent());
+        return widget;
+    }
+    const StAny = /** @type {any} */ (St);
+    if (StAny.Spinner) {
+        return new StAny.Spinner({reactive: false});
+    }
+    return new St.Icon({icon_name: 'media-playback-start-symbolic', ...params, reactive: false});
 }
 
 export const VoiceIndicator = GObject.registerClass(

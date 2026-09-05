@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { Deployer } from "./deploy.js";
+import { SshTransport } from "./transport.js";
 
 export interface TmuxHelper {
   session: string;
@@ -20,10 +21,10 @@ async function tmuxCmd(t: TmuxHelper, ...args: string[]): Promise<string> {
     return result.stdout.trim();
   }
 
-  // Fallback: spawn new SSH connection
-  const sshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${t.sshKey} -p ${t.sshPort}`;
-  const sshHost = `${t.sshUser}@localhost`;
-  return execSync(`ssh ${sshOpts} ${sshHost} "${cmd}"`, { encoding: "utf-8" }).trim();
+  // Fallback: one-shot ssh via the SshTransport seam
+  const transport = new SshTransport({ sshKey: t.sshKey, sshPort: t.sshPort, sshUser: t.sshUser, host: "localhost" });
+  const result = await transport.exec(cmd);
+  return result.stdout.trim();
 }
 
 /** Capture the visible pane content as plain text */

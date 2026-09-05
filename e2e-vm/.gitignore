@@ -1,0 +1,8 @@
+*.qcow2
+*.iso
+overlay.qcow2
+qemu.pid
+qemu-monitor.sock
+serial.log
+id_ed25519
+id_ed25519.pub

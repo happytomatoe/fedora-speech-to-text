@@ -135,6 +135,7 @@ export class Deployer {
         const data = readFileSync(localPath);
         sftp.writeFile(resolvedRemote, data, (err) => {
           sftp.end();
+          if (err) console.error(`  [sftp] uploadFile failed: ${resolvedRemote}: ${err.message}`);
           if (err) {
             reject(err);
           } else {
@@ -199,7 +200,7 @@ export class Deployer {
             const data = readFileSync(file.local);
             await new Promise<void>((res, rej) => {
               sftp.writeFile(file.remote, data, (err) => {
-                if (err) rej(err);
+                if (err) { console.error(`  [sftp] writeFile failed: ${file.remote}: ${err.message}`); rej(err); }
                 else res();
               });
             });

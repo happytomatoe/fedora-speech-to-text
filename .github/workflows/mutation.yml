@@ -1,10 +1,20 @@
 name: Mutation Testing
 
-# mutmut runs take ~6 min on current suite size — acceptable per-PR.
-# Revisit if runtime grows: move to weekly schedule + manual dispatch.
+# mutmut runs take ~6 min on current suite size.
+# Only runs on PRs touching src/tests/deps.
+# mutants/ is cached so incremental runs only re-test changed mutants.
 on:
   pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
   workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python-mutmut:
@@ -46,6 +56,13 @@ jobs:
           if [ ! -f ~/.cache/voice-to-text/silero_vad.onnx ]; then
             wget -q -L -O ~/.cache/voice-to-text/silero_vad.onnx "$MODEL_URL"
           fi
+
+      - name: Restore mutmut cache
+        uses: actions/cache@v4
+        with:
+          path: mutants/
+          key: mutmut-${{ runner.os }}-${{ github.sha }}
+          restore-keys: mutmut-${{ runner.os }}-
 
       - name: Run mutmut
         run: uv run mutmut run --max-children 4

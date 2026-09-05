@@ -17,6 +17,7 @@ export interface ParallelConfig {
   recordMode: boolean;
   updateMode: boolean;
   skipDeps: boolean;
+  env: import("./env.js").SuiteEnv;
 }
 
 export interface TestCase {
@@ -107,6 +108,7 @@ export class ParallelTestRunner {
         updateMode: this.config.updateMode,
         testAudioFile: "", // Will be set per test
         skipDeps: this.config.skipDeps,
+        env: this.config.env,
       };
 
       const vm = new VmManager(vmConfig);

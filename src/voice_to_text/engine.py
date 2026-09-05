@@ -193,6 +193,10 @@ class RecordingEngine:
         self._notify_state()
         if text and typer:
             await typer.stream_diff(text)
+            # stream_diff only stores text for MutterVirtualPaster (commit
+            # happens in flush()); commit now so output isn't dropped.
+            if isinstance(typer, MutterVirtualPaster):
+                await typer.flush()
         logger.info("DEBUG MODE: Transcription complete")
 
     async def _init_transcriber(self, config: dict[str, Any]) -> tuple[HybridTranscriber | None, BatchProvider | None]:

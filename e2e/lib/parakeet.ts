@@ -1,5 +1,6 @@
 import http from "node:http";
 import { execSync } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const PORT = 5092;
@@ -18,13 +19,26 @@ function checkHealth(): Promise<boolean> {
 
 /** Ensure Parakeet is running. Only starts if not already listening. */
 export async function ensureParakeet(): Promise<void> {
-  const modelsDir = join(process.env.HOME || process.env.USERPROFILE || ".", "parakeet", "models");
+  const home = process.env.HOME || process.env.USERPROFILE || ".";
+  const modelsDir = join(home, "parakeet", "models");
   const containerName = "parakeet-v2";
 
   // Fast path: already listening
   if (await checkHealth()) {
     console.log("  Parakeet already running on port " + PORT);
     return;
+  }
+
+  // CI (and any host without pre-downloaded models): download on first use.
+  // The container needs the exact int8 model files at /models — without them
+  // the server can pass /health but fails transcription.
+  if (!existsSync(join(modelsDir, "config.json"))) {
+    mkdirSync(modelsDir, { recursive: true });
+    console.log("  Downloading Parakeet models (first run on this host)...");
+    const base = "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main";
+    for (const f of ["config.json", "vocab.txt", "encoder-model.int8.onnx", "decoder_joint-model.int8.onnx"]) {
+      execSync(`curl -sfL -o '${modelsDir}/${f}' '${base}/${f}'`, { stdio: "inherit" });
+    }
   }
 
   // Container running but still loading models — poll until ready

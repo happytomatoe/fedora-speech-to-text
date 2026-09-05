@@ -7,9 +7,12 @@
     "test:update": "bun run e2e.ts --update"
   },
   "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "ssh2": "^1.17.0"
   },
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
     "@types/ssh2": "^1.15.5",
     "bun-types": "latest",
     "typescript": "^7.0.2"

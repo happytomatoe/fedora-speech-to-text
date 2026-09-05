@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { QemuMonitor } from "./qemu.js";
 import { RunContext } from "./run-context.js";
 import { Deployer } from "./deploy.js";
+import { SshTransport } from "./transport.js";
 import { ShellHelper } from "./shell.js";
 import { pollUntil, pollForProcess, pollForCommandOutput } from "./poll.js";
 import { execSync } from "node:child_process";
+import type { SuiteEnv } from "./env.js";
 import {
   DeployConfig,
   waitForGdmLogin,
@@ -27,12 +29,16 @@ export interface VmConfig {
   pythonSrc: string;
   fixtureDir: string;
   extensionUuid: string;
-  recordMode: boolean;
-  updateMode: boolean;
+  recordMode?: boolean;
+  updateMode?: boolean;
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
   configFixture?: string;
+  /** Environment abstraction — OS/boot specifics live here. */
+  env: SuiteEnv;
+  /** Attach to an already-running VM instead of booting (CI-failure repro). */
+  useExisting?: boolean;
 }
 
 export class VmManager {
@@ -43,10 +49,12 @@ export class VmManager {
   qemu: QemuMonitor;
   deployer: Deployer;
   shell: ShellHelper;
+  /** File/command transport to the VM (ssh2-backed scp/exec). */
+  transport: SshTransport;
   frameCount = 0;
   config!: VmConfig;
 
-  private deployCfg: DeployConfig;
+  deployCfg: DeployConfig;
 
   constructor(config: VmConfig) {
     this.config = config;
@@ -56,6 +64,12 @@ export class VmManager {
       port: config.run.sshPort,
       username: config.sshUser,
       privateKey: readFileSync(config.sshKey),
+    });
+    this.transport = new SshTransport({
+      sshKey: config.sshKey,
+      sshPort: config.run.sshPort,
+      sshUser: config.sshUser,
+      host: "localhost",
     });
     this.shell = new ShellHelper();
     this.deployCfg = {
@@ -69,6 +83,7 @@ export class VmManager {
       testAudioFile: config.testAudioFile,
       outputMethod: config.outputMethod,
       configFixture: config.configFixture,
+      env: config.env,
     };
   }
 
@@ -88,8 +103,23 @@ export class VmManager {
   }
 
   async boot(loadvmTag?: string): Promise<void> {
+    if (this.config.useExisting) {
+      // Attach mode: an externally-managed VM (e.g. e2e-vm/boot-vm.sh parity
+      // VM) is already running — no QEMU lifecycle of our own. waitForSsh
+      // does the reachability check; setup() skips GDM wait (already logged
+      // in) and QEMU-monitor screenshots fall back to D-Bus (no socket of
+      // ours). Used to reproduce CI failures against the same image.
+      console.log("Using existing VM (no boot)... --use-existing");
+      this.booted = false;
+      this.freshlyBooted = false;
+      return;
+    }
     const { baseImage, vmDir, updateMode } = this.config;
     const { socketPath, overlayImage, sshPort } = this.config.run;
+
+    // vmDir is cwd for the QEMU spawn — must exist before spawn or posix_spawn
+    // fails with a misleading ENOENT on 'sh'.
+    mkdirSync(vmDir, { recursive: true });
 
     if (await this.isVmRunning()) {
       console.log("VM already running, shutting down for clean restart...");
@@ -137,6 +167,8 @@ export class VmManager {
       const proc = Bun.spawnSync([
         "qemu-img", "create", "-f", "qcow2",
         "-b", baseImage, "-F", "qcow2", overlayImage,
+        // raw cloud image is ~3G virtual; suite needs room for deps + artifacts
+        ...(this.config.env.os === "ubuntu" ? ["20G"] : []),
       ]);
       if (proc.exitCode !== 0) throw new Error(`Failed to create overlay: ${proc.stderr.toString()}`);
     } else {
@@ -163,8 +195,15 @@ export class VmManager {
       "-netdev", `user,id=net0,hostfwd=tcp::${sshPort}-:22`,
       "-device", "virtio-net-pci,netdev=net0",
       "-device", "virtio-rng-pci",
-      "-cdrom", join(vmDir, "cloud-init.iso"),
-      "-no-reboot",
+      // cloud-init seed ISO per env: Fedora uses cloud-init.iso, Ubuntu uses
+      // ubuntu-seed.iso (raw cloud image + seed, no baked golden image).
+      ...(this.config.env.os === "fedora"
+        ? ["-cdrom", join(vmDir, "cloud-init.iso")]
+        : ["-cdrom", join(vmDir, "ubuntu-seed.iso")]),
+      // Fedora's deploy flow relies on mid-run GDM restarts only; Ubuntu 26.04
+      // GDM restarts core-dump gnome-session, so the Ubuntu flow uses a full
+      // guest reboot instead and must not exit QEMU on reset.
+      ...(this.config.env.os === "ubuntu" ? [] : ["-no-reboot"]),
     ];
     // std VGA (Bochs-VBE) with EDID override: no resize-negotiation channel, so
     // the guest keeps its own resolution instead of shrinking to whatever size
@@ -226,10 +265,10 @@ export class VmManager {
   }
 
   async waitForSsh(): Promise<void> {
-    // Wait for a full SSH handshake, not just an open port — sshd may accept
-    // the TCP connection but reset during the handshake on a fresh boot under
-    // load, which makes the ssh2 Deployer connections flake with ECONNRESET.
-    await this.waitForSshHandshake();
+    // Cloud-init (seed ISO) applies user/key/packages at first boot — apt can
+    // take minutes on CI, so give the marker-file wait a generous window.
+    const cloudInit = this.config.env.os === "ubuntu";
+    await this.waitForSshHandshake(cloudInit ? 600_000 : 90_000);
     await this.shell.openSshSession({
       sshKey: this.config.sshKey,
       sshPort: this.config.run.sshPort,
@@ -267,7 +306,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
-      await ensureGdmAutologin(this.deployer, this.config.sshUser);
+      await ensureGdmAutologin(this.deployer, this.config.sshUser, this.config.env);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
@@ -283,7 +322,7 @@ export class VmManager {
       const reason = this.config.skipDeps ? '--skip-deps' : 'golden-gnome-deps image (deps pre-installed)';
       console.log(`  Skipping installDependencies (${reason})`);
     } else {
-      await installDependencies(this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
+      await installDependencies(this.config.env, this.config.sshKey, this.config.run.sshPort, this.config.sshUser);
     }
     // D-Bus address is obtained via getShellDbusAddr() in shell.ts as needed
     console.log(`  installDependencies: ${Date.now() - t1}ms`);
@@ -316,7 +355,7 @@ export class VmManager {
     await this.deployer.connect();
 
     if (this.freshlyBooted) {
-      await ensureGdmAutologin(this.deployer, this.config.sshUser);
+      await ensureGdmAutologin(this.deployer, this.config.sshUser, this.config.env);
       await waitForGdmLogin(this.deployer);
     } else {
       console.log("VM already booted, skipping GDM wait...");
