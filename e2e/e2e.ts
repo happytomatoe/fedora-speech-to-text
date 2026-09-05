@@ -1545,9 +1545,12 @@ ATSPIEOF`;
       // window lives in the org.gnome.Shell.Extensions process; kill it and
       // verify the window leaves the a11y tree.
       await run(`pkill -f '[o]rg.gnome.Shell.Extensions' || true`, 5_000);
-      await Bun.sleep(2000);
-      const gone = await transport.exec(
-        `python3 - <<'ATSPIEOF'
+      // Poll until the window leaves the a11y tree (no blind sleep).
+      const gone = await pollUntil(
+        "prefs window gone",
+        async () =>
+          transport.exec(
+            `python3 - <<'ATSPIEOF'
 from gi.repository import Atspi
 d = Atspi.get_desktop(0)
 found = "no"
@@ -1559,8 +1562,11 @@ for i in range(d.get_child_count()):
             found = "yes"
 print("RESULT:" + found)
 ATSPIEOF`,
+            10_000,
+          ).then(r => r.stdout.includes("RESULT:no")),
         10_000,
-      ).then(r => r.stdout.includes("RESULT:no"));
+        500,
+      );
       prefsRow("prefs window closes", gone);
       // End-state screenshot AFTER the close step — shows the prefs window
       // gone (desktop/terminal only), visually distinct from prefs-after-add.
