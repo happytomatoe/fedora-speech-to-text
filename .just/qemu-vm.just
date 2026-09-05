@@ -399,3 +399,84 @@ e2e-stop:
     virsh -c qemu:///session destroy e2e
 e2e-record output='e2e/output/recording.mp4':
     python3 e2e/lib/spice-record.py --host localhost --port 5930 --output {{ output }}
+
+# @category e2e-vm
+# Local CI-parity: set up the Ubuntu 26.04 VM (image download + customize)
+ubuntu-vm-setup:
+    ./e2e-vm/setup-vm.sh
+
+# @category e2e-vm
+# Local CI-parity: boot the Ubuntu 26.04 VM headless (idempotent).
+# Overlay persists across runs; `just ubuntu-vm-boot fresh` resets to golden image.
+ubuntu-vm-boot *args='':
+    ./e2e-vm/boot-vm.sh {{ args }}
+
+# @category e2e-vm
+# Local CI-parity: boot the Ubuntu 26.04 VM with a visible desktop window
+# (GTK display instead of headless). Same disk/SSH as ubuntu-vm-boot.
+ubuntu-vm-boot-gui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e-vm
+    if [ -f qemu.pid ] && kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+      echo "VM already running (PID $(cat qemu.pid)) — run 'just ubuntu-vm-kill' first" >&2
+      exit 1
+    fi
+    [ -f golden-ubuntu-2604.qcow2 ] || { echo "Run 'just ubuntu-vm-setup' first" >&2; exit 1; }
+    rm -f overlay.qcow2
+    qemu-img create -f qcow2 -b golden-ubuntu-2604.qcow2 -F qcow2 overlay.qcow2 > /dev/null
+    qemu-system-x86_64 \
+      -enable-kvm -cpu host -m 4096 -smp 2 \
+      -drive file=overlay.qcow2,format=qcow2,if=virtio \
+      -device virtio-vga \
+      -display gtk,gl=off \
+      -monitor unix:qemu-monitor.sock,server,nowait \
+      -serial file:serial.log \
+      -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+      -device virtio-net-pci,netdev=net0 \
+      -daemonize -pidfile qemu.pid
+    echo "Ubuntu 26.04 desktop window open (GDM auto-login: testuser), SSH on :2222"
+
+# @category e2e-vm
+# Full local CI-parity cycle: boot Ubuntu 26.04 VM (if not running) + Parakeet
+# + run the CI harness + stop the VM. Add GUI=1 for a visible desktop window.
+ubuntu-vm-test GUI='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just ubuntu-vm-{{ if GUI == "1" { "boot-gui" } else { "boot" } }}
+    trap 'just ubuntu-vm-kill' EXIT
+    just ubuntu-vm-parakeet
+    just ubuntu-vm-run
+
+# @category e2e-vm
+# Local CI-parity: run the CI harness (ci-e2e-headless.sh) inside the VM.
+# Requires Parakeet on the host: just ubuntu-vm-parakeet
+ubuntu-vm-run:
+    ./e2e-vm/run-parity.sh
+
+# @category e2e-vm
+# Start Parakeet on the host (port 5092) for the Ubuntu VM parity run
+ubuntu-vm-parakeet:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RUNTIME=docker
+    command -v docker >/dev/null 2>&1 || RUNTIME=podman
+    $RUNTIME rm -f parakeet-e2e-parity >/dev/null 2>&1 || true
+    $RUNTIME run -d --name parakeet-e2e-parity --network host \
+      ghcr.io/achetronic/parakeet:latest > /dev/null
+    for i in $(seq 1 60); do
+      curl -sf http://localhost:5092/health >/dev/null && { echo "Parakeet ready"; exit 0; }
+      sleep 2
+    done
+    echo "FATAL: Parakeet not ready" >&2; exit 1
+
+# @category e2e-vm
+# Stop the Ubuntu 26.04 parity VM
+ubuntu-vm-kill:
+    #!/usr/bin/env bash
+    PID_FILE="e2e-vm/qemu.pid"
+    if [ -f "$PID_FILE" ]; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null || true
+      rm -f "$PID_FILE"
+    fi
+    echo "VM stopped"

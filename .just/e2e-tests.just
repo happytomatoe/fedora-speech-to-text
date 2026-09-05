@@ -71,3 +71,49 @@ e2e-no-snapshot:
     cd e2e && bun run e2e.ts --no-snapshot
 e2e-update:
     cd e2e && bun run e2e.ts --update
+
+# Unified E2E suite — one command per environment:
+#   just e2e-fedora-local   (default; snapshot mode, fast ~40s after first run)
+#   just e2e-ubuntu-local   (fresh pinned resolute VM)
+#   just e2e-ubuntu-ci      (same bits as ubuntu-local; CI now runs the
+#                            bare-runner headless harness instead — see
+#                            docs/CI-E2E-STATUS.md)
+# Output is always tee'd to /tmp/fedora-speech-to-text-e2e-run.log — tail it to
+# watch progress: tail -f /tmp/fedora-speech-to-text-e2e-run.log
+# Override with args: just e2e-fedora-local --update
+_e2e-run E2E_ENV *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd e2e
+    LOG="${E2E_LOG:-/tmp/fedora-speech-to-text-e2e-run.log}"
+    : > "$LOG"
+    if [[ "{{ E2E_ENV }}" == "fedora-local" ]]; then
+      bun run e2e.ts --save-snapshot {{ ARGS }} 2>&1 | tee "$LOG"
+      exit ${PIPESTATUS[0]}
+    else
+      bun run e2e.ts --env "{{ E2E_ENV }}" {{ ARGS }} 2>&1 | tee "$LOG"
+      exit ${PIPESTATUS[0]}
+    fi
+
+e2e-fedora-local *ARGS:
+    just _e2e-run fedora-local {{ ARGS }}
+
+e2e-ubuntu-local *ARGS:
+    just _e2e-run ubuntu-local {{ ARGS }}
+
+e2e-ubuntu-ci *ARGS:
+    just _e2e-run ubuntu-ci {{ ARGS }}
+
+# First-time setup for the Ubuntu env of the unified suite: pinned resolute
+# cloud image + golden customization + ssh key (same URL/recipe as CI).
+e2e-setup-ubuntu:
+    ./e2e/setup-ubuntu-vm.sh
+
+# @category e2e-ubuntu-ci (LEGACY - CI runs the bare-runner headless harness;
+# this VM-based env is kept for local reproduction of CI failures)
+ubuntu-ci-e2e *args='':
+    just e2e ubuntu-ci {{ args }}
+
+# @category e2e-ubuntu-ci (LEGACY)
+ubuntu-ci-e2e-setup:
+    just e2e-setup-ubuntu
