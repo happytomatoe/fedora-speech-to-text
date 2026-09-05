@@ -56,7 +56,7 @@ qemu-e2e-vm port='5930':
         -cpu host \
         -m 4096 \
         -smp 2 \
-        -drive file=overlay.qcow2,format=qcow2,if=virtio \
+        -drive file="${VM_DIR_ABS}/overlay.qcow2",format=qcow2,if=virtio \
         -device virtio-vga \
         -display vnc=:1 \
         -spice port={{ port }},disable-ticketing=on \
@@ -509,7 +509,7 @@ ubuntu-vm-parakeet:
     # models, but transcription would fail (mirrors e2e/lib/parakeet.ts).
     MODELS_DIR="${HOME}/parakeet/models"
     mkdir -p "$MODELS_DIR"
-    if [ ! -f "$MODELS_DIR/config.json" ]; then
+    if [ ! -f "$MODELS_DIR/config.json" ] || [ ! -f "$MODELS_DIR/vocab.txt" ] || [ ! -f "$MODELS_DIR/encoder-model.int8.onnx" ] || [ ! -f "$MODELS_DIR/decoder_joint-model.int8.onnx" ]; then
       echo "Downloading Parakeet models (first run on this host)..."
       BASE="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main"
       for f in config.json vocab.txt encoder-model.int8.onnx decoder_joint-model.int8.onnx; do

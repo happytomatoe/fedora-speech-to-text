@@ -39,8 +39,8 @@ service-install:
 service-uninstall:
     # Stop the running service before removing its files, otherwise an
     # already-active D-Bus process keeps serving with stale code.
-    systemctl --user stop voice-to-text.service 2>/dev/null || true
-    systemctl --user disable voice-to-text.service 2>/dev/null || true
+    systemctl --user stop com.happytomatoe.VoiceToText.user.service 2>/dev/null || true
+    systemctl --user disable com.happytomatoe.VoiceToText.user.service 2>/dev/null || true
     rm -f ~/.local/share/dbus-1/services/com.happytomatoe.VoiceToText.service
     rm -f ~/.config/systemd/user/com.happytomatoe.VoiceToText.user.service
     rm -f ~/.local/bin/voice-to-text-dbus-wrapper

@@ -33,6 +33,7 @@ VALID_TEMPLATE_KEYS = {
     "api_key",
     "api_key_env",
     "timeout",
+    "variables",
 }
 
 

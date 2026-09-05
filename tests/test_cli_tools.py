@@ -16,9 +16,10 @@ transcription:
 crispasr:
   type: template
   endpoint: http://localhost:5092/v1/audio/transcriptions
-  model: whisper-1
   headers:
     Authorization: "Bearer {{ API_KEY }}"
+  variables:
+    MODEL: whisper-1
   form:
     model: "{{ MODEL }}"
     hotwords: "{{ CUSTOM_WORDS | join(', ') }}"
@@ -69,6 +70,18 @@ class TestCheckConfig:
         path = _write_config(VALID_TEMPLATE_CONFIG, monkeypatch)
         try:
             assert check_config(ConfigManager(path)) == []
+        finally:
+            os.unlink(path)
+
+    def test_null_headers_reported(self, monkeypatch):
+        config = VALID_TEMPLATE_CONFIG.replace(
+            '  headers:\n    Authorization: "Bearer {{ API_KEY }}"\n',
+            '  headers: null\n',
+        )
+        path = _write_config(config, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert any("headers must be a mapping" in f for f in findings)
         finally:
             os.unlink(path)
 
