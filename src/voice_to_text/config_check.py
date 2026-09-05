@@ -16,6 +16,8 @@ from jinja2.nativetypes import NativeEnvironment
 from voice_to_text.config import ConfigManager
 from voice_to_text.providers import _BATCH_PROVIDERS, get_batch_provider
 
+_MISSING = object()
+
 _NATIVE_ENV = NativeEnvironment()
 
 logger = logging.getLogger(__name__)
@@ -56,8 +58,8 @@ def _findings_for_template_provider(name: str, section: dict[str, Any]) -> list[
     if not isinstance(path, str) or not path or any(not p for p in path.split(".")):
         findings.append(f"provider '{name}': invalid response_text_path {path!r}")
     for key in ("headers", "form", "json"):
-        body = section.get(key)
-        if body is None:
+        body = section.get(key, _MISSING)
+        if body is _MISSING:
             continue
         if not isinstance(body, dict):
             findings.append(f"provider '{name}': {key} must be a mapping, got {type(body).__name__}")
