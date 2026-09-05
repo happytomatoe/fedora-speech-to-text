@@ -60,12 +60,27 @@ class TemplateProvider(BatchProvider):
         self.api_key = resolve_api_key(config, "TEMPLATE_API_KEY", provider_name="template") if wants_key else ""
         # NativeEnvironment renders {{ CUSTOM_WORDS }} to a real list in JSON bodies
         self.env: Environment = NativeEnvironment()
-        # Headers templating on an unset API_KEY (e.g. "Bearer {{ API_KEY }}")
-        # would render to "Bearer " — an illegal header. Skip those entirely.
+
+        def _usable_header(source: str) -> bool:
+            # Key configured → always usable. Without a key, render with
+            # API_KEY left undefined (ChainableUndefined) so `default`
+            # fallbacks resolve; skip the header only if API_KEY would leak
+            # through unresolved or the value collapses to empty.
+            if self.api_key != "":
+                return True
+            if "API_KEY" not in source:
+                return True
+            rendered = str(
+                NativeEnvironment(undefined=ChainableUndefined)
+                .from_string(source)
+                .render(LANGUAGE="", MODEL="", CUSTOM_WORDS=[])
+            )
+            return "API_KEY" not in rendered and rendered != ""
+
         self._header_tmpl: dict[str, Template] = {
-            k: self.env.from_string(str(v))
+            k: self.env.from_string(v)
             for k, v in config.get("headers", {}).items()
-            if not (self.api_key == "" and "API_KEY" in str(v))
+            if _usable_header(str(v))
         }
         self._form_tmpl: dict[str, Template] = {
             k: self.env.from_string(str(v)) for k, v in config.get("form", {}).items()
