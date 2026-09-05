@@ -9,7 +9,7 @@ import { StepRunner } from "./lib/step-runner.js";
 import { VmManager, type VmConfig } from "./lib/vm.js";
 import { RunContext } from "./lib/run-context.js";
 import { deployTestAudio, deployExtension, startVoiceService } from "./lib/deploy-steps.js";
-import { ATSPI_PY, atspiScrollToBottom, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
+import { ATSPI_PY, atspiScrollTo, atspiScrollToBottom, doAtspiAction, findAtspiExtents, setAtspiText, setAtspiTextByRole, waitForAtspiNode, waitForAtspiText } from "./lib/atspi.js";
 import { pollForCommandOutput, pollFileExists } from "./lib/poll.js";
 import { beginSpan, endSpan, printTimingTree } from "./lib/timing.js";
 import * as tmux from "./lib/tmux.js";
@@ -1358,8 +1358,12 @@ ATSPIEOF`;
           await shot("prefs-scroll-before");
           // Scroll via AT-SPI Value interface on the vertical scrollbar.
           // No pointer/keyboard events, so no seat/focus side-effects.
-          const res = await atspiScrollToBottom(transport);
-          console.log(`  atspi value scroll: ${res}`);
+          const res = await atspiScrollTo(transport, "Open Editor", "BOTTOM_RIGHT");
+          console.log(`  atspi scroll_to: ${res}`);
+          if (res !== "yes") {
+            const res2 = await atspiScrollToBottom(transport, 2_000);
+            console.log(`  atspi value scroll fallback: ${res2}`);
+          }
           await Bun.sleep(500);
           await shot("prefs-scroll-after");
           const psnr = await pxChanged("prefs-scroll-before", "prefs-scroll-after");
@@ -1450,9 +1454,11 @@ ATSPIEOF`;
         try {
           // Scroll via AT-SPI Value interface on the vertical scrollbar —
           // no pointer events, no focus side-effects on the modal.
-          const res2 = await atspiScrollToBottom(transport);
-          console.log(`  atspi value scroll: ${res2}`);
-          await Bun.sleep(600);
+          const res2 = await atspiScrollTo(transport, "Open Editor", "BOTTOM_RIGHT");
+          console.log(`  atspi scroll_to: ${res2}`);
+          if (res2 !== "yes") {
+            await atspiScrollToBottom(transport, 2_000);
+          }
         } catch (e) {
           console.log(`  WARN: scroll-to-bottom failed (${e})`);
         }

@@ -191,6 +191,20 @@ print("RESULT:" + str(set_text_by_name('${pyQuote(name)}', '${pyQuote(text)}') o
   }
 }
 
+/** Scroll the first node matching `name` into view via AT-SPI Component.scroll_to.
+ *  Returns "yes" on success, "no"/"no-api"/"no" otherwise. Single attempt, no retry. */
+export async function atspiScrollTo(
+  deployer: ExecLike,
+  name: string,
+  position: "TOP_LEFT" | "BOTTOM_RIGHT" = "BOTTOM_RIGHT"
+): Promise<string> {
+  const script = `${ATSPI_PY}
+print("RESULT:" + str(scroll_to('${pyQuote(name)}', '${pyQuote(position)}')))
+`;
+  const out = await execPython(deployer, script);
+  return parseResult(out) || "no";
+}
+
 /** Scroll the prefs window to the bottom via AT-SPI Value on the vertical
  *  scrollbar. No pointer events -> no focus pollution of the modal dialog. */
 export async function atspiScrollToBottom(
