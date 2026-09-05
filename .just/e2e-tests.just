@@ -14,7 +14,7 @@ container-watch:
 
     # Install x11vnc as root (not gnomeshell user)
     echo "Installing x11vnc..."
-    podman exec $POD dnf install -y --nogpgcheck x11vnc 2>/dev/null || true
+    podman exec $POD dnf install -y --nogpgcheck x11vnc
 
     # Kill any existing VNC server
     podman exec --user gnomeshell $POD pkill x11vnc 2>/dev/null || true
