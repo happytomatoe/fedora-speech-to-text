@@ -32,7 +32,7 @@ everything else the server expects (model name, language, vendor options, …).
 
 The HTTP request timeout is fixed at 120 seconds; the overall stop/transcribe
 deadline is the engine's `stop_timeout` (GNOME preferences →
-"stop-timeout-seconds", default 300). Note that `config-check` rejects a
+"stop-timeout-seconds", default 120). Note that `config-check` rejects a
 `timeout` key in a template provider section — that setting was removed.
 
 **`response_text_path`** tells the provider where the transcript text lives in
