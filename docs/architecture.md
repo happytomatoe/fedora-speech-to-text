@@ -27,7 +27,6 @@ graph TB
 
         subgraph Engine["RecordingEngine"]
             Audio["Audio<br/>Recorder"]
-            VAD["VAD<br/>(SmoothedVAD)"]
             Transcriber["Transcriber<br/>(Hybrid/Batch/Stream)"]
         end
 
