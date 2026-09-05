@@ -540,7 +540,7 @@ chmod +x /tmp/dconf-set.sh && bash /tmp/dconf-set.sh`);
   } catch (err) {
     console.warn(`[deploy] dotoold pkill failed (may not be running): ${err instanceof Error ? err.message : err}`);
   }
-  await shell.exec("export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; nohup dotoold &>/tmp/dotoold.log &", 10000).catch(() => {});
+  await shell.exec("export DOTOOL_PIPE=/run/user/$(id -u)/dotool-pipe; nohup dotoold &>/tmp/dotoold.log &", 10000).catch((err: unknown) => console.warn(`[deploy] dotoold start failed: ${err instanceof Error ? err.message : err}`));
   await pollUntilFn(
     "dotool pipe",
     async () => {

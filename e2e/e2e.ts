@@ -419,7 +419,7 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
     "echo 'key shift+a' | $D; sleep 0.5",
     "if [ \"$(cap)\" != \"$before\" ]; then echo FOCUSED; else echo NOT_FOCUSED; fi",
   ].join("\n");
-  const focusOut = await shell.exec(`bash -c ${JSON.stringify(focusProbe)}`).catch(() => "");
+  const focusOut = await shell.exec(`bash -c ${JSON.stringify(focusProbe)}`).catch((err: unknown) => { console.warn(`[e2e] focus probe failed: ${err instanceof Error ? err.message : err}`); return ""; });
   if (!focusOut.includes("FOCUSED")) {
     console.log("  WARNING: Terminal may not be focused");
   }
@@ -1014,7 +1014,7 @@ async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void
     async () => {
       const out = await vm.deployer.exec(
         `python3 - <<'ATSPIEOF'\n${ATSPI_PY}\nprint("RESULT:" + node_showing("Voice to Text"))\nATSPIEOF`,
-      ).catch(() => ({ stdout: "RESULT:no" }));
+      ).catch((err: unknown) => { console.warn(`[e2e] ATSPI node_showing probe failed: ${err instanceof Error ? err.message : err}`); return { stdout: "RESULT:no" }; });
       return out.stdout.includes("RESULT:no");
     },
     5_000,
@@ -1211,7 +1211,7 @@ async function runBareMode(): Promise<void> {
         let paneHit = false;
         if (!captureHit && captureRequired) {
           const pane = await transport.exec(`tmux capture-pane -t ci-e2e -p 2>/dev/null || true`, 5_000)
-            .then(r => r.stdout).catch(() => "");
+            .then(r => r.stdout).catch((err: unknown) => { console.warn(`[e2e] service log read failed: ${err instanceof Error ? err.message : err}`); return ""; });
           paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
         }
         const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || paneHit || !captureRequired);
@@ -1231,7 +1231,7 @@ async function runBareMode(): Promise<void> {
         const cellLabel = `${bareCase.file.replace(/\.wav$/, "")}-${method}`;
         const cellsDir = process.env.VOX_CI_E2E_CELLS_DIR;
         if (cellsDir) {
-          await transport.exec(`mkdir -p '${cellsDir}/${cellLabel}'`, 5_000).catch(() => {});
+          await transport.exec(`mkdir -p '${cellsDir}/${cellLabel}'`, 5_000).catch((err: unknown) => console.warn(`[e2e] mkdir failed: ${err instanceof Error ? err.message : err}`));
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${cellsDir}/${cellLabel}/after.png'`,
             10_000,
@@ -1254,7 +1254,7 @@ async function runBareMode(): Promise<void> {
         console.log(`  FAIL (exception): ${e}`);
         results.push({ file: bareCase.file, method, status: "fail", typed: "", note: String(e) });
         // Recover the service for the next cell if this one wedged it.
-        await gdbus("StopRecording").catch(() => {});
+        await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
       }
     }
   }
@@ -1383,7 +1383,7 @@ ATSPIEOF`;
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
             10_000,
-          ).catch(() => {});
+          ).catch((err: unknown) => console.warn(`[e2e] screenshot ${name} capture failed (best-effort): ${err instanceof Error ? err.message : err}`));
         };
         // Pixel-diff two screenshots via ffmpeg PSNR (no ImageMagick on the
         // runner); identical frames → PSNR=inf. Threshold ~30dB: clock churns
@@ -1392,7 +1392,7 @@ ATSPIEOF`;
           const out = await transport.exec(
             `ffmpeg -v info -i '${outputDir}/${a}.png' -i '${outputDir}/${b}.png' -filter_complex psnr -f null - 2>&1 | grep -oP 'average:\\K[0-9.inf]+'`,
             20_000,
-          ).then(r => r.stdout.trim()).catch(() => "err");
+          ).then(r => r.stdout.trim()).catch((err: unknown) => { console.warn(`[e2e] PSNR probe failed: ${err instanceof Error ? err.message : err}`); return "err"; });
           console.log(`  scroll diff ${a} vs ${b}: PSNR=${out}`);
           return out;
         };
@@ -1468,7 +1468,8 @@ ATSPIEOF`;
             },
             5_000,
             100,
-          ).catch(() => {
+          ).catch((err: unknown) => {
+            console.warn(`[e2e] add-word entry not reachable after click — proceeding: ${err instanceof Error ? err.message : err}`);
             // Entry not reachable after click — proceed anyway; the
             // type-and-read verification below reports the failure.
           });
@@ -1488,7 +1489,7 @@ ATSPIEOF`;
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/${name}.png'`,
             10_000,
-          ).catch(() => {});
+          ).catch((err: unknown) => console.warn(`[e2e] screenshot ${name} capture failed (best-effort): ${err instanceof Error ? err.message : err}`));
         };
         await Bun.sleep(1500);
         // The entry gets default focus when the dialog opens. Type, then READ
@@ -1603,7 +1604,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       await transport.exec(
         `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${outputDir}/prefs-end.png'`,
         10_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] prefs-end screenshot failed (best-effort): ${err instanceof Error ? err.message : err}`));
     } catch (e) {
       console.warn(`[e2e] P01 prefs flow failed: ${String(e)}`);
       prefsRow("prefs window opens", false, String(e));
@@ -1666,7 +1667,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       transport.exec(
         `setsid bash -c "cd '${cwd}' && exec ${cmdline}" >> '${serviceLog}' 2>&1 < /dev/null &`,
         5_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] service restart exec failed: ${err instanceof Error ? err.message : err}`));
       await new Promise(r => setTimeout(r, 3_000));
       const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
       console.log(`  service restart: pid=${vr.stdout.trim()}`);
@@ -1715,7 +1716,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
         "until [ \"$(busctl --user list 2>/dev/null | grep -c 'com.happytomatoe.[V]oiceToText')\" = \"0\" ]; do sleep 0.5; done; echo GONE",
         "GONE",
         15_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] busctl-gone poll failed: ${err instanceof Error ? err.message : err}`));
     }
     const e06 = await transport.exec(
       "gdbus call --session --dest com.happytomatoe.VoiceToText --object-path /com/happytomatoe/VoiceToText --method com.happytomatoe.VoiceToText.StartRecording '{}'",
@@ -1727,7 +1728,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       transport.exec(
         `setsid bash -c "cd '${restoreCwd}' && exec ${restoreCmd}" >> '${serviceLog}' 2>&1 < /dev/null &`,
         5_000,
-      ).catch(() => {});
+      ).catch((err: unknown) => console.warn(`[e2e] service restore exec failed: ${err instanceof Error ? err.message : err}`));
       await new Promise(r => setTimeout(r, 3_000));
       const vr = await transport.exec("pgrep -f voice-to-text-dbus | head -1", 10_000);
       console.log(`  service restore: pid=${vr.stdout.trim()}`);
@@ -1744,7 +1745,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
   }
   // E06 leftover: a StartRecording '{}' can land after the service restarted
   // (racing gdbus timeout) and leave the engine in a bad state — reset it.
-  await gdbus("StopRecording").catch(() => {});
+  await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
   // Unknown provider → error in log, service stays alive
   try {
     // In-process moonshine has no HTTP endpoint to break. A nonexistent
@@ -1758,7 +1759,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     // synchronously in get_batch_provider, so the error can land in the log
     // before a later wc runs (run 33906572002: offset-after missed it).
     const logOffset = parseInt((await run(`wc -c < '${serviceLog}' 2>/dev/null || echo 0`)).trim()) || 0;
-    await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch(() => {});
+    await gdbus("StartRecording", `'${JSON.stringify({ provider: "nonexistent_provider", language: "en" })}'`).catch((err: unknown) => console.warn(`[e2e] StartRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
     // Engine raises synchronously in get_batch_provider — poll for the line
     // instead of one-shot grepping (CI run 33752963412 E02 false-fail).
     // 1000ms interval: the service log updates slowly, a tight poll just
@@ -1781,7 +1782,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
       console.warn(`[e2e] error-line poll timed out — treating as no error logged: ${err instanceof Error ? err.message : err}`);
       // pollUntil throws on timeout — treat as no error line logged.
     }
-    await gdbus("StopRecording").catch(() => {});
+    await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
     row("unknown provider logs a clear error", errHit > 0);
   } catch (e) {
     console.warn(`[e2e] unknown-provider check failed: ${String(e)}`);
@@ -1825,7 +1826,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
         async () => (await since("Recording|recording started|DEBUG MODE")).includes("Recording"),
         5_000,
         500,
-      ).then(() => true).catch(() => false);
+      ).then(() => true).catch((err: unknown) => { console.warn(`[e2e] hotkey recording-start poll failed: ${err instanceof Error ? err.message : err}`); return false; });
       await dtool("key super+w");
       // gsettings CLI can't see the extension's relocatable schema (not in
       // the default schema source in this env) — read the default straight
@@ -1845,7 +1846,7 @@ pgrep -f '[o]rg.gnome.Shell.Extensions' >/dev/null && echo PROC:yes || echo PROC
     } catch (e) {
       console.warn(`[e2e] hotkey recording check failed: ${String(e)}`);
       hotkeyUiRows.push({ id: "hotkey starts and stops recording", status: "fail", note: String(e) });
-      await gdbus("StopRecording").catch(() => {});
+      await gdbus("StopRecording").catch((err: unknown) => console.warn(`[e2e] StopRecording failed (best-effort): ${err instanceof Error ? err.message : err}`));
     }
     try {
       // P01: the inner harness issued OpenExtensionPrefs on
