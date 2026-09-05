@@ -76,9 +76,7 @@ class TemplateProvider(BatchProvider):
                 return True
             sentinel = "__UNRESOLVED_API_KEY__"
             env = NativeEnvironment(undefined=ChainableUndefined)
-            rendered = str(
-                env.from_string(source).render(API_KEY=sentinel, LANGUAGE="", CUSTOM_WORDS=[])
-            )
+            rendered = str(env.from_string(source).render(API_KEY=sentinel, LANGUAGE="", CUSTOM_WORDS=[]))
             return sentinel not in rendered and rendered.strip() != ""
 
         self._header_tmpl: dict[str, Template] = {
@@ -105,13 +103,9 @@ class TemplateProvider(BatchProvider):
             if not isinstance(name, str) or not name:
                 raise ValueError("template provider 'variables' keys must be non-empty strings")
             if name in TemplateProvider._RESERVED_VARIABLES:
-                raise ValueError(
-                    f"template provider variable '{name}' conflicts with a built-in template variable"
-                )
+                raise ValueError(f"template provider variable '{name}' conflicts with a built-in template variable")
             if not isinstance(value, (str, int, float, bool)):
-                raise ValueError(
-                    f"template provider variable '{name}' must be a scalar (str/int/float/bool)"
-                )
+                raise ValueError(f"template provider variable '{name}' must be a scalar (str/int/float/bool)")
         return dict(variables)
 
     def render(self, language: str = "en", custom_words: list[str] | None = None) -> dict[str, Any]:
