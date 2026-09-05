@@ -174,9 +174,7 @@ class TestVariables:
     @pytest.mark.asyncio
     async def test_variables_on_wire(self, httpserver, tmp_path):
         """Variables defined in config must arrive rendered in the multipart body."""
-        httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json(
-            {"text": "ok"}
-        )
+        httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json({"text": "ok"})
         provider = TemplateProvider(
             {
                 "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
