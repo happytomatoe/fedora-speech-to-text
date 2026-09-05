@@ -20,9 +20,8 @@ def _make_wav(tmp_path: Path) -> str:
 CRISPASR_CONFIG = {
     "type": "template",
     "endpoint": "http://stub/v1/audio/transcriptions",
-    "model": "whisper-1",
     "form": {
-        "model": "{{ MODEL }}",
+        "model": "whisper-1",
         "hotwords": "{{ CUSTOM_WORDS | join(', ') }}",
         "hotwords_boost": "2.0",
     },
@@ -78,7 +77,7 @@ class TestRender:
                 "endpoint": "http://stub",
                 "api_key": "sk-secret",
                 "headers": {"Authorization": "Bearer {{ API_KEY }}"},
-                "form": {"model": "{{ MODEL }}"},
+                "form": {"model": "whisper-1"},
             }
         )
         rendered = provider.render()
@@ -206,8 +205,7 @@ class TestTranscribeFile:
         provider = TemplateProvider(
             {
                 "endpoint": httpserver.url_for("/v1/audio/transcriptions"),
-                "form": {"model": "{{ MODEL }}", "model_value": "parakeet"},
-                "model": "parakeet-tdt-0.6b",
+                "form": {"model": "parakeet-tdt-0.6b", "model_value": "parakeet"},
             }
         )
         assert "sunny" in await provider.transcribe_file(WAV_FIXTURE)

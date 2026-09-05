@@ -2,7 +2,7 @@
 
 The HTTP request is described declaratively in config.yaml as a Jinja2-templated
 blueprint. Context variables available in templates: API_KEY, LANGUAGE,
-CUSTOM_WORDS, MODEL.
+CUSTOM_WORDS.
 
 Project docs: docs/providers/template.md
 """
@@ -41,7 +41,7 @@ class TemplateProvider(BatchProvider):
         json: JSON body fields (values are templates, rendered to native types).
         headers: request headers (values are templates).
         response_text_path: dotted path to the transcript in the response (default "text").
-        model: value exposed to templates as MODEL (not sent unless templated).
+        variables: custom key/value pairs exposed to templates (values must be scalars).
         api_key / api_key_env: resolved via resolve_api_key, exposed as API_KEY.
         timeout: request timeout in seconds (default 120).
     """
@@ -56,6 +56,7 @@ class TemplateProvider(BatchProvider):
         self.endpoint = config["endpoint"]
         self.timeout = config.get("timeout", 120.0)
         self.text_path = config.get("response_text_path", "text")
+        self._variables = self._validate_variables(config.get("variables", {}))
         wants_key = bool(config.get("api_key") or config.get("api_key_env"))
         self.api_key = resolve_api_key(config, "TEMPLATE_API_KEY", provider_name="template") if wants_key else ""
         # NativeEnvironment renders {{ CUSTOM_WORDS }} to a real list in JSON bodies
@@ -77,7 +78,7 @@ class TemplateProvider(BatchProvider):
             sentinel = "__UNRESOLVED_API_KEY__"
             env = NativeEnvironment(undefined=ChainableUndefined)
             rendered = str(
-                env.from_string(source).render(API_KEY=sentinel, LANGUAGE="", MODEL="", CUSTOM_WORDS=[])
+                env.from_string(source).render(API_KEY=sentinel, LANGUAGE="", CUSTOM_WORDS=[])
             )
             return sentinel not in rendered and rendered.strip() != ""
 
@@ -94,13 +95,32 @@ class TemplateProvider(BatchProvider):
         self._client = get_shared_client()
         logger.info("Template provider: %s (timeout=%.0fs)", self.endpoint, self.timeout)
 
+    _RESERVED_VARIABLES = ("API_KEY", "LANGUAGE", "CUSTOM_WORDS")
+
+    @staticmethod
+    def _validate_variables(variables: Any) -> dict[str, Any]:
+        """Validate the ``variables`` section, failing fast on misuse."""
+        if not isinstance(variables, dict):
+            raise ValueError("template provider 'variables' must be a mapping")
+        for name, value in variables.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError("template provider 'variables' keys must be non-empty strings")
+            if name in TemplateProvider._RESERVED_VARIABLES:
+                raise ValueError(
+                    f"template provider variable '{name}' conflicts with a built-in template variable"
+                )
+            if not isinstance(value, (str, int, float, bool)):
+                raise ValueError(
+                    f"template provider variable '{name}' must be a scalar (str/int/float/bool)"
+                )
+        return dict(variables)
+
     def render(self, language: str = "en", custom_words: list[str] | None = None) -> dict[str, Any]:
         """Render the blueprint. Side-effect free; shared by transcribe_file and provider-test."""
         ctx = {
             "API_KEY": self.api_key,
             "LANGUAGE": language,
             "CUSTOM_WORDS": list(custom_words or []),
-            "MODEL": self.spec.get("model", ""),
         }
         # The audio file forces multipart encoding, so `json` fields ride along as
         # additional multipart form fields; list values become repeated keys.
