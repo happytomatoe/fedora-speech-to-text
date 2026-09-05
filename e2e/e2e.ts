@@ -483,17 +483,21 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   let isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
   if (!isFocused) {
     console.log("  Terminal not focused, retrying with click + focus loop...");
-    await pollUntil(
-      "terminal focused",
-      async () => {
-        await shell.clickToFocus(640, 400);
-        await shell.focusTerminal();
-        isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
-        return isFocused;
-      },
-      5_000,
-      500,
-    );
+    try {
+      await pollUntil(
+        "terminal focused",
+        async () => {
+          await shell.clickToFocus(640, 400);
+          await shell.focusTerminal();
+          isFocused = await shell.verifyTerminalFocus(tmuxCfg.session, SSH_KEY, run.sshPort);
+          return isFocused;
+        },
+        5_000,
+        500,
+      );
+    } catch {
+      // pollUntil throws on timeout — fall back to the tolerant warning below.
+    }
     console.log(`  After retry: focused=${isFocused}`);
   }
   if (!isFocused) {
@@ -1455,7 +1459,10 @@ ATSPIEOF`;
             },
             5_000,
             100,
-          );
+          ).catch(() => {
+            // Entry not reachable after click — proceed anyway; the
+            // type-and-read verification below reports the failure.
+          });
           console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
         } else {
           console.log(`  entry extents implausible (${entryExt}) — skipping click, relying on dialog default focus`);
