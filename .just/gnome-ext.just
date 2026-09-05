@@ -45,7 +45,7 @@ gnome-ext-dev: reinstall gnome-ext-install
     # Also start AT-SPI accessibility bus for UI inspection.
     # Trap EXIT/INT/TERM to kill the background services when the shell exits,
     # Remove gnome-shell-disable-extensions file (disables all extensions in nested session)
-    rm -f /run/user/1000/gnome-shell-disable-extensions
+    rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/gnome-shell-disable-extensions"
     export LOG_FILE DEVKIT_FLAG
     dbus-run-session -- sh "$PWD/scripts/gnome-ext-dev-session.sh"
     echo "Logs written to $LOG_FILE"

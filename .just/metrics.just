@@ -1,5 +1,7 @@
 metrics:
     mkdir -p metrics-report
+    # Clear stale reports so a failed producer can't leave old data behind
+    rm -f metrics-report/*.json metrics-report/*.xml
     # Python: cyclomatic + Halstead + SLOC
     uv run radon cc -s -j src/ > metrics-report/radon-cc.json || true
     uv run radon hal src/ -j > metrics-report/radon-hal.json || true
