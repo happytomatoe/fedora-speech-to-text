@@ -43,7 +43,13 @@ def _load_manager() -> ConfigManager:
 
 
 def _mask(value: str, ctx: dict[str, Any]) -> str:
-    """Mask anything derived from the API key in rendered output."""
+    """Mask anything derived from the API key in rendered output.
+
+    Args:
+        value: Rendered value to mask.
+        ctx: Template context containing API_KEY.
+
+    """
     api_key = ctx.get("API_KEY") or ""
     if api_key and api_key in value:
         return value.replace(api_key, "****")
@@ -59,6 +65,15 @@ def _parse_value(raw: str) -> Any:
 
 
 def _print_blueprint(name: str, provider: TemplateProvider, language: str, words: list[str]) -> None:
+    """Print the dry-run request blueprint with API-key masking.
+
+    Args:
+        name: Provider config section name.
+        provider: Instantiated template provider.
+        language: LANGUAGE context value.
+        words: CUSTOM_WORDS context values.
+
+    """
     rendered = provider.render(language, words)
     print(f"Provider '{name}' (template)")
     print(f"POST {_mask(provider.endpoint, rendered['ctx'])}")
@@ -110,7 +125,12 @@ def _parse_value_flag(parsed: "_Args", flag: str, value: str) -> "_Args | int":
 
 
 def _parse_args(args: list[str]) -> "_Args | int":
-    """Parse argv. Returns _Args on success or exit code int on usage error."""
+    """Parse argv. Returns _Args on success or exit code int on usage error.
+
+    Args:
+        args: Command-line arguments (without the program name).
+
+    """
     parsed = _Args()
     i = 0
     while i < len(args):
@@ -135,7 +155,15 @@ def _parse_args(args: list[str]) -> "_Args | int":
 
 
 def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, Any]) -> "TemplateProvider | int":
-    """Find and instantiate the named template provider, or return an exit code."""
+    """Find and instantiate the named template provider, or return an exit code.
+
+    Args:
+        manager: Loaded configuration manager.
+        name: Provider config section name.
+        overrides: Variable overrides applied to the section (mutated: API_KEY
+            is popped and mapped to ``api_key``, the rest merge into ``variables``).
+
+    """
     if name not in manager.config:
         available = [k for k, v in manager.config.items() if isinstance(v, dict) and k != "transcription"]
         print(f"Unknown provider '{name}'. Configured: {available}", file=sys.stderr)
@@ -162,7 +190,15 @@ def _resolve_provider(manager: ConfigManager, name: str, overrides: dict[str, An
 
 
 def _send(provider: TemplateProvider, audio: str, language: str, words: list[str]) -> int:
-    """Send the audio file and print the transcription; returns exit code."""
+    """Send the audio file and print the transcription; returns exit code.
+
+    Args:
+        provider: Instantiated template provider.
+        audio: Path to the audio file.
+        language: LANGUAGE context value.
+        words: CUSTOM_WORDS context values.
+
+    """
     try:
         result = asyncio.run(provider.transcribe_file(audio, language, words))
     except httpx.HTTPError as exc:
@@ -177,7 +213,12 @@ def _send(provider: TemplateProvider, audio: str, language: str, words: list[str
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the provider-test CLI; returns the process exit code."""
+    """Run the provider-test CLI; returns the process exit code.
+
+    Args:
+        argv: Command-line arguments; defaults to sys.argv[1:].
+
+    """
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = list(sys.argv[1:] if argv is None else argv)
     parsed = _parse_args(args)

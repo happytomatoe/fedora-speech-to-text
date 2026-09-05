@@ -22,7 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 def _dig(obj: Any, dotted: str) -> Any:
-    """Walk a dotted path ('result.transcript' or 'segments.0.text') through nested dicts/lists."""
+    """Walk a dotted path ('result.transcript' or 'segments.0.text') through nested dicts/lists.
+
+    Args:
+        obj: Response object to descend into (nested dicts/lists).
+        dotted: Dotted path to the target value.
+
+    Raises:
+        TypeError: If the path descends into a non-container value.
+        (KeyError, IndexError): If a path segment does not exist.
+
+    """
     for part in dotted.split("."):
         if isinstance(obj, list) and part.lstrip("-").isdigit():
             obj = obj[int(part)]
@@ -47,7 +57,16 @@ class TemplateProvider(BatchProvider):
     """
 
     def __init__(self, config: dict[str, Any]):
-        """Initialize the template provider from the request blueprint config."""
+        """Initialize the template provider from the request blueprint config.
+
+        Args:
+            config: Provider config section (see class docstring for keys).
+
+        Raises:
+            ValueError: If 'endpoint' or a request body ('form'/'json') is
+                missing, or the ``variables`` section is invalid.
+
+        """
         if not config.get("endpoint"):
             raise ValueError("template provider requires 'endpoint'")
         if not (config.get("form") or config.get("json")):
@@ -62,6 +81,7 @@ class TemplateProvider(BatchProvider):
         self.env: Environment = NativeEnvironment()
 
         def _usable_header(source: str) -> bool:
+            """Return whether a header template is usable when no API key is configured."""
             # Key configured → always usable. Without a key, render with
             # API_KEY as a sentinel (ChainableUndefined keeps fallbacks like
             # `{{ API_KEY or 'public' }}` and `{% if API_KEY %}` working —
@@ -96,7 +116,19 @@ class TemplateProvider(BatchProvider):
 
     @staticmethod
     def _validate_variables(variables: Any) -> dict[str, Any]:
-        """Validate the ``variables`` section, failing fast on misuse."""
+        """Validate the ``variables`` section, failing fast on misuse.
+
+        Args:
+            variables: Raw ``variables`` config value.
+
+        Returns:
+            A copy of the validated mapping.
+
+        Raises:
+            ValueError: If it is not a mapping, keys are not non-empty strings,
+                names conflict with built-in variables, or values are not scalars.
+
+        """
         if not isinstance(variables, dict):
             raise ValueError("template provider 'variables' must be a mapping")
         for name, value in variables.items():
@@ -109,7 +141,18 @@ class TemplateProvider(BatchProvider):
         return dict(variables)
 
     def render(self, language: str = "en", custom_words: list[str] | None = None) -> dict[str, Any]:
-        """Render the blueprint. Side-effect free; shared by transcribe_file and provider-test."""
+        """Render the blueprint. Side-effect free; shared by transcribe_file and provider-test.
+
+        Args:
+            language: LANGUAGE context value.
+            custom_words: CUSTOM_WORDS context values.
+
+        Returns:
+            Dict with ``headers`` (rendered header values), ``fields`` (form
+            field name/value pairs, possibly with repeated names) and ``ctx``
+            (the full template context).
+
+        """
         ctx = {
             **self._variables,
             "API_KEY": self.api_key,
@@ -134,7 +177,21 @@ class TemplateProvider(BatchProvider):
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
-        """Transcribe an audio file by POSTing it to the templated endpoint."""
+        """Transcribe an audio file by POSTing it to the templated endpoint.
+
+        Args:
+            audio_path: Path to the audio file.
+            language: LANGUAGE context value.
+            custom_words: CUSTOM_WORDS context values.
+
+        Returns:
+            The transcript extracted from the response at ``response_text_path``.
+
+        Raises:
+            httpx.HTTPError: On request or HTTP status failures.
+            RuntimeError: If the transcript path is not found in the response.
+
+        """
         rendered = self.render(language, custom_words)
         # httpx AsyncClient rejects list-of-tuples `data=` payloads (mis-detects
         # them as a sync stream, httpx #3471) — pass a dict instead. Repeated

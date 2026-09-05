@@ -43,19 +43,6 @@ path — nothing is hardcoded. For example, a response of
 `segments.0.text` (integers index into lists). If the path doesn't match, the
 error message shows a snippet of the actual response so you can correct it.
 
-**YAML validation:** there is no universally adopted schema standard for YAML
-equivalent to JSON Schema, so this project doesn't ship one. Validation is done
-by `just config-check`, which verifies required keys, value types, and Jinja
-syntax. If you use VS Code, the YAML extension can associate a custom schema
-(via `yaml.schemas` in settings or a modeline) if you want editor
-autocomplete/validation, but none is bundled here. TOML has the same situation.
-
-**Why configure `api_key` here when the provider is chosen in GNOME
-preferences?** The extension preferences only select *which* provider is
-active; they never handle secrets. API keys live in `config.yaml` (or better,
-in an env var via `api_key_env`, or a `!command` lookup) so they stay out of
-the desktop UI, out of dconf, and out of screenshots.
-
 ## Context variables
 
 These variables are available in every template (`headers`, `form`, `json`):

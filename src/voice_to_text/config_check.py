@@ -37,7 +37,14 @@ VALID_TEMPLATE_KEYS = {
 
 
 def _compile_template(provider: str, location: str, value: str) -> list[str]:
-    """Try compiling one template value; return a finding on failure."""
+    """Try compiling one template value; return a finding on failure.
+
+    Args:
+        provider: Provider name for the finding message.
+        location: Dotted location of the value (e.g. "form.model").
+        value: The template source to compile.
+
+    """
     try:
         _NATIVE_ENV.from_string(value)
     except TemplateError as e:
@@ -46,6 +53,13 @@ def _compile_template(provider: str, location: str, value: str) -> list[str]:
 
 
 def _findings_for_template_provider(name: str, section: dict[str, Any]) -> list[str]:
+    """Validate one template provider section; returns human-readable findings.
+
+    Args:
+        name: Provider config section name.
+        section: The raw provider config mapping.
+
+    """
     findings: list[str] = []
     unknown = set(section) - VALID_TEMPLATE_KEYS
     if unknown:
@@ -77,7 +91,12 @@ def _load_manager() -> ConfigManager:
 
 
 def check_config(manager: ConfigManager) -> list[str]:
-    """Validate the whole config; returns a list of human-readable findings."""
+    """Validate the whole config; returns a list of human-readable findings.
+
+    Args:
+        manager: Loaded configuration manager.
+
+    """
     findings: list[str] = []
     selected = manager.get_selected_provider()
     sections = manager.config
