@@ -73,9 +73,9 @@ def main() -> int:
             x, y = float(rest[0]), float(rest[1])
             pointer_move(x, y)
             call(bus, RD_NAME, rd_path, RD_SESS_IFACE, "NotifyPointerButton",
-                 "(ub)", BTN_LEFT, True)
+                 "(ib)", BTN_LEFT, True)
             call(bus, RD_NAME, rd_path, RD_SESS_IFACE, "NotifyPointerButton",
-                 "(ub)", BTN_LEFT, False)
+                 "(ib)", BTN_LEFT, False)
         elif cmd == "wheel":
             # positive = scroll down
             call(bus, RD_NAME, rd_path, RD_SESS_IFACE,
