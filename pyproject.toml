@@ -76,6 +76,6 @@ dev = [
 
 [tool.mutmut]
 source_paths = ["src/voice_to_text/"]
-also_copy = ["config.yaml", "service/", "gnome-ext/"]
+also_copy = ["config.yaml", "service/", "gnome-ext/", "e2e/fixtures/"]
 # tests_dir is deprecated in mutmut 3.7+; pass test selection via pytest args instead
 pytest_add_cli_args_test_selection = ["tests/"]
