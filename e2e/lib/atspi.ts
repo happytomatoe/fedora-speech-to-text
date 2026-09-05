@@ -206,7 +206,9 @@ print("RESULT:" + str(scroll_to('${pyQuote(name)}', '${pyQuote(position)}')))
 }
 
 /** Scroll the prefs window to the bottom via AT-SPI Value on the vertical
- *  scrollbar. No pointer events -> no focus pollution of the modal dialog. */
+ *  scrollbar. No pointer events -> no focus pollution of the modal dialog.
+ *  Passes a numeric timeout so it works with LocalTransport (whose exec
+ *  second arg is milliseconds, not an options object). */
 export async function atspiScrollToBottom(
   deployer: ExecLike,
   timeoutMs = 15_000

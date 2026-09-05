@@ -2,6 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "e2e/e2e.ts",
+    "e2e/extensions/*/extension.js",
     "gnome-ext/extension.js",
     "gnome-ext/prefs.js",
     "gnome-ext/type-text-service.js",
@@ -34,7 +35,8 @@
   ],
   "ignore": [
     "gnome-ext/vendor/**",
-    "gnome-ext/**"
+    "gnome-ext/**",
+    "e2e/extensions/**"
   ],
   "ignoreExportsUsedInFile": true
 }

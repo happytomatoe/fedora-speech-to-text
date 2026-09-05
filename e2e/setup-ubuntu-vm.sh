@@ -33,49 +33,9 @@ if [ ! -f "$SEED" ]; then
   TMPD="$(mktemp -d)"
   trap 'rm -rf "$TMPD"' EXIT
   PUB="$(cat "$KEY.pub")"
-  cat > "$TMPD/user-data" <<EOF
-#cloud-config
-users:
-  - name: testuser
-    sudo: "ALL=(ALL) NOPASSWD:ALL"
-    groups: [sudo]
-    shell: /bin/bash
-    ssh_authorized_keys:
-      - $PUB
-ssh_pwauth: false
-packages:
-  - gdm3
-  - gnome-shell
-  - gnome-session
-  - glib2.0-bin
-  - mesa-utils
-  - libgl1-mesa-dri
-  - libgbm1
-  - dconf-gsettings-backend
-  - gsettings-desktop-schemas
-  - libportaudio2
-  - tmux
-  - dbus
-  - curl
-  - pulseaudio
-  - pulseaudio-utils
-runcmd:
-  - mkdir -p /etc/gdm3
-  - printf '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=testuser\nWaylandEnable=true\n' > /etc/gdm3/custom.conf
-  # gnome-session #190: profile state from a previous run can abort the session
-  # on next autologin; wipe it before GDM starts the session
-  - sh -c 'rm -rf ~testuser/.config/gnome-* ~testuser/.cache/gnome-shell ~testuser/.local/share/gnome-shell ~testuser/.local/state/gnome-shell'
-  # sshd PerSourcePenalties (default-on in OpenSSH 9.8+) penalizes the slirp
-  # NAT IP 10.0.2.2 when wait-ssh probes race cloud-init, dropping all host
-  # connections for the rest of the run
-  - printf 'PerSourcePenalties no\n' > /etc/ssh/sshd_config.d/60-e2e-nopenalties.conf
-  - systemctl reload ssh || systemctl restart ssh || true
-  - sh -c 'echo cloud-init-ready > /var/tmp/cloud-init-ready'
-EOF
-  cat > "$TMPD/meta-data" <<EOF
-instance-id: e2e-ubuntu-2604
-local-hostname: e2e-ubuntu
-EOF
+  # Seed files live next to this script; substitute the SSH pubkey.
+  sed "s|{{ SSH_PUBKEY }}|$PUB|" "$SUITE_DIR/user-data" > "$TMPD/user-data"
+  cp "$SUITE_DIR/meta-data" "$TMPD/meta-data"
   if command -v cloud-localds >/dev/null; then
     cloud-localds "$SEED" "$TMPD/user-data" "$TMPD/meta-data"
   else

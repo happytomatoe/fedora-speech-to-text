@@ -6,8 +6,10 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 function createSpinner(params) {
-    // St.SpinnerContent 在 GNOME 48 才加入；46 上既无 SpinnerContent 也无 St.Spinner。
-    // 转圈只是装饰，老 Shell 退化为静态图标即可，不影响 E2E 断言。
+    // St.SpinnerContent only exists since GNOME 48; on GNOME 46 neither
+    // SpinnerContent nor St.Spinner is available. The spinner is purely
+    // decorative — older shells fall back to a static icon, which does not
+    // affect E2E assertions.
     if (St.SpinnerContent) {
         const widget = new St.Widget({...params, reactive: false});
         widget.set_content(new St.SpinnerContent());

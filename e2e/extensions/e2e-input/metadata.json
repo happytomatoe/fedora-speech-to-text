@@ -1,0 +1,6 @@
+{
+  "uuid": "e2e-input@local",
+  "name": "E2E Input Injector",
+  "description": "Test-only: virtual keyboard injection over D-Bus",
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
+}
