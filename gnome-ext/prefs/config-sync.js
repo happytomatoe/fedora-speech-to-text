@@ -79,7 +79,9 @@ function writeConfigYaml(config) {
         // Strip group/other bits: config may hold API keys, never world-readable.
         if (m) mode = m & 0o600;
     } catch (e) {
-        console.warn(`[config-sync] stat failed on config file (using 0600 default): ${e instanceof Error ? e.message : e}`);
+        console.warn(
+            `[config-sync] stat failed on config file (using 0600 default): ${e instanceof Error ? e.message : e}`
+        );
         // File doesn't exist yet — keep the 0600 default.
     }
     const [ok] = file.replace_contents(
