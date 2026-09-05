@@ -51,7 +51,7 @@ Local:
 - Moonshine (streaming + batch, CPU-only)
 
 Custom:
-- [Template provider](docs/providers/template.md) — define your own provider in
+- [Template provider](docs/providers/add-custom-provider.md) — define your own provider in
   `config.yaml` for any OpenAI-compatible or custom HTTP STT server, including a
   step-by-step guide and troubleshooting.
 

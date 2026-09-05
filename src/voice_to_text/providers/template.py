@@ -4,7 +4,7 @@ The HTTP request is described declaratively in config.yaml as a Jinja2-templated
 blueprint. Context variables available in templates: API_KEY, LANGUAGE,
 CUSTOM_WORDS.
 
-Project docs: docs/providers/template.md
+Project docs: docs/providers/add-custom-provider.md
 """
 
 import logging
