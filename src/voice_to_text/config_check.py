@@ -114,7 +114,7 @@ def main() -> int:
     if path and os.path.isfile(path):
         try:
             with open(path) as f:
-                yaml.safe_load(f) or {}
+                yaml.safe_load(f)
         except yaml.YAMLError as e:
             print(f"FAIL: config YAML parse error: {e}", file=sys.stderr)
             return 1

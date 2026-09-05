@@ -121,6 +121,21 @@ def _resolve_provider(manager: ConfigManager, name: str) -> "TemplateProvider | 
     return provider
 
 
+def _send(provider: TemplateProvider, audio: str, language: str, words: list[str]) -> int:
+    """Send the audio file and print the transcription; returns exit code."""
+    try:
+        result = asyncio.run(provider.transcribe_file(audio, language, words))
+    except httpx.HTTPError as exc:
+        print(f"FAILED: request error: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"FAILED: {exc}", file=sys.stderr)
+        return 1
+    print("Transcription result:")
+    print(result)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the provider-test CLI; returns the process exit code."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -147,17 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Audio file not found: {audio}", file=sys.stderr)
         return 2
 
-    try:
-        result = asyncio.run(provider.transcribe_file(audio, parsed.language, parsed.words))
-    except (httpx.HTTPStatusError, httpx.HTTPError) as exc:
-        print(f"FAILED: request error: {exc}", file=sys.stderr)
-        return 1
-    except Exception as exc:
-        print(f"FAILED: {exc}", file=sys.stderr)
-        return 1
-    print("Transcription result:")
-    print(result)
-    return 0
+    return _send(provider, audio, parsed.language, parsed.words)
 
 
 if __name__ == "__main__":
