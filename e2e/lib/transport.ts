@@ -34,6 +34,7 @@ export interface SshSessionInfo {
   host: string;
 }
 
+/** Build a short ssh option string (host key off, key auth, port). */
 function sshOpts(session: SshSessionInfo): string {
   return `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${session.sshKey} -p ${session.sshPort}`;
 }
@@ -99,6 +100,7 @@ export class SshTransport implements Transport {
   }
 }
 
+/** Single-quote a string for safe shell interpolation. */
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
 }

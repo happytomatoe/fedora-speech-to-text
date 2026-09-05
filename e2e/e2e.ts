@@ -901,6 +901,10 @@ async function svcCmdline(
   return { cmdline, cwd };
 }
 
+/**
+ * Run preferences screenshot tests.
+ * Opens preferences and takes screenshots of each section.
+ */
 async function runPreferencesTests(vm: VmManager, run: RunContext): Promise<void> {
   console.log("\n📸 Running preferences screenshot tests...");
   

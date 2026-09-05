@@ -177,6 +177,7 @@ print("RESULT:" + str(dump_tree() or ""))
   }
 }
 
+/** Set the text of an accessible node found by name. */
 export async function setAtspiText(
   deployer: ExecLike,
   name: string,
