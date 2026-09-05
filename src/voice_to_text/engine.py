@@ -36,8 +36,6 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 2048
-PREROLL_BUFFER_SIZE = 33  # ~4 seconds at 2048 samples/frame, 16kHz
-PREROLL_MAX_FRAMES = PREROLL_BUFFER_SIZE * 3  # cap buffer growth to prevent memory issues
 
 
 class EngineState(Enum):
@@ -292,22 +290,11 @@ class RecordingEngine:
 
         raw_device = config.get("device")
         device = None if raw_device in (None, "", "__system_default__") else raw_device
-        vad_enabled = config.get("vad_enabled", engine_cfg.get("vad_enabled", True))
         recorder = AsyncAudioRecorder(
             device=device,
             sample_rate=SAMPLE_RATE,
-            vad_enabled=vad_enabled,
         )
         self._recorder = recorder
-
-        # Enable preroll buffer for batch mode only (not streaming)
-        preroll_config = config.get("preroll_enabled")
-        use_preroll = preroll_config if preroll_config is not None else not transcriber
-        recorder.enable_preroll(use_preroll)
-        if use_preroll:
-            logger.info("Preroll buffer enabled for batch mode")
-        if not vad_enabled:
-            logger.info("Silero VAD disabled via config")
 
         with SpeakerVolumeManager.with_decrease(decrease_pct):
             if self._cancel_event.is_set():
