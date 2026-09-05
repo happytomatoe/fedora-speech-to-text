@@ -183,7 +183,7 @@ export default class E2EInput {
     }
 
     disable() {
-        if (this._ownerId !== null) {
+        if (this._ownerId) {
             Gio.bus_unown_name(this._ownerId);
             this._ownerId = null;
         }

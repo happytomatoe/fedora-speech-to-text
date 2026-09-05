@@ -76,7 +76,8 @@ function writeConfigYaml(config) {
             null
         );
         const m = info.get_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE);
-        if (m) mode = m;
+        // Strip group/other bits: config may hold API keys, never world-readable.
+        if (m) mode = m & 0o600;
     } catch (e) {
         // File doesn't exist yet — keep the 0600 default.
     }
@@ -137,6 +138,8 @@ function typeMatches(type, val) {
             return typeof val === 'string';
         case 'strv':
             return Array.isArray(val);
+        case 'boolean':
+            return typeof val === 'boolean';
         default:
             return false;
     }
@@ -195,6 +198,8 @@ function syncSetting(settings, gkey, type, cfgVal) {
         gsetVal = settings.get_int(gkey);
     } else if (type === 'double') {
         gsetVal = settings.get_double(gkey);
+    } else if (type === 'boolean') {
+        gsetVal = settings.get_boolean(gkey);
     } else {
         gsetVal = settings.get_string(gkey);
     }
@@ -202,6 +207,7 @@ function syncSetting(settings, gkey, type, cfgVal) {
     if (settings.get_user_value(gkey) === null && gsetVal !== cfgVal) {
         if (type === 'int') settings.set_int(gkey, cfgVal);
         else if (type === 'double') settings.set_double(gkey, cfgVal);
+        else if (type === 'boolean') settings.set_boolean(gkey, cfgVal);
         else settings.set_string(gkey, cfgVal);
         gsetVal = cfgVal;
     }
@@ -225,6 +231,7 @@ export function syncToConfig(settings) {
         if (type === 'strv') value = settings.get_strv(gkey);
         else if (type === 'int') value = settings.get_int(gkey);
         else if (type === 'double') value = settings.get_double(gkey);
+        else if (type === 'boolean') value = settings.get_boolean(gkey);
         else value = settings.get_string(gkey);
         setConfigValue(config, path, value);
     }

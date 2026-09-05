@@ -571,8 +571,19 @@ async function runTestFlow(vm: VmManager, run: RunContext): Promise<void> {
   beginSpan("stop-recording");
   console.log("Stopping recording via hotkey...");
   await shell.sendHotkey();
-  // Poll until recording state clears (sendHotkey is synchronous via D-Bus)
-  await Bun.sleep(200); // Brief settle for D-Bus round-trip
+  await vm.pollUntil(
+    "recording stopped",
+    async () => {
+      try {
+        const out = await shell.getVoiceServiceStatus();
+        return out.includes("idle");
+      } catch {
+        return false;
+      }
+    },
+    10_000,
+    100,
+  );
   endSpan();
 
   // Basic test complete. Close the terminal so it doesn't appear in the preferences screenshots.
@@ -1198,11 +1209,9 @@ async function runBareMode(): Promise<void> {
           }
           await transport.exec(`printf '%s\n%s\n' '${cellStartIso}' "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" > '${cellsDir}/${cellLabel}/window.txt'`, 5_000);
         }
-        const shotBase = process.env.VOX_CI_E2E_SHOT_AFTER;
-        if (shotBase) {
-          // Per-cell after-shot only — the top-level -after-<cell>.png copy was
-          // byte-identical to the cell's own after.png (duplicate artifact).
-          const caseShot = `${cellsDir}/${cellLabel}/after.png`;
+        if (process.env.VOX_CI_E2E_SHOT_AFTER && !cellsDir) {
+          // SHOT_AFTER-only run (no cells dir): keep the per-cell after-shot.
+          const caseShot = `${process.env.VOX_CI_E2E_SHOT_AFTER.replace(/\.png$/, "")}-${cellLabel}.png`;
           await transport.exec(
             `gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.Screenshot true false '${caseShot}'`,
             10_000,
@@ -1247,7 +1256,7 @@ async function runBareMode(): Promise<void> {
       await run(`dbus-send --session --print-reply --dest=com.happytomatoe.VoiceToText --type=method_call /com/happytomatoe/VoiceToText com.happytomatoe.VoiceToText.OpenPrefs 2>&1`, 15_000);
       // OpenExtensionPrefs signature: (s uuid, s parent_window, a{sv} options).
       await run(`dbus-send --session --print-reply --dest=org.gnome.Shell.Extensions --type=method_call /org/gnome/Shell/Extensions org.gnome.Shell.Extensions.OpenExtensionPrefs string:"voice-to-text@happytomatoe.com" string:"" dict:string:variant: 2>&1`, 15_000);
-      const execLike = { exec: (cmd: string, opts?: Record<string, unknown>) => transport.exec(cmd, (opts?.timeout as number) ?? 15_000) };
+      const execLike = { exec: (cmd: string, timeoutMs?: number) => transport.exec(cmd, timeoutMs ?? 15_000) };
       await waitForAtspiNode(execLike, { name: "Voice to Text", role: "frame", timeoutMs: 20000 });
       const t0 = await transport.exec(
         `python3 - <<'ATSPIEOF'
@@ -1392,10 +1401,17 @@ ATSPIEOF`;
         .then(r => r.stdout.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "no-result");
       if (entryExt.includes(",")) {
         const [ex, ey, ew, eh] = entryExt.split(",").map(Number);
-        if ([ex, ey, ew, eh].every(v => Number.isFinite(v)) && ew > 0 && eh > 0) {
+        // A y near the top edge means the extents are bogus (top bar / wrong
+        // origin) — clicking there opens the overview and steals keyboard
+        // focus, sending TypeText into the shell search instead (run 33961390474).
+        const plausible = [ex, ey, ew, eh].every(v => Number.isFinite(v)) &&
+          ew > 0 && eh > 0 && ey > 40 && ey + eh < CI_HEIGHT;
+        if (plausible) {
           await remoteInput(`click ${ex + ew / 2} ${ey + eh / 2}`);
           await Bun.sleep(300);
           console.log(`  clicked entry at (${ex + ew / 2}, ${ey + eh / 2})`);
+        } else {
+          console.log(`  entry extents implausible (${entryExt}) — skipping click, relying on dialog default focus`);
         }
       } else {
         console.log(`  entry extents unavailable: ${entryExt} — typing without click-focus`);

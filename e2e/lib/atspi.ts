@@ -23,7 +23,7 @@ export interface Extents {
 interface ExecLike {
   exec: (
     cmd: string,
-    opts?: Record<string, unknown>
+    timeoutMs?: number
   ) => Promise<string | { stdout: string; stderr: string; code: number }>;
 }
 
@@ -218,7 +218,7 @@ ATSPIEOF`;
   const start = Date.now();
   let last = "";
   while (Date.now() - start < timeoutMs) {
-    const out = await deployer.exec(script, { timeout: 20_000 }).then(r =>
+    const out = await deployer.exec(script, 20_000).then(r =>
       typeof r === "string" ? r : r.stdout
     );
     const res = out.split("\n").find(l => l.startsWith("RESULT:"))?.slice(7) ?? "";
