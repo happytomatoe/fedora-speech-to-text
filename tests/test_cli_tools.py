@@ -141,7 +141,8 @@ transcription:
 parakeet:
   type: builtin
   http_endpoint: http://localhost:5092
-"""
+""",
+            monkeypatch,
         )
         try:
             assert main(["parakeet"]) == 2  # type: ignore[arg-type]
