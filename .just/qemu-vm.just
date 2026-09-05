@@ -474,8 +474,20 @@ ubuntu-vm-parakeet:
     set -euo pipefail
     RUNTIME=docker
     command -v docker >/dev/null 2>&1 || RUNTIME=podman
+    # Provision model files first — the container can pass /health without
+    # models, but transcription would fail (mirrors e2e/lib/parakeet.ts).
+    MODELS_DIR="${HOME}/parakeet/models"
+    mkdir -p "$MODELS_DIR"
+    if [ ! -f "$MODELS_DIR/config.json" ]; then
+      echo "Downloading Parakeet models (first run on this host)..."
+      BASE="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main"
+      for f in config.json vocab.txt encoder-model.int8.onnx decoder_joint-model.int8.onnx; do
+        curl -sfL -o "$MODELS_DIR/$f" "$BASE/$f"
+      done
+    fi
     $RUNTIME rm -f parakeet-e2e-parity >/dev/null 2>&1 || true
     $RUNTIME run -d --name parakeet-e2e-parity --network host \
+      -v "$MODELS_DIR":/models:Z \
       ghcr.io/achetronic/parakeet:latest > /dev/null
     for i in $(seq 1 60); do
       curl -sf http://localhost:5092/health >/dev/null && { echo "Parakeet ready"; exit 0; }

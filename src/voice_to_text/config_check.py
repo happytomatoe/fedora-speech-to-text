@@ -9,11 +9,12 @@ import os
 import sys
 from typing import Any
 
+import yaml
 from jinja2 import TemplateError
 from jinja2.nativetypes import NativeEnvironment
 
 from voice_to_text.config import ConfigManager
-from voice_to_text.providers import get_batch_provider
+from voice_to_text.providers import _BATCH_PROVIDERS, get_batch_provider
 
 _NATIVE_ENV = NativeEnvironment()
 
@@ -54,13 +55,16 @@ def _findings_for_template_provider(name: str, section: dict[str, Any]) -> list[
     path = section.get("response_text_path", "text")
     if not isinstance(path, str) or not path or any(not p for p in path.split(".")):
         findings.append(f"provider '{name}': invalid response_text_path {path!r}")
-    for key in ("headers", "form"):
-        for k, v in section.get(key, {}).items():
+    for key in ("headers", "form", "json"):
+        body = section.get(key)
+        if body is None:
+            continue
+        if not isinstance(body, dict):
+            findings.append(f"provider '{name}': {key} must be a mapping, got {type(body).__name__}")
+            continue
+        for k, v in body.items():
             if isinstance(v, str):
                 findings.extend(_compile_template(name, f"{key}.{k}", v))
-    for k, v in section.get("json", {}).items():
-        if isinstance(v, str):
-            findings.extend(_compile_template(name, f"json.{k}", v))
     return findings
 
 
@@ -75,10 +79,12 @@ def check_config(manager: ConfigManager) -> list[str]:
     findings: list[str] = []
     selected = manager.get_selected_provider()
     sections = manager.config
-    # Only flag a missing section when other provider sections exist (built-in
-    # providers like groq work from env vars alone and need no section).
-    provider_sections = [k for k, v in sections.items() if isinstance(v, dict) and k != "transcription"]
-    if selected not in sections and provider_sections:
+    # Only flag a missing section when it's genuinely unknown: built-in
+    # providers work from env vars alone, and template sections are validated
+    # below. A misspelled selected provider with no other sections must still
+    # be reported.
+    builtin_providers = set(_BATCH_PROVIDERS) - {"template"}
+    if selected not in sections and selected not in builtin_providers:
         findings.append(f"transcription.provider '{selected}' has no config section")
     for name, section in sections.items():
         if not isinstance(section, dict) or section.get("type") != "template":
@@ -101,6 +107,17 @@ def check_config(manager: ConfigManager) -> list[str]:
 def main() -> int:
     """Run the config-check CLI; returns the process exit code."""
     logging.basicConfig(level=logging.WARNING)
+    # Validate the raw YAML first: ConfigManager silently swallows parse
+    # errors into an empty config, which would make a broken config file
+    # pass as "config OK" here.
+    path = os.environ.get("VOICE_TO_TEXT_CONFIG")
+    if path and os.path.isfile(path):
+        try:
+            with open(path) as f:
+                yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            print(f"FAIL: config YAML parse error: {e}", file=sys.stderr)
+            return 1
     try:
         manager = _load_manager()
     except Exception as e:
