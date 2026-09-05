@@ -81,7 +81,7 @@ function writeConfigYaml(config) {
     } catch (e) {
         if (e instanceof Gio.IOErrorEnum && e.code === Gio.IOErrorEnum.NOT_FOUND) {
             // File doesn't exist yet — normal first run, keep the 0600 default.
-            console.log(`[config-sync] no config file yet — using 0600 default`);
+            console.debug(`[config-sync] no config file yet — using 0600 default`);
         } else {
             console.warn(
                 `[config-sync] stat failed on config file (using 0600 default): ${e instanceof Error ? e.message : e}`
