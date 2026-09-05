@@ -12,8 +12,7 @@ import os
 from typing import Any
 
 import httpx
-from jinja2 import Environment, StrictUndefined, Template
-from jinja2.exceptions import UndefinedError
+from jinja2 import ChainableUndefined, Environment, Template
 from jinja2.nativetypes import NativeEnvironment
 
 from .base import BatchProvider, get_shared_client, resolve_api_key
@@ -64,23 +63,23 @@ class TemplateProvider(BatchProvider):
 
         def _usable_header(source: str) -> bool:
             # Key configured → always usable. Without a key, render with
-            # API_KEY undefined (StrictUndefined): a bare "{{ API_KEY }}"
-            # raises UndefinedError → skip the header (an unfilled "Bearer "
-            # would be an illegal header value), while
-            # "{{ API_KEY | default(...) }}" resolves to its fallback → keep.
+            # API_KEY as a sentinel (ChainableUndefined keeps fallbacks like
+            # `{{ API_KEY or 'public' }}` and `{% if API_KEY %}` working —
+            # StrictUndefined would raise on the truthiness check and drop
+            # legitimate no-key-friendly headers). If the sentinel survives
+            # into the output, the header depends on a bare unresolved
+            # API_KEY → skip it (an unfilled "Bearer " would be an illegal
+            # header value).
             if self.api_key != "":
                 return True
             if "API_KEY" not in source:
                 return True
-            try:
-                rendered = str(
-                    NativeEnvironment(undefined=StrictUndefined)
-                    .from_string(source)
-                    .render(LANGUAGE="", MODEL="", CUSTOM_WORDS=[])
-                )
-            except UndefinedError:
-                return False
-            return rendered != ""
+            sentinel = "__UNRESOLVED_API_KEY__"
+            env = NativeEnvironment(undefined=ChainableUndefined)
+            rendered = str(
+                env.from_string(source).render(API_KEY=sentinel, LANGUAGE="", MODEL="", CUSTOM_WORDS=[])
+            )
+            return sentinel not in rendered and rendered.strip() != ""
 
         self._header_tmpl: dict[str, Template] = {
             k: self.env.from_string(v) for k, v in config.get("headers", {}).items() if _usable_header(str(v))
@@ -124,10 +123,22 @@ class TemplateProvider(BatchProvider):
         """Transcribe an audio file by POSTing it to the templated endpoint."""
         rendered = self.render(language, custom_words)
         # httpx AsyncClient rejects list-of-tuples `data=` payloads (mis-detects
-        # them as a sync stream, httpx #3471) — pass a dict instead.
-        data = dict(rendered["fields"])
+        # them as a sync stream, httpx #3471) — pass a dict instead. Repeated
+        # keys (list-valued json fields) can't live in a dict, so they ride in
+        # `files=` as (name, (None, value)) tuples, which httpx encodes as
+        # additional multipart fields.
+        data: dict[str, str] = {}
+        repeated: list[tuple[str, tuple[None, str]]] = []
+        seen: set[str] = set()
+        for k, v in rendered["fields"]:
+            if k in seen:
+                repeated.append((k, (None, v)))
+            else:
+                seen.add(k)
+                data[k] = v
         with open(audio_path, "rb") as f:
-            files = {"file": (os.path.basename(audio_path), f, "audio/wav")}
+            files: list[tuple[str, Any]] = [("file", (os.path.basename(audio_path), f, "audio/wav"))]
+            files.extend(repeated)
             logger.info("Template POST %s (%d form fields)", self.endpoint, len(rendered["fields"]))
             try:
                 response = await self._client.post(
