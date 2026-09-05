@@ -46,7 +46,7 @@ class GroqProvider(BatchProvider):
                 kwargs["prompt"] = ", ".join(custom_words)
             transcription = await self.client.audio.transcriptions.create(**kwargs)
             result = str(transcription).strip()
-            logger.info("Transcription result: %s", result[:100])
+            logger.debug("Transcription result: %s", result[:100])
             return result
         except Exception:
             logger.exception("Groq transcription API call failed")

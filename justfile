@@ -1054,6 +1054,9 @@ _e2e-run E2E_ENV *ARGS:
       exit ${PIPESTATUS[0]}
     fi
 
+e2e *ARGS:
+    just _e2e-run fedora-local {{ ARGS }}
+
 e2e-fedora-local *ARGS:
     just _e2e-run fedora-local {{ ARGS }}
 

@@ -121,7 +121,7 @@ async def handle_debug_recording(  # noqa: C901, PLR0912
                     custom_filler_words=postprocess_cfg.get("custom_filler_words"),
                 )
 
-        logger.info("DEBUG MODE: Transcription result: %s", text[:100] if text else "(empty)")
+        logger.debug("DEBUG MODE: Transcription result: %s", text[:100] if text else "(empty)")
         return text
 
     finally:

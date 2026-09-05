@@ -657,18 +657,6 @@ export async function startVoiceService(
   const outputMethod = cfg.outputMethod || 'type';
   console.log(`  Using output method: ${outputMethod}`);
 
-  // Sanity probe: confirm the deployed source has an entrypoint and the
-  // interpreter is present BEFORE we start it blind. Surfaces path/version
-  // mistakes instead of a silent 60s bus-name timeout.
-  try {
-    const probe = await shell.exec(
-      "ls -la $HOME/voice_to_text/src/voice_to_text/__main__.py 2>&1; " +
-      "python3 --version 2>&1; cat $HOME/.config/voice-to-text/config.yaml 2>&1 | head -20"
-    );
-    console.log("  source probe:\n" + probe.trim().split("\n").map((l) => "    " + l).join("\n"));
-  } catch (e) {
-    console.warn(`  (source probe failed: ${(e as Error).message})`);
-  }
 
   // Use $HOME (not ~) — tilde doesn't expand inside a scalar assignment under
   // dash/sh, so PYTHONPATH=~/voice_to_text/src would be taken literally and
