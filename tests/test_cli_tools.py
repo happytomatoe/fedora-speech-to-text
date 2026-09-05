@@ -76,7 +76,7 @@ class TestCheckConfig:
     def test_null_headers_reported(self, monkeypatch):
         config = VALID_TEMPLATE_CONFIG.replace(
             '  headers:\n    Authorization: "Bearer {{ API_KEY }}"\n',
-            '  headers: null\n',
+            "  headers: null\n",
         )
         path = _write_config(config, monkeypatch)
         try:
