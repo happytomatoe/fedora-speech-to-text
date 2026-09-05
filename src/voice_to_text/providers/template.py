@@ -78,9 +78,7 @@ class TemplateProvider(BatchProvider):
             return "API_KEY" not in rendered and rendered != ""
 
         self._header_tmpl: dict[str, Template] = {
-            k: self.env.from_string(v)
-            for k, v in config.get("headers", {}).items()
-            if _usable_header(str(v))
+            k: self.env.from_string(v) for k, v in config.get("headers", {}).items() if _usable_header(str(v))
         }
         self._form_tmpl: dict[str, Template] = {
             k: self.env.from_string(str(v)) for k, v in config.get("form", {}).items()
