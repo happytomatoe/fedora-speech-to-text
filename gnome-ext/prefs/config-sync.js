@@ -56,6 +56,26 @@ function readConfigYaml() {
     }
 }
 
+/**
+ * Names of user-defined provider sections in config.yaml with
+ * `type: batch_custom`. These are valid transcription.provider values and are
+ * shown as "name (custom)" entries.
+ * @returns {string[]}
+ */
+export function readCustomProviderNames() {
+    const config = readConfigYaml();
+    if (!config) return [];
+    return Object.entries(config)
+        .filter(
+            ([key, value]) =>
+                value !== null &&
+                typeof value === 'object' &&
+                !Array.isArray(value) &&
+                value.type === 'batch_custom'
+        )
+        .map(([key]) => key);
+}
+
 function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     const parent = file.get_parent();
@@ -79,12 +99,24 @@ function writeConfigYaml(config) {
         // Strip group/other bits: config may hold API keys, never world-readable.
         if (m) mode = m & 0o600;
     } catch (e) {
-        if (e instanceof Gio.IOErrorEnum && e.code === Gio.IOErrorEnum.NOT_FOUND) {
+        if (
+            e instanceof Gio.IOErrorEnum &&
+            e.code === Gio.IOErrorEnum.NOT_FOUND
+        ) {
             // File doesn't exist yet — normal first run, keep the 0600 default.
-            console.debug(`[config-sync] no config file yet — using 0600 default`);
+            console.debug(
+                `[config-sync] no config file yet — using 0600 default`
+            );
         } else {
-            const msg = e instanceof Gio.IOErrorEnum ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e);
-            console.warn(`[config-sync] stat failed on config file (using 0600 default): ${msg}`);
+            const msg =
+                e instanceof Gio.IOErrorEnum
+                    ? `${e.code}: ${e.message}`
+                    : e instanceof Error
+                      ? e.message
+                      : String(e);
+            console.warn(
+                `[config-sync] stat failed on config file (using 0600 default): ${msg}`
+            );
         }
     }
     const [ok] = file.replace_contents(

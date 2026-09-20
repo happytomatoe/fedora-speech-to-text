@@ -12,6 +12,7 @@ dependencies = [
   "httpx~=0.28.0",
   "websockets~=14.0",
   "dbus-next~=0.2.3",
+  "jinja2>=3.1",
   "mistralai[realtime]~=2.4,!=2.4.6",
   "moonshine-voice~=0.1.1",
 ]
@@ -70,11 +71,12 @@ dev = [
     "radon>=6.0.1",
     "complexipy>=7.0.1",
     "pytest-cov>=7.1.0",
+    "pytest-httpserver>=1.1.0",
     "mutmut>=3.7.0",
 ]
 
 [tool.mutmut]
 source_paths = ["src/voice_to_text/"]
-also_copy = ["config.yaml", "service/", "gnome-ext/"]
+also_copy = ["config.yaml", "service/", "gnome-ext/", "e2e/fixtures/"]
 # tests_dir is deprecated in mutmut 3.7+; pass test selection via pytest args instead
 pytest_add_cli_args_test_selection = ["tests/"]

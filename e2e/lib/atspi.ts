@@ -189,7 +189,13 @@ print("RESULT:" + str(set_text_by_name('${pyQuote(name)}', '${pyQuote(text)}') o
 `;
   const out = await execPython(deployer, script);
   if (parseResult(out) !== "ok") {
-    throw new Error(`AT-SPI: no Text node '${name}' to set '${text}'`);
+    // Debug: list Text-interface nodes so name/role mismatches are diagnosable
+    const dump = await execPython(deployer, `${ATSPI_PY}
+print("RESULT:" + str(dump_tree() or ""))
+`);
+    throw new Error(
+      `AT-SPI: no Text node '${name}' to set '${text}' — tree: ${parseResult(dump).slice(0, 2000)}`
+    );
   }
 }
 

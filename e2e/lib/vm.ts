@@ -34,6 +34,7 @@ export interface VmConfig {
   testAudioFile: string;
   outputMethod?: string;
   skipDeps?: boolean;
+  configFixture?: string;
   /** Environment abstraction — OS/boot specifics live here. */
   env: SuiteEnv;
   /** Attach to an already-running VM instead of booting (CI-failure repro). */
@@ -81,6 +82,7 @@ export class VmManager {
       extensionUuid: config.extensionUuid,
       testAudioFile: config.testAudioFile,
       outputMethod: config.outputMethod,
+      configFixture: config.configFixture,
       env: config.env,
     };
   }

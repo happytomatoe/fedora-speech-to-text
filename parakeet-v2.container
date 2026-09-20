@@ -1,0 +1,16 @@
+# Quadlet unit for the Parakeet v2 transcription server (see parakeet-v2.sh).
+# Install with: just parakeet-start-on-boot
+[Unit]
+Description=Parakeet v2 transcription server (port 5092)
+
+[Container]
+Image=ghcr.io/achetronic/parakeet:latest
+ContainerName=parakeet-v2
+PublishPort=5092:5092
+Volume=%h/parakeet/models:/models:Z
+
+[Service]
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

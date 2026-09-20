@@ -14,6 +14,7 @@ export interface RunConfig {
   testAudioFile: string;
   recordMode?: boolean;
   updateMode?: boolean;
+  configFixture?: string;
   /** Attach to an existing VM instead of allocating a fresh port. */
   existingSshPort?: number;
   /** Preserve run artifacts into output/ on cleanup. */

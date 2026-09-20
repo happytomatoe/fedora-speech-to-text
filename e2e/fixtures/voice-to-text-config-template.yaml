@@ -1,0 +1,19 @@
+# E2E fixture: template provider against the Parakeet container.
+# Same server as voice-to-text-config.yaml but reached through the
+# batch_custom provider — proves the custom provider path end-to-end.
+# Deploy with `--config voice-to-text-config-template.yaml` (see e2e/e2e.ts arg parsing).
+transcription:
+  provider: parakeet-template
+
+parakeet-template:
+  type: batch_custom
+  endpoint: http://10.0.2.2:5092/v1/audio/transcriptions
+  variables:
+    MODEL: whisper-1
+  form:
+    model: "{{ MODEL }}"
+
+custom_words:
+  - herdr
+  - command
+  - PR

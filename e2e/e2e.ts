@@ -124,6 +124,11 @@ const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
 const outputMethodIdx = args.indexOf("--output-method");
 const OUTPUT_METHOD = outputMethodIdx >= 0 ? args[outputMethodIdx + 1] : "type";
 
+// Parse --config <fixture-file> (deploy a specific config fixture, e.g.
+// voice-to-text-config-template.yaml to run through the custom provider)
+const configIdx = args.indexOf("--config");
+const CONFIG_FIXTURE = configIdx >= 0 ? args[configIdx + 1] : "voice-to-text-config.yaml";
+
 // Parse --parallel <n> (run n VMs in parallel)
 const parallelIdx = args.indexOf("--parallel");
 const PARALLEL_VMS = parallelIdx >= 0 ? parseInt(args[parallelIdx + 1]) || 1 : 1;
@@ -1903,6 +1908,7 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     recordMode: RECORD_MODE,
     updateMode: UPDATE_MODE,
+    configFixture: CONFIG_FIXTURE,
     existingSshPort: USE_EXISTING && IS_UBUNTU ? SUITE_ENV.existingSshPort : undefined,
     preserveArtifacts: true,
   });
@@ -1925,6 +1931,7 @@ async function main(): Promise<void> {
     testAudioFile: join(import.meta.dir, "fixtures", CURRENT_TEST.file),
     outputMethod: OUTPUT_METHOD,
     skipDeps: SKIP_DEPS,
+    configFixture: CONFIG_FIXTURE,
     env: SUITE_ENV,
     useExisting: USE_EXISTING,
   };
@@ -1968,6 +1975,7 @@ async function main(): Promise<void> {
       recordMode: RECORD_MODE,
       updateMode: UPDATE_MODE,
       skipDeps: SKIP_DEPS,
+      configFixture: CONFIG_FIXTURE,
       env: SUITE_ENV,
     });
     
