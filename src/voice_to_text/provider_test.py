@@ -53,6 +53,13 @@ def _mask(value: str, ctx: dict[str, Any]) -> str:
     api_key = ctx.get("API_KEY") or ""
     if api_key and api_key in value:
         return value.replace(api_key, "****")
+    # Check for transformed key (reversed, sliced, etc.) by looking
+    # for a substring overlap with the API key.
+    substr_len = 4
+    if api_key and len(value) >= substr_len:
+        for i in range(len(value) - substr_len + 1):
+            if value[i : i + substr_len] in api_key:
+                return "****"
     return value
 
 

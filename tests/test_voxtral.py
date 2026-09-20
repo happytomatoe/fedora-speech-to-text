@@ -1,5 +1,10 @@
 """Tests for Voxtral provider."""
 
+import os
+import tempfile
+from unittest.mock import MagicMock, patch
+
+import httpx
 import pytest
 
 from voice_to_text.providers import get_batch_provider
@@ -21,8 +26,6 @@ class TestVoxtralProvider:
 
     def test_provider_name_passed_to_resolve(self):
         """Verify provider_name='voxtral' is passed to resolve_api_key."""
-        from unittest.mock import patch
-
         with patch("voice_to_text.providers.voxtral.resolve_api_key") as mock_resolve:
             mock_resolve.return_value = "test_key"
             config = {"api_key": "test_key"}
@@ -106,6 +109,131 @@ class TestVoxtralProvider:
 
         finally:
             os.unlink(tmp_path)
+            if old_voxtral_key is not None:
+                os.environ["VOXTRAL_API_KEY"] = old_voxtral_key
+            if old_mistral_key is not None:
+                os.environ["MISTRAL_API_KEY"] = old_mistral_key
+
+
+class TestRetryBehavior:
+    @pytest.mark.asyncio
+    async def test_retry_on_429_then_success(self):
+        """429 followed by 200 should succeed after retry."""
+        old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
+        old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
+        try:
+            mock_response_ok = MagicMock()
+            mock_response_ok.raise_for_status.return_value = None
+            mock_response_ok.json.return_value = {"text": "retry success"}
+
+            config = {"api_key": "test_key"}
+            provider = VoxtralProvider(config)
+            calls = [0]
+
+            async def _fake_post(url, **kwargs):
+                calls[0] += 1
+                if calls[0] == 1:
+                    raise httpx.HTTPStatusError("429", request=MagicMock(), response=MagicMock(status_code=429))
+                return mock_response_ok
+
+            provider._client.post = _fake_post  # type: ignore[assignment]
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(b"RIFF....WAVEfmt ")
+                tmp_path = tmp.name
+
+            try:
+                with (
+                    patch(
+                        "voice_to_text.providers.voxtral.asyncio.sleep",
+                        return_value=None,
+                    ),
+                    patch("voice_to_text.providers.voxtral.Notify") as mock_notify,
+                ):
+                    result = await provider.transcribe_file(tmp_path)
+                    assert result == "retry success"
+                    assert calls[0] == 2
+                    assert mock_notify.Notification.new.called
+            finally:
+                os.unlink(tmp_path)
+        finally:
+            if old_voxtral_key is not None:
+                os.environ["VOXTRAL_API_KEY"] = old_voxtral_key
+            if old_mistral_key is not None:
+                os.environ["MISTRAL_API_KEY"] = old_mistral_key
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_401(self):
+        """401 should fail immediately without retry."""
+        old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
+        old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
+        try:
+            config = {"api_key": "test_key"}
+            provider = VoxtralProvider(config)
+            calls = [0]
+
+            async def _fake_post(url, **kwargs):
+                calls[0] += 1
+                raise httpx.HTTPStatusError("401", request=MagicMock(), response=MagicMock(status_code=401))
+
+            provider._client.post = _fake_post  # type: ignore[assignment]
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(b"RIFF....WAVEfmt ")
+                tmp_path = tmp.name
+
+            try:
+                with pytest.raises(RuntimeError, match="401"):
+                    await provider.transcribe_file(tmp_path)
+                assert calls[0] == 1
+            finally:
+                os.unlink(tmp_path)
+        finally:
+            if old_voxtral_key is not None:
+                os.environ["VOXTRAL_API_KEY"] = old_voxtral_key
+            if old_mistral_key is not None:
+                os.environ["MISTRAL_API_KEY"] = old_mistral_key
+
+    @pytest.mark.asyncio
+    async def test_notification_on_retry(self):
+        """Desktop notification is triggered on 429 retry."""
+        old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
+        old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
+        try:
+            mock_response_ok = MagicMock()
+            mock_response_ok.raise_for_status.return_value = None
+            mock_response_ok.json.return_value = {"text": "ok"}
+
+            config = {"api_key": "test_key"}
+            provider = VoxtralProvider(config)
+            calls = [0]
+
+            async def _fake_post(url, **kwargs):
+                calls[0] += 1
+                if calls[0] == 1:
+                    raise httpx.HTTPStatusError("429", request=MagicMock(), response=MagicMock(status_code=429))
+                return mock_response_ok
+
+            provider._client.post = _fake_post  # type: ignore[assignment]
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(b"RIFF....WAVEfmt ")
+                tmp_path = tmp.name
+
+            try:
+                with (
+                    patch("voice_to_text.providers.voxtral.Notify") as mock_notify,
+                    patch(
+                        "voice_to_text.providers.voxtral.asyncio.sleep",
+                        return_value=None,
+                    ),
+                ):
+                    result = await provider.transcribe_file(tmp_path)
+                    assert result == "ok"
+                    assert mock_notify.Notification.new.called
+            finally:
+                os.unlink(tmp_path)
+        finally:
             if old_voxtral_key is not None:
                 os.environ["VOXTRAL_API_KEY"] = old_voxtral_key
             if old_mistral_key is not None:
