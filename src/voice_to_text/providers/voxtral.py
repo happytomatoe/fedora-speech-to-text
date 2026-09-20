@@ -12,6 +12,16 @@ import os
 import threading
 from typing import Any
 
+try:
+    import gi  # pyright: ignore[reportMissingImports]
+
+    gi.require_version("Notify", "0.7")
+    from gi.repository import Notify  # pyright: ignore[reportMissingImports]
+
+    Notify.init("voice-to-text")
+except (ImportError, ValueError):
+    Notify = None  # type: ignore
+
 import httpx
 
 from .base import AsyncKeyMixin, BatchProvider, StreamingProvider, get_shared_client, resolve_api_key
@@ -20,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 # HTTP status codes
 _HTTP_UNAUTHORIZED = 401
+_HTTP_RETRYABLE = 429
 _API_KEY_MIN_LEN = 10
+_RETRY_BACKOFF = 0.5
 
 
 class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
@@ -69,58 +81,75 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
 
     # ── Batch ──────────────────────────────────────────────────────────
 
+    def _handle_retry(self, e: httpx.HTTPStatusError) -> bool:
+        """Handle retryable HTTP errors. Notify and sleep if retryable."""
+        status = e.response.status_code if e.response is not None else "?"
+        logger.error("Voxtral API error: HTTP %s", status)
+        if status == _HTTP_RETRYABLE:
+            if Notify is not None:
+                Notify.Notification.new(
+                    "Voice to Text",
+                    "Voxtral rate limited (429) — retrying in 0.5s",
+                    "audio-input-microphone-symbolic",
+                ).show()
+            logger.warning("Voxtral rate limited (429) — retrying in %.1fs", _RETRY_BACKOFF)
+            return True
+        return False
+
+    def _handle_http_error(self, e: httpx.HTTPStatusError) -> None:
+        """Convert non-retryable HTTP errors to RuntimeError."""
+        status = e.response.status_code if e.response is not None else "?"
+        api_msg = None
+        if e.response is not None:
+            try:
+                body = e.response.json()
+                logger.error("Voxtral response body: %s", body)
+                api_msg = body.get("message")
+            except ValueError as ve:
+                logger.error("Voxtral response parse failed (%s), raw text: %s", ve, e.response.text[:500])
+            if status == _HTTP_UNAUTHORIZED:
+                key_len = len(self.api_key)
+                fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
+                logger.error("401 Unauthorized - key fingerprint=%s (len=%d)", fp, len(self.api_key))
+        detail = f": {api_msg}" if api_msg else ""
+        raise RuntimeError(f"Voxtral API error (HTTP {status}){detail}") from e
+
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
         """Transcribe audio file using Voxtral batch transcription API."""
         await self._ensure_api_key()  # Resolve async key if needed
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
-        try:
-            with open(audio_path, "rb") as audio_file:
-                files = {"file": (os.path.basename(audio_path), audio_file)}
-                data: dict[str, str | list[str]] = {"model": self.model, "language": language}
-                if custom_words:
-                    # Voxtral context_bias rejects items with spaces/commas — split them
-                    bias = []
-                    for w in custom_words:
-                        bias.extend(w.replace(",", " ").split())
-                    data["context_bias"] = bias
-                response = await self._client.post(
-                    f"{self._api_url}/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    files=files,
-                    data=data,
-                    timeout=120,
-                )
-            response.raise_for_status()
-            result = response.json()
-            text = result.get("text", "").strip()
-            logger.info("Transcription result: %s", text[:100])
-            return text
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code if e.response is not None else "?"
-            logger.error("Voxtral API error: HTTP %s", status)
-            api_msg = None
-            if e.response is not None:
-                try:
-                    body = e.response.json()
-                    logger.error("Voxtral response body: %s", body)
-                    api_msg = body.get("message")
-                except ValueError as ve:
-                    logger.error("Voxtral response parse failed (%s), raw text: %s", ve, e.response.text[:500])
-                if status == _HTTP_UNAUTHORIZED:
-                    key_len = len(self.api_key)
-                    fp = self.api_key[:6] + "..." + self.api_key[-4:] if key_len > _API_KEY_MIN_LEN else self.api_key
-                    logger.error(
-                        "401 Unauthorized - key fingerprint=%s (len=%d)",
-                        fp,
-                        len(self.api_key),
+        while True:
+            try:
+                with open(audio_path, "rb") as audio_file:
+                    files = {"file": (os.path.basename(audio_path), audio_file)}
+                    data: dict[str, str | list[str]] = {"model": self.model, "language": language}
+                    if custom_words:
+                        bias = []
+                        for w in custom_words:
+                            bias.extend(w.replace(",", " ").split())
+                        data["context_bias"] = bias
+                    response = await self._client.post(
+                        f"{self._api_url}/v1/audio/transcriptions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        files=files,
+                        data=data,
+                        timeout=120,
                     )
-            detail = f": {api_msg}" if api_msg else ""
-            raise RuntimeError(f"Voxtral API error (HTTP {status}){detail}") from e
-        except Exception as e:
-            logger.exception("Voxtral transcription failed")
-            raise RuntimeError(f"Voxtral transcription failed: {e}") from e
+                response.raise_for_status()
+                result = response.json()
+                text = result.get("text", "").strip()
+                logger.info("Transcription result: %s", text[:100])
+                return text
+            except httpx.HTTPStatusError as e:
+                if self._handle_retry(e):
+                    await asyncio.sleep(_RETRY_BACKOFF)
+                    continue
+                self._handle_http_error(e)
+            except Exception as e:
+                logger.exception("Voxtral transcription failed")
+                raise RuntimeError(f"Voxtral transcription failed: {e}") from e
 
     # ── Streaming ──────────────────────────────────────────────────────
 

@@ -48,6 +48,7 @@ Cloud:
 
 Local:
 - Parakeet. You can install it in podman container using [this script](./parakeet-v2.sh)
+- Parakeet Streaming — local CPU via C engine, run `scripts/parakeet-streaming-server.py` first
 - Moonshine (streaming + batch, CPU-only)
 
 Custom:

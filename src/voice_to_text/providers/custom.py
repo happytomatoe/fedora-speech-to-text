@@ -80,6 +80,11 @@ class CustomProvider(BatchProvider):
         self._variables = self._validate_variables(config.get("variables", {}))
         wants_key = bool(config.get("api_key") or config.get("api_key_env"))
         self.api_key = resolve_api_key(config, "CUSTOM_API_KEY", provider_name="batch_custom") if wants_key else ""
+        if self.api_key.startswith("!!"):
+            raise ValueError(
+                "custom provider does not support deferred API-key commands ('!!'); "
+                "resolve the key before passing it to the provider"
+            )
         # NativeEnvironment renders {{ CUSTOM_WORDS }} to a real list in JSON bodies
         self.env: Environment = NativeEnvironment()
 
@@ -196,6 +201,12 @@ class CustomProvider(BatchProvider):
 
         """
         rendered = self.render(language, custom_words)
+        if (
+            self.api_key
+            and not self.endpoint.startswith("https://")
+            and not (self.endpoint.startswith("http://127.") or self.endpoint.startswith("http://localhost"))
+        ):
+            raise ValueError("HTTPS required for custom provider with API key configured")
         # httpx AsyncClient rejects list-of-tuples `data=` payloads (mis-detects
         # them as a sync stream, httpx #3471) — pass a dict instead. Repeated
         # keys (list-valued json fields) can't live in a dict, so they ride in
