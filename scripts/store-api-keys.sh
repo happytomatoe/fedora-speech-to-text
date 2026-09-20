@@ -55,4 +55,16 @@ echo
 
 if secret-tool store --label="${provider} API Key" service voice-to-text username "$username"; then
   echo "✓ ${provider} API key stored (service=voice-to-text, username=${username})"
+
+  # Update config.yaml with secret-tool lookup reference
+  SCRIPT="$(dirname "$0")/update-config-yaml.py"
+  if command -v python3 &>/dev/null && [ -f "$SCRIPT" ]; then
+    python3 "$SCRIPT" "$username"
+    echo "✓ config.yaml updated"
+  else
+    CONFIG="${HOME}/.config/voice-to-text/config.yaml"
+    echo "⚠ python3 not found — add this manually to ${CONFIG}:"
+    echo "  ${username}:"
+    echo "    api_key: \"!secret-tool lookup service voice-to-text username ${username}\""
+  fi
 fi
