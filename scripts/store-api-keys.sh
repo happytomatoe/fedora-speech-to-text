@@ -59,19 +59,36 @@ if secret-tool store --label="${provider} API Key" service voice-to-text usernam
   # Update config.yaml with secret-tool lookup reference
   CONFIG="${HOME}/.config/voice-to-text/config.yaml"
   if command -v python3 &>/dev/null; then
-    STORED_PROVIDER="$provider" STORED_USERNAME="$username" python3 -c '
-import os, yaml
+    STORED_USERNAME="$username" python3 -c '
+import os, re
 cfg_path = os.path.expanduser(os.path.join(os.environ["HOME"], ".config", "voice-to-text", "config.yaml"))
-provider = os.environ["STORED_PROVIDER"]
 username = os.environ["STORED_USERNAME"]
-cfg = {}
-if os.path.exists(cfg_path):
+api_line = f'  api_key: "!secret-tool lookup service voice-to-text username {username}"'
+if not os.path.exists(cfg_path):
+    with open(cfg_path, "w") as f:
+        f.write(f"{username}:\n{api_line}\n")
+else:
     with open(cfg_path) as f:
-        cfg = yaml.safe_load(f) or {}
-cfg.setdefault(provider, {})["api_key"] = f"!secret-tool lookup service voice-to-text username {username}"
-os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
-with open(cfg_path, "w") as f:
-    yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
+        lines = f.readlines()
+    section_idx = None
+    for i, line in enumerate(lines):
+        if re.match(rf'^{username}:', line, re.IGNORECASE):
+            section_idx = i
+            break
+    if section_idx is not None:
+        for j in range(section_idx + 1, len(lines)):
+            if lines[j].startswith("  api_key:"):
+                lines[j] = api_line + "\n"
+                break
+        else:
+            lines.insert(section_idx + 1, api_line + "\n")
+    else:
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        lines.append(f"\n{username}:\n")
+        lines.append(api_line + "\n")
+    with open(cfg_path, "w") as f:
+        f.writelines(lines)
 '
     echo "✓ config.yaml updated (${CONFIG})"
   else
