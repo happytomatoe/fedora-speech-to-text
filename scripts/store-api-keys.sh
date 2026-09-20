@@ -55,4 +55,28 @@ echo
 
 if secret-tool store --label="${provider} API Key" service voice-to-text username "$username"; then
   echo "✓ ${provider} API key stored (service=voice-to-text, username=${username})"
+
+  # Update config.yaml with secret-tool lookup reference
+  CONFIG="${HOME}/.config/voice-to-text/config.yaml"
+  if command -v python3 &>/dev/null; then
+    STORED_PROVIDER="$provider" STORED_USERNAME="$username" python3 -c '
+import os, yaml
+cfg_path = os.path.expanduser(os.path.join(os.environ["HOME"], ".config", "voice-to-text", "config.yaml"))
+provider = os.environ["STORED_PROVIDER"]
+username = os.environ["STORED_USERNAME"]
+cfg = {}
+if os.path.exists(cfg_path):
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f) or {}
+cfg.setdefault(provider, {})["api_key"] = f"!secret-tool lookup service voice-to-text username {username}"
+os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+with open(cfg_path, "w") as f:
+    yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
+'
+    echo "✓ config.yaml updated (${CONFIG})"
+  else
+    echo "⚠ python3 not found — add this manually to ${CONFIG}:"
+    echo "  ${username}:"
+    echo "    api_key: \"!secret-tool lookup service voice-to-text username ${username}\""
+  fi
 fi
