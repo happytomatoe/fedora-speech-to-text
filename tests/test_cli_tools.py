@@ -55,6 +55,40 @@ crispasr:
     model: m
 """
 
+DISABLED_PROVIDER_CONFIG = """
+transcription:
+  provider: voxtral
+voxtral:
+  disabled: true
+"""
+
+DISABLED_HYBRID_CONFIG = """
+transcription:
+  provider: deepgram
+  hybrid:
+    streaming_provider: deepgram
+    batch_provider: voxtral
+voxtral:
+  disabled: true
+"""
+
+
+DISABLED_SIXTY_CONFIG = """
+transcription:
+  provider: 60db
+sixty:
+  disabled: true
+"""
+
+DISABLED_CUSTOM_CONFIG = """
+transcription:
+  provider: crisp
+crisp:
+  type: batch_custom
+  endpoint: http://localhost:5092
+  disabled: true
+"""
+
 
 def _write_config(content: str, monkeypatch=None) -> str:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -106,6 +140,38 @@ class TestCheckConfig:
         try:
             findings = check_config(ConfigManager(path))
             assert any("'nosuch' has no config section" in f for f in findings)
+        finally:
+            os.unlink(path)
+
+    def test_disabled_selected_provider_found(self, monkeypatch):
+        path = _write_config(DISABLED_PROVIDER_CONFIG, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert any("transcription.provider 'voxtral' is disabled" in f for f in findings)
+        finally:
+            os.unlink(path)
+
+    def test_disabled_hybrid_batch_provider_found(self, monkeypatch):
+        path = _write_config(DISABLED_HYBRID_CONFIG, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert any("transcription.hybrid.batch_provider 'voxtral' is disabled" in f for f in findings)
+        finally:
+            os.unlink(path)
+
+    def test_disabled_alias_provider_found(self, monkeypatch):
+        path = _write_config(DISABLED_SIXTY_CONFIG, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert any("transcription.provider '60db' is disabled" in f for f in findings)
+        finally:
+            os.unlink(path)
+
+    def test_disabled_custom_provider_reported_once(self, monkeypatch):
+        path = _write_config(DISABLED_CUSTOM_CONFIG, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert findings == ["transcription.provider 'crisp' is disabled in config.yaml (disabled: true)"]
         finally:
             os.unlink(path)
 

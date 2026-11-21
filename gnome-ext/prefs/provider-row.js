@@ -6,7 +6,12 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio'; // eslint-disable-line no-unused-vars -- used in JSDoc
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
-import {readCustomProviderNames} from './config-sync.js';
+import {
+    readCustomProviderNames,
+    readDisabledProviderNames,
+    syncKeyToConfig,
+} from './config-sync.js';
+import {needsApiKeySetup, showAddApiKeyDialog} from './api-key.js';
 
 /**
  * Built-in provider id → display label. Must mirror the Python registry in
@@ -38,41 +43,132 @@ function fillProviderCombo(combo, entries) {
 }
 
 /**
+ * Providers marked `disabled: true` in config.yaml are hidden from every
+ * selector, so a stored selection on one of them cannot be shown. Fall back to
+ * the first offered provider and write that one key through to GSettings and
+ * config.yaml. Any other missing id (unreadable config, unknown provider) is
+ * left alone rather than silently rewriting the user's choice.
+ * @param {Gtk.ComboBoxText} combo
+ * @param {Array<[string, string]>} entries
+ * @param {string} current - stored GSettings value
+ * @param {Gio.Settings} settings
+ * @param {string} settingsKey
+ * @param {Set<string>} disabledProviders
+ */
+function selectEnabledProvider(
+    combo,
+    entries,
+    current,
+    settings,
+    settingsKey,
+    disabledProviders
+) {
+    const ids = entries.map(([id]) => id);
+    if (ids.includes(current)) {
+        combo.set_active_id(current);
+        return;
+    }
+    const fallback = ids[0];
+    if (!disabledProviders.has(current) || !fallback) return;
+    combo.set_active_id(fallback);
+    console.info(`VoiceToText: '${current}' is disabled, using '${fallback}'`);
+    settings.set_string(settingsKey, fallback);
+    try {
+        syncKeyToConfig(settings, settingsKey);
+    } catch (e) {
+        console.error('VoiceToText: sync failed:', e.message);
+    }
+}
+
+/**
+ * Add an "Add API Key" button to a provider row. The button is visible only
+ * when the row's provider needs a key and none is stored in the keyring.
+ * @param {Adw.ActionRow} row
+ * @param {() => string | null} getProviderId
+ * @param {Gtk.Window} parentWindow
+ * @returns {() => void} Refreshes the button visibility.
+ */
+function attachApiKeyButton(row, getProviderId, parentWindow) {
+    const button = new Gtk.Button({
+        label: _('Add API Key'),
+        valign: Gtk.Align.CENTER,
+    });
+    row.add_suffix(button);
+
+    const refresh = () => {
+        button.visible = needsApiKeySetup(getProviderId());
+    };
+
+    button.connect('clicked', () => {
+        const providerId = getProviderId();
+        if (!providerId) return;
+        showAddApiKeyDialog(parentWindow, providerId, refresh);
+    });
+
+    refresh();
+    return refresh;
+}
+
+/**
  * Create the provider/mode settings rows.
  * @param {Gio.Settings} settings
  * @param {() => Promise<void>} syncAllToConfig - Function to sync settings to config.yaml
- * @returns {{ rows: Adw.ActionRow[], updateVisibility: () => void }}
+ * @param {Gtk.Window} parentWindow
+ * @returns {{ rows: Adw.ActionRow[], updateVisibility: () => void, ensureEnabledProvider: () => void }}
  */
-export function createProviderRows(settings, syncAllToConfig) {
+export function createProviderRows(settings, syncAllToConfig, parentWindow) {
     // Provider setting (batch mode only)
     const providerRow = new Adw.ActionRow({
         title: _('Transcription Provider'),
     });
 
+    const disabledProviders = new Set(readDisabledProviderNames());
+    const batchEntries = Object.entries(BATCH_PROVIDERS).filter(
+        ([id]) => !disabledProviders.has(id)
+    );
+
     const providerCombo = new Gtk.ComboBoxText();
     // Custom providers from config.yaml (e.g. type: batch_custom sections) are
     // appended after the built-ins. Their section names are valid
     // transcription.provider values, so selecting one selects that provider.
-    fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));
-    const customProviders = readCustomProviderNames().filter(
-        name =>
-            !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) &&
-            name !== 'template'
+    const customEntries = readCustomProviderNames()
+        .filter(
+            name =>
+                !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) &&
+                name !== 'template' &&
+                !disabledProviders.has(name)
+        )
+        .map(
+            name => /** @type {[string, string]} */ ([name, `${name} (custom)`])
+        );
+    const providerEntries = [...batchEntries, ...customEntries];
+    fillProviderCombo(providerCombo, providerEntries);
+    const ensureEnabledProvider = () =>
+        selectEnabledProvider(
+            providerCombo,
+            providerEntries,
+            settings.get_string('provider'),
+            settings,
+            'provider',
+            disabledProviders
+        );
+    ensureEnabledProvider();
+    providerRow.add_suffix(providerCombo);
+    const refreshProviderKey = attachApiKeyButton(
+        providerRow,
+        () => providerCombo.get_active_id(),
+        parentWindow
     );
-    for (const name of customProviders) {
-        providerCombo.append(name, `${name} (custom)`);
-    }
-    providerCombo.set_active_id(settings.get_string('provider'));
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();
         if (activeId) {
             settings.set_string('provider', activeId);
+            refreshProviderKey();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
         }
     });
-    providerRow.add_suffix(providerCombo);
 
     // Transcription mode setting
     const modeRow = new Adw.ActionRow({
@@ -95,26 +191,35 @@ export function createProviderRows(settings, syncAllToConfig) {
         subtitle: _('Provider for real-time streaming during recording'),
     });
 
-    const streamingProviderCombo = new Gtk.ComboBoxText();
-    fillProviderCombo(
-        streamingProviderCombo,
-        Object.entries(BATCH_PROVIDERS).filter(([id]) =>
-            STREAMING_PROVIDER_IDS.includes(id)
-        )
+    const streamingEntries = batchEntries.filter(([id]) =>
+        STREAMING_PROVIDER_IDS.includes(id)
     );
-    streamingProviderCombo.set_active_id(
-        settings.get_string('streaming-provider')
+    const streamingProviderCombo = new Gtk.ComboBoxText();
+    fillProviderCombo(streamingProviderCombo, streamingEntries);
+    selectEnabledProvider(
+        streamingProviderCombo,
+        streamingEntries,
+        settings.get_string('streaming-provider'),
+        settings,
+        'streaming-provider',
+        disabledProviders
+    );
+    streamingProviderRow.add_suffix(streamingProviderCombo);
+    const refreshStreamingProviderKey = attachApiKeyButton(
+        streamingProviderRow,
+        () => streamingProviderCombo.get_active_id(),
+        parentWindow
     );
     streamingProviderCombo.connect('changed', () => {
         const activeId = streamingProviderCombo.get_active_id();
         if (activeId) {
             settings.set_string('streaming-provider', activeId);
+            refreshStreamingProviderKey();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
         }
     });
-    streamingProviderRow.add_suffix(streamingProviderCombo);
 
     // Batch provider setting (hybrid mode only)
     const batchProviderRow = new Adw.ActionRow({
@@ -123,18 +228,31 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const batchProviderCombo = new Gtk.ComboBoxText();
-    fillProviderCombo(batchProviderCombo, Object.entries(BATCH_PROVIDERS));
-    batchProviderCombo.set_active_id(settings.get_string('batch-provider'));
+    fillProviderCombo(batchProviderCombo, providerEntries);
+    selectEnabledProvider(
+        batchProviderCombo,
+        providerEntries,
+        settings.get_string('batch-provider'),
+        settings,
+        'batch-provider',
+        disabledProviders
+    );
+    batchProviderRow.add_suffix(batchProviderCombo);
+    const refreshBatchProviderKey = attachApiKeyButton(
+        batchProviderRow,
+        () => batchProviderCombo.get_active_id(),
+        parentWindow
+    );
     batchProviderCombo.connect('changed', () => {
         const activeId = batchProviderCombo.get_active_id();
         if (activeId) {
             settings.set_string('batch-provider', activeId);
+            refreshBatchProviderKey();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
         }
     });
-    batchProviderRow.add_suffix(batchProviderCombo);
 
     // Show/hide provider rows based on mode
     const updateProviderVisibility = () => {
@@ -159,6 +277,7 @@ export function createProviderRows(settings, syncAllToConfig) {
     return {
         rows: [providerRow, modeRow, streamingProviderRow, batchProviderRow],
         updateVisibility: updateProviderVisibility,
+        ensureEnabledProvider,
     };
 }
 

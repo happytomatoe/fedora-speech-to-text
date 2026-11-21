@@ -8,6 +8,11 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Registry provider id → config.yaml section, where the built-in id differs
+# from the section name users already have (the ``60db`` provider reads its
+# ``sixty`` section).
+_PROVIDER_SECTION_ALIASES = {"60db": "sixty"}
+
 
 class ConfigManager:
     """Manage application configuration with provider support."""
@@ -74,7 +79,7 @@ class ConfigManager:
 
     def get_provider_config(self, provider_name: str) -> dict[str, Any]:
         """Get configuration for specific provider."""
-        provider_config = self.config.get(provider_name, {})
+        provider_config = self.get_provider_section(provider_name)
 
         # Merge with global transcription settings
         transcription_config = self.config.get("transcription", {})
@@ -84,6 +89,10 @@ class ConfigManager:
         merged.update(provider_config)
 
         return merged
+
+    def get_provider_section(self, provider_name: str) -> dict[str, Any]:
+        """Return the raw config.yaml section backing a provider id."""
+        return self._section(_PROVIDER_SECTION_ALIASES.get(provider_name, provider_name))
 
     def _section(self, name: str) -> dict[str, Any]:
         """Return a top-level config section, or an empty dict if absent."""

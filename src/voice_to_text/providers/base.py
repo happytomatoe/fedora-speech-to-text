@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import os
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from typing import Any
@@ -224,21 +225,39 @@ async def await_api_key(key_or_future: str | asyncio.Future[str]) -> str:
     return await key_or_future
 
 
-def resolve_api_key(
+def _lookup_keyring(provider_name: str | None) -> str | None:
+    """Read an API key from the OS keyring via secret-tool, if available."""
+    if not provider_name or shutil.which("secret-tool") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["secret-tool", "lookup", "service", "voice-to-text", "username", provider_name],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning("Keyring lookup failed for %s: %s", provider_name, e)
+        return None
+    if result.returncode != 0:
+        logger.warning(
+            "Keyring lookup failed for %s: secret-tool exited %s",
+            provider_name,
+            result.returncode,
+        )
+        return None
+    key = result.stdout.strip()
+    return key or None
+
+
+def _resolve_key_sources(
     config: dict[str, Any],
     default_env: str,
-    extra_envs: tuple[str, ...] = (),
-    provider_name: str | None = None,
-) -> str:
-    """Resolve API key from environment variable or config.
-
-    Resolution order (env > config):
-    1. Environment variable (via api_key_env or default_env)
-    2. Config file api_key field (supports !command substitution)
-
-    Raises ValueError if not found.
-    """
-    source_used = "none"
+    extra_envs: tuple[str, ...],
+    provider_name: str | None,
+) -> tuple[str, str]:
+    """Return (key, source) using env, then config, then the OS keyring."""
     env_var = config.get("api_key_env", default_env)
     key = os.getenv(env_var)
     if not key:
@@ -247,27 +266,48 @@ def resolve_api_key(
             if key:
                 break
     if key:
-        source_used = f"env:{env_var or extra_envs}"
-    # 2. Config file
-    if not key:
-        key = config.get("api_key")
-        if key:
-            source_used = "config:api_key"
+        return key, f"env:{env_var or extra_envs}"
+    key = config.get("api_key")
+    if key:
+        return key, "config:api_key"
+    key = _lookup_keyring(provider_name)
+    if key:
+        return key, "keyring:secret-tool"
+    return "", "none"
+
+
+def resolve_api_key(
+    config: dict[str, Any],
+    default_env: str,
+    extra_envs: tuple[str, ...] = (),
+    provider_name: str | None = None,
+) -> str:
+    """Resolve API key from environment variable, config, or OS keyring.
+
+    Resolution order (env > config > keyring):
+    1. Environment variable (via api_key_env or default_env)
+    2. Config file api_key field (supports !command substitution)
+    3. OS keyring (service=voice-to-text, username=<provider_name>)
+
+    Raises ValueError if not found.
+    """
+    key, source_used = _resolve_key_sources(config, default_env, extra_envs, provider_name)
 
     if not key:
         all_vars = (*extra_envs, config.get("api_key_env", default_env))
-        raise ValueError(f"No API key found in environment ({all_vars}) or config")
+        raise ValueError(f"No API key found in environment ({all_vars}), config, or keyring")
     # Log key fingerprint for debugging (first 6 + last 4 chars)
     fingerprint = f"{key[:6]}...{key[-4:]}" if len(key) > _API_KEY_MIN_LEN else f"{key[:3]}...{key[-2:]}"
     logger.info("API key resolved: provider=%s source=%s fingerprint=%s", provider_name, source_used, fingerprint)
 
-    # 4. Command substitution (!command or !!command)
-    if key and key.startswith("!!"):
+    # 4. Command substitution (!command or !!command), config.yaml only:
+    # env vars and keyring values are opaque keys, never shell commands.
+    if source_used == "config:api_key" and key.startswith("!!"):
         # Async mode: return raw command string; Future created later in async context
         command = key[2:]  # strip leading !!
         logger.info("API key command will run in background: %s", command)
         return key  # return "!!command" as-is for deferred resolution
-    elif key and key.startswith("!"):
+    elif source_used == "config:api_key" and key.startswith("!"):
         # Sync mode (existing behavior)
         command = key[1:]  # strip leading !
         return _execute_command_for_key(command)

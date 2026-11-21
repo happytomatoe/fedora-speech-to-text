@@ -19,6 +19,7 @@
       "gi://Gdk": ["./node_modules/@girs/gdk-4.0"],
       "gi://GObject": ["./node_modules/@girs/gobject-2.0"],
       "gi://GdkPixbuf": ["./node_modules/@girs/gdkpixbuf-2.0"],
+      "gi://Secret": ["./node_modules/@girs/secret-1"],
       "gi://Pango": ["./node_modules/@girs/pango-1.0"],
       "gi://cairo": ["./node_modules/@girs/cairo-1.0"],
       "gi://St": ["./node_modules/@girs/st-18"],

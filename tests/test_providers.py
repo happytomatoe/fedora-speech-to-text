@@ -22,6 +22,19 @@ class TestProviderFactory:
         with pytest.raises(ValueError, match="invalid"):
             get_batch_provider("invalid", {})
 
+    def test_disabled_provider_rejected(self):
+        with pytest.raises(ValueError, match="disabled"):
+            get_batch_provider("groq", {"api_key": "test_key", "disabled": True})
+
+    def test_disabled_streaming_provider_rejected(self):
+        with pytest.raises(ValueError, match="disabled"):
+            get_streaming_provider("deepgram", {"api_key": "test_key", "disabled": True})
+
+    def test_disabled_custom_provider_rejected(self):
+        config = {"type": "batch_custom", "endpoint": "http://localhost:1", "disabled": True}
+        with pytest.raises(ValueError, match="disabled"):
+            get_batch_provider("mycustom", config)
+
 
 class TestGroqProvider:
     def test_initialization(self):

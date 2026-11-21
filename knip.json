@@ -22,6 +22,7 @@
     "@girs/gtk-4.0",
     "@girs/meta-18",
     "@girs/pango-1.0",
+    "@girs/secret-1",
     "@girs/shell-18",
     "@girs/st-18",
     "ssh2"

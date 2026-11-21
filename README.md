@@ -113,7 +113,18 @@ The command runs fresh each time the key is needed (no caching). Raises `ValueEr
 
 **Script requirements:** Output ONLY the key to stdout; all logs/errors to stderr.
 
-#### 4. Async Command Substitution (For Fast Recording Start)
+#### 4. OS Keyring (extension preferences)
+
+For the supported built-in providers, preferences show **Add API Key** when the
+selected provider has no key.
+The dialog links to the provider's key page and stores the key in the OS keyring
+through libsecret (service `voice-to-text`, username `<provider>`). The Python
+service reads it after environment variables and `config.yaml`, so no restart or
+extra configuration is needed.
+
+You can also store a key from a terminal with `just store-secret`.
+
+#### 5. Async Command Substitution (For Fast Recording Start)
 
 If an API key starts with `!!`, the command runs in the background while recording starts immediately. Use this when key resolution is slow (e.g., network calls to secret managers):
 

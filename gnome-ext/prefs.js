@@ -104,9 +104,10 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         recordingGroup.add(deviceRow);
         populateDevices();
 
-        const {rows: providerRows} = createProviderRows(
+        const {rows: providerRows, ensureEnabledProvider} = createProviderRows(
             settings,
-            _syncAllToConfig
+            _syncAllToConfig,
+            window
         );
         for (const row of providerRows) {
             recordingGroup.add(row);
@@ -236,6 +237,9 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
         const _initSync = async () => {
             const {config, drifted} = await syncFromConfig(settings);
+            // The config may now select a disabled provider; fall back again
+            // so the next recording does not fail.
+            ensureEnabledProvider();
             if (config && drifted.length > 0) {
                 syncWarningRow.visible = true;
                 _configSyncFailed.v = true;

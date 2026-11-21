@@ -31,6 +31,12 @@ _STREAMING_PROVIDERS = {
 }
 
 
+def _reject_disabled(name: str, config: dict[str, Any]) -> None:
+    """Refuse a provider hidden by ``disabled: true`` in config.yaml."""
+    if config.get("disabled") is True:
+        raise ValueError(f"Provider '{name}' is disabled in config.yaml (disabled: true)")
+
+
 def _resolve_provider_class(name: str, config: dict[str, Any]) -> type[BatchProvider] | None:
     """Resolve the batch provider class for a section name.
 
@@ -54,6 +60,7 @@ def get_batch_provider(name: str, config: dict[str, Any]) -> BatchProvider:
         config: Provider configuration.
 
     """
+    _reject_disabled(name, config)
     provider_cls = _resolve_provider_class(name, config)
     if provider_cls is None:
         raise ValueError(f"Batch provider '{name}' not found. Available: {list(_BATCH_PROVIDERS.keys())}")
@@ -73,4 +80,5 @@ def get_streaming_provider(name: str, config: dict[str, Any]) -> StreamingProvid
     """
     if name not in _STREAMING_PROVIDERS:
         raise ValueError(f"Streaming provider '{name}' not found. Available: {list(_STREAMING_PROVIDERS.keys())}")
+    _reject_disabled(name, config)
     return _STREAMING_PROVIDERS[name](config)  # type: ignore[return-value]

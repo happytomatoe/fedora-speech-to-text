@@ -42,6 +42,16 @@ const CONFIG_SYNC_MAP = {
     profiling: {path: ['profiling'], type: 'boolean'},
 };
 
+// config.yaml section name → provider id where they differ. Mirrors the
+// inverse of _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
+const PROVIDER_SECTION_ALIASES = {sixty: '60db'};
+const SECTION_BY_PROVIDER = Object.fromEntries(
+    Object.entries(PROVIDER_SECTION_ALIASES).map(([section, id]) => [
+        id,
+        section,
+    ])
+);
+
 function readConfigYaml() {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     if (!file.query_exists(null)) return {};
@@ -74,6 +84,47 @@ export function readCustomProviderNames() {
                 value.type === 'batch_custom'
         )
         .map(([key]) => key);
+}
+
+/**
+ * Provider ids whose config.yaml section is marked `disabled: true`. These are
+ * hidden from the provider selectors and rejected by the Python registry.
+ * @returns {string[]}
+ */
+export function readDisabledProviderNames() {
+    const config = readConfigYaml();
+    if (!config) return [];
+    return Object.entries(config)
+        .filter(
+            ([, value]) =>
+                value !== null &&
+                typeof value === 'object' &&
+                !Array.isArray(value) &&
+                value.disabled === true
+        )
+        .map(([key]) => PROVIDER_SECTION_ALIASES[key] ?? key);
+}
+
+/**
+ * Read the provider's API key settings from config.yaml.
+ * @param {string} providerId
+ * @returns {{apiKey: string, apiKeyEnv: string}}
+ */
+export function readProviderKeyConfig(providerId) {
+    const config = readConfigYaml();
+    if (!config) return {apiKey: '', apiKeyEnv: ''};
+    const sectionName = SECTION_BY_PROVIDER[providerId] ?? providerId;
+    const section = config[sectionName];
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+        return {apiKey: '', apiKeyEnv: ''};
+    }
+    const apiKey =
+        typeof section.api_key === 'string' ? section.api_key.trim() : '';
+    const apiKeyEnv =
+        typeof section.api_key_env === 'string'
+            ? section.api_key_env.trim()
+            : '';
+    return {apiKey, apiKeyEnv};
 }
 
 function writeConfigYaml(config) {
@@ -252,6 +303,35 @@ function syncSetting(settings, gkey, type, cfgVal) {
     return gsetVal !== cfgVal;
 }
 
+// Read a mapped setting's current GSettings value.
+function readSettingValue(settings, gkey, type) {
+    if (type === 'strv') return settings.get_strv(gkey);
+    if (type === 'int') return settings.get_int(gkey);
+    if (type === 'double') return settings.get_double(gkey);
+    if (type === 'boolean') return settings.get_boolean(gkey);
+    return settings.get_string(gkey);
+}
+
+/**
+ * Write one mapped setting from GSettings to config.yaml, leaving other keys
+ * untouched. Use this for a single-key correction; `syncToConfig` writes the
+ * whole map and would persist schema defaults before `syncFromConfig` runs.
+ * @param {Gio.Settings} settings
+ * @param {string} gkey
+ */
+export function syncKeyToConfig(settings, gkey) {
+    const {path, type} = CONFIG_SYNC_MAP[gkey];
+    const config = readConfigYaml();
+    if (!config) {
+        console.error(
+            `VoiceToText: syncKeyToConfig failed for '${gkey}' - cannot read config.yaml`
+        );
+        throw new Error(`Failed to read config.yaml for sync of ${gkey}`);
+    }
+    setConfigValue(config, path, readSettingValue(settings, gkey, type));
+    writeConfigYaml(config);
+}
+
 /**
  * Write all mapped settings from GSettings to config.yaml.
  * @param {Gio.Settings} settings
@@ -265,13 +345,7 @@ export function syncToConfig(settings) {
         throw new Error('Failed to read config.yaml for sync');
     }
     for (const [gkey, {path, type}] of Object.entries(CONFIG_SYNC_MAP)) {
-        let value;
-        if (type === 'strv') value = settings.get_strv(gkey);
-        else if (type === 'int') value = settings.get_int(gkey);
-        else if (type === 'double') value = settings.get_double(gkey);
-        else if (type === 'boolean') value = settings.get_boolean(gkey);
-        else value = settings.get_string(gkey);
-        setConfigValue(config, path, value);
+        setConfigValue(config, path, readSettingValue(settings, gkey, type));
     }
     writeConfigYaml(config);
 }
