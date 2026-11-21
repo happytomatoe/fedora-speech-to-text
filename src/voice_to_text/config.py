@@ -8,9 +8,6 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-# Registry provider id → config.yaml section, where the built-in id differs
-# from the section name users already have (the ``60db`` provider reads its
-# ``sixty`` section).
 _PROVIDER_SECTION_ALIASES = {"60db": "sixty"}
 
 

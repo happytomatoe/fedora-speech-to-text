@@ -42,8 +42,7 @@ const CONFIG_SYNC_MAP = {
     profiling: {path: ['profiling'], type: 'boolean'},
 };
 
-// Provider id → config.yaml section name where they differ. Mirrors
-// _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
+// Keep in sync with _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
 const PROVIDER_SECTION_ALIASES = {sixty: '60db'};
 
 function readConfigYaml() {
@@ -275,7 +274,6 @@ function syncSetting(settings, gkey, type, cfgVal) {
     return gsetVal !== cfgVal;
 }
 
-// Read a mapped setting's current GSettings value.
 function readSettingValue(settings, gkey, type) {
     if (type === 'strv') return settings.get_strv(gkey);
     if (type === 'int') return settings.get_int(gkey);

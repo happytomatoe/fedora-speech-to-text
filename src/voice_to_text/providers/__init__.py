@@ -32,7 +32,6 @@ _STREAMING_PROVIDERS = {
 
 
 def _reject_disabled(name: str, config: dict[str, Any]) -> None:
-    """Refuse a provider hidden by ``disabled: true`` in config.yaml."""
     if config.get("disabled") is True:
         raise ValueError(f"Provider '{name}' is disabled in config.yaml (disabled: true)")
 

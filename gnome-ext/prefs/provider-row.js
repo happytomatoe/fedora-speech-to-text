@@ -42,11 +42,6 @@ function fillProviderCombo(combo, entries) {
 }
 
 /**
- * Providers marked `disabled: true` in config.yaml are hidden from every
- * selector, so a stored selection on one of them cannot be shown. Fall back to
- * the first offered provider and write that one key through to GSettings and
- * config.yaml. Any other missing id (unreadable config, unknown provider) is
- * left alone rather than silently rewriting the user's choice.
  * @param {Gtk.ComboBoxText} combo
  * @param {Array<[string, string]>} entries
  * @param {string} current - stored GSettings value

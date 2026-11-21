@@ -86,7 +86,6 @@ def _findings_for_template_provider(name: str, section: dict[str, Any]) -> list[
 
 
 def _findings_for_disabled_selection(manager: ConfigManager) -> list[str]:
-    """Report providers selected for use but hidden by ``disabled: true``."""
     transcription = manager.config.get("transcription")
     if not isinstance(transcription, dict):
         return []
