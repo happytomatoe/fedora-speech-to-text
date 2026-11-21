@@ -49,10 +49,6 @@ let _schema = null;
 
 function getSchema() {
     if (!_schema) {
-        _schema = Secret.Schema.new(KEYRING_SCHEMA, Secret.SchemaFlags.NONE, {
-            service: Secret.SchemaAttributeType.STRING,
-            username: Secret.SchemaAttributeType.STRING,
-        });
         // DONT_MATCH_NAME: also see items stored by `secret-tool`, whose
         // schema name differs from ours.
         _schema = Secret.Schema.new(
