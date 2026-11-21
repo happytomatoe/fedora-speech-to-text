@@ -1137,6 +1137,14 @@ async function runBareMode(): Promise<void> {
     matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
   );
   const rawCases = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"))["test-cases"] as TestCaseFile[];
+  const unmatchedSelectors = SELECTED_CASES.filter(
+    s => !rawCases.some(c => c.file.includes(s)),
+  );
+  if (unmatchedSelectors.length > 0) {
+    throw new Error(
+      `no test cases match '${unmatchedSelectors.join(", ")}'. Available: ${rawCases.map(c => c.file).join(", ")}`,
+    );
+  }
   const picked = SELECTED_CASES.length > 0
     ? rawCases.filter(c => SELECTED_CASES.some(s => c.file.includes(s)))
     : [rawCases[Math.floor(Math.random() * rawCases.length)]];
@@ -1150,12 +1158,6 @@ async function runBareMode(): Promise<void> {
 
   interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
   const results: BareResult[] = [];
-  const normalize = (s: string) =>
-    s.trim().toLowerCase()
-      .replace(/\b(\d)\s*p\.m\.?\b/g, "$1pm").replace(/\b(\d)\s*a\.m\.?\b/g, "$1am")
-      .replace(/(\d)\s+(am|pm)\b/g, "$1$2")
-      .replace(/\.+$/, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ");
-
   const requireOk: Record<string, boolean> = {
     dotoolc: uinputOk,
     "gnome-extension": true,
@@ -1255,7 +1257,9 @@ async function runBareMode(): Promise<void> {
         if (!captureHit && captureRequired) {
           const pane = await transport.exec(`tmux capture-pane -t ci-e2e -p 2>/dev/null || true`, 5_000)
             .then(r => r.stdout).catch((err: unknown) => { console.warn(`[e2e] service log read failed: ${err instanceof Error ? err.message : err}`); return ""; });
-          paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
+          paneHit = pane
+            .split("\n")
+            .some(line => transcriptMatches(bareCase.expected, line));
         }
         const similarity = wordSimilarity(bareCase.expected, typed);
         const passed = transcriptMatches(bareCase.expected, typed) && !errorLine && (captureHit || paneHit || !captureRequired);
