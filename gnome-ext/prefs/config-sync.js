@@ -285,8 +285,7 @@ function readSettingValue(settings, gkey, type) {
 
 /**
  * Write one mapped setting from GSettings to config.yaml, leaving other keys
- * untouched. Use this for a single-key correction; `syncToConfig` writes the
- * whole map and would persist schema defaults before `syncFromConfig` runs.
+ * untouched.
  * @param {Gio.Settings} settings
  * @param {string} gkey
  */
