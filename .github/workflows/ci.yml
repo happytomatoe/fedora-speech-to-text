@@ -71,9 +71,11 @@ jobs:
       # PortAudio's PulseAudio host API fails hard and collection dies.
       - name: Start PulseAudio (headless)
         run: |
-          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
-          echo "PULSE_SERVER=unix:/run/user/$(id -u)/pulse/native" >> "$GITHUB_ENV"
-          mkdir -p /run/user/$(id -u)/pulse
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          echo "PULSE_SERVER=$PULSE_SERVER" >> "$GITHUB_ENV"
+          mkdir -p "$XDG_RUNTIME_DIR/pulse"
           pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
             --load="module-null-sink sink_name=virtual_sink" \
             --load="module-null-source source_name=virtual_mic"
