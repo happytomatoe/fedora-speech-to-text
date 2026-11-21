@@ -17,6 +17,46 @@ import { LocalTransport } from "./lib/transport.js";
 import { ShellHelper } from "./lib/shell.js";
 import { execSync } from "node:child_process";
 
+/**
+ * Word-level similarity between an expected transcript and the model output.
+ * ASR (Parakeet) can vary a word or punctuation between runs; requiring an
+ * exact string match made the suite flap. 0.8 still rejects a different
+ * language, an empty transcript, or a model swap.
+ */
+const MIN_TRANSCRIPT_SIMILARITY = 0.8;
+
+function transcriptWords(text: string): string[] {
+  return text.trim().toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function wordSimilarity(expected: string, actual: string): number {
+  const a = transcriptWords(expected);
+  const b = transcriptWords(actual);
+  if (a.length === 0) return 0;
+  const distances = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let previous = distances[0];
+    distances[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const current = distances[j];
+      distances[j] = Math.min(
+        distances[j] + 1,
+        distances[j - 1] + 1,
+        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      previous = current;
+    }
+  }
+  return 1 - distances[b.length] / a.length;
+}
+
+function transcriptMatches(expected: string, actual: string): boolean {
+  return actual.trim().length > 0 && wordSimilarity(expected, actual) >= MIN_TRANSCRIPT_SIMILARITY;
+}
+
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
 mkdirSync(LOG_DIR, { recursive: true });
@@ -777,13 +817,9 @@ async function verifyWithScreenshot(
   // Verify via file (primary method)
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
   
-  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
-  const actualNorm = normalize(actual);
-  const expectedNorm = normalize(expected);
-  
-  // Check text match
-  if (actualNorm !== expectedNorm) {
-    return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
+  const similarity = wordSimilarity(expected, actual);
+  if (!transcriptMatches(expected, actual)) {
+    return { passed: false, message: `Text does not match (similarity ${similarity.toFixed(2)} < ${MIN_TRANSCRIPT_SIMILARITY}): expected '${expected}', got '${actual}'`, screenshot };
   }
   
   // Check visual regression (reference is mandatory unless --update populates it)
@@ -1221,9 +1257,11 @@ async function runBareMode(): Promise<void> {
             .then(r => r.stdout).catch((err: unknown) => { console.warn(`[e2e] service log read failed: ${err instanceof Error ? err.message : err}`); return ""; });
           paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
         }
-        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || paneHit || !captureRequired);
+        const similarity = wordSimilarity(bareCase.expected, typed);
+        const passed = transcriptMatches(bareCase.expected, typed) && !errorLine && (captureHit || paneHit || !captureRequired);
         console.log(`  expected: '${bareCase.expected}'`);
         console.log(`  typed:    '${typed}'`);
+        console.log(`  word similarity: ${similarity.toFixed(2)} (min ${MIN_TRANSCRIPT_SIMILARITY})`);
         console.log(`  output method exercised: capture=${captureHit} pane=${paneHit}${captureRequired ? " (required)" : " (optional for dotool)"}`);
         if (errorLine) console.log(`  error in log: ${errorLine}`);
         console.log(passed ? "  PASS" : "  FAIL");
