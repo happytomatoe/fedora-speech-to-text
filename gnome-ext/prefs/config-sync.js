@@ -42,9 +42,15 @@ const CONFIG_SYNC_MAP = {
     profiling: {path: ['profiling'], type: 'boolean'},
 };
 
-// Provider id → config.yaml section name where they differ. Mirrors
-// _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
+// config.yaml section name → provider id where they differ. Mirrors the
+// inverse of _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
 const PROVIDER_SECTION_ALIASES = {sixty: '60db'};
+const SECTION_BY_PROVIDER = Object.fromEntries(
+    Object.entries(PROVIDER_SECTION_ALIASES).map(([section, id]) => [
+        id,
+        section,
+    ])
+);
 
 function readConfigYaml() {
     const file = Gio.File.new_for_path(CONFIG_PATH);
@@ -107,7 +113,7 @@ export function readDisabledProviderNames() {
 export function readProviderKeyConfig(providerId) {
     const config = readConfigYaml();
     if (!config) return {apiKey: '', apiKeyEnv: ''};
-    const sectionName = PROVIDER_SECTION_ALIASES[providerId] ?? providerId;
+    const sectionName = SECTION_BY_PROVIDER[providerId] ?? providerId;
     const section = config[sectionName];
     if (!section || typeof section !== 'object' || Array.isArray(section)) {
         return {apiKey: '', apiKeyEnv: ''};

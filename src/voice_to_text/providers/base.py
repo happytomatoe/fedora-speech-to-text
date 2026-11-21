@@ -238,7 +238,14 @@ def _lookup_keyring(provider_name: str | None) -> str | None:
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        logger.debug("Keyring lookup failed for %s: %s", provider_name, e)
+        logger.warning("Keyring lookup failed for %s: %s", provider_name, e)
+        return None
+    if result.returncode != 0:
+        logger.warning(
+            "Keyring lookup failed for %s: secret-tool exited %s",
+            provider_name,
+            result.returncode,
+        )
         return None
     key = result.stdout.strip()
     return key or None

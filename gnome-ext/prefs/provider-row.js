@@ -114,7 +114,7 @@ function attachApiKeyButton(row, getProviderId, parentWindow) {
  * @param {Gio.Settings} settings
  * @param {() => Promise<void>} syncAllToConfig - Function to sync settings to config.yaml
  * @param {Gtk.Window} parentWindow
- * @returns {{ rows: Adw.ActionRow[], updateVisibility: () => void }}
+ * @returns {{ rows: Adw.ActionRow[], updateVisibility: () => void, ensureEnabledProvider: () => void }}
  */
 export function createProviderRows(settings, syncAllToConfig, parentWindow) {
     // Provider setting (batch mode only)
@@ -143,14 +143,16 @@ export function createProviderRows(settings, syncAllToConfig, parentWindow) {
         );
     const providerEntries = [...batchEntries, ...customEntries];
     fillProviderCombo(providerCombo, providerEntries);
-    selectEnabledProvider(
-        providerCombo,
-        providerEntries,
-        settings.get_string('provider'),
-        settings,
-        'provider',
-        disabledProviders
-    );
+    const ensureEnabledProvider = () =>
+        selectEnabledProvider(
+            providerCombo,
+            providerEntries,
+            settings.get_string('provider'),
+            settings,
+            'provider',
+            disabledProviders
+        );
+    ensureEnabledProvider();
     providerRow.add_suffix(providerCombo);
     const refreshProviderKey = attachApiKeyButton(
         providerRow,
@@ -275,6 +277,7 @@ export function createProviderRows(settings, syncAllToConfig, parentWindow) {
     return {
         rows: [providerRow, modeRow, streamingProviderRow, batchProviderRow],
         updateVisibility: updateProviderVisibility,
+        ensureEnabledProvider,
     };
 }
 

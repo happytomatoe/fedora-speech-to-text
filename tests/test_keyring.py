@@ -134,6 +134,19 @@ class TestKeyringFallback:
         assert result == "config-key"
         run.assert_not_called()
 
+    def test_failed_secret_tool_output_is_rejected(self):
+        """Nonzero secret-tool exit means no key, even if it printed something."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch(
+                "voice_to_text.providers.base.subprocess.run",
+                return_value=SimpleNamespace(stdout="stderr noise", returncode=1),
+            ),
+            pytest.raises(ValueError, match="No API key found"),
+        ):
+            resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
     def test_keyring_value_is_opaque(self):
         """A keyring value starting with ! is a key, not a shell command."""
         with (

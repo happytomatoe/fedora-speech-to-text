@@ -115,7 +115,8 @@ The command runs fresh each time the key is needed (no caching). Raises `ValueEr
 
 #### 4. OS Keyring (extension preferences)
 
-When a selected provider has no key, the extension preferences show **Add API Key**.
+For the supported built-in providers, preferences show **Add API Key** when the
+selected provider has no key.
 The dialog links to the provider's key page and stores the key in the OS keyring
 through libsecret (service `voice-to-text`, username `<provider>`). The Python
 service reads it after environment variables and `config.yaml`, so no restart or
