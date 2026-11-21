@@ -63,7 +63,7 @@ Request parts:
 | `sample_rate` | Audio sample rate in Hz | Not sent; file header carries it |
 | `channels` | Audio channel count | Not sent |
 | `prompt` | Context about the audio (domain, scenario, names) | Set `batch_options.prompt` |
-| `keyterms_prompt` | Up to 100 terms (8000 characters total) to bias recognition; aliases `keyterms`, `word_boost` | Filled from `custom_words` when not overridden in `batch_options` |
+| `keyterms_prompt` | Up to 100 terms (8000 characters total) to bias recognition; aliases `keyterms`, `word_boost` | Filled from `custom_words` unless any alias is set in `batch_options` |
 | `conversation_context` | Prior transcript context | Available through `batch_options.conversation_context` |
 | `language_codes` | Language or languages in the audio | Set from `language` when it is one of the 32 supported codes; omitted otherwise (auto-detect) |
 | `timestamps` | Include word-level timings | Available through `batch_options.timestamps`; response words are not consumed |
@@ -113,6 +113,10 @@ Connection parameters:
 
 `streaming_options` values are serialized per type: booleans become `true`/`false`,
 lists and dicts become JSON, everything else `str()`.
+
+The provider owns `speech_model`, `sample_rate`, and `encoding`. Values for those
+keys in `streaming_options` are ignored. `language_codes` set in
+`streaming_options` replaces the hint derived from `language`.
 
 Messages:
 

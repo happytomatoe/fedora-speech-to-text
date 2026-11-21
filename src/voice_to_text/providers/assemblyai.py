@@ -78,6 +78,8 @@ _SUPPORTED_LANGUAGES = frozenset(
     }
 )
 
+_KEYTERM_FIELDS = ("keyterms_prompt", "keyterms", "word_boost")
+
 # API limits: 100 keyterms per request, 8000 characters across all Sync keyterms.
 _MAX_KEYTERMS = 100
 _MAX_BATCH_KEYTERM_CHARS = 8000
@@ -157,7 +159,7 @@ class AssemblyAIProvider(BatchProvider, WebSocketStreamingProvider):
         """Transcribe an audio file with the AssemblyAI Sync API."""
         logger.info("Transcribing %s with AssemblyAI model %s", audio_path, self.model)
         payload: dict[str, Any] = dict(self.batch_options)
-        if custom_words and "keyterms_prompt" not in payload:
+        if custom_words and not any(field in payload for field in _KEYTERM_FIELDS):
             keyterms = _keyterms(custom_words, _MAX_BATCH_KEYTERM_CHARS)
             if keyterms:
                 payload["keyterms_prompt"] = keyterms
@@ -198,15 +200,18 @@ class AssemblyAIProvider(BatchProvider, WebSocketStreamingProvider):
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Open the AssemblyAI v3 streaming WebSocket."""
-        params: dict[str, str] = {
-            "speech_model": self.streaming_model,
-            "sample_rate": str(sample_rate),
-            "encoding": "pcm_s16le",
-        }
-        language_codes = _language_codes(language)
-        if language_codes:
-            params["language_codes"] = json.dumps(language_codes)
-        params.update({key: _query_value(value) for key, value in self.streaming_options.items()})
+        params: dict[str, str] = {key: _query_value(value) for key, value in self.streaming_options.items()}
+        params.update(
+            {
+                "speech_model": self.streaming_model,
+                "sample_rate": str(sample_rate),
+                "encoding": "pcm_s16le",
+            }
+        )
+        if "language_codes" not in params:
+            language_codes = _language_codes(language)
+            if language_codes:
+                params["language_codes"] = json.dumps(language_codes)
         logger.debug("AssemblyAI streaming params: %s", params)
         ws_url = f"{self.streaming_url}/v3/ws?{urlencode(params)}"
         await self._connect_ws(ws_url, {"Authorization": self.api_key})

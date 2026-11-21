@@ -164,6 +164,28 @@ class TestAssemblyAIBatch:
         }
 
     @pytest.mark.asyncio
+    async def test_batch_options_aliases_suppress_custom_words(self, monkeypatch):
+        monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"text": "ok"}
+
+        for alias in ("keyterms", "word_boost"):
+            config = {"api_key": "test_key", "batch_options": {alias: ["custom"]}}
+            with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
+                provider = AssemblyAIProvider(config)
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp.write(b"RIFF")
+                    tmp_path = tmp.name
+                try:
+                    await provider.transcribe_file(tmp_path, custom_words=["ignored"])
+                finally:
+                    os.unlink(tmp_path)
+
+            payload = json.loads(mock_post.call_args[1]["files"]["config"][1])
+            assert payload == {alias: ["custom"], "language_codes": ["en"]}
+
+    @pytest.mark.asyncio
     async def test_unsupported_language_omits_config(self, monkeypatch):
         monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
         mock_response = Mock()
@@ -230,6 +252,28 @@ class TestAssemblyAIStreaming:
         assert json.loads(query["keyterms_prompt"][0]) == ["AssemblyAI"]
         assert query["include_partial_turns"] == ["true"]
         assert "format_turns" not in query
+
+    @pytest.mark.asyncio
+    async def test_streaming_options_cannot_override_reserved_params(self):
+        provider = AssemblyAIProvider(
+            {
+                "api_key": "test_key",
+                "streaming_options": {
+                    "speech_model": "universal-3-6-pro",
+                    "sample_rate": 48000,
+                    "encoding": "opus",
+                },
+            }
+        )
+        connect = AsyncMock()
+        provider._connect_ws = connect
+
+        await provider.start_stream(language="en", sample_rate=16000)
+
+        query = parse_qs(urlsplit(connect.call_args[0][0]).query)
+        assert query["speech_model"] == ["assemblyai-stt-3-7-realtime"]
+        assert query["sample_rate"] == ["16000"]
+        assert query["encoding"] == ["pcm_s16le"]
 
     @pytest.mark.asyncio
     async def test_start_stream_omits_unsupported_language(self):
