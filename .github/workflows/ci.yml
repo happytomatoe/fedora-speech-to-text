@@ -5,7 +5,7 @@ on:
 
 jobs:
   lint-and-type-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install just
@@ -58,32 +58,12 @@ jobs:
         run: ./scripts/ego-lint --show=fail,warn gnome-ext/
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y portaudio19-dev pulseaudio pulseaudio-utils
-
-      # sounddevice initializes PortAudio on import; without a running server
-      # PortAudio's PulseAudio host API fails hard and collection dies.
-      - name: Start PulseAudio (headless)
-        run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          export PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
-          echo "PULSE_SERVER=$PULSE_SERVER" >> "$GITHUB_ENV"
-          mkdir -p "$XDG_RUNTIME_DIR/pulse"
-          pulseaudio -D --exit-idle-time=-1 --disallow-exit=true \
-            --load="module-null-sink sink_name=virtual_sink" \
-            --load="module-null-source source_name=virtual_mic"
-          for i in $(seq 1 20); do
-            pactl info >/dev/null 2>&1 && break
-            sleep 1
-          done
-          pactl info
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -102,7 +82,7 @@ jobs:
         run: uv run python -m pytest
 
   js-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -133,7 +113,7 @@ jobs:
         run: bunx jscpd src/ gnome-ext/ --min-tokens 50 --threshold 1 --silent
 
   python-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
