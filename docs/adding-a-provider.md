@@ -152,15 +152,20 @@ voxtral:
   disabled: true
 ```
 
-- `gnome-ext/prefs/provider-row.js` filters the provider, streaming, and
+- The GNOME prefs hide disabled providers from the provider, streaming, and
   hybrid-batch dropdowns (`readDisabledProviderNames` in
-  `gnome-ext/prefs/config-sync.js`).
+  `gnome-ext/prefs/config-sync.js`). If a disabled provider is still the stored
+  selection, prefs switch to the first enabled provider and write that choice
+  to both GSettings and `config.yaml`.
 - `get_batch_provider` / `get_streaming_provider` raise `ValueError` for a
-  disabled section, so a stale selection fails loudly instead of silently
-  using it.
+  disabled section, so a stale engine selection fails loudly instead of
+  silently using it.
+- Sections whose name differs from the registry id resolve through the same
+  alias in both layers: the `60db` provider reads its `sixty:` section.
 - `just config-check` reports a finding when `transcription.provider`,
   `transcription.hybrid.streaming_provider`, or
-  `transcription.hybrid.batch_provider` names a disabled section.
+  `transcription.hybrid.batch_provider` names a disabled section. Disabled
+  custom sections are otherwise skipped by validation.
 
 ## 4. Surface in the GNOME extension
 

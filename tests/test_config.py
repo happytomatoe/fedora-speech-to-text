@@ -54,6 +54,28 @@ def test_speaker_config_defaults(groq_config):
     assert speaker_config == {}
 
 
+def test_sixty_section_backs_60db_provider():
+    config_content = """
+transcription:
+  provider: 60db
+sixty:
+  api_url: http://example.test
+  disabled: true
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(config_content)
+        config_path = f.name
+
+    try:
+        config_mgr = ConfigManager(config_path)
+        provider_config = config_mgr.get_provider_config("60db")
+        assert provider_config["api_url"] == "http://example.test"
+        with pytest.raises(ValueError, match="disabled"):
+            get_batch_provider("60db", provider_config)
+    finally:
+        os.unlink(config_path)
+
+
 def test_speaker_config_with_values():
     config_content = """
 audio:

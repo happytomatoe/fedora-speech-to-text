@@ -42,6 +42,10 @@ const CONFIG_SYNC_MAP = {
     profiling: {path: ['profiling'], type: 'boolean'},
 };
 
+// Provider id → config.yaml section name where they differ. Mirrors
+// _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
+const PROVIDER_SECTION_ALIASES = {sixty: '60db'};
+
 function readConfigYaml() {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     if (!file.query_exists(null)) return {};
@@ -77,7 +81,7 @@ export function readCustomProviderNames() {
 }
 
 /**
- * Names of provider sections marked `disabled: true` in config.yaml. These are
+ * Provider ids whose config.yaml section is marked `disabled: true`. These are
  * hidden from the provider selectors and rejected by the Python registry.
  * @returns {string[]}
  */
@@ -92,7 +96,7 @@ export function readDisabledProviderNames() {
                 !Array.isArray(value) &&
                 value.disabled === true
         )
-        .map(([key]) => key);
+        .map(([key]) => PROVIDER_SECTION_ALIASES[key] ?? key);
 }
 
 function writeConfigYaml(config) {

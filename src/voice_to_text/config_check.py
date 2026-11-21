@@ -85,9 +85,9 @@ def _findings_for_template_provider(name: str, section: dict[str, Any]) -> list[
     return findings
 
 
-def _findings_for_disabled_selection(sections: dict[str, Any]) -> list[str]:
+def _findings_for_disabled_selection(manager: ConfigManager) -> list[str]:
     """Report providers selected for use but hidden by ``disabled: true``."""
-    transcription = sections.get("transcription")
+    transcription = manager.config.get("transcription")
     if not isinstance(transcription, dict):
         return []
     candidates: list[tuple[str, Any]] = [("transcription.provider", transcription.get("provider"))]
@@ -97,8 +97,8 @@ def _findings_for_disabled_selection(sections: dict[str, Any]) -> list[str]:
         candidates.append(("transcription.hybrid.batch_provider", hybrid.get("batch_provider")))
     findings = []
     for label, name in candidates:
-        section = sections.get(name) if isinstance(name, str) else None
-        if isinstance(section, dict) and section.get("disabled") is True:
+        section = manager.get_provider_section(name) if isinstance(name, str) else {}
+        if section.get("disabled") is True:
             findings.append(f"{label} '{name}' is disabled in config.yaml (disabled: true)")
     return findings
 
@@ -119,7 +119,7 @@ def check_config(manager: ConfigManager) -> list[str]:
     findings: list[str] = []
     selected = manager.get_selected_provider()
     sections = manager.config
-    findings.extend(_findings_for_disabled_selection(sections))
+    findings.extend(_findings_for_disabled_selection(manager))
     # Only flag a missing section when it's genuinely unknown: built-in
     # providers work from env vars alone, and template sections are validated
     # below. A misspelled selected provider with no other sections must still
@@ -130,9 +130,15 @@ def check_config(manager: ConfigManager) -> list[str]:
     for name, section in sections.items():
         if not isinstance(section, dict) or section.get("type") != "batch_custom":
             continue
+        if section.get("disabled") is True:
+            continue
         findings.extend(_findings_for_template_provider(name, section))
-    selected_section = sections.get(selected)
-    if isinstance(selected_section, dict) and selected_section.get("type") == "batch_custom":
+    selected_section = manager.get_provider_section(selected)
+    if (
+        isinstance(selected_section, dict)
+        and selected_section.get("type") == "batch_custom"
+        and selected_section.get("disabled") is not True
+    ):
         # Selected custom provider must also instantiate via its registry type.
         # Neutralize api_key sources: resolve_api_key runs !command substitutions,
         # which must never execute during a supposedly dry validation.
