@@ -99,6 +99,28 @@ export function readDisabledProviderNames() {
         .map(([key]) => PROVIDER_SECTION_ALIASES[key] ?? key);
 }
 
+/**
+ * Read the provider's API key settings from config.yaml.
+ * @param {string} providerId
+ * @returns {{apiKey: string, apiKeyEnv: string}}
+ */
+export function readProviderKeyConfig(providerId) {
+    const config = readConfigYaml();
+    if (!config) return {apiKey: '', apiKeyEnv: ''};
+    const sectionName = PROVIDER_SECTION_ALIASES[providerId] ?? providerId;
+    const section = config[sectionName];
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+        return {apiKey: '', apiKeyEnv: ''};
+    }
+    const apiKey =
+        typeof section.api_key === 'string' ? section.api_key.trim() : '';
+    const apiKeyEnv =
+        typeof section.api_key_env === 'string'
+            ? section.api_key_env.trim()
+            : '';
+    return {apiKey, apiKeyEnv};
+}
+
 function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     const parent = file.get_parent();

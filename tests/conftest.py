@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 
 import pytest
 
@@ -20,4 +21,11 @@ def _reset_shared_http_client():
 @pytest.fixture(autouse=True)
 def _no_host_keyring(monkeypatch):
     """Keep tests hermetic: never read the developer's real OS keyring."""
-    monkeypatch.setattr("voice_to_text.providers.base.shutil.which", lambda _: None)
+    real_which = shutil.which
+
+    def which(command, *args, **kwargs):
+        if command == "secret-tool":
+            return None
+        return real_which(command, *args, **kwargs)
+
+    monkeypatch.setattr("voice_to_text.providers.base.shutil.which", which)

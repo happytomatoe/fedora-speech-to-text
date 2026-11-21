@@ -121,3 +121,53 @@ class TestKeyringFallback:
             pytest.raises(ValueError, match="No API key found"),
         ):
             resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
+    def test_config_takes_precedence_over_keyring(self):
+        """A config api_key wins without consulting secret-tool."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch("voice_to_text.providers.base.subprocess.run") as run,
+        ):
+            result = resolve_api_key({"api_key": "config-key"}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
+        assert result == "config-key"
+        run.assert_not_called()
+
+    def test_keyring_value_is_opaque(self):
+        """A keyring value starting with ! is a key, not a shell command."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch(
+                "voice_to_text.providers.base.subprocess.run",
+                return_value=SimpleNamespace(stdout="!touch /tmp/keyring-pwned\n", returncode=0),
+            ),
+            patch("voice_to_text.providers.base._execute_command_for_key") as execute,
+        ):
+            result = resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
+        assert result == "!touch /tmp/keyring-pwned"
+        execute.assert_not_called()
+
+    def test_config_command_substitution_still_runs(self):
+        """Command substitution remains available for config.yaml keys."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch(
+                "voice_to_text.providers.base._execute_command_for_key",
+                return_value="from-command",
+            ) as execute,
+        ):
+            result = resolve_api_key({"api_key": "!echo key"}, "DEEPGRAM_API_KEY")
+
+        assert result == "from-command"
+        execute.assert_called_once_with("echo key")
+
+
+def test_keyring_block_keeps_other_which_lookups():
+    """The hermetic fixture only hides secret-tool, not every executable."""
+    import shutil
+
+    assert shutil.which("secret-tool") is None
+    assert shutil.which("sh")

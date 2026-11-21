@@ -2,37 +2,45 @@
 /**
  * API key storage in the OS keyring, plus the "Add API Key" dialog.
  */
+import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 import Secret from 'gi://Secret';
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {readProviderKeyConfig} from './config-sync.js';
 
 const KEYRING_SERVICE = 'voice-to-text';
 const KEYRING_SCHEMA = 'com.happytomatoe.VoiceToText.ApiKey';
 
 /**
  * Built-in providers that authenticate with an API key. Must mirror the
- * keyring usernames and create-key URLs in scripts/store-api-keys.sh.
+ * keyring usernames, env vars, and create-key URLs in
+ * scripts/store-api-keys.sh and the Python provider constructors.
  */
 const API_KEY_PROVIDERS = {
     deepgram: {
         label: 'Deepgram',
         url: 'https://console.deepgram.com/project/default/settings/api-keys',
+        env: ['DEEPGRAM_API_KEY'],
     },
     voxtral: {
         label: 'Voxtral',
         url: 'https://console.mistral.ai/?profile_dialog=api-keys',
+        env: ['VOXTRAL_API_KEY', 'MISTRAL_API_KEY'],
     },
     groq: {
         label: 'Groq',
         url: 'https://console.groq.com/keys',
+        env: ['GROQ_API_KEY'],
     },
     elevenlabs: {
         label: 'ElevenLabs',
         url: 'https://elevenlabs.io/app/settings/api-keys',
+        env: ['ELEVENLABS_API_KEY'],
     },
     '60db': {
         label: '60db',
         url: 'https://app.60db.ai/app/developers',
+        env: ['SIXTYDB_API_KEY'],
     },
 };
 
@@ -59,7 +67,7 @@ function keyringAttributes(providerId) {
  * @param {string | null} providerId
  * @returns {boolean}
  */
-export function providerNeedsApiKey(providerId) {
+function providerNeedsApiKey(providerId) {
     return Boolean(
         providerId &&
         Object.prototype.hasOwnProperty.call(API_KEY_PROVIDERS, providerId)
@@ -71,7 +79,7 @@ export function providerNeedsApiKey(providerId) {
  * @param {string} providerId
  * @returns {boolean}
  */
-export function hasStoredApiKey(providerId) {
+function hasStoredApiKey(providerId) {
     try {
         const key = Secret.password_lookup_sync(
             getSchema(),
@@ -83,6 +91,31 @@ export function hasStoredApiKey(providerId) {
         console.error('VoiceToText: keyring lookup failed:', e.message);
         return false;
     }
+}
+
+/**
+ * Whether the provider has a key from env or config.yaml, which both outrank
+ * the keyring the dialog writes to.
+ * @param {string} providerId
+ * @returns {boolean}
+ */
+function hasConfiguredApiKey(providerId) {
+    const info = API_KEY_PROVIDERS[providerId];
+    const {apiKey, apiKeyEnv} = readProviderKeyConfig(providerId);
+    if (apiKey) return true;
+    const envNames = apiKeyEnv ? [apiKeyEnv] : info.env;
+    return envNames.some(name => Boolean(GLib.getenv(name)));
+}
+
+/**
+ * Whether the row should offer the Add API Key button: the provider needs a
+ * key and no source already supplies one.
+ * @param {string | null} providerId
+ * @returns {boolean}
+ */
+export function needsApiKeySetup(providerId) {
+    if (!providerId || !providerNeedsApiKey(providerId)) return false;
+    return !hasConfiguredApiKey(providerId) && !hasStoredApiKey(providerId);
 }
 
 /**

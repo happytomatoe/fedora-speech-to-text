@@ -293,13 +293,14 @@ def resolve_api_key(
     fingerprint = f"{key[:6]}...{key[-4:]}" if len(key) > _API_KEY_MIN_LEN else f"{key[:3]}...{key[-2:]}"
     logger.info("API key resolved: provider=%s source=%s fingerprint=%s", provider_name, source_used, fingerprint)
 
-    # 4. Command substitution (!command or !!command)
-    if key and key.startswith("!!"):
+    # 4. Command substitution (!command or !!command), config.yaml only:
+    # env vars and keyring values are opaque keys, never shell commands.
+    if source_used == "config:api_key" and key.startswith("!!"):
         # Async mode: return raw command string; Future created later in async context
         command = key[2:]  # strip leading !!
         logger.info("API key command will run in background: %s", command)
         return key  # return "!!command" as-is for deferred resolution
-    elif key and key.startswith("!"):
+    elif source_used == "config:api_key" and key.startswith("!"):
         # Sync mode (existing behavior)
         command = key[1:]  # strip leading !
         return _execute_command_for_key(command)

@@ -11,11 +11,7 @@ import {
     readDisabledProviderNames,
     syncKeyToConfig,
 } from './config-sync.js';
-import {
-    hasStoredApiKey,
-    providerNeedsApiKey,
-    showAddApiKeyDialog,
-} from './api-key.js';
+import {needsApiKeySetup, showAddApiKeyDialog} from './api-key.js';
 
 /**
  * Built-in provider id → display label. Must mirror the Python registry in
@@ -100,10 +96,7 @@ function attachApiKeyButton(row, getProviderId, parentWindow) {
     row.add_suffix(button);
 
     const refresh = () => {
-        const providerId = getProviderId();
-        button.visible =
-            providerNeedsApiKey(providerId) &&
-            !hasStoredApiKey(/** @type {string} */ (providerId));
+        button.visible = needsApiKeySetup(getProviderId());
     };
 
     button.connect('clicked', () => {
