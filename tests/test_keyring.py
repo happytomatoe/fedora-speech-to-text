@@ -1,6 +1,7 @@
 """Tests for API key resolution."""
 
 import os
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -45,3 +46,78 @@ class TestResolveApiKey:
         with patch.dict(os.environ, {"DEEPGRAM_API_KEY": "env-key"}):
             result = resolve_api_key({"api_key": "config-key"}, "DEEPGRAM_API_KEY")
             assert result == "env-key"
+
+
+class TestKeyringFallback:
+    """Tests for the OS keyring fallback."""
+
+    def test_keyring_fallback(self):
+        """Read the key from secret-tool when env and config are empty."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch(
+                "voice_to_text.providers.base.subprocess.run",
+                return_value=SimpleNamespace(stdout="keyring-key\n", returncode=0),
+            ) as run,
+        ):
+            result = resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
+        assert result == "keyring-key"
+        assert run.call_args.args[0] == [
+            "secret-tool",
+            "lookup",
+            "service",
+            "voice-to-text",
+            "username",
+            "deepgram",
+        ]
+
+    def test_keyring_ignored_without_provider_name(self):
+        """Do not consult the keyring when the caller gives no provider name."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch("voice_to_text.providers.base.subprocess.run") as run,
+            pytest.raises(ValueError, match="No API key found"),
+        ):
+            resolve_api_key({}, "DEEPGRAM_API_KEY")
+
+        run.assert_not_called()
+
+    def test_env_var_takes_precedence_over_keyring(self):
+        """Env var wins over the keyring, so secret-tool is not called."""
+        with (
+            patch.dict(os.environ, {"DEEPGRAM_API_KEY": "env-key"}),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch("voice_to_text.providers.base.subprocess.run") as run,
+        ):
+            result = resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
+        assert result == "env-key"
+        run.assert_not_called()
+
+    def test_missing_secret_tool_raises(self):
+        """Skip the keyring when secret-tool is not installed."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value=None),
+            patch("voice_to_text.providers.base.subprocess.run") as run,
+            pytest.raises(ValueError, match="No API key found"),
+        ):
+            resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
+
+        run.assert_not_called()
+
+    def test_empty_keyring_value_raises(self):
+        """An empty secret-tool result counts as no key."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("voice_to_text.providers.base.shutil.which", return_value="/usr/bin/secret-tool"),
+            patch(
+                "voice_to_text.providers.base.subprocess.run",
+                return_value=SimpleNamespace(stdout="\n", returncode=0),
+            ),
+            pytest.raises(ValueError, match="No API key found"),
+        ):
+            resolve_api_key({}, "DEEPGRAM_API_KEY", provider_name="deepgram")
