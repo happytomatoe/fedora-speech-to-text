@@ -53,7 +53,11 @@ elevenlabs:
 assemblyai:
   api_key_env: "ASSEMBLYAI_API_KEY"
   model: "universal-3-6-pro"                    # Sync API (batch)
-  streaming_model: "universal-streaming-english"
+  streaming_model: "assemblyai-stt-3-7-realtime"
+  # batch_options:             # extra Sync config fields (prompt, timestamps, ...)
+  #   prompt: "Dictation of technical notes."
+  # streaming_options:         # extra v3 connection params (mode, vad_threshold, ...)
+  #   keyterms_prompt: ["Kubernetes", "OAuth"]
   # Data residency: use https://sync.eu.assemblyai.com and
   # wss://streaming.eu.assemblyai.com to keep audio in the EU.
   # Retention: the training opt-out is an account setting in the AssemblyAI

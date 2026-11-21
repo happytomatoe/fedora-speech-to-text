@@ -4,7 +4,8 @@ import asyncio
 import json
 import os
 import tempfile
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -68,7 +69,7 @@ class TestAssemblyAIInit:
     def test_defaults(self):
         provider = AssemblyAIProvider({"api_key": "test_key"})
         assert provider.model == "universal-3-6-pro"
-        assert provider.streaming_model == "universal-streaming-english"
+        assert provider.streaming_model == "assemblyai-stt-3-7-realtime"
         assert provider.api_url == "https://sync.assemblyai.com"
         assert provider.streaming_url == "wss://streaming.assemblyai.com"
 
@@ -108,6 +109,78 @@ class TestAssemblyAIBatch:
         file_part = call_args[1]["files"]["audio"]
         assert file_part[0] == os.path.basename(tmp_path)
         assert file_part[2] == "audio/mpeg"
+        config_part = call_args[1]["files"]["config"]
+        assert config_part[2] == "application/json"
+        assert json.loads(config_part[1]) == {"language_codes": ["en"]}
+
+    @pytest.mark.asyncio
+    async def test_custom_words_and_language_sent_as_config(self, monkeypatch):
+        monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"text": "ok"}
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
+            provider = AssemblyAIProvider({"api_key": "test_key"})
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(b"RIFF")
+                tmp_path = tmp.name
+            try:
+                await provider.transcribe_file(
+                    tmp_path, language="es", custom_words=["AssemblyAI", "AssemblyAI", "  ECG  "]
+                )
+            finally:
+                os.unlink(tmp_path)
+
+        payload = json.loads(mock_post.call_args[1]["files"]["config"][1])
+        assert payload == {"keyterms_prompt": ["AssemblyAI", "ECG"], "language_codes": ["es"]}
+
+    @pytest.mark.asyncio
+    async def test_batch_options_override_generated_config(self, monkeypatch):
+        monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"text": "ok"}
+
+        config = {
+            "api_key": "test_key",
+            "batch_options": {"prompt": "Support call.", "keyterms_prompt": ["custom"]},
+        }
+        with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
+            provider = AssemblyAIProvider(config)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(b"RIFF")
+                tmp_path = tmp.name
+            try:
+                await provider.transcribe_file(tmp_path, custom_words=["ignored"])
+            finally:
+                os.unlink(tmp_path)
+
+        payload = json.loads(mock_post.call_args[1]["files"]["config"][1])
+        assert payload == {
+            "prompt": "Support call.",
+            "keyterms_prompt": ["custom"],
+            "language_codes": ["en"],
+        }
+
+    @pytest.mark.asyncio
+    async def test_unsupported_language_omits_config(self, monkeypatch):
+        monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"text": "ok"}
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
+            provider = AssemblyAIProvider({"api_key": "test_key"})
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(b"RIFF")
+                tmp_path = tmp.name
+            try:
+                await provider.transcribe_file(tmp_path, language="pl")
+            finally:
+                os.unlink(tmp_path)
+
+        assert "config" not in mock_post.call_args[1]["files"]
 
     @pytest.mark.asyncio
     async def test_http_error_raises_runtime_error(self, monkeypatch):
@@ -135,6 +208,40 @@ class TestAssemblyAIBatch:
 
 
 class TestAssemblyAIStreaming:
+    @pytest.mark.asyncio
+    async def test_start_stream_params(self):
+        provider = AssemblyAIProvider(
+            {
+                "api_key": "test_key",
+                "streaming_options": {"keyterms_prompt": ["AssemblyAI"], "include_partial_turns": True},
+            }
+        )
+        connect = AsyncMock()
+        provider._connect_ws = connect
+
+        await provider.start_stream(language="es", sample_rate=48000)
+
+        url = connect.call_args[0][0]
+        query = parse_qs(urlsplit(url).query)
+        assert query["speech_model"] == ["assemblyai-stt-3-7-realtime"]
+        assert query["sample_rate"] == ["48000"]
+        assert query["encoding"] == ["pcm_s16le"]
+        assert json.loads(query["language_codes"][0]) == ["es"]
+        assert json.loads(query["keyterms_prompt"][0]) == ["AssemblyAI"]
+        assert query["include_partial_turns"] == ["true"]
+        assert "format_turns" not in query
+
+    @pytest.mark.asyncio
+    async def test_start_stream_omits_unsupported_language(self):
+        provider = AssemblyAIProvider({"api_key": "test_key"})
+        connect = AsyncMock()
+        provider._connect_ws = connect
+
+        await provider.start_stream(language="pl")
+
+        query = parse_qs(urlsplit(connect.call_args[0][0]).query)
+        assert "language_codes" not in query
+
     @pytest.mark.asyncio
     async def test_finalize_concatenates_final_turns(self):
         """A final Turn carries the whole turn, so finals concatenate, not partials."""
