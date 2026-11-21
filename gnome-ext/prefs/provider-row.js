@@ -13,6 +13,7 @@ import {readCustomProviderNames} from './config-sync.js';
  * src/voice_to_text/providers/__init__.py (_BATCH_PROVIDERS).
  */
 const BATCH_PROVIDERS = {
+    assemblyai: 'AssemblyAI',
     deepgram: 'Deepgram',
     groq: 'Groq',
     voxtral: 'Voxtral',
@@ -26,7 +27,13 @@ const BATCH_PROVIDERS = {
  * Providers that support streaming. Must mirror _STREAMING_PROVIDERS in
  * src/voice_to_text/providers/__init__.py.
  */
-const STREAMING_PROVIDER_IDS = ['deepgram', 'voxtral', '60db', 'moonshine'];
+const STREAMING_PROVIDER_IDS = [
+    'assemblyai',
+    'deepgram',
+    'voxtral',
+    '60db',
+    'moonshine',
+];
 
 /**
  * Fill a ComboBoxText with the given provider ids/labels.

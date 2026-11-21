@@ -43,6 +43,7 @@ Cloud:
 - Voxtral
 - Groq
 - Deepgram
+- AssemblyAI
 - 60db
 - ElevenLabs
 
@@ -63,6 +64,13 @@ Custom:
 
 ### API Keys
 
+To store a key in GNOME Keyring from a source checkout, run `just store-secret`.
+Installed users can store it directly:
+
+```bash
+secret-tool store --label="Deepgram API Key" service voice-to-text username deepgram
+```
+
 You can provide API keys using next:
 
 #### 1. Environment Variables (Default)
@@ -70,6 +78,7 @@ You can provide API keys using next:
 ```bash
 export VOXTRAL_API_KEY="your-api-key-here"
 export DEEPGRAM_API_KEY="your-api-key-here"
+export ASSEMBLYAI_API_KEY="your-api-key-here"
 export GROQ_API_KEY="your-api-key-here"
 export SIXTYDB_API_KEY="your-api-key-here"
 export ELEVENLABS_API_KEY="your-api-key-here"

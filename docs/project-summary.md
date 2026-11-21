@@ -21,6 +21,7 @@ Lint/format via ruff, types via pyright.
 | Parakeet   | local | ❌        |
 | Voxtral    | cloud | ✅        |
 | Deepgram   | cloud | ✅        |
+| AssemblyAI | cloud | ✅        |
 | 60db       | cloud | ✅        |
 | Groq       | cloud | ❌        |
 | ElevenLabs | cloud | ❌        |

@@ -141,6 +141,37 @@ Keys are resolved at runtime by `resolve_api_key` (step 1). Options:
 > Command substitution supports shell pipes and quotes (`shell=True`).
 > 10-second timeout; raises `ValueError` on failure.
 
+### Register the keyring helper
+
+`just store-secret` runs `scripts/store-api-keys.sh`, which stores a key in
+GNOME Keyring under `service=voice-to-text`. Every cloud provider must be added
+there, or keyring users have to hand-write `secret-tool`.
+
+Add the provider in two places in `scripts/store-api-keys.sh`:
+
+1. the `providers` array, which is the menu entry
+2. the `case` block, with the keyring username and the page where users create a key
+
+```bash
+providers=(... "MyProvider")
+
+case "$provider" in
+MyProvider)
+  username="myprovider"
+  url="https://example.com/api-keys"
+  ;;
+esac
+```
+
+The username must match the lookup the documentation gives users, for example
+`api_key: "!secret-tool lookup service voice-to-text username myprovider"`.
+When `just gnome-ext-dev` should export the key into a nested session, add the
+same lookup to `.just/gnome-ext.just`:
+
+```bash
+export MYPROVIDER_API_KEY=$(secret-tool lookup service voice-to-text username myprovider 2>/dev/null)
+```
+
 ## 4. Surface in the GNOME extension
 
 Edit `gnome-ext/prefs.js`:
