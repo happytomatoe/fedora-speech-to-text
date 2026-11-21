@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .assemblyai import AssemblyAIProvider
 from .base import BatchProvider, StreamingProvider
 from .custom import CustomProvider
 from .deepgram import DeepgramProvider
@@ -13,6 +14,7 @@ from .sixty import SixtyProvider
 from .voxtral import VoxtralProvider
 
 _BATCH_PROVIDERS = {
+    "assemblyai": AssemblyAIProvider,
     "groq": GroqProvider,
     "deepgram": DeepgramProvider,
     "voxtral": VoxtralProvider,
@@ -24,6 +26,7 @@ _BATCH_PROVIDERS = {
 }
 
 _STREAMING_PROVIDERS = {
+    "assemblyai": AssemblyAIProvider,
     "deepgram": DeepgramProvider,
     "voxtral": VoxtralProvider,
     "60db": SixtyProvider,

@@ -4,7 +4,7 @@
 # Provider selection
 transcription:
   mode: "batch"        # "batch", "hybrid", or "streaming"
-  provider: "voxtral"   # batch: "deepgram", "groq", "voxtral", "parakeet", or "elevenlabs"
+  provider: "voxtral"   # batch: "deepgram", "groq", "voxtral", "parakeet", "elevenlabs", or "assemblyai"
   language: "en"
   hybrid:
     streaming_provider: "voxtral"
@@ -49,6 +49,16 @@ elevenlabs:
   api_key_env: "ELEVENLABS_API_KEY"
   model: "scribe_v2"          # scribe_v1, scribe_v2, scribe_v2_base, scribe_v3
   tag_audio_events: false     # true includes (laughter) etc. tags in the transcript
+
+assemblyai:
+  api_key_env: "ASSEMBLYAI_API_KEY"
+  model: "universal-3-6-pro"                    # Sync API (batch)
+  streaming_model: "universal-streaming-english"
+  # Data residency: use https://sync.eu.assemblyai.com and
+  # wss://streaming.eu.assemblyai.com to keep audio in the EU.
+  # Retention: the training opt-out is an account setting in the AssemblyAI
+  # dashboard, not a request parameter. Free plans cannot opt out, and zero
+  # retention on the streaming product requires a paid plan.
 
 moonshine:
   model: medium

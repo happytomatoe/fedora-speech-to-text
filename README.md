@@ -43,6 +43,7 @@ Cloud:
 - Voxtral
 - Groq
 - Deepgram
+- AssemblyAI
 - 60db
 - ElevenLabs
 
@@ -70,6 +71,7 @@ You can provide API keys using next:
 ```bash
 export VOXTRAL_API_KEY="your-api-key-here"
 export DEEPGRAM_API_KEY="your-api-key-here"
+export ASSEMBLYAI_API_KEY="your-api-key-here"
 export GROQ_API_KEY="your-api-key-here"
 export SIXTYDB_API_KEY="your-api-key-here"
 export ELEVENLABS_API_KEY="your-api-key-here"
