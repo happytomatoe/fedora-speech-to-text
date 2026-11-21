@@ -5,7 +5,7 @@ on:
 
 jobs:
   lint-and-type-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install just
@@ -59,7 +59,7 @@ jobs:
         run: ./scripts/ego-lint --show=fail,warn gnome-ext/
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -103,7 +103,7 @@ jobs:
         run: uv run python -m pytest
 
   js-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -134,7 +134,7 @@ jobs:
         run: bunx jscpd src/ gnome-ext/ --min-tokens 50 --threshold 1 --silent
 
   python-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
