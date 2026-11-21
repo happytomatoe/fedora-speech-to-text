@@ -9,6 +9,7 @@ import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions
 import {
     readCustomProviderNames,
     readDisabledProviderNames,
+    syncKeyToConfig,
 } from './config-sync.js';
 
 /**
@@ -43,7 +44,7 @@ function fillProviderCombo(combo, entries) {
 /**
  * Providers marked `disabled: true` in config.yaml are hidden from every
  * selector, so a stored selection on one of them cannot be shown. Fall back to
- * the first offered provider and write that choice through to GSettings and
+ * the first offered provider and write that one key through to GSettings and
  * config.yaml. Any other missing id (unreadable config, unknown provider) is
  * left alone rather than silently rewriting the user's choice.
  * @param {Gtk.ComboBoxText} combo
@@ -52,7 +53,6 @@ function fillProviderCombo(combo, entries) {
  * @param {Gio.Settings} settings
  * @param {string} settingsKey
  * @param {Set<string>} disabledProviders
- * @param {() => Promise<void>} syncAllToConfig
  */
 function selectEnabledProvider(
     combo,
@@ -60,8 +60,7 @@ function selectEnabledProvider(
     current,
     settings,
     settingsKey,
-    disabledProviders,
-    syncAllToConfig
+    disabledProviders
 ) {
     const ids = entries.map(([id]) => id);
     if (ids.includes(current)) {
@@ -73,7 +72,11 @@ function selectEnabledProvider(
     combo.set_active_id(fallback);
     console.info(`VoiceToText: '${current}' is disabled, using '${fallback}'`);
     settings.set_string(settingsKey, fallback);
-    syncAllToConfig().catch(e => console.error('VoiceToText: sync failed:', e));
+    try {
+        syncKeyToConfig(settings, settingsKey);
+    } catch (e) {
+        console.error('VoiceToText: sync failed:', e.message);
+    }
 }
 
 /**
@@ -115,8 +118,7 @@ export function createProviderRows(settings, syncAllToConfig) {
         settings.get_string('provider'),
         settings,
         'provider',
-        disabledProviders,
-        syncAllToConfig
+        disabledProviders
     );
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();
@@ -161,8 +163,7 @@ export function createProviderRows(settings, syncAllToConfig) {
         settings.get_string('streaming-provider'),
         settings,
         'streaming-provider',
-        disabledProviders,
-        syncAllToConfig
+        disabledProviders
     );
     streamingProviderCombo.connect('changed', () => {
         const activeId = streamingProviderCombo.get_active_id();
@@ -189,8 +190,7 @@ export function createProviderRows(settings, syncAllToConfig) {
         settings.get_string('batch-provider'),
         settings,
         'batch-provider',
-        disabledProviders,
-        syncAllToConfig
+        disabledProviders
     );
     batchProviderCombo.connect('changed', () => {
         const activeId = batchProviderCombo.get_active_id();
