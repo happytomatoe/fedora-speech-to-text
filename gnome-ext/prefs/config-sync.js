@@ -42,8 +42,6 @@ const CONFIG_SYNC_MAP = {
     profiling: {path: ['profiling'], type: 'boolean'},
 };
 
-// Config section name → provider id; inverse of _PROVIDER_SECTION_ALIASES in
-// src/voice_to_text/config.py.
 const SECTION_TO_PROVIDER_ID = {sixty: '60db'};
 
 function readConfigYaml() {

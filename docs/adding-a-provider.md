@@ -162,6 +162,8 @@ voxtral:
   silently using it.
 - Sections whose name differs from the registry id resolve through the same
   alias in both layers: the `60db` provider reads its `sixty:` section.
+  `SECTION_TO_PROVIDER_ID` in `gnome-ext/prefs/config-sync.js` is the inverse
+  of `_PROVIDER_SECTION_ALIASES` in `src/voice_to_text/config.py`.
 - `just config-check` reports a finding when `transcription.provider`,
   `transcription.hybrid.streaming_provider`, or
   `transcription.hybrid.batch_provider` names a disabled section. Disabled
