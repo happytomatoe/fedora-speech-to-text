@@ -106,7 +106,8 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         """Finalize the streaming session and return the complete text."""
         if self._transcriber is not None:
             try:
-                self._transcriber.stop()
+                # Off the event loop so a slow stop cannot outlive the caller's timeout.
+                await asyncio.to_thread(self._transcriber.stop)
             except Exception as e:
                 logger.warning("Error stopping Moonshine transcriber: %s", e)
         result = self._finalized_text

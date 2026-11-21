@@ -52,6 +52,27 @@ class TestMoonshineProviderStreaming:
         result = asyncio.run(provider.finalize_stream())
         assert result == ""
 
+    def test_finalize_stops_transcriber_off_event_loop(self):
+        """finalize_stream should stop the transcriber without blocking the event loop."""
+        import asyncio
+        import threading
+
+        provider = MoonshineProvider({})
+        stop_threads: list[int] = []
+
+        class _Transcriber:
+            def stop(self) -> None:
+                stop_threads.append(threading.get_ident())
+
+        provider._transcriber = _Transcriber()  # type: ignore[assignment]
+        provider._finalized_text = "hello"
+
+        result = asyncio.run(provider.finalize_stream())
+
+        assert result == "hello"
+        assert stop_threads
+        assert stop_threads[0] != threading.get_ident()
+
     def test_get_partial_result_without_start(self):
         """get_partial_result should return None when no stream was started."""
         import asyncio

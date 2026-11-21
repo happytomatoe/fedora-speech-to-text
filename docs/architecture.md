@@ -65,8 +65,12 @@ sequenceDiagram
     User->>Ext: Press Super+W again
     Ext->>DBus: StopRecording()
     DBus->>Engine: stop()
-    Engine->>Engine: Finalize streaming
-    Engine->>Engine: Run batch transcription
+    Engine->>Engine: Finalize streaming (hybrid, streaming)
+    alt batch or hybrid mode
+        Engine->>Engine: Run batch transcription
+    else streaming mode
+        Engine->>Engine: Keep the final stream transcript
+    end
     Engine->>Engine: Apply postprocessing
     Engine->>Output: Output text via selected method
 ```
@@ -116,7 +120,10 @@ Selected by `transcription.mode` in `config.yaml` (also overridable per call):
 - **batch** — record fully, then send the WAV to one provider (`provider`).
 - **hybrid** — stream partials from `streaming_provider` while recording, then a
   final `batch_provider` pass for the corrected result.
-- **streaming** — stream-only; `streaming_provider` is used for both live and final.
+- **streaming** — stream-only; `streaming_provider` supplies live partials and the
+  final transcript. Stop waits up to `STREAM_FINALIZE_TIMEOUT` (2 s) for the
+  server's last result, then outputs the best transcript received so far — no
+  second batch pass, so stop latency is bounded.
 
 ## Output Methods
 
