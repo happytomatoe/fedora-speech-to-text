@@ -65,8 +65,12 @@ sequenceDiagram
     User->>Ext: Press Super+W again
     Ext->>DBus: StopRecording()
     DBus->>Engine: stop()
-    Engine->>Engine: Finalize streaming
-    Engine->>Engine: Run batch transcription
+    Engine->>Engine: Finalize streaming (hybrid, streaming)
+    alt batch or hybrid mode
+        Engine->>Engine: Run batch transcription
+    else streaming mode
+        Engine->>Engine: Keep the final stream transcript
+    end
     Engine->>Engine: Apply postprocessing
     Engine->>Output: Output text via selected method
 ```
