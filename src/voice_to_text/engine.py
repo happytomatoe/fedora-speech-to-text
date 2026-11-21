@@ -222,10 +222,10 @@ class RecordingEngine:
             streaming_provider = await asyncio.to_thread(get_streaming_provider, streaming_name, streaming_config)
             batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
         else:
-            # streaming mode — use streaming provider as both
+            # streaming mode — the stream's own final transcript is the result
             streaming_provider = await asyncio.to_thread(get_streaming_provider, streaming_name, streaming_config)
-            batch_provider = None  # no batch in pure streaming mode
-        transcriber = HybridTranscriber(streaming_provider, batch_provider or streaming_provider)  # type: ignore[arg-type]
+            batch_provider = None
+        transcriber = HybridTranscriber(streaming_provider, batch_provider)
         return transcriber, batch_provider
 
     async def _record_and_transcribe(

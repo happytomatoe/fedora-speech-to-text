@@ -1,5 +1,6 @@
 """Hybrid transcriber combining streaming and batch providers."""
 
+import asyncio
 import contextlib
 import logging
 
@@ -7,15 +8,21 @@ from .providers.base import BatchProvider, StreamingProvider
 
 logger = logging.getLogger(__name__)
 
+# Bound on waiting for the streaming server's final transcript after stop.
+# Long enough to flush the last audio window, short enough that a hung
+# connection cannot hold up output.
+STREAM_FINALIZE_TIMEOUT = 2.0
+
 
 class HybridTranscriber:
-    """Combines streaming provider for real-time text with batch provider for final accuracy.
+    """Streams live text, then optionally replaces it with a batch pass.
 
-    All methods are async (``streaming.send_audio``, ``streaming.get_partial_result``,
-    ``batch.transcribe_file`` are now async).
+    ``batch=None`` selects stream-only mode: the streaming provider's own
+    final transcript is the result, so stop does not trigger a second
+    transcription round-trip.
     """
 
-    def __init__(self, streaming: StreamingProvider, batch: BatchProvider):
+    def __init__(self, streaming: StreamingProvider, batch: BatchProvider | None = None):
         """Initialize the hybrid transcriber."""
         self.streaming = streaming
         self.batch = batch
@@ -41,14 +48,32 @@ class HybridTranscriber:
             logger.warning("Streaming connection lost, continuing without live text: %s", e)
         return self.partial_text
 
-    async def on_recording_stop(self, audio_path: str, language: str, custom_words: list[str] | None = None) -> str:
-        """Transcribe the recorded audio and return the final text."""
+    async def _finalize_stream(self) -> str:
+        """Close the stream and return the best transcript available."""
         try:
-            finalized = await self.streaming.finalize_stream()
-            if finalized:
-                self.partial_text = finalized
+            finalized = await asyncio.wait_for(self.streaming.finalize_stream(), timeout=STREAM_FINALIZE_TIMEOUT)
+        except TimeoutError:
+            logger.warning(
+                "Streaming finalize exceeded %.1fs, using last partial transcript", STREAM_FINALIZE_TIMEOUT
+            )
+            with contextlib.suppress(Exception):
+                latest = await self.streaming.get_partial_result()
+                if latest:
+                    self.partial_text = latest
+            return self.partial_text
         except Exception as e:
             logger.warning("Error finalizing stream: %s", e)
+            return self.partial_text
+        if finalized:
+            self.partial_text = finalized
+        return self.partial_text
+
+    async def on_recording_stop(self, audio_path: str, language: str, custom_words: list[str] | None = None) -> str:
+        """Return the final transcript after the recording stops."""
+        stream_text = await self._finalize_stream()
+        if self.batch is None:
+            logger.info("Streaming mode: final transcript from stream (%d chars)", len(stream_text))
+            return stream_text
         try:
             return await self.batch.transcribe_file(audio_path, language=language, custom_words=custom_words)
         except Exception as e:
@@ -59,5 +84,6 @@ class HybridTranscriber:
         """Close both streaming and batch providers."""
         with contextlib.suppress(Exception):
             await self.streaming.close()
-        with contextlib.suppress(Exception):
-            await self.batch.close()
+        if self.batch is not None:
+            with contextlib.suppress(Exception):
+                await self.batch.close()
