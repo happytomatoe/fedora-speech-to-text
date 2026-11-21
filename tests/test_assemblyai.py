@@ -1,5 +1,6 @@
 """Tests for the AssemblyAI provider."""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -14,8 +15,9 @@ from voice_to_text.providers.assemblyai import AssemblyAIProvider
 class _FakeWS:
     """Minimal stand-in for a websockets client connection."""
 
-    def __init__(self, messages: list[str]):
+    def __init__(self, messages: list[str], after_terminate: list[str] | None = None):
         self._messages = list(messages)
+        self._after_terminate = list(after_terminate or [])
         self.sent: list[str] = []
         self.closed = False
 
@@ -23,9 +25,29 @@ class _FakeWS:
         self.sent.append(payload)
 
     async def recv(self) -> str:
+        if self._after_terminate and any("Terminate" in payload for payload in self.sent):
+            self._messages.extend(self._after_terminate)
+            self._after_terminate = []
         if self._messages:
             return self._messages.pop(0)
         raise TimeoutError
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _RaisingWS:
+    """Connection whose first receive raises the supplied exception."""
+
+    def __init__(self, exc: BaseException):
+        self.exc = exc
+        self.closed = False
+
+    async def send(self, payload: str) -> None:
+        pass
+
+    async def recv(self) -> str:
+        raise self.exc
 
     async def close(self) -> None:
         self.closed = True
@@ -157,6 +179,41 @@ class TestAssemblyAIStreaming:
 
         await provider._collect_final_turns()
         assert ws._messages == []
+
+    @pytest.mark.asyncio
+    async def test_finalize_drains_turns_sent_after_terminate(self):
+        """Final turns arriving only after Terminate must still reach the result."""
+        provider = AssemblyAIProvider({"api_key": "test_key"})
+        ws = _FakeWS(
+            [],
+            after_terminate=[
+                json.dumps({"type": "Turn", "turn_order": 0, "end_of_turn": True, "transcript": "late words"}),
+                json.dumps({"type": "Termination"}),
+            ],
+        )
+        provider._ws = ws
+
+        assert await provider.finalize_stream() == "late words"
+        assert json.loads(ws.sent[-1]) == {"type": "Terminate"}
+
+    @pytest.mark.asyncio
+    async def test_process_messages_propagates_cancellation(self):
+        provider = AssemblyAIProvider({"api_key": "test_key"})
+        provider._ws = _RaisingWS(asyncio.CancelledError())
+
+        with pytest.raises(asyncio.CancelledError):
+            await provider._process_messages()
+
+    @pytest.mark.asyncio
+    async def test_process_messages_closes_socket_on_error(self):
+        provider = AssemblyAIProvider({"api_key": "test_key"})
+        ws = _RaisingWS(ValueError("bad frame"))
+        provider._ws = ws
+
+        await provider._process_messages()
+
+        assert ws.closed is True
+        assert provider._ws is None
 
     @pytest.mark.asyncio
     async def test_send_audio_without_session_raises(self):

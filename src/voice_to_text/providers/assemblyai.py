@@ -163,11 +163,14 @@ class AssemblyAIProvider(BatchProvider, WebSocketStreamingProvider):
                     raw = await self._ws.recv()
                     if isinstance(raw, str) and self._handle_message(json.loads(raw)):
                         return
-        except (TimeoutError, asyncio.CancelledError):
+        except TimeoutError:
             pass
         except Exception as e:
             logger.warning("Error processing AssemblyAI messages: %s", e)
-            self._ws = None
+            ws, self._ws = self._ws, None
+            if ws is not None:
+                with contextlib.suppress(Exception):
+                    await ws.close()
 
     def _handle_message(self, data: dict[str, Any]) -> bool:
         """Apply one streaming message; return True on session termination."""

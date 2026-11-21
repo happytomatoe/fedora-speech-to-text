@@ -28,16 +28,19 @@ audio. The pre-recorded async API (upload + poll) is not used by this provider.
 |-----------|-------------|---------|-------|
 | `audio` | Multipart audio part | — (required) | ≤ 20 min, ≤ 256 MB; WAV/PCM/MP3/M4A/AAC/Ogg/FLAC/WebM |
 | `X-AAI-Model` | Model header | — (required) | `universal-3-6-pro` |
-| server deadline | Request timeout | 30 s | Short dictation fits comfortably |
+| client timeout | `httpx` request timeout | 120 s | The server's own deadline is 30 s; this only bounds the client wait |
 
-Response fields used: `text` (full transcript), plus `words`, `confidence`,
-`audio_duration_ms`, `session_id`, `request_time_ms`.
+The provider reads only `text` from the response. The API also returns `words`,
+`confidence`, `audio_duration_ms`, `session_id`, and `request_time_ms`; this
+integration does not consume them.
 
 ## Streaming (v3 WebSocket)
 
-Query parameters: `speech_model` (required; default `universal-streaming-english`),
-`sample_rate` (required), `encoding=pcm_s16le`, `format_turns=true`,
-`end_of_turn_confidence_threshold`, `vad_threshold`, `keyterms_prompt`.
+Query parameters this provider sends: `speech_model` (default
+`universal-streaming-english`), `sample_rate`, `encoding=pcm_s16le`, and
+`format_turns=true`. The endpoint also accepts `end_of_turn_confidence_threshold`,
+`vad_threshold`, and `keyterms_prompt`, but they are not exposed through
+`config.yaml` and are not sent.
 
 Messages:
 
@@ -53,7 +56,7 @@ Sessions left open keep accruing charges until the 3-hour cap, so
 
 ## Languages
 
-- Batch (Sync, `universal-3-6-pro`): 55+ languages.
+- Batch (Sync, `universal-3-6-pro`): 32 languages, auto-detected.
 - Streaming: `universal-streaming-english` (English);
   `universal-streaming-multilingual` covers en/es/fr/de/it/pt. Other languages need
   `speech_model=whisper-rt`.
