@@ -116,9 +116,11 @@ const SKIP_DEPS = args.includes("--skip-deps");
 const timeoutIdx = args.indexOf("--timeout");
 const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
 
-// Parse --case <name> (select specific test case instead of random)
-const caseIdx = args.indexOf("--case");
-const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
+// Parse --case <name> (repeatable: select specific test cases instead of random)
+const SELECTED_CASES = args.reduce<string[]>((acc, arg, i) => {
+  if (arg === "--case" && args[i + 1]) acc.push(args[i + 1]);
+  return acc;
+}, []);
 
 // Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual)
 const outputMethodIdx = args.indexOf("--output-method");
@@ -300,10 +302,10 @@ function pickRandomTestCase(): TestCaseFile {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
   const cases: TestCaseFile[] = data["test-cases"];
   let picked: TestCaseFile;
-  if (SELECTED_CASE) {
-    picked = cases.find(c => c.file.includes(SELECTED_CASE))!;
+  if (SELECTED_CASES.length > 0) {
+    picked = cases.find(c => SELECTED_CASES.some(s => c.file.includes(s)))!;
     if (!picked) {
-      throw new Error(`Test case '${SELECTED_CASE}' not found. Available: ${cases.map(c => c.file).join(", ")}`);
+      throw new Error(`No test case matches '${SELECTED_CASES.join(", ")}'. Available: ${cases.map(c => c.file).join(", ")}`);
     }
     console.log(`  Selected test case (by name): ${picked.file}`);
   } else {
@@ -1099,11 +1101,11 @@ async function runBareMode(): Promise<void> {
     matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
   );
   const rawCases = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"))["test-cases"] as TestCaseFile[];
-  const picked = SELECTED_CASE
-    ? rawCases.filter(c => c.file.includes(SELECTED_CASE))
+  const picked = SELECTED_CASES.length > 0
+    ? rawCases.filter(c => SELECTED_CASES.some(s => c.file.includes(s)))
     : [rawCases[Math.floor(Math.random() * rawCases.length)]];
-  if (picked.length === 0) throw new Error(`no test cases match '${SELECTED_CASE ?? "(all)"}'`);
-  if (!SELECTED_CASE) console.log(`  Bare mode: randomly picked ${picked[0].file} (one case is enough for the basic flow)`);
+  if (picked.length === 0) throw new Error(`no test cases match '${SELECTED_CASES.join(", ")}'`);
+  if (SELECTED_CASES.length === 0) console.log(`  Bare mode: randomly picked ${picked[0].file} (one case is enough for the basic flow)`);
   const allCases: (TestCaseFile & { method: string })[] = picked
     .map(c => ({ ...c, method: (c as any)["output-method"] ?? "mutter-commit" }));
   const uinputOk = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
