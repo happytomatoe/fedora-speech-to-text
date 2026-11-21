@@ -6,7 +6,10 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio'; // eslint-disable-line no-unused-vars -- used in JSDoc
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
-import {readCustomProviderNames} from './config-sync.js';
+import {
+    readCustomProviderNames,
+    readDisabledProviderNames,
+} from './config-sync.js';
 
 /**
  * Built-in provider id → display label. Must mirror the Python registry in
@@ -38,6 +41,32 @@ function fillProviderCombo(combo, entries) {
 }
 
 /**
+ * Providers marked `disabled: true` in config.yaml are hidden from every
+ * selector, so a stored selection on one of them cannot be shown. Fall back to
+ * the first offered provider and persist that choice in GSettings.
+ * @param {Gtk.ComboBoxText} combo
+ * @param {Array<[string, string]>} entries
+ * @param {string} current - stored GSettings value
+ * @param {Gio.Settings} settings
+ * @param {string} settingsKey
+ */
+function selectEnabledProvider(combo, entries, current, settings, settingsKey) {
+    const ids = entries.map(([id]) => id);
+    const active = ids.includes(current) ? current : ids[0];
+    if (!active) {
+        console.warn(`VoiceToText: no enabled provider for '${settingsKey}'`);
+        return;
+    }
+    combo.set_active_id(active);
+    if (active !== current) {
+        console.info(
+            `VoiceToText: '${current}' is not an enabled provider, using '${active}'`
+        );
+        settings.set_string(settingsKey, active);
+    }
+}
+
+/**
  * Create the provider/mode settings rows.
  * @param {Gio.Settings} settings
  * @param {() => Promise<void>} syncAllToConfig - Function to sync settings to config.yaml
@@ -49,20 +78,34 @@ export function createProviderRows(settings, syncAllToConfig) {
         title: _('Transcription Provider'),
     });
 
+    const disabledProviders = new Set(readDisabledProviderNames());
+    const batchEntries = Object.entries(BATCH_PROVIDERS).filter(
+        ([id]) => !disabledProviders.has(id)
+    );
+
     const providerCombo = new Gtk.ComboBoxText();
     // Custom providers from config.yaml (e.g. type: batch_custom sections) are
     // appended after the built-ins. Their section names are valid
     // transcription.provider values, so selecting one selects that provider.
-    fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));
-    const customProviders = readCustomProviderNames().filter(
-        name =>
-            !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) &&
-            name !== 'template'
+    const customEntries = readCustomProviderNames()
+        .filter(
+            name =>
+                !Object.prototype.hasOwnProperty.call(BATCH_PROVIDERS, name) &&
+                name !== 'template' &&
+                !disabledProviders.has(name)
+        )
+        .map(
+            name => /** @type {[string, string]} */ ([name, `${name} (custom)`])
+        );
+    const providerEntries = [...batchEntries, ...customEntries];
+    fillProviderCombo(providerCombo, providerEntries);
+    selectEnabledProvider(
+        providerCombo,
+        providerEntries,
+        settings.get_string('provider'),
+        settings,
+        'provider'
     );
-    for (const name of customProviders) {
-        providerCombo.append(name, `${name} (custom)`);
-    }
-    providerCombo.set_active_id(settings.get_string('provider'));
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();
         if (activeId) {
@@ -95,15 +138,17 @@ export function createProviderRows(settings, syncAllToConfig) {
         subtitle: _('Provider for real-time streaming during recording'),
     });
 
-    const streamingProviderCombo = new Gtk.ComboBoxText();
-    fillProviderCombo(
-        streamingProviderCombo,
-        Object.entries(BATCH_PROVIDERS).filter(([id]) =>
-            STREAMING_PROVIDER_IDS.includes(id)
-        )
+    const streamingEntries = batchEntries.filter(([id]) =>
+        STREAMING_PROVIDER_IDS.includes(id)
     );
-    streamingProviderCombo.set_active_id(
-        settings.get_string('streaming-provider')
+    const streamingProviderCombo = new Gtk.ComboBoxText();
+    fillProviderCombo(streamingProviderCombo, streamingEntries);
+    selectEnabledProvider(
+        streamingProviderCombo,
+        streamingEntries,
+        settings.get_string('streaming-provider'),
+        settings,
+        'streaming-provider'
     );
     streamingProviderCombo.connect('changed', () => {
         const activeId = streamingProviderCombo.get_active_id();
@@ -123,8 +168,14 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
 
     const batchProviderCombo = new Gtk.ComboBoxText();
-    fillProviderCombo(batchProviderCombo, Object.entries(BATCH_PROVIDERS));
-    batchProviderCombo.set_active_id(settings.get_string('batch-provider'));
+    fillProviderCombo(batchProviderCombo, batchEntries);
+    selectEnabledProvider(
+        batchProviderCombo,
+        batchEntries,
+        settings.get_string('batch-provider'),
+        settings,
+        'batch-provider'
+    );
     batchProviderCombo.connect('changed', () => {
         const activeId = batchProviderCombo.get_active_id();
         if (activeId) {

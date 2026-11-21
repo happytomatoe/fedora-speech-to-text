@@ -76,6 +76,25 @@ export function readCustomProviderNames() {
         .map(([key]) => key);
 }
 
+/**
+ * Names of provider sections marked `disabled: true` in config.yaml. These are
+ * hidden from the provider selectors and rejected by the Python registry.
+ * @returns {string[]}
+ */
+export function readDisabledProviderNames() {
+    const config = readConfigYaml();
+    if (!config) return [];
+    return Object.entries(config)
+        .filter(
+            ([, value]) =>
+                value !== null &&
+                typeof value === 'object' &&
+                !Array.isArray(value) &&
+                value.disabled === true
+        )
+        .map(([key]) => key);
+}
+
 function writeConfigYaml(config) {
     const file = Gio.File.new_for_path(CONFIG_PATH);
     const parent = file.get_parent();

@@ -33,6 +33,7 @@ VALID_TEMPLATE_KEYS = {
     "api_key",
     "api_key_env",
     "variables",
+    "disabled",
 }
 
 
@@ -84,6 +85,24 @@ def _findings_for_template_provider(name: str, section: dict[str, Any]) -> list[
     return findings
 
 
+def _findings_for_disabled_selection(sections: dict[str, Any]) -> list[str]:
+    """Report providers selected for use but hidden by ``disabled: true``."""
+    transcription = sections.get("transcription")
+    if not isinstance(transcription, dict):
+        return []
+    candidates: list[tuple[str, Any]] = [("transcription.provider", transcription.get("provider"))]
+    hybrid = transcription.get("hybrid")
+    if isinstance(hybrid, dict):
+        candidates.append(("transcription.hybrid.streaming_provider", hybrid.get("streaming_provider")))
+        candidates.append(("transcription.hybrid.batch_provider", hybrid.get("batch_provider")))
+    findings = []
+    for label, name in candidates:
+        section = sections.get(name) if isinstance(name, str) else None
+        if isinstance(section, dict) and section.get("disabled") is True:
+            findings.append(f"{label} '{name}' is disabled in config.yaml (disabled: true)")
+    return findings
+
+
 def _load_manager() -> ConfigManager:
     """Load config from VOICE_TO_TEXT_CONFIG env var if set, else default discovery."""
     path = os.environ.get("VOICE_TO_TEXT_CONFIG")
@@ -100,6 +119,7 @@ def check_config(manager: ConfigManager) -> list[str]:
     findings: list[str] = []
     selected = manager.get_selected_provider()
     sections = manager.config
+    findings.extend(_findings_for_disabled_selection(sections))
     # Only flag a missing section when it's genuinely unknown: built-in
     # providers work from env vars alone, and template sections are validated
     # below. A misspelled selected provider with no other sections must still

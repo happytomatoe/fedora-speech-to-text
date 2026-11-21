@@ -55,6 +55,23 @@ crispasr:
     model: m
 """
 
+DISABLED_PROVIDER_CONFIG = """
+transcription:
+  provider: voxtral
+voxtral:
+  disabled: true
+"""
+
+DISABLED_HYBRID_CONFIG = """
+transcription:
+  provider: deepgram
+  hybrid:
+    streaming_provider: deepgram
+    batch_provider: voxtral
+voxtral:
+  disabled: true
+"""
+
 
 def _write_config(content: str, monkeypatch=None) -> str:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -106,6 +123,22 @@ class TestCheckConfig:
         try:
             findings = check_config(ConfigManager(path))
             assert any("'nosuch' has no config section" in f for f in findings)
+        finally:
+            os.unlink(path)
+
+    def test_disabled_selected_provider_found(self, monkeypatch):
+        path = _write_config(DISABLED_PROVIDER_CONFIG, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert any("transcription.provider 'voxtral' is disabled" in f for f in findings)
+        finally:
+            os.unlink(path)
+
+    def test_disabled_hybrid_batch_provider_found(self, monkeypatch):
+        path = _write_config(DISABLED_HYBRID_CONFIG, monkeypatch)
+        try:
+            findings = check_config(ConfigManager(path))
+            assert any("transcription.hybrid.batch_provider 'voxtral' is disabled" in f for f in findings)
         finally:
             os.unlink(path)
 

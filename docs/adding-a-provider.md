@@ -141,6 +141,27 @@ Keys are resolved at runtime by `resolve_api_key` (step 1). Options:
 > Command substitution supports shell pipes and quotes (`shell=True`).
 > 10-second timeout; raises `ValueError` on failure.
 
+### Disabling a provider
+
+Any provider block accepts `disabled: true` to hide it from the GNOME
+selectors without deleting its configuration:
+
+```yaml
+voxtral:
+  api_key: "!op read 'op://Vault/Voxtral/key'"
+  disabled: true
+```
+
+- `gnome-ext/prefs/provider-row.js` filters the provider, streaming, and
+  hybrid-batch dropdowns (`readDisabledProviderNames` in
+  `gnome-ext/prefs/config-sync.js`).
+- `get_batch_provider` / `get_streaming_provider` raise `ValueError` for a
+  disabled section, so a stale selection fails loudly instead of silently
+  using it.
+- `just config-check` reports a finding when `transcription.provider`,
+  `transcription.hybrid.streaming_provider`, or
+  `transcription.hybrid.batch_provider` names a disabled section.
+
 ## 4. Surface in the GNOME extension
 
 Edit `gnome-ext/prefs.js`:
