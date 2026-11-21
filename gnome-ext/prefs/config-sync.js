@@ -42,8 +42,9 @@ const CONFIG_SYNC_MAP = {
     profiling: {path: ['profiling'], type: 'boolean'},
 };
 
-// Keep in sync with _PROVIDER_SECTION_ALIASES in src/voice_to_text/config.py.
-const PROVIDER_SECTION_ALIASES = {sixty: '60db'};
+// Config section name → provider id; inverse of _PROVIDER_SECTION_ALIASES in
+// src/voice_to_text/config.py.
+const SECTION_TO_PROVIDER_ID = {sixty: '60db'};
 
 function readConfigYaml() {
     const file = Gio.File.new_for_path(CONFIG_PATH);
@@ -95,7 +96,7 @@ export function readDisabledProviderNames() {
                 !Array.isArray(value) &&
                 value.disabled === true
         )
-        .map(([key]) => PROVIDER_SECTION_ALIASES[key] ?? key);
+        .map(([key]) => SECTION_TO_PROVIDER_ID[key] ?? key);
 }
 
 function writeConfigYaml(config) {
