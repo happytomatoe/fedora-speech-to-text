@@ -13,6 +13,7 @@
     "@girs/gtk-4.0": "^4.1.0",
     "@girs/meta-18": "^4.1.0",
     "@girs/pango-1.0": "^4.1.0",
+    "@girs/secret-1": "^5.6.0",
     "@girs/shell-18": "^4.1.0",
     "@girs/st-18": "^4.1.0",
     "@types/pngjs": "^6.0.5",

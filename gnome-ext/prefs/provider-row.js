@@ -11,6 +11,11 @@ import {
     readDisabledProviderNames,
     syncKeyToConfig,
 } from './config-sync.js';
+import {
+    hasStoredApiKey,
+    providerNeedsApiKey,
+    showAddApiKeyDialog,
+} from './api-key.js';
 
 /**
  * Built-in provider id → display label. Must mirror the Python registry in
@@ -80,12 +85,45 @@ function selectEnabledProvider(
 }
 
 /**
+ * Add an "Add API Key" button to a provider row. The button is visible only
+ * when the row's provider needs a key and none is stored in the keyring.
+ * @param {Adw.ActionRow} row
+ * @param {() => string | null} getProviderId
+ * @param {Gtk.Window} parentWindow
+ * @returns {() => void} Refreshes the button visibility.
+ */
+function attachApiKeyButton(row, getProviderId, parentWindow) {
+    const button = new Gtk.Button({
+        label: _('Add API Key'),
+        valign: Gtk.Align.CENTER,
+    });
+    row.add_suffix(button);
+
+    const refresh = () => {
+        const providerId = getProviderId();
+        button.visible =
+            providerNeedsApiKey(providerId) &&
+            !hasStoredApiKey(/** @type {string} */ (providerId));
+    };
+
+    button.connect('clicked', () => {
+        const providerId = getProviderId();
+        if (!providerId) return;
+        showAddApiKeyDialog(parentWindow, providerId, refresh);
+    });
+
+    refresh();
+    return refresh;
+}
+
+/**
  * Create the provider/mode settings rows.
  * @param {Gio.Settings} settings
  * @param {() => Promise<void>} syncAllToConfig - Function to sync settings to config.yaml
+ * @param {Gtk.Window} parentWindow
  * @returns {{ rows: Adw.ActionRow[], updateVisibility: () => void }}
  */
-export function createProviderRows(settings, syncAllToConfig) {
+export function createProviderRows(settings, syncAllToConfig, parentWindow) {
     // Provider setting (batch mode only)
     const providerRow = new Adw.ActionRow({
         title: _('Transcription Provider'),
@@ -120,16 +158,22 @@ export function createProviderRows(settings, syncAllToConfig) {
         'provider',
         disabledProviders
     );
+    providerRow.add_suffix(providerCombo);
+    const refreshProviderKey = attachApiKeyButton(
+        providerRow,
+        () => providerCombo.get_active_id(),
+        parentWindow
+    );
     providerCombo.connect('changed', () => {
         const activeId = providerCombo.get_active_id();
         if (activeId) {
             settings.set_string('provider', activeId);
+            refreshProviderKey();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
         }
     });
-    providerRow.add_suffix(providerCombo);
 
     // Transcription mode setting
     const modeRow = new Adw.ActionRow({
@@ -165,16 +209,22 @@ export function createProviderRows(settings, syncAllToConfig) {
         'streaming-provider',
         disabledProviders
     );
+    streamingProviderRow.add_suffix(streamingProviderCombo);
+    const refreshStreamingProviderKey = attachApiKeyButton(
+        streamingProviderRow,
+        () => streamingProviderCombo.get_active_id(),
+        parentWindow
+    );
     streamingProviderCombo.connect('changed', () => {
         const activeId = streamingProviderCombo.get_active_id();
         if (activeId) {
             settings.set_string('streaming-provider', activeId);
+            refreshStreamingProviderKey();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
         }
     });
-    streamingProviderRow.add_suffix(streamingProviderCombo);
 
     // Batch provider setting (hybrid mode only)
     const batchProviderRow = new Adw.ActionRow({
@@ -192,16 +242,22 @@ export function createProviderRows(settings, syncAllToConfig) {
         'batch-provider',
         disabledProviders
     );
+    batchProviderRow.add_suffix(batchProviderCombo);
+    const refreshBatchProviderKey = attachApiKeyButton(
+        batchProviderRow,
+        () => batchProviderCombo.get_active_id(),
+        parentWindow
+    );
     batchProviderCombo.connect('changed', () => {
         const activeId = batchProviderCombo.get_active_id();
         if (activeId) {
             settings.set_string('batch-provider', activeId);
+            refreshBatchProviderKey();
             syncAllToConfig().catch(e =>
                 console.error('VoiceToText: sync failed:', e)
             );
         }
     });
-    batchProviderRow.add_suffix(batchProviderCombo);
 
     // Show/hide provider rows based on mode
     const updateProviderVisibility = () => {

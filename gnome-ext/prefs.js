@@ -106,7 +106,8 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
 
         const {rows: providerRows} = createProviderRows(
             settings,
-            _syncAllToConfig
+            _syncAllToConfig,
+            window
         );
         for (const row of providerRows) {
             recordingGroup.add(row);
