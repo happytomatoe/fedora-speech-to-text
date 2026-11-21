@@ -13,7 +13,7 @@ fi
 
 echo "voice-to-text — API Key Storage"
 
-providers=("Deepgram" "Voxtral" "Groq" "ElevenLabs" "60db")
+providers=("Deepgram" "Voxtral" "Groq" "ElevenLabs" "60db" "AssemblyAI")
 
 echo "Which provider's API key do you want to store?"
 select provider in "${providers[@]}"; do
@@ -42,6 +42,10 @@ ElevenLabs)
 60db)
   username="60db"
   url="https://app.60db.ai/app/developers"
+  ;;
+AssemblyAI)
+  username="assemblyai"
+  url="https://www.assemblyai.com/dashboard"
   ;;
 *)
   echo "Invalid provider. Aborted."

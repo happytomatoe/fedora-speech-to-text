@@ -64,6 +64,8 @@ Custom:
 
 ### API Keys
 
+To store a key in GNOME Keyring, run `just store-secret`.
+
 You can provide API keys using next:
 
 #### 1. Environment Variables (Default)
