@@ -6,6 +6,7 @@ gnome-ext-dev: reinstall gnome-ext-install
     # (where the Secret Service is reachable) so the nested D-Bus service
     # inherits them. The wrapper does this for the real service; dev
     # launches voice-to-text-dbus directly and must load keys here instead.
+    set +x  # keep expanded key values out of traced logs
     if command -v secret-tool &>/dev/null; then
         export VOXTRAL_API_KEY=$(secret-tool lookup service voice-to-text username voxtral 2>/dev/null)
         export DEEPGRAM_API_KEY=$(secret-tool lookup service voice-to-text username deepgram 2>/dev/null)
@@ -14,6 +15,7 @@ gnome-ext-dev: reinstall gnome-ext-install
         export SIXTYDB_API_KEY=$(secret-tool lookup service voice-to-text username 60db 2>/dev/null)
         export ASSEMBLYAI_API_KEY=$(secret-tool lookup service voice-to-text username assemblyai 2>/dev/null)
     fi
+    set -x
     if [ -n "${TOOLBOX_PATH:-}" ] || [ "${container:-}" = "oci" ]; then
         echo "Error: Cannot start a development GNOME Shell from within a toolbox container. Run this command on the host system." >&2
         exit 1

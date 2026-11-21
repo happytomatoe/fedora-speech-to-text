@@ -64,7 +64,12 @@ Custom:
 
 ### API Keys
 
-To store a key in GNOME Keyring, run `just store-secret`.
+To store a key in GNOME Keyring from a source checkout, run `just store-secret`.
+Installed users can store it directly:
+
+```bash
+secret-tool store --label="Deepgram API Key" service voice-to-text username deepgram
+```
 
 You can provide API keys using next:
 

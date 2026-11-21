@@ -160,12 +160,17 @@ MyProvider)
   username="myprovider"
   url="https://example.com/api-keys"
   ;;
+esac
 ```
 
 The username must match the lookup the documentation gives users, for example
 `api_key: "!secret-tool lookup service voice-to-text username myprovider"`.
 When `just gnome-ext-dev` should export the key into a nested session, add the
-same lookup to `.just/gnome-ext.just`.
+same lookup to `.just/gnome-ext.just`:
+
+```bash
+export MYPROVIDER_API_KEY=$(secret-tool lookup service voice-to-text username myprovider 2>/dev/null)
+```
 
 ## 4. Surface in the GNOME extension
 
