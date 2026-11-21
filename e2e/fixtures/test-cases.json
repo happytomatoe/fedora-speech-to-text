@@ -1,29 +1,28 @@
 {
   "test-cases": [
     {
-      "file": "test-01-weather.wav",
-      "expected": "the weather today is sunny with a high of 75 degrees",
+      "file": "test-01-thieves.wav",
+      "expected": "the thieves, for elder was soon joined by burgess, drove together to ben caunt's, the pugilist's, public-house in st. martin's lane",
       "output-method": "mutter-commit"
     },
     {
-      "file": "test-02-reminder.wav",
-      "expected": "remember to buy groceries after work today",
+      "file": "test-02-embassy.wav",
+      "expected": "was quite interested in determining the nature of his contact with the soviet embassy in mexico city, end quote",
       "output-method": "mutter-virtual"
     },
     {
-      "file": "test-03-hello.wav",
-      "expected": "good morning, how are you today?",
+      "file": "test-03-jails.wav",
+      "expected": "by other acts local authorities were empowered to construct new jails or hire accommodation in the district",
       "output-method": "mutter-commit"
     },
     {
-      "file": "test-04-calendar.wav",
-      "expected": "our meeting is scheduled for 3pm on monday",
+      "file": "test-04-monster.wav",
+      "expected": "let this monster give his name; i am ready to fight him. i am still determined to put myself in the place of mr. fauntleroy",
       "output-method": "mutter-virtual"
     },
     {
-      "file": "test-05-note.wav",
-      "expected": "note that the project",
-      "note": "substring both Parakeet and Moonshine-medium produce verbatim (Moonshine mishears deadline->then died, CI 2026-09-03)",
+      "file": "test-05-phial.wav",
+      "expected": "this phial he had managed to retain in his possession in spite of the frequent searches to which he was subjected in newgate",
       "output-method": "mutter-commit"
     }
   ]

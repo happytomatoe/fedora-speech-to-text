@@ -8,7 +8,7 @@ import pytest
 from voice_to_text.providers import get_batch_provider
 from voice_to_text.providers.custom import CustomProvider
 
-WAV_FIXTURE = str(Path(__file__).parents[1] / "e2e" / "fixtures" / "test-01-weather.wav")
+WAV_FIXTURE = str(Path(__file__).parents[1] / "e2e" / "fixtures" / "test-01-thieves.wav")
 
 
 def _make_wav(tmp_path: Path) -> str:
