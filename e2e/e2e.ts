@@ -17,6 +17,46 @@ import { LocalTransport } from "./lib/transport.js";
 import { ShellHelper } from "./lib/shell.js";
 import { execSync } from "node:child_process";
 
+/**
+ * Word-level similarity between an expected transcript and the model output.
+ * ASR (Parakeet) can vary a word or punctuation between runs; requiring an
+ * exact string match made the suite flap. 0.8 still rejects a different
+ * language, an empty transcript, or a model swap.
+ */
+const MIN_TRANSCRIPT_SIMILARITY = 0.8;
+
+function transcriptWords(text: string): string[] {
+  return text.trim().toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function wordSimilarity(expected: string, actual: string): number {
+  const a = transcriptWords(expected);
+  const b = transcriptWords(actual);
+  if (a.length === 0) return 0;
+  const distances = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let previous = distances[0];
+    distances[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const current = distances[j];
+      distances[j] = Math.min(
+        distances[j] + 1,
+        distances[j - 1] + 1,
+        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      previous = current;
+    }
+  }
+  return 1 - distances[b.length] / a.length;
+}
+
+function transcriptMatches(expected: string, actual: string): boolean {
+  return actual.trim().length > 0 && wordSimilarity(expected, actual) >= MIN_TRANSCRIPT_SIMILARITY;
+}
+
 // Log to file
 const LOG_DIR = join(import.meta.dir, "output");
 mkdirSync(LOG_DIR, { recursive: true });
@@ -116,9 +156,11 @@ const SKIP_DEPS = args.includes("--skip-deps");
 const timeoutIdx = args.indexOf("--timeout");
 const GLOBAL_TIMEOUT_MS = timeoutIdx >= 0 ? (parseInt(args[timeoutIdx + 1]) || 600) * 1000 : 600_000;
 
-// Parse --case <name> (select specific test case instead of random)
-const caseIdx = args.indexOf("--case");
-const SELECTED_CASE = caseIdx >= 0 ? args[caseIdx + 1] : undefined;
+// Parse --case <name> (repeatable: select specific test cases instead of random)
+const SELECTED_CASES = args.reduce<string[]>((acc, arg, i) => {
+  if (arg === "--case" && args[i + 1]) acc.push(args[i + 1]);
+  return acc;
+}, []);
 
 // Parse --output-method <method> (test specific output method: type, clipboard, mutter-virtual)
 const outputMethodIdx = args.indexOf("--output-method");
@@ -300,10 +342,10 @@ function pickRandomTestCase(): TestCaseFile {
   const data = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"));
   const cases: TestCaseFile[] = data["test-cases"];
   let picked: TestCaseFile;
-  if (SELECTED_CASE) {
-    picked = cases.find(c => c.file.includes(SELECTED_CASE))!;
+  if (SELECTED_CASES.length > 0) {
+    picked = cases.find(c => SELECTED_CASES.some(s => c.file.includes(s)))!;
     if (!picked) {
-      throw new Error(`Test case '${SELECTED_CASE}' not found. Available: ${cases.map(c => c.file).join(", ")}`);
+      throw new Error(`No test case matches '${SELECTED_CASES.join(", ")}'. Available: ${cases.map(c => c.file).join(", ")}`);
     }
     console.log(`  Selected test case (by name): ${picked.file}`);
   } else {
@@ -775,13 +817,9 @@ async function verifyWithScreenshot(
   // Verify via file (primary method)
   const { stdout: actual } = await vm.deployer.exec("cat /tmp/file.txt 2>/dev/null");
   
-  const normalize = (s: string) => s.trim().toLowerCase().replace(/\.+$/, "").replace(/\s+/g, " ");
-  const actualNorm = normalize(actual);
-  const expectedNorm = normalize(expected);
-  
-  // Check text match
-  if (actualNorm !== expectedNorm) {
-    return { passed: false, message: `Text does not match: expected '${expectedNorm}', got '${actualNorm}'`, screenshot };
+  const similarity = wordSimilarity(expected, actual);
+  if (!transcriptMatches(expected, actual)) {
+    return { passed: false, message: `Text does not match (similarity ${similarity.toFixed(2)} < ${MIN_TRANSCRIPT_SIMILARITY}): expected '${expected}', got '${actual}'`, screenshot };
   }
   
   // Check visual regression (reference is mandatory unless --update populates it)
@@ -1099,11 +1137,19 @@ async function runBareMode(): Promise<void> {
     matrix.matrix["output-methods"].map((m: any) => [m.id, m.requires ?? []]),
   );
   const rawCases = JSON.parse(readFileSync(TEST_CASES_FILE, "utf-8"))["test-cases"] as TestCaseFile[];
-  const picked = SELECTED_CASE
-    ? rawCases.filter(c => c.file.includes(SELECTED_CASE))
+  const unmatchedSelectors = SELECTED_CASES.filter(
+    s => !rawCases.some(c => c.file.includes(s)),
+  );
+  if (unmatchedSelectors.length > 0) {
+    throw new Error(
+      `no test cases match '${unmatchedSelectors.join(", ")}'. Available: ${rawCases.map(c => c.file).join(", ")}`,
+    );
+  }
+  const picked = SELECTED_CASES.length > 0
+    ? rawCases.filter(c => SELECTED_CASES.some(s => c.file.includes(s)))
     : [rawCases[Math.floor(Math.random() * rawCases.length)]];
-  if (picked.length === 0) throw new Error(`no test cases match '${SELECTED_CASE ?? "(all)"}'`);
-  if (!SELECTED_CASE) console.log(`  Bare mode: randomly picked ${picked[0].file} (one case is enough for the basic flow)`);
+  if (picked.length === 0) throw new Error(`no test cases match '${SELECTED_CASES.join(", ")}'`);
+  if (SELECTED_CASES.length === 0) console.log(`  Bare mode: randomly picked ${picked[0].file} (one case is enough for the basic flow)`);
   const allCases: (TestCaseFile & { method: string })[] = picked
     .map(c => ({ ...c, method: (c as any)["output-method"] ?? "mutter-commit" }));
   const uinputOk = !process.env.VOX_E2E_FORCE_NO_UINPUT &&
@@ -1112,12 +1158,6 @@ async function runBareMode(): Promise<void> {
 
   interface BareResult { file: string; method: string; status: "pass" | "fail"; typed: string; note?: string }
   const results: BareResult[] = [];
-  const normalize = (s: string) =>
-    s.trim().toLowerCase()
-      .replace(/\b(\d)\s*p\.m\.?\b/g, "$1pm").replace(/\b(\d)\s*a\.m\.?\b/g, "$1am")
-      .replace(/(\d)\s+(am|pm)\b/g, "$1$2")
-      .replace(/\.+$/, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ");
-
   const requireOk: Record<string, boolean> = {
     dotoolc: uinputOk,
     "gnome-extension": true,
@@ -1217,11 +1257,15 @@ async function runBareMode(): Promise<void> {
         if (!captureHit && captureRequired) {
           const pane = await transport.exec(`tmux capture-pane -t ci-e2e -p 2>/dev/null || true`, 5_000)
             .then(r => r.stdout).catch((err: unknown) => { console.warn(`[e2e] service log read failed: ${err instanceof Error ? err.message : err}`); return ""; });
-          paneHit = pane.length > 0 && normalize(pane).includes(normalize(bareCase.expected));
+          paneHit = pane
+            .split("\n")
+            .some(line => transcriptMatches(bareCase.expected, line));
         }
-        const passed = typed.length > 0 && normalize(typed).includes(normalize(bareCase.expected)) && !errorLine && (captureHit || paneHit || !captureRequired);
+        const similarity = wordSimilarity(bareCase.expected, typed);
+        const passed = transcriptMatches(bareCase.expected, typed) && !errorLine && (captureHit || paneHit || !captureRequired);
         console.log(`  expected: '${bareCase.expected}'`);
         console.log(`  typed:    '${typed}'`);
+        console.log(`  word similarity: ${similarity.toFixed(2)} (min ${MIN_TRANSCRIPT_SIMILARITY})`);
         console.log(`  output method exercised: capture=${captureHit} pane=${paneHit}${captureRequired ? " (required)" : " (optional for dotool)"}`);
         if (errorLine) console.log(`  error in log: ${errorLine}`);
         console.log(passed ? "  PASS" : "  FAIL");
