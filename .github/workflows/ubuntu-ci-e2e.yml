@@ -25,8 +25,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ubuntu-ci-e2e.yml"
-      - ".github/workflows/scripts/ci-e2e-headless.sh"
-      - ".github/workflows/scripts/ci-e2e-headless-inner.sh"
+      - ".github/workflows/scripts/**"
+      - "e2e/**"
       - "gnome-ext/**"
       - "src/voice_to_text/**"
 
