@@ -224,3 +224,10 @@ class TestDeepgramProvider:
         assert await provider.finalize_stream() == "hello"
         assert ws.sent[-1] == {"type": "CloseStream"}
         assert ws.closed is True
+
+    async def test_finalize_without_connection_keeps_partial(self):
+        provider = DeepgramProvider({"api_key": "test_key"})
+        provider._finalized_text = "final"
+        provider._partial_result = "partial"
+
+        assert await provider.finalize_stream() == "final partial"

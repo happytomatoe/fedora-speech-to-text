@@ -379,8 +379,16 @@ class WebSocketStreamingProvider(StreamingProvider):
 
     async def finalize_stream(self) -> str:
         """Finalize the streaming session and return the complete text."""
+        had_ws = self._ws is not None
         await self._finalize_ws({"type": "CloseStream"}, timeout=2.0)
-        result = self._finalized_text
+        if had_ws:
+            result = self._finalized_text
+        else:
+            result = (
+                (self._finalized_text + " " + self._partial_result).strip()
+                if self._partial_result
+                else self._finalized_text
+            )
         self._partial_result = None
         self._finalized_text = ""
         return result
