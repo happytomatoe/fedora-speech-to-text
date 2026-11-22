@@ -109,3 +109,15 @@ class TestProviderConsistency:
             assert pid in all_python, (
                 f"prefs.js provider '{pid}' is not a registered provider. Available: {sorted(all_python)}"
             )
+
+    def test_python_batch_providers_exist_in_prefs(self):
+        prefs = _parse_prefs_providers()
+        shown = set(prefs.get("batchProviderCombo", [])) | set(prefs.get("providerCombo", []))
+        missing = (set(_BATCH_PROVIDERS) - {"batch_custom"}) - shown
+        assert not missing, f"Python batch providers missing from prefs.js: {sorted(missing)}"
+
+    def test_python_streaming_providers_exist_in_prefs(self):
+        prefs = _parse_prefs_providers()
+        shown = set(prefs.get("streamingProviderCombo", []))
+        missing = set(_STREAMING_PROVIDERS) - shown
+        assert not missing, f"Python streaming providers missing from prefs.js: {sorted(missing)}"

@@ -14,7 +14,6 @@ dashboard, not a request parameter. Free plans cannot opt out, and zero
 retention on the streaming product requires a paid plan.
 """
 
-import asyncio
 import contextlib
 import json
 import logging
@@ -218,56 +217,15 @@ class AssemblyAIProvider(BatchProvider, WebSocketStreamingProvider):
 
     async def finalize_stream(self) -> str:
         """Send ``Terminate``, collect the last turns, and return the transcript."""
-        if self._ws is None:
-            result = self._combined_text()
-            self._partial_result = None
-            self._finalized_text = ""
-            return result
-
-        try:
-            await self._ws.send(json.dumps({"type": "Terminate"}))
-            await asyncio.wait_for(self._collect_final_turns(), timeout=2.0)
-        except TimeoutError:
-            logger.debug("Timeout draining AssemblyAI stream during close")
-        except Exception as e:
-            logger.warning("Error closing AssemblyAI stream: %s", e)
-        finally:
-            if self._ws is not None:
-                with contextlib.suppress(Exception):
-                    await self._ws.close()
-
+        await self._finalize_ws({"type": "Terminate"}, timeout=2.0)
         result = self._combined_text()
-        self._ws = None
         self._partial_result = None
         self._finalized_text = ""
         return result
 
-    async def _collect_final_turns(self) -> None:
-        """Read messages until the server sends ``Termination``."""
-        assert self._ws is not None
-        while self._ws is not None:
-            raw = await self._ws.recv()
-            if isinstance(raw, str) and self._handle_message(json.loads(raw)):
-                return
-
     async def _process_messages(self) -> None:
         """Apply buffered streaming messages without blocking the audio loop."""
-        if self._ws is None:
-            return
-        try:
-            async with asyncio.timeout(0.01):
-                while self._ws is not None:
-                    raw = await self._ws.recv()
-                    if isinstance(raw, str) and self._handle_message(json.loads(raw)):
-                        return
-        except TimeoutError:
-            pass
-        except Exception as e:
-            logger.warning("Error processing AssemblyAI messages: %s", e)
-            ws, self._ws = self._ws, None
-            if ws is not None:
-                with contextlib.suppress(Exception):
-                    await ws.close()
+        await self._pump_messages()
 
     def _handle_message(self, data: dict[str, Any]) -> bool:
         """Apply one streaming message; return True on session termination."""

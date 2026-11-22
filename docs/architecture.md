@@ -171,6 +171,7 @@ graph TB
     BP --> Parakeet
     BP --> ElevenLabs
     BP --> AssemblyAI
+    BP --> Speechmatics
     BP --> 60db
 
     SP[StreamingProvider<br/>start_stream / send_audio / get_partial / finalize]
@@ -178,10 +179,11 @@ graph TB
     SP --> DeepgramS[Deepgram]
     SP --> VoxtralS[Voxtral]
     SP --> AssemblyAI
+    SP --> Speechmatics
     SP --> 60dbS[60db]
 ```
 
-All streaming providers extend `WebSocketStreamingProvider` which handles the Deepgram-compatible WebSocket protocol.
+Streaming providers extend `WebSocketStreamingProvider` for connection, buffered message pumping, and teardown. Each provider parses its own server messages; Deepgram keeps its Deepgram-specific loop.
 
 ## Configuration & secrets
 

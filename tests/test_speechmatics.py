@@ -17,10 +17,12 @@ class _FakeWS:
     def __init__(self, messages: list[str]):
         self._messages = list(messages)
         self.sent: list[dict] = []
+        self.audio: list[bytes] = []
         self.closed = False
 
     async def send(self, payload: str | bytes) -> None:
         if isinstance(payload, bytes):
+            self.audio.append(payload)
             return
         data = json.loads(payload)
         self.sent.append(data)
@@ -108,9 +110,30 @@ class TestSpeechmaticsBatch:
         assert b'"model": "enhanced"' in submit.content
         assert b'"language": "en"' in submit.content
         assert b'"additional_vocab": [{"content": "Kubernetes"}]' in submit.content
+        job_get = seen[1]
+        assert job_get.url.path == "/v2/jobs/job-1"
+        assert job_get.url.params["wait"] == "30"
         transcript = seen[-1]
         assert transcript.url.path == "/v2/jobs/job-1/transcript"
         assert transcript.url.params["format"] == "txt"
+
+    async def test_job_wait_respects_timeout(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST":
+                return httpx.Response(201, json={"id": "job-1"})
+            return httpx.Response(200, json={"job": {"id": "job-1", "status": "running"}})
+
+        monkeypatch.setattr("asyncio.sleep", _no_sleep)
+        provider = _provider(poll_interval=0, timeout_seconds=0.01)
+        provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        try:
+            with (
+                tempfile.NamedTemporaryFile(suffix=".wav") as audio,
+                pytest.raises(RuntimeError, match="timed out"),
+            ):
+                await provider.transcribe_file(audio.name)
+        finally:
+            await provider._client.aclose()
 
     async def test_rejected_job_raises(self, monkeypatch):
         def handler(request: httpx.Request) -> httpx.Response:
@@ -159,12 +182,24 @@ class TestSpeechmaticsStreaming:
         assert start["transcription_config"]["language"] == "en"
         assert start["transcription_config"]["enable_partials"] is True
         assert start["transcription_config"]["additional_vocab"] == [{"content": "Kubernetes"}]
+        assert ws.audio == [b"\x00\x01"]
         assert await provider.get_partial_result() == "hello world again"
 
         text = await provider.finalize_stream()
         assert text == "hello world again"
-        assert ws.sent[-1] == {"message": "EndOfStream"}
+        assert ws.sent[-1] == {"message": "EndOfStream", "last_seq_no": 1}
         assert ws.closed is True
+
+    async def test_start_stream_surfaces_server_error(self):
+        provider = _provider()
+        ws = _FakeWS(_stream_messages({"message": "Error", "reason": "invalid key"}))
+
+        async def connect(ws_url: str, headers: dict[str, str]) -> None:
+            provider._ws = ws
+
+        provider._connect_ws = connect
+        with pytest.raises(RuntimeError, match="invalid key"):
+            await provider.start_stream()
 
 
 async def _no_sleep(seconds: float) -> None:

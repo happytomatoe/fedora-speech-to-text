@@ -20,14 +20,15 @@ For on-prem appliances, override `api_url` and `realtime_url` in `config.yaml`.
 
 ## Models
 
-Set `model` in `transcription_config`. `operating_point` is deprecated and
-still maps to `model`.
+Set `model` in `transcription_config`. Speechmatics deprecates
+`operating_point` in favor of `model`; this provider reads only `model` and
+does not translate `operating_point`.
 
 | Model | Notes |
 |---|---|
 | `enhanced` | Default. Highest accuracy for single-language audio. |
 | `standard` | Lower latency and higher throughput. |
-| `melia-1` | Multilingual; set `language: multi` and send `ForceEndOfUtterance`. |
+| `melia-1` | Multilingual (`language: multi`). Batch supported; realtime needs `ForceEndOfUtterance`, which this provider does not send. |
 | `oak-1` | Batch only. |
 
 ## Batch

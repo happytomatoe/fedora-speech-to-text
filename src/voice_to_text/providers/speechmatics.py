@@ -18,6 +18,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,7 @@ class SpeechmaticsProvider(BatchProvider, WebSocketStreamingProvider):
         self.poll_interval = float(config.get("poll_interval", DEFAULT_POLL_INTERVAL))
         self._client = get_shared_client()
         self._init_ws_state()
+        self._audio_seq = 0
 
     @property
     def name(self) -> str:
@@ -110,9 +112,17 @@ class SpeechmaticsProvider(BatchProvider, WebSocketStreamingProvider):
 
     async def _wait_for_job(self, job_id: str, headers: dict[str, str]) -> None:
         """Poll the job until it is done or fails, bounded by ``timeout_seconds``."""
-        deadline = asyncio.get_running_loop().time() + self.timeout_seconds
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.timeout_seconds
         while True:
-            response = await self._client.get(f"{self.api_url}/jobs/{job_id}", headers=headers, params={"wait": 30})
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError
+            response = await self._client.get(
+                f"{self.api_url}/jobs/{job_id}",
+                headers=headers,
+                params={"wait": max(1, min(30, math.ceil(remaining)))},
+            )
             response.raise_for_status()
             job = response.json().get("job") or {}
             status = job.get("status")
@@ -120,9 +130,10 @@ class SpeechmaticsProvider(BatchProvider, WebSocketStreamingProvider):
                 return
             if status in _TERMINAL_FAILURES:
                 raise RuntimeError(f"Speechmatics job {job_id} {status}: {job.get('error') or job}")
-            if asyncio.get_running_loop().time() >= deadline:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
                 raise TimeoutError
-            await asyncio.sleep(self.poll_interval)
+            await asyncio.sleep(min(self.poll_interval, remaining))
 
     async def _fetch_transcript(self, job_id: str, headers: dict[str, str]) -> str:
         """Download the plain-text transcript for a finished job."""
@@ -150,53 +161,37 @@ class SpeechmaticsProvider(BatchProvider, WebSocketStreamingProvider):
         if self._ws is None:
             raise RuntimeError("Speechmatics WebSocket failed to connect")
         await self._ws.send(json.dumps(message))
+        await self._await_recognition_started()
+        self._audio_seq = 0
         logger.debug("Speechmatics StartRecognition: %s", transcription_config)
+
+    async def send_audio(self, audio_chunk: bytes) -> None:
+        """Send raw audio, then track the chunk count for ``last_seq_no``."""
+        await super().send_audio(audio_chunk)
+        self._audio_seq += 1
+
+    async def _await_recognition_started(self) -> None:
+        """Block until the server accepts the session, so auth errors surface early."""
+        while self._ws is not None:
+            raw = await asyncio.wait_for(self._ws.recv(), timeout=10.0)
+            if not isinstance(raw, str):
+                continue
+            data = json.loads(raw)
+            kind = data.get("message")
+            if kind == "RecognitionStarted":
+                return
+            if kind == "Error":
+                raise RuntimeError(f"Speechmatics could not start the stream: {data.get('reason') or data}")
+        raise RuntimeError("Speechmatics stream closed before it started")
 
     async def finalize_stream(self) -> str:
         """Send ``EndOfStream``, collect the final transcripts, and close."""
-        if self._ws is None:
-            return self._take_combined_text()
-
-        try:
-            await self._ws.send(json.dumps({"message": "EndOfStream"}))
-            await asyncio.wait_for(self._collect_final_transcripts(), timeout=3.0)
-        except TimeoutError:
-            logger.debug("Timeout draining Speechmatics stream during close")
-        except Exception as e:
-            logger.warning("Error closing Speechmatics stream: %s", e)
-        finally:
-            ws, self._ws = self._ws, None
-            if ws is not None:
-                with contextlib.suppress(Exception):
-                    await ws.close()
-
+        await self._finalize_ws({"message": "EndOfStream", "last_seq_no": self._audio_seq})
         return self._take_combined_text()
-
-    async def _collect_final_transcripts(self) -> None:
-        """Read messages until the server acknowledges the end of the stream."""
-        while self._ws is not None:
-            raw = await self._ws.recv()
-            if isinstance(raw, str) and self._handle_message(json.loads(raw)):
-                return
 
     async def _process_messages(self) -> None:
         """Apply buffered messages without blocking the audio loop."""
-        if self._ws is None:
-            return
-        try:
-            async with asyncio.timeout(0.01):
-                while self._ws is not None:
-                    raw = await self._ws.recv()
-                    if isinstance(raw, str) and self._handle_message(json.loads(raw)):
-                        return
-        except TimeoutError:
-            pass
-        except Exception as e:
-            logger.warning("Error processing Speechmatics messages: %s", e)
-            ws, self._ws = self._ws, None
-            if ws is not None:
-                with contextlib.suppress(Exception):
-                    await ws.close()
+        await self._pump_messages()
 
     def _handle_message(self, data: dict[str, Any]) -> bool:
         """Apply one server message; return True on ``EndOfTranscript``."""
