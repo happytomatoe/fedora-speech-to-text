@@ -22,7 +22,6 @@ class TestElevenLabsProvider:
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"text": "hello world", "language_code": "eng"}
 
-        # Isolate from a real ELEVENLABS_API_KEY in the ambient environment.
         monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
 
         with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
@@ -37,11 +36,10 @@ class TestElevenLabsProvider:
                 assert call_args[0][0] == "https://api.elevenlabs.io/v1/speech-to-text"
                 headers = call_args[1]["headers"]
                 assert headers["xi-api-key"] == "test_key"
-                # httpx multipart: form fields are in `data`, file in `files`
                 data = call_args[1]["data"]
                 assert data["model_id"] == "scribe_v2"
                 assert data["tag_audio_events"] == "false"
-                assert data["language_code"] == "en"  # default "en" is forwarded (ISO-639-1)
+                assert data["language_code"] == "en"
                 assert call_args[1]["files"]["file"] is not None
                 assert result == "hello world"
             finally:

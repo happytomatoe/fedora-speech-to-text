@@ -301,7 +301,6 @@ class TestAssemblyAIStreaming:
         provider._ws = ws
 
         await provider.send_audio(b"\x00\x01")
-        # Live text is finalized turns plus the open partial, so it accumulates.
         assert await provider.get_partial_result() == "hello world and goodbye"
 
         result = await provider.finalize_stream()

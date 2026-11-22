@@ -62,12 +62,10 @@ class TestFilterTranscriptionOutput:
         assert result == "I think this is good"
 
     def test_portuguese_preserves_um(self):
-        # "um" means "a/an" in Portuguese
         result = filter_transcription_output("um gato bonito", "pt")
         assert result == "um gato bonito"
 
     def test_spanish_preserves_ha(self):
-        # "ha" means "has" in Spanish
         result = filter_transcription_output("ha sido un buen día", "es")
         assert result == "ha sido un buen día"
 
@@ -114,11 +112,11 @@ class TestGetFillerWords:
 
     def test_portuguese(self):
         fillers = get_filler_words("pt")
-        assert "um" not in fillers  # "um" is real word in Portuguese
+        assert "um" not in fillers
 
     def test_unknown_language(self):
         fillers = get_filler_words("xx")
-        assert "um" not in fillers  # fallback is conservative
+        assert "um" not in fillers
 
 
 class TestPostprocess:

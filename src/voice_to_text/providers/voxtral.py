@@ -18,7 +18,6 @@ from .base import AsyncKeyMixin, BatchProvider, StreamingProvider, get_shared_cl
 
 logger = logging.getLogger(__name__)
 
-# HTTP status codes
 _HTTP_UNAUTHORIZED = 401
 _API_KEY_MIN_LEN = 10
 
@@ -44,43 +43,35 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
         key_or_future = resolve_api_key(
             config, "VOXTRAL_API_KEY", extra_envs=("MISTRAL_API_KEY",), provider_name="voxtral"
         )
-        self._init_async_key(key_or_future)  # from AsyncKeyMixin
+        self._init_async_key(key_or_future)
         self._api_url = config.get("api_url", "https://api.mistral.ai")
-        # Batch model
         self.model = config.get("model", "voxtral-mini-latest")
-        # Streaming model
         self._realtime_model = config.get("realtime_model", "voxtral-mini-transcribe-realtime-2602")
         self._target_delay_ms = config.get("target_delay_ms", 400)
 
-        # Use shared HTTP client (created once at service startup)
         self._client = get_shared_client()
 
-        # Streaming state
         self._audio_queue: asyncio.Queue[bytes | None] | None = None
         self._partial_result: str | None = None
         self._partial_tokens: list[str] = []
         self._stream_task: concurrent.futures.Future[None] | None = None
         self._closed = False
 
-        # Thread + event loop for async streaming
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._ready_event = threading.Event()
-
-    # ── Batch ──────────────────────────────────────────────────────────
 
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
     ) -> str:
         """Transcribe audio file using Voxtral batch transcription API."""
-        await self._ensure_api_key()  # Resolve async key if needed
+        await self._ensure_api_key()
         logger.info("Transcribing %s with Voxtral model %s", audio_path, self.model)
         try:
             with open(audio_path, "rb") as audio_file:
                 files = {"file": (os.path.basename(audio_path), audio_file)}
                 data: dict[str, str | list[str]] = {"model": self.model, "language": language}
                 if custom_words:
-                    # Voxtral context_bias rejects items with spaces/commas — split them
                     bias = []
                     for w in custom_words:
                         bias.extend(w.replace(",", " ").split())
@@ -122,8 +113,6 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
             logger.exception("Voxtral transcription failed")
             raise RuntimeError(f"Voxtral transcription failed: {e}") from e
 
-    # ── Streaming ──────────────────────────────────────────────────────
-
     def _run_event_loop(self):
         """Run the asyncio event loop in a dedicated thread."""
         self._loop = asyncio.new_event_loop()
@@ -133,14 +122,12 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Initialize a streaming session via Voxtral SDK."""
-        await self._ensure_api_key()  # Resolve async key if needed
+        await self._ensure_api_key()
         import time as _time  # noqa: PLC0415
 
         _t0 = _time.monotonic()
-        # Ensure the SDK sees the correct key even if only VOXTRAL_API_KEY is set
         os.environ.setdefault("MISTRAL_API_KEY", self.api_key)
 
-        # Start the event loop thread if not already running
         if self._thread is None or not self._thread.is_alive():
             self._loop = None
             self._ready_event.clear()
@@ -151,13 +138,11 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
                 raise RuntimeError("Failed to start event loop thread")
         _t_loop = _time.monotonic()
 
-        # Create audio queue for this stream
         self._audio_queue = asyncio.Queue(maxsize=100)
         self._partial_tokens = []
         self._closed = False
 
-        # Schedule the streaming coroutine on the event loop
-        assert self._loop is not None  # guaranteed by the thread wait above
+        assert self._loop is not None
         self._stream_task = asyncio.run_coroutine_threadsafe(self._stream(language, sample_rate), self._loop)
         logger.info(
             "[PROFIL] Voxtral stream start: %.3fs total (event_loop %.3fs, model=%s delay=%sms)",
@@ -292,7 +277,6 @@ class VoxtralProvider(AsyncKeyMixin, BatchProvider, StreamingProvider):
 
         if self._loop is not None:
             with contextlib.suppress(Exception):
-                # Use run_in_executor to stop the loop in its own thread
                 await asyncio.get_event_loop().run_in_executor(None, self._loop.stop)
 
         if self._thread is not None:

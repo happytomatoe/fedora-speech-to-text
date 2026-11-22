@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Runs inside dbus-run-session: starts AT-SPI, D-Bus service, enables extension, launches nested GNOME Shell.
-# Called by `just dev`.
 set -euo pipefail
 echo "DEBUG: Script started, LOG_FILE=$LOG_FILE" >> "$LOG_FILE"
 
 LOG_FILE="${LOG_FILE:?}"
 DEVKIT_FLAG="${DEVKIT_FLAG:?}"
 UUID="voice-to-text@happytomatoe.com"
-# Remove gnome-shell-disable-extensions file if it exists (disables all extensions)
 echo "DEBUG: Checking for gnome-shell-disable-extensions..." >> "$LOG_FILE"
 if [ -f /run/user/1000/gnome-shell-disable-extensions ]; then
   echo "DEBUG: Found gnome-shell-disable-extensions, removing..." >> "$LOG_FILE"
@@ -17,12 +14,10 @@ else
   echo "DEBUG: gnome-shell-disable-extensions not found" >> "$LOG_FILE"
 fi
 
-# Start AT-SPI accessibility bus (needed for UI inspection)
 /usr/libexec/at-spi-bus-launcher >> "$LOG_FILE" 2>&1 &
 ATSPI_PID=$!
 sleep 0.5
 
-# Start AT-SPI registry daemon (registers accessibility providers)
 /usr/libexec/at-spi2-registryd --use-gnome-session >> "$LOG_FILE" 2>&1 &
 ATSPI_REG_PID=$!
 sleep 0.5
@@ -33,7 +28,6 @@ sleep 1
 trap 'kill $DBUS_PID $ATSPI_PID $ATSPI_REG_PID 2>/dev/null || true' EXIT INT TERM
 echo 'AT-SPI bus running. Use: just atspi-tree' >> "$LOG_FILE"
 
-# Enable extension in this session's isolated dconf
 echo "DEBUG: Checking dconf for enabled extensions..." >> "$LOG_FILE"
 CURRENT=$(dconf read /org/gnome/shell/enabled-extensions)
 echo "DEBUG: CURRENT=$CURRENT" >> "$LOG_FILE"

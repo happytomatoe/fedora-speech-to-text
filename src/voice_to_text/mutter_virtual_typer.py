@@ -50,7 +50,6 @@ class MutterVirtualTyper:
             if bus is not None:
                 bus.disconnect()
 
-        # D-Bus service not available
         logger.warning("MutterVirtualTyper: TypeText D-Bus service not available")
         self._usable = False
 
@@ -62,7 +61,6 @@ class MutterVirtualTyper:
         if not self._proxy or not self._usable:
             return
 
-        # Find common prefix
         old_text = self._typed_text
         common_len = 0
         min_len = min(len(old_text), len(new_text))
@@ -80,12 +78,10 @@ class MutterVirtualTyper:
             len(new_text),
         )
         try:
-            # Send backspaces if needed
             if backspace_count > 0:
                 bs_text = "\x08" * backspace_count
                 await self._proxy.call_type_text(bs_text)  # type: ignore[reportAttributeAccessIssue]
 
-            # Send new text
             if new_suffix:
                 await self._proxy.call_type_text(new_suffix)  # type: ignore[reportAttributeAccessIssue]
                 logger.debug("MutterVirtualTyper: Sending %d chars via D-Bus", len(new_suffix))

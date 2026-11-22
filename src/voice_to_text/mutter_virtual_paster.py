@@ -76,9 +76,6 @@ class MutterVirtualPaster:
 
     async def commit_text(self, text: str) -> bool:
         """Commit text directly via GNOME Shell's inputMethod."""
-        # The extension's TypeText service may come up after this process
-        # (e.g. in headless E2E where gnome-shell boots later), so retry the
-        # connection lazily instead of relying only on the startup check.
         if (not self._proxy or not self._usable) and not await self._try_connect():
             logger.debug("MutterVirtualPaster: commit_text() called but proxy not available")
             return False
@@ -98,9 +95,6 @@ class MutterVirtualPaster:
         During streaming, we only track the text without making D-Bus calls.
         This avoids issues with preedit rendering and commit appending.
         """
-        # Just store the text - no D-Bus calls during streaming. Store even if
-        # not currently usable: the TypeText service may come up later, and
-        # flush() retries the connection before committing.
         self._typed_text = new_text
 
     async def flush(self) -> bool:

@@ -6,10 +6,6 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 function createSpinner(params) {
-    // St.SpinnerContent only exists since GNOME 48; on GNOME 46 neither
-    // SpinnerContent nor St.Spinner is available. The spinner is purely
-    // decorative — older shells fall back to a static icon, which does not
-    // affect E2E assertions.
     if (St.SpinnerContent) {
         const widget = new St.Widget({...params, reactive: false});
         widget.set_content(new St.SpinnerContent());
@@ -19,11 +15,16 @@ function createSpinner(params) {
     if (StAny.Spinner) {
         return new StAny.Spinner({reactive: false});
     }
-    return new St.Icon({icon_name: 'media-playback-start-symbolic', ...params, reactive: false});
+    return new St.Icon({
+        icon_name: 'media-playback-start-symbolic',
+        ...params,
+        reactive: false,
+    });
 }
 
 export const VoiceIndicator = GObject.registerClass(
-    class VoiceIndicator extends PanelMenu.Button { // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+    class VoiceIndicator extends PanelMenu.Button {
+        // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
         _init() {
             super._init(0.0, 'Voice to Text');
             this._destroyed = false;
@@ -47,7 +48,6 @@ export const VoiceIndicator = GObject.registerClass(
                 reactive: true,
             });
             this._icon.connect('button-press-event', (_, event) => {
-                // Right-click opens the menu, left-click toggles recording
                 if (event.get_button() === Clutter.BUTTON_SECONDARY) {
                     this.menu.open();
                     return Clutter.EVENT_STOP;

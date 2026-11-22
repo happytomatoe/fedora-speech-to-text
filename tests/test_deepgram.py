@@ -51,7 +51,6 @@ class TestDeepgramProvider:
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"results": {"channels": [{"alternatives": [{"transcript": "hello world"}]}]}}
 
-        # Clear env vars to force config fallback
         with (
             patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post,
             patch.dict(os.environ, {}, clear=True),
@@ -96,7 +95,6 @@ class TestDeepgramProvider:
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"results": {"channels": [{"alternatives": [{"transcript": "url world"}]}]}}
 
-        # Clear env vars to force config fallback
         with (
             patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post,
             patch.dict(os.environ, {}, clear=True),
@@ -137,14 +135,12 @@ class TestDeepgramProvider:
             patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post,
             patch.dict(os.environ, {}, clear=True),
         ):
-            # Provide config without batch_options
             config = {"api_key": "test_key"}
             provider = DeepgramProvider(config)
 
             await provider.transcribe_file("https://example.com/audio.wav")
 
             params = mock_post.call_args[1]["params"]
-            # Check the specifically required defaults from the plan
             assert params["mip_opt_out"] is True, "mip_opt_out should be True by default"
             assert params["filler_words"] is False, "filler_words should be False by default"
             assert params["model"] == "nova-3"

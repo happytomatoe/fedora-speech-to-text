@@ -13,7 +13,7 @@ WAV_FIXTURE = str(Path(__file__).parents[1] / "e2e" / "fixtures" / "test-01-thie
 
 def _make_wav(tmp_path: Path) -> str:
     path = tmp_path / "test.wav"
-    path.write_bytes(b"RIFF....WAVEfmt ")  # content irrelevant; server is mocked
+    path.write_bytes(b"RIFF....WAVEfmt ")
     return str(path)
 
 
@@ -199,9 +199,6 @@ class TestVariables:
 class TestTranscribeFile:
     @pytest.mark.asyncio
     async def test_happy_path_multipart(self, httpserver, tmp_path):
-        # NOTE: pytest-httpserver `data=` matches raw body bytes, which never
-        # matches multipart (random boundary) — match uri+method, then assert
-        # the decoded form fields from the server log.
         httpserver.expect_request("/v1/audio/transcriptions", method="POST").respond_with_json(
             {"text": "  Hello world.  "}
         )
@@ -285,7 +282,7 @@ class TestTranscribeFile:
         provider = CustomProvider({"endpoint": httpserver.url_for("/x"), "form": {"m": "1"}}, "template")
         with pytest.raises(RuntimeError, match="response_text_path 'text'") as exc_info:
             await provider.transcribe_file(_make_wav(tmp_path))
-        assert "transcript" in str(exc_info.value)  # response snippet included
+        assert "transcript" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_real_wav_against_stub(self, httpserver):

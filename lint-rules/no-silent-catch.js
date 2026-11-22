@@ -1,7 +1,3 @@
-// Custom oxlint JS plugin rule: catch blocks must not be silent.
-// Every catch body (try/catch or promise .catch) must contain a console.*
-// call so failures are visible in CI logs. A comment is NOT sufficient —
-// comments rot, logs persist. A top-level rethrow also satisfies the rule.
 function hasConsoleCall(node) {
   if (!node || typeof node !== "object") return false;
   if (
@@ -14,8 +10,6 @@ function hasConsoleCall(node) {
   ) {
     return true;
   }
-  // Never descend into nested function/class bodies: a console call inside an
-  // uncalled callback proves nothing about the catch path being loud.
   if (
     node.type === "ArrowFunctionExpression" ||
     node.type === "FunctionExpression" ||
@@ -44,8 +38,6 @@ function checkCatchBody(context, bodyNode) {
     context.report({ node: bodyNode, messageId: "silent" });
     return;
   }
-  // Block body: check statements. Expression body (concise arrow): the
-  // expression itself must be the console call or a throw.
   const body = Array.isArray(bodyNode.body) ? bodyNode.body : [bodyNode];
   if (body.length === 0) {
     context.report({ node: bodyNode, messageId: "silent" });

@@ -76,23 +76,18 @@ class TestSaveErrorHandling:
     """Issue #5: save() must return False (not raise) on directory-creation failure."""
 
     def test_save_returns_false_when_mkdir_fails(self, tmp_path):
-        # Pick a non-existent target (so __init__'s _load_config() returns
-        # an empty dict via the FileNotFoundError branch) and then make mkdir
-        # fail at save-time.
         target = tmp_path / "subdir" / "config.yaml"
         cfg = ConfigManager(config_path=str(target))
         cfg.config = {"transcription": {"provider": "groq"}}
 
         with patch.object(Path, "mkdir", side_effect=PermissionError("nope")):
             assert cfg.save() is False
-        # And the target must not have been created
         assert not target.exists()
 
     def test_save_returns_false_when_target_is_unwritable(self, tmp_path):
         cfg = ConfigManager(config_path=str(tmp_path / "config.yaml"))
         cfg.config = {"transcription": {"provider": "groq"}}
 
-        # Make write() raise; mkdir should already have succeeded.
         with patch("builtins.open", side_effect=PermissionError("nope")):
             assert cfg.save() is False
 
@@ -101,37 +96,28 @@ class TestSaveMigration:
     """Issue #4: save() must not write to an auto-discovered non-user path."""
 
     def test_save_redirects_auto_discovered_non_user_path_to_user_config(self, tmp_path, monkeypatch):
-        # The repo's config.yaml is auto-discovered as the first existing
-        # default path; save() must redirect writes to the user config and
-        # leave the repo file untouched.
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         user_config = tmp_path / ".config" / "voice-to-text" / "config.yaml"
         repo_config = Path(__file__).resolve().parent.parent / "config.yaml"
         repo_contents_before = repo_config.read_text() if repo_config.exists() else None
 
         cfg = ConfigManager()
-        # The constructor picked up the repo's config (which is not user_config_path)
         assert cfg._explicit_config_path is False
         assert Path(cfg.config_path).resolve() != user_config.resolve()
 
         cfg.config = {"transcription": {"provider": "groq"}}
         assert cfg.save() is True
 
-        # config_path was redirected to the user config
         assert cfg.config_path == str(user_config)
         assert "provider: groq" in user_config.read_text()
-        # And the repo file was not modified
         if repo_contents_before is not None:
             assert repo_config.read_text() == repo_contents_before
 
     def test_save_writes_to_explicit_path_even_if_not_user_path(self, tmp_path):
-        # Explicit path: should be respected, not migrated to user_config_path,
-        # even if it happens to live under /tmp/ (e.g. a test fixture).
         explicit = tmp_path / "explicit-config.yaml"
         cfg = ConfigManager(config_path=str(explicit))
         cfg.config = {"transcription": {"provider": "groq"}}
         assert cfg.save() is True
         assert explicit.exists()
         assert "groq" in explicit.read_text()
-        # And config_path still points at the explicit file
         assert cfg.config_path == str(explicit)

@@ -45,7 +45,7 @@ class DotoolTyper:
         self._process: asyncio.subprocess.Process | None = None
         self._dotoolc_path: str | None = None
         self._typed_text: str = ""
-        self._usable: bool = True  # set to False after first write failure
+        self._usable: bool = True
         self._pipe_path: str | None = None
 
     def _find_pipe_path(self) -> str | None:
@@ -56,12 +56,10 @@ class DotoolTyper:
         1. $DOTOOL_PIPE environment variable
         2. $XDG_RUNTIME_DIR/dotool-pipe (proper per-user location per XDG spec)
         """
-        # 1. Check environment variable
         env_pipe = os.environ.get("DOTOOL_PIPE")
         if env_pipe and os.path.exists(env_pipe):
             return env_pipe
 
-        # 2. Check XDG_RUNTIME_DIR (proper location per XDG spec)
         xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
         xdg_pipe = os.path.join(xdg_runtime, "dotool-pipe")
         if os.path.exists(xdg_pipe):
@@ -73,7 +71,6 @@ class DotoolTyper:
         """Start a persistent dotoolc process and keep stdin open."""
         self._dotoolc_path = shutil.which("dotoolc")
         if not self._dotoolc_path:
-            # Check ~/.local/bin as fallback
             local_bin = os.path.expanduser("~/.local/bin/dotoolc")
             if os.path.isfile(local_bin) and os.access(local_bin, os.X_OK):
                 self._dotoolc_path = local_bin
@@ -84,13 +81,11 @@ class DotoolTyper:
                     "dotoolc requires dotoold running (dotool-quickstart.sh)"
                 )
 
-        # Find the pipe path
         self._pipe_path = self._find_pipe_path()
         if not self._pipe_path:
             raise DotoolcNotFoundError("dotool pipe not found. dotoold is not running.")
         logger.info("Using dotool pipe: %s", self._pipe_path)
 
-        # Pass pipe path to dotoolc via environment
         env = os.environ.copy()
         env["DOTOOL_PIPE"] = self._pipe_path
 
@@ -103,13 +98,11 @@ class DotoolTyper:
         )
         self._typed_text = ""
 
-        # Send initial configuration: zero delays for snappy typing
         assert self._process.stdin is not None
         self._process.stdin.write(b"keydelay 0\ntypedelay 0\n")
         try:
             await self._process.stdin.drain()
         except (BrokenPipeError, ConnectionResetError) as err:
-            # dotoold not running — process started but pipe is dead
             try:
                 stderr_output = await asyncio.wait_for(self._process.stderr.read(), timeout=2.0)
             except TimeoutError:
@@ -123,7 +116,6 @@ class DotoolTyper:
             )
             raise DotoolcNotFoundError(formatted_msg) from err
 
-        # Check if dotoolc exited with error (no health check wait — errors caught by BrokenPipeError + returncode)
         if self._process.returncode is not None and self._process.returncode != 0:
             returncode = self._process.returncode
             stderr_output = await self._process.stderr.read()
@@ -172,8 +164,6 @@ class DotoolTyper:
         try:
             lines = text.split("\n")
             for i, line in enumerate(lines):
-                # dotool interprets backslashes as escape sequences;
-                # escape them so literal backslashes are typed
                 safe = line.replace("\\", "\\\\")
                 cmd = f"type {safe}\n"
                 self._process.stdin.write(cmd.encode("utf-8"))
@@ -196,7 +186,6 @@ class DotoolTyper:
             if text_len == 0:
                 break
 
-            # Find the start of the last word
             word_end = text_len
             word_start = word_end
             while word_start > 0 and self._typed_text[word_start - 1] != " ":
@@ -223,7 +212,6 @@ class DotoolTyper:
             return
 
         try:
-            # 1. Line-level optimization: delete whole line if count is large enough
             lines = self._typed_text.split("\n")
             current_line = lines[-1]
             line_len = len(current_line)
@@ -243,10 +231,8 @@ class DotoolTyper:
                 await self._process.stdin.drain()
                 return
 
-            # 2. Word-level optimization: use ctrl+backspace for whole words
             count = self._delete_words(count)
 
-            # 3. Fallback: individual backspaces for the remainder
             for _ in range(count):
                 self._process.stdin.write(b"key backspace\n")
             if count > 0:
@@ -267,9 +253,6 @@ class DotoolTyper:
         try:
             self._process.stdin.write(b"key ctrl+backspace\n")
             await self._process.stdin.drain()
-            # Note: We can't accurately update _typed_text because we don't
-            # know exactly how many characters the app will delete.
-            # For a helper method, we just assume it's one word.
             text_len = len(self._typed_text)
             if text_len > 0:
                 word_start = text_len
@@ -303,8 +286,6 @@ class DotoolTyper:
         try:
             self._process.stdin.write(b"key shift+end\nkey backspace\n")
             await self._process.stdin.drain()
-            # We don't know exactly what was deleted after the cursor
-            # unless we track cursor position. For now, we leave _typed_text.
         except Exception as e:
             logger.error("Failed to stream delete_line_end: %s", e)
             self._usable = False
@@ -325,7 +306,6 @@ class DotoolTyper:
 
         old_text = self._typed_text
 
-        # Find common prefix length
         common_len = 0
         min_len = min(len(old_text), len(new_text))
         while common_len < min_len and old_text[common_len] == new_text[common_len]:

@@ -31,7 +31,8 @@ export const VoiceToTextIface = `
   </interface>
 </node>`;
 
-export const VoiceToTextProxy = Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
+export const VoiceToTextProxy =
+    Gio.DBusProxy.makeProxyWrapper(VoiceToTextIface);
 
 export const SessionManagerIface =
     '<node>\
@@ -49,4 +50,5 @@ export const SessionManagerIface =
   </interface>\
 </node>';
 
-export const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);
+export const SessionManagerProxy =
+    Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);

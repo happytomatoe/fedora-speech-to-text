@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Setup open source references for API inspection
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,7 +6,6 @@ OPENSRC_DIR="$SCRIPT_DIR/../opensrc"
 
 mkdir -p "$OPENSRC_DIR"
 
-# GNOME Shell (target: GNOME 45-50)
 if [ -d "$OPENSRC_DIR/gnome-shell/.git" ]; then
     echo "GNOME Shell already cloned"
 elif [ -d "$OPENSRC_DIR/gnome-shell" ]; then

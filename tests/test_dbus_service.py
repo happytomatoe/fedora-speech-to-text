@@ -14,8 +14,6 @@ from dbus_next import DBusError
 from voice_to_text.dbus_service import VoiceToTextInterface
 from voice_to_text.engine import EngineState
 
-# ── Mock engine ──────────────────────────────────────────────────────────
-
 
 class MockRecordingEngine:
     """Simulates recording-engine state transitions without hardware.
@@ -48,9 +46,6 @@ class MockRecordingEngine:
             self.on_state_change(EngineState.IDLE)
 
 
-# ── Fixtures ─────────────────────────────────────────────────────────────
-
-
 @pytest.fixture
 def mock_engine():
     """Fresh MockRecordingEngine per test."""
@@ -63,15 +58,11 @@ def interface(mock_engine):
     return VoiceToTextInterface(engine=mock_engine)
 
 
-# ── Tests ────────────────────────────────────────────────────────────────
-
-
 class TestGetStatus:
     """GetStatus method."""
 
     async def test_initial_state_is_idle(self, interface):
         """GetStatus returns 'idle' on a fresh service."""
-        # Access _state directly since @method() decorator intercepts direct calls
         assert interface._state == "idle"
 
     async def test_recording_after_start(self, interface):
@@ -152,7 +143,6 @@ class TestSignals:
 
     async def test_state_changed_on_start(self, interface, mock_engine):
         """StateChanged signal fires when engine starts."""
-        # Wire up a callback to capture state changes
         states = []
         interface._engine.on_state_change = lambda state: states.append(state.value)
 
@@ -187,11 +177,9 @@ class TestSignals:
 
     async def test_audio_level_signal(self, interface, mock_engine):
         """AudioLevel signal fires with float value."""
-        # Wire up callback on the engine
         levels = []
         mock_engine.on_audio_level = levels.append
 
-        # Trigger the callback
         mock_engine.on_audio_level(0.5)
 
         assert 0.5 in levels

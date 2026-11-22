@@ -13,8 +13,6 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Shared HTTP client — created once at import time, reused across all providers.
-# This avoids the ~300ms cost of creating a new client per recording.
 _shared_client: httpx.AsyncClient | None = None
 
 
@@ -37,7 +35,6 @@ async def close_shared_client() -> None:
         _shared_client = None
 
 
-# API key fingerprint threshold
 _API_KEY_MIN_LEN = 10
 
 
@@ -164,7 +161,7 @@ class AsyncKeyMixin:
     """
 
     _api_key_future: asyncio.Future[str] | None = None
-    _pending_key_command: str | None = None  # !!command string for deferred resolution
+    _pending_key_command: str | None = None
     api_key: str
     _config: dict[str, Any]
 
@@ -177,12 +174,11 @@ class AsyncKeyMixin:
         if isinstance(key_or_future, asyncio.Future):
             self._api_key_future = key_or_future
             self._pending_key_command = None
-            self.api_key = ""  # placeholder
+            self.api_key = ""
         elif isinstance(key_or_future, str) and key_or_future.startswith("!!"):
-            # Deferred: store command, create Future later in async context
-            self._pending_key_command = key_or_future[2:]  # strip leading !!
+            self._pending_key_command = key_or_future[2:]
             self._api_key_future = None
-            self.api_key = ""  # placeholder
+            self.api_key = ""
         else:
             self._api_key_future = None
             self._pending_key_command = None
@@ -193,7 +189,6 @@ class AsyncKeyMixin:
 
         Creates the Future from pending !!command in the main async context.
         """
-        # Create future from pending !!command (now in async context)
         if self._pending_key_command is not None:
             logger.info("Starting async API key resolution: %s", self._pending_key_command)
             self._api_key_future = _execute_command_for_key_async(self._pending_key_command)
@@ -248,7 +243,6 @@ def resolve_api_key(
                 break
     if key:
         source_used = f"env:{env_var or extra_envs}"
-    # 2. Config file
     if not key:
         key = config.get("api_key")
         if key:
@@ -257,19 +251,15 @@ def resolve_api_key(
     if not key:
         all_vars = (*extra_envs, config.get("api_key_env", default_env))
         raise ValueError(f"No API key found in environment ({all_vars}) or config")
-    # Log key fingerprint for debugging (first 6 + last 4 chars)
     fingerprint = f"{key[:6]}...{key[-4:]}" if len(key) > _API_KEY_MIN_LEN else f"{key[:3]}...{key[-2:]}"
     logger.info("API key resolved: provider=%s source=%s fingerprint=%s", provider_name, source_used, fingerprint)
 
-    # 4. Command substitution (!command or !!command)
     if key and key.startswith("!!"):
-        # Async mode: return raw command string; Future created later in async context
-        command = key[2:]  # strip leading !!
+        command = key[2:]
         logger.info("API key command will run in background: %s", command)
-        return key  # return "!!command" as-is for deferred resolution
+        return key
     elif key and key.startswith("!"):
-        # Sync mode (existing behavior)
-        command = key[1:]  # strip leading !
+        command = key[1:]
         return _execute_command_for_key(command)
 
     return key
@@ -285,7 +275,7 @@ class WebSocketStreamingProvider(StreamingProvider):
 
     _partial_result: str | None
     _finalized_text: str
-    _ws: Any  # websockets.WebSocketClientProtocol | None
+    _ws: Any
 
     def _init_ws_state(self) -> None:
         self._partial_result = None

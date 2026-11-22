@@ -8,9 +8,6 @@ from .providers.base import BatchProvider, StreamingProvider
 
 logger = logging.getLogger(__name__)
 
-# Bound on waiting for the streaming server's final transcript after stop.
-# Long enough to flush the last audio window, short enough that a hung
-# connection cannot hold up output.
 STREAM_FINALIZE_TIMEOUT = 2.0
 
 
@@ -53,9 +50,7 @@ class HybridTranscriber:
         try:
             finalized = await asyncio.wait_for(self.streaming.finalize_stream(), timeout=STREAM_FINALIZE_TIMEOUT)
         except TimeoutError:
-            logger.warning(
-                "Streaming finalize exceeded %.1fs, using last partial transcript", STREAM_FINALIZE_TIMEOUT
-            )
+            logger.warning("Streaming finalize exceeded %.1fs, using last partial transcript", STREAM_FINALIZE_TIMEOUT)
             with contextlib.suppress(Exception):
                 latest = await self.streaming.get_partial_result()
                 if latest:

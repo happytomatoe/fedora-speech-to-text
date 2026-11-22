@@ -134,7 +134,8 @@
         "typescript/no-explicit-any": "off",
         "typescript/ban-ts-comment": "off",
         "typescript/dot-notation": "error",
-        "no-silent-catch/no-silent-catch": "error"
+        "no-silent-catch/no-silent-catch": "error",
+        "no-comments/no-comments": "error"
       },
       "globals": {
         "imports": "readonly",
@@ -158,7 +159,8 @@
         "typescript"
       ],
       "jsPlugins": [
-        "./lint-rules/no-silent-catch.js"
+        "./lint-rules/no-silent-catch.js",
+        "./lint-rules/no-comments.js"
       ]
     },
     {

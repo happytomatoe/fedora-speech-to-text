@@ -39,7 +39,6 @@ from .base import BatchProvider, WebSocketStreamingProvider, get_shared_client, 
 
 logger = logging.getLogger(__name__)
 
-# HTTP status codes
 _HTTP_UNAUTHORIZED = 401
 _API_KEY_MIN_LEN = 10
 
@@ -57,13 +56,11 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         self.model = config.get("model", "nova-3")
         self.api_url = config.get("api_url", "https://api.deepgram.com")
 
-        # Default batch options
         self.batch_options = {
             "filler_words": False,
             "mip_opt_out": True,
             "paragraphs": True,
         }
-        # Merge with config options
         self.batch_options.update(config.get("batch_options", {}))
 
         self._client = get_shared_client()

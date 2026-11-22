@@ -1,0 +1,19 @@
+{
+  "policy": "docs/adr/0001-comments-are-not-documentation.md",
+  "files": {
+    "e2e/e2e.ts": 342,
+    "e2e/lib/atspi.ts": 4,
+    "e2e/lib/deploy-steps.ts": 123,
+    "e2e/lib/deploy.ts": 11,
+    "e2e/lib/env.ts": 6,
+    "e2e/lib/parakeet.ts": 8,
+    "e2e/lib/parallel.ts": 16,
+    "e2e/lib/qemu.ts": 16,
+    "e2e/lib/run-context.ts": 20,
+    "e2e/lib/shell.ts": 32,
+    "e2e/lib/timing.ts": 1,
+    "e2e/lib/tmux.ts": 2,
+    "e2e/lib/transport.ts": 4,
+    "e2e/lib/vm.ts": 91
+  }
+}

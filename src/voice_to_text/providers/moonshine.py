@@ -32,9 +32,8 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         self._partial_result: str | None = None
         self._finalized_text = ""
         self._sample_rate: int = 16000
-        # Lazy imports to avoid slow startup
         self._moonshine: Any = None
-        self._model_arch: Any = None  # Resolved ModelArch enum
+        self._model_arch: Any = None
 
     def _ensure_imported(self) -> None:
         """Lazily import moonshine_voice."""
@@ -48,17 +47,14 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         self._ensure_imported()
         lang = language or self.language
         if self._transcriber is None:
-            # Map model name string to ModelArch enum
             model_name_upper = self.model_name.upper()
             try:
                 self._model_arch = self._moonshine.ModelArch[model_name_upper]
             except KeyError:
-                # Try adding _STREAMING suffix for streaming models
                 streaming_name = f"{model_name_upper}_STREAMING"
                 try:
                     self._model_arch = self._moonshine.ModelArch[streaming_name]
                 except KeyError:
-                    # Fallback to MEDIUM_STREAMING
                     self._model_arch = self._moonshine.ModelArch.MEDIUM_STREAMING
                     logger.warning("Unknown model '%s', falling back to MEDIUM_STREAMING", self.model_name)
 
@@ -98,7 +94,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         """Send an audio chunk to the streaming transcriber."""
         if self._transcriber is None:
             raise RuntimeError("Stream not started. Call start_stream() first.")
-        # Convert int16 bytes to float32 array (normalized to [-1, 1])
         samples = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
         self._transcriber.add_audio(samples.tolist(), self._sample_rate)
 
@@ -106,7 +101,6 @@ class MoonshineProvider(StreamingProvider, BatchProvider):
         """Finalize the streaming session and return the complete text."""
         if self._transcriber is not None:
             try:
-                # Off the event loop so a slow stop cannot outlive the caller's timeout.
                 await asyncio.to_thread(self._transcriber.stop)
             except Exception as e:
                 logger.warning("Error stopping Moonshine transcriber: %s", e)

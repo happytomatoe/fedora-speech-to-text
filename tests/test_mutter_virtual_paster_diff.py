@@ -32,16 +32,13 @@ async def test_stream_diff_stores_text(mock_dbus):
     paster = MutterVirtualPaster()
     await paster.start()
 
-    # Simulate streaming: "Hello" -> "Hello world" -> "Hello world!"
     await paster.stream_diff("Hello")
     await paster.stream_diff("Hello world")
     await paster.stream_diff("Hello world!")
 
-    # stream_diff should NOT make any D-Bus calls
     assert mock_dbus.call_commit_text.call_count == 0
-    assert mock_dbus.call_set_preedit_text.call_count == 0 if hasattr(mock_dbus, "call_set_preedit_text") else True
+    assert mock_dbus.call_commit_text.call_count == 0 if hasattr(mock_dbus, "call_set_preedit_text") else True
 
-    # Text should be stored internally
     assert paster._typed_text == "Hello world!"
 
 
@@ -57,10 +54,8 @@ async def test_stream_diff_no_duplication(mock_dbus):
     await paster.stream_diff("Hello there")
     await paster.stream_diff("Hello there.")
 
-    # No D-Bus calls during streaming
     assert mock_dbus.call_commit_text.call_count == 0
 
-    # Final text stored correctly
     assert paster._typed_text == "Hello there."
 
 
@@ -73,12 +68,10 @@ async def test_stream_diff_skip_if_same(mock_dbus):
     await paster.start()
 
     await paster.stream_diff("Hello")
-    await paster.stream_diff("Hello")  # Same text
+    await paster.stream_diff("Hello")
 
-    # No D-Bus calls
     assert mock_dbus.call_commit_text.call_count == 0
 
-    # Text stored correctly
     assert paster._typed_text == "Hello"
 
 
@@ -90,10 +83,8 @@ async def test_flush_commits_text(mock_dbus):
     paster = MutterVirtualPaster()
     await paster.start()
 
-    # Stream some text
     await paster.stream_diff("Hello world")
 
-    # Flush should commit the text
     result = await paster.flush()
 
     assert result is True
@@ -109,7 +100,6 @@ async def test_flush_empty_text(mock_dbus):
     paster = MutterVirtualPaster()
     await paster.start()
 
-    # No text streamed
     result = await paster.flush()
 
     assert result is False

@@ -23,7 +23,7 @@ def generate_syllable(t: float, duration: float, f0: float, f1: float) -> float:
     """Generate a single syllable-like tone with formant sweep."""
     progress = t / duration if duration > 0 else 0
     freq = f0 + (f1 - f0) * progress
-    amp = math.sin(math.pi * progress)  # smooth attack/release
+    amp = math.sin(math.pi * progress)
     return amp * math.sin(2 * math.pi * freq * t)
 
 
@@ -32,22 +32,21 @@ def generate_test_audio(duration_sec: float) -> bytes:
     num_samples = int(SAMPLE_RATE * duration_sec)
     samples = [0.0] * num_samples
 
-    # Syllable pattern: frequency pairs (f0, f1) and durations
     syllables = [
-        (0.0, 0.15, 200, 350),  # uh
-        (0.15, 0.35, 280, 450),  # hmm
-        (0.35, 0.55, 300, 600),  # rising tone
-        (0.55, 0.70, 400, 350),  # falling tone
-        (0.70, 0.90, 250, 500),  # mid rise
-        (0.90, 1.10, 350, 300),  # mid fall
-        (1.10, 1.30, 450, 700),  # high rise
-        (1.30, 1.50, 500, 400),  # high fall
-        (1.50, 1.70, 300, 550),  # another rise
-        (1.70, 1.85, 350, 280),  # fall
-        (1.85, 2.00, 400, 500),  # short rise
+        (0.0, 0.15, 200, 350),
+        (0.15, 0.35, 280, 450),
+        (0.35, 0.55, 300, 600),
+        (0.55, 0.70, 400, 350),
+        (0.70, 0.90, 250, 500),
+        (0.90, 1.10, 350, 300),
+        (1.10, 1.30, 450, 700),
+        (1.30, 1.50, 500, 400),
+        (1.50, 1.70, 300, 550),
+        (1.70, 1.85, 350, 280),
+        (1.85, 2.00, 400, 500),
     ]
 
-    total_pattern = 2.0  # seconds per pattern repetition
+    total_pattern = 2.0
 
     for i in range(num_samples):
         t = i / SAMPLE_RATE
@@ -60,11 +59,9 @@ def generate_test_audio(duration_sec: float) -> bytes:
                 syl_d = end - start
                 sample += generate_syllable(syl_t, syl_d, f0, f1)
 
-        # Add some low-frequency hum and noise floor
         sample += 0.005 * math.sin(2 * math.pi * 120 * t)
-        sample += 0.003 * (2 * (t * 1000 % 1) - 1)  # noise
+        sample += 0.003 * (2 * (t * 1000 % 1) - 1)
 
-        # Normalize and scale
         sample = max(-1.0, min(1.0, sample * 0.6))
         samples[i] = int(sample * 32767)
 

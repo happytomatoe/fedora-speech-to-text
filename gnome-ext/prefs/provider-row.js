@@ -51,15 +51,11 @@ function fillProviderCombo(combo, entries) {
  * @returns {{ rows: Adw.ActionRow[], updateVisibility: () => void }}
  */
 export function createProviderRows(settings, syncAllToConfig) {
-    // Provider setting (batch mode only)
     const providerRow = new Adw.ActionRow({
         title: _('Transcription Provider'),
     });
 
     const providerCombo = new Gtk.ComboBoxText();
-    // Custom providers from config.yaml (e.g. type: batch_custom sections) are
-    // appended after the built-ins. Their section names are valid
-    // transcription.provider values, so selecting one selects that provider.
     fillProviderCombo(providerCombo, Object.entries(BATCH_PROVIDERS));
     const customProviders = readCustomProviderNames().filter(
         name =>
@@ -81,7 +77,6 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
     providerRow.add_suffix(providerCombo);
 
-    // Transcription mode setting
     const modeRow = new Adw.ActionRow({
         title: _('Transcription Mode'),
         subtitle: _(
@@ -96,7 +91,6 @@ export function createProviderRows(settings, syncAllToConfig) {
     modeCombo.set_active_id(settings.get_string('mode'));
     modeRow.add_suffix(modeCombo);
 
-    // Streaming provider setting (hybrid/streaming modes)
     const streamingProviderRow = new Adw.ActionRow({
         title: _('Streaming Provider'),
         subtitle: _('Provider for real-time streaming during recording'),
@@ -123,7 +117,6 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
     streamingProviderRow.add_suffix(streamingProviderCombo);
 
-    // Batch provider setting (hybrid mode only)
     const batchProviderRow = new Adw.ActionRow({
         title: _('Batch Provider'),
         subtitle: _('Provider for final batch transcription after recording'),
@@ -143,7 +136,6 @@ export function createProviderRows(settings, syncAllToConfig) {
     });
     batchProviderRow.add_suffix(batchProviderCombo);
 
-    // Show/hide provider rows based on mode
     const updateProviderVisibility = () => {
         const mode = settings.get_string('mode');
         providerRow.visible = mode === 'batch';
@@ -185,7 +177,6 @@ export function createOutputMethodRow(settings, syncAllToConfig) {
     combo.append('mutter-commit', _('Mutter Commit'));
     combo.append('mutter-virtual', _('Mutter Type'));
     combo.append('type', _('Dotool Type'));
-    // Migrate legacy output-method values
     const currentMethod = settings.get_string('output-method');
     const validMethods = ['mutter-commit', 'mutter-virtual', 'type'];
     if (!validMethods.includes(currentMethod)) {

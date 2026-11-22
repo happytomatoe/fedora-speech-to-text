@@ -26,6 +26,9 @@ pre-commit:
     check-merge-conflict:
       run: bash -c 'matches=$(grep -rn --exclude-dir=.venv --exclude-dir=node_modules "^<<<<<<< \|^=======$\|^>>>>>>> " {staged_files}); if [ -n "$matches" ]; then echo "$matches"; exit 1; fi'
       glob: "*.{py,js,sh,css,json,xml,yaml,yml,toml,md}"
+    check-comments:
+      run: python3 scripts/check-comments.py
+      glob: "*.{py,js,ts,css}"
     uv-sync:
       run: uv sync
       glob: "*.{py,toml,lock}"

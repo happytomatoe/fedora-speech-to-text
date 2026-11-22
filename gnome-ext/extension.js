@@ -164,13 +164,17 @@ export default class VoiceToTextExtension extends Extension {
                         ? Date.now() - this._startTime
                         : 0;
                     if (this._profiling) {
-                        console.debug(`[VoiceToText] [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`)
+                        console.debug(
+                            `[VoiceToText] [PROFIL] state changed to '${state}', elapsed: ${elapsed}ms`
+                        );
                     }
                     if (state === 'recording') {
                         this._indicator?.setRecordingActive();
                         this._audioLevelWidget?.show();
                         if (this._profiling) {
-                            console.debug(`[VoiceToText] [PROFIL] user can speak now, total elapsed: ${elapsed}ms`)
+                            console.debug(
+                                `[VoiceToText] [PROFIL] user can speak now, total elapsed: ${elapsed}ms`
+                            );
                         }
                     } else if (state === 'processing') {
                         this._indicator?.setProcessing();
@@ -204,18 +208,18 @@ export default class VoiceToTextExtension extends Extension {
             const prefsId = this._proxy.connectSignal(
                 'OpenPrefsRequested',
                 () => {
-                    console.debug('[VoiceToText] OpenPrefsRequested — opening preferences');
+                    console.debug(
+                        '[VoiceToText] OpenPrefsRequested — opening preferences'
+                    );
                     this._openPreferences();
                 }
             );
             this._signalIds.push(prefsId);
 
-            // Sync state on (re)enable — engine may already be recording
             const proxyRef = this._proxy;
             this._proxy
                 .GetStatusAsync()
                 .then(state => {
-                    // Guard: extension may have been disabled or re-enabled while promise was pending
                     if (
                         this._proxy === proxyRef &&
                         (state === 'recording' || state === 'processing')
@@ -231,7 +235,7 @@ export default class VoiceToTextExtension extends Extension {
                 })
                 .catch(err =>
                     console.error('VoiceToText: initial GetStatus failed:', err)
-                ); // best-effort init sync
+                );
         } catch (e) {
             console.error(
                 'VoiceToText: failed to connect to D-Bus service:',
@@ -247,8 +251,9 @@ export default class VoiceToTextExtension extends Extension {
                 try {
                     this._proxy.disconnectSignal(id);
                 } catch (e) {
-                    console.warn(`[extension] signal disconnect failed: ${e instanceof Error ? e.message : e}`);
-                    // ignore: signal may already be disconnected or proxy destroyed
+                    console.warn(
+                        `[extension] signal disconnect failed: ${e instanceof Error ? e.message : e}`
+                    );
                 }
             }
             this._signalIds = [];
@@ -290,7 +295,9 @@ export default class VoiceToTextExtension extends Extension {
             .StartRecordingAsync(JSON.stringify(config))
             .then(() => {
                 if (this._profiling) {
-                    console.debug(`[VoiceToText] [PROFIL] StartRecording sent via D-Bus, elapsed: ${Date.now() - this._startTime}ms`)
+                    console.debug(
+                        `[VoiceToText] [PROFIL] StartRecording sent via D-Bus, elapsed: ${Date.now() - this._startTime}ms`
+                    );
                 }
             })
             .catch(e => {
@@ -354,18 +361,11 @@ export default class VoiceToTextExtension extends Extension {
         if (!this._recording) return;
 
         this._sessionManager
-            .InhibitAsync(
-                'voice-to-text',
-                0,
-                'Voice recording in progress',
-                12 // INHIBIT_SUSPEND | INHIBIT_IDLE (per InhibitedActions=12)
-            )
+            .InhibitAsync('voice-to-text', 0, 'Voice recording in progress', 12)
             .then(cookie => {
                 if (this._recording && this._inhibitCookie === 0) {
                     this._inhibitCookie = cookie;
                 } else {
-                    // Race guard: recording stopped or inhibitor already acquired;
-                    // release the new cookie immediately
                     this._sessionManager.UninhibitAsync(cookie);
                 }
             })
@@ -382,7 +382,9 @@ export default class VoiceToTextExtension extends Extension {
         this._sessionManager
             .UninhibitAsync(this._inhibitCookie)
             .then(() =>
-                console.debug(`[VoiceToText] sleep inhibitor released, cookie=${this._inhibitCookie}`)
+                console.debug(
+                    `[VoiceToText] sleep inhibitor released, cookie=${this._inhibitCookie}`
+                )
             )
             .catch(e => {
                 console.error(
@@ -401,9 +403,6 @@ export default class VoiceToTextExtension extends Extension {
     }
 
     _openPreferences() {
-        // openPreferences() runs inside the shell — no external process, so it
-        // works in headless sessions where spawning gnome-extensions CLI dies
-        // (D-Bus-activated child has no display).
         try {
             // @ts-expect-error
             Main.extensionManager.openExtensionPrefs(this.uuid, '', {}); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
@@ -422,7 +421,8 @@ export default class VoiceToTextExtension extends Extension {
     }
     _showNotification(message) {
         const systemSource = MessageTray.getSystemSource(); // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
-        const notification = new MessageTray.Notification({ // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
+        const notification = new MessageTray.Notification({
+            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             source: systemSource,
             title: 'Voice to Text',
             body: message,
@@ -431,6 +431,3 @@ export default class VoiceToTextExtension extends Extension {
         systemSource.addNotification(notification);
     }
 }
-
-// TODO(fedora-speech-to-text#aislop-plan): split extension.js when a second
-// extension entry point lands; tracked in thoughts/shared/plans/fix-aislop-findings.md

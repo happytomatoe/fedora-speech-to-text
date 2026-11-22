@@ -15,8 +15,6 @@ const CONFIG_PATH = GLib.build_filenamev([
     'config.yaml',
 ]);
 
-// Mapping: GSettings key → [config.yaml path parts..., value type]
-// Types: 'string', 'int', 'double', 'strv'
 const CONFIG_SYNC_MAP = {
     mode: {path: ['transcription', 'mode'], type: 'string'},
     provider: {path: ['transcription', 'provider'], type: 'string'},
@@ -85,9 +83,6 @@ function writeConfigYaml(config) {
     const yamlStr = yamlDump(config);
     const encoder = new TextEncoder();
     const bytes = encoder.encode(yamlStr);
-    // REPLACE_DESTINATION recreates the file with default (world-readable)
-    // perms — config can hold API keys, so preserve the existing mode (or
-    // default to 0600 for a fresh file) after the replace.
     let mode = 0o600;
     try {
         const info = file.query_info(
@@ -96,14 +91,12 @@ function writeConfigYaml(config) {
             null
         );
         const m = info.get_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE);
-        // Strip group/other bits: config may hold API keys, never world-readable.
         if (m) mode = m & 0o600;
     } catch (e) {
         if (
             e instanceof Gio.IOErrorEnum &&
             e.code === Gio.IOErrorEnum.NOT_FOUND
         ) {
-            // File doesn't exist yet — normal first run, keep the 0600 default.
             console.debug(
                 `[config-sync] no config file yet — using 0600 default`
             );
@@ -145,7 +138,6 @@ function writeConfigYaml(config) {
     }
 }
 
-// Get a nested value from an object by path array
 function getConfigValue(config, path) {
     let val = config;
     for (const key of path) {
@@ -155,7 +147,6 @@ function getConfigValue(config, path) {
     return val;
 }
 
-// Set a nested value in an object by path array
 function setConfigValue(config, path, value) {
     let obj = config;
     for (let i = 0; i < path.length - 1; i++) {
@@ -165,7 +156,6 @@ function setConfigValue(config, path, value) {
     obj[path[path.length - 1]] = value;
 }
 
-// Type-check a config value against the declared sync type.
 function typeMatches(type, val) {
     switch (type) {
         case 'int':
@@ -211,13 +201,10 @@ export function syncFromConfig(settings) {
     return {config, drifted};
 }
 
-// Seed GSettings from a config value when no user value exists; report drift.
-// Returns true if the current GSettings value differs from the config value.
 function syncSetting(settings, gkey, type, cfgVal) {
     let gsetVal;
     if (type === 'strv') {
         gsetVal = settings.get_strv(gkey);
-        // Only seed from config if GSettings has no user value (not explicitly set)
         if (
             settings.get_user_value(gkey) === null &&
             gsetVal.length === 0 &&
@@ -226,7 +213,6 @@ function syncSetting(settings, gkey, type, cfgVal) {
             settings.set_strv(gkey, cfgVal);
             gsetVal = cfgVal;
         }
-        // Compare sorted arrays
         const gsetStr = gsetVal.slice().sort().join('\n');
         const cfgStr = cfgVal.slice().sort().join('\n');
         return gsetStr !== cfgStr;

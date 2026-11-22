@@ -61,7 +61,6 @@ def get_batch_provider(name: str, config: dict[str, Any]) -> BatchProvider:
     if provider_cls is None:
         raise ValueError(f"Batch provider '{name}' not found. Available: {list(_BATCH_PROVIDERS.keys())}")
     if provider_cls is CustomProvider:
-        # CustomProvider takes the config.yaml section name for log identity.
         return CustomProvider(config, name=name)  # type: ignore[abstract]
     return provider_cls(config)  # type: ignore[abstract]
 

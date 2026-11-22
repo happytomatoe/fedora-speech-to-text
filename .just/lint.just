@@ -2,6 +2,7 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
     uv run pyright
+    python3 scripts/check-comments.py
     just gnome-ext-lint
     just check-output-methods-sync
     echo "All lint checks passed!"

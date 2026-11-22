@@ -35,7 +35,6 @@ export function createDeviceRow(settings) {
         settings.get_string('input-device') || '__system_default__';
     deviceCombo.set_active_id(currentDevice);
 
-    // Create D-Bus proxy for listing input devices
     const DeviceListProxy = Gio.DBusProxy.makeProxyWrapper(DeviceListIface);
     let deviceProxy = null;
     try {

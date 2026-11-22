@@ -5,6 +5,13 @@
 - All imports must be at the module level (top of file), never inside functions or methods.
 - Local imports inside functions cause `NameError` when module-level functions reference those names.
 
+## Comments
+
+- Code carries no comments except machine directives (`noqa`, `type: ignore`, `pyright:`, `@ts-*`, `eslint-*`, `aislop-*`, `shellcheck`, shebang, SPDX). Docstrings and JSDoc blocks are documentation and are allowed.
+- A non-obvious *why* goes to `docs/adr/` (see `docs/adr/0001-comments-are-not-documentation.md`). A *what* is deleted.
+- Enforced by `python3 scripts/check-comments.py` with the `comment-budget.json` ratchet (budgets only go down) and by `lint-rules/no-comments.js` for `gnome-ext/`.
+- Use the `delete-comment` skill when auditing a subtree.
+
 ## Project overview
 
 Voice-to-text converts speech to text on Linux using free cloud/local APIs. It is a two-part project:

@@ -34,7 +34,6 @@ class ElevenLabsProvider(BatchProvider):
         self.model = config.get("model", DEFAULT_MODEL)
         self.api_url = config.get("api_url", "https://api.elevenlabs.io")
         self.tag_audio_events = config.get("tag_audio_events", False)
-        # Use shared HTTP client (created once at service startup)
         self._client = get_shared_client()
 
     async def transcribe_file(
@@ -50,9 +49,6 @@ class ElevenLabsProvider(BatchProvider):
         }
         if custom_words:
             data["keyterms"] = custom_words
-        # ElevenLabs accepts ISO-639-1 (2-letter, e.g. "en") and ISO-639-3
-        # (3-letter, e.g. "eng") language codes. Forward the configured language
-        # when present so the user's choice is respected instead of auto-detecting.
         if language and len(language) in (2, 3):
             data["language_code"] = language
         try:

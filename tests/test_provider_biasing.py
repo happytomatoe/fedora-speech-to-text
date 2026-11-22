@@ -14,8 +14,6 @@ from voice_to_text.providers.groq import GroqProvider
 from voice_to_text.providers.sixty import SixtyProvider
 from voice_to_text.providers.voxtral import VoxtralProvider
 
-# -- Helpers -------------------------------------------------------------------
-
 
 def _make_wav(tmp_path: Path) -> Path:
     """Create a minimal WAV file for testing."""
@@ -30,9 +28,6 @@ def _make_wav(tmp_path: Path) -> Path:
         f.write(b"data")
         f.write(struct.pack("<I", 0))
     return wav
-
-
-# -- Deepgram ------------------------------------------------------------------
 
 
 class TestDeepgramBiasing:
@@ -80,9 +75,6 @@ class TestDeepgramBiasing:
         assert "keyterm" not in captured["params"]
 
 
-# -- Voxtral -------------------------------------------------------------------
-
-
 class TestVoxtralBiasing:
     """Verify that custom_words are sent as context_bias form fields."""
 
@@ -128,9 +120,6 @@ class TestVoxtralBiasing:
         assert "context_bias" not in captured["data"]
 
 
-# -- Groq ----------------------------------------------------------------------
-
-
 class TestGroqBiasing:
     """Verify that custom_words are sent as a comma-joined prompt string."""
 
@@ -168,9 +157,6 @@ class TestGroqBiasing:
         await provider.transcribe_file(str(wav))
 
         assert "prompt" not in captured
-
-
-# -- ElevenLabs ----------------------------------------------------------------
 
 
 class TestElevenLabsBiasing:
@@ -216,9 +202,6 @@ class TestElevenLabsBiasing:
         await provider.transcribe_file(str(wav))
 
         assert "keyterms" not in captured["data"]
-
-
-# -- 60db ----------------------------------------------------------------------
 
 
 class TestSixtyBiasing:

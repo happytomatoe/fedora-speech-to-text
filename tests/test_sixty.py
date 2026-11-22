@@ -86,7 +86,6 @@ class FakeSixtyWebSocket:
     def __init__(self):
         self.sent_messages: list[str] = []
         self._incoming: asyncio.Queue[str] = asyncio.Queue()
-        # Seed handshake messages delivered on connect.
         self._incoming.put_nowait(json.dumps({"connection_established": {}}))
         self._incoming.put_nowait(json.dumps({"type": "connected"}))
         self._incoming.put_nowait(json.dumps({"type": "session_started"}))
@@ -99,7 +98,6 @@ class FakeSixtyWebSocket:
         if msg_type == "audio":
             self._audio_count += 1
             if self._audio_count == 1:
-                # Interim partial result.
                 self._incoming.put_nowait(
                     json.dumps(
                         {
@@ -111,7 +109,6 @@ class FakeSixtyWebSocket:
                     )
                 )
             elif self._audio_count == 2:
-                # speech_final with empty text -> must be skipped.
                 self._incoming.put_nowait(
                     json.dumps(
                         {
@@ -124,7 +121,6 @@ class FakeSixtyWebSocket:
                     )
                 )
             elif self._audio_count == 3:
-                # Canonical final transcription.
                 self._incoming.put_nowait(
                     json.dumps(
                         {
@@ -160,22 +156,18 @@ class TestSixtyStreaming:
             provider = SixtyProvider({"api_key": "test_key", "api_key_source": "env"})
             await provider.start_stream("en", 16000)
 
-            # start message was sent after connection_established
             assert any(json.loads(m).get("type") == "start" for m in fake.sent_messages)
 
-            # Frame 1 -> interim partial result.
             await provider.send_audio(b"PCMDATA1")
             for _ in range(5):
                 await asyncio.sleep(0)
             partial = await provider.get_partial_result()
             assert partial == "hello world"
 
-            # Frame 2 -> empty speech_final signal (skipped).
             await provider.send_audio(b"PCMDATA2")
             for _ in range(5):
                 await asyncio.sleep(0)
 
-            # Frame 3 -> canonical final.
             await provider.send_audio(b"PCMDATA3")
             for _ in range(5):
                 await asyncio.sleep(0)
@@ -183,5 +175,4 @@ class TestSixtyStreaming:
             result = await provider.finalize_stream()
             assert result == "hello world"
 
-            # stop message was sent.
             assert any(json.loads(m).get("type") == "stop" for m in fake.sent_messages)

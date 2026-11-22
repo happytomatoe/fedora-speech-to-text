@@ -28,7 +28,6 @@ def _parse_prefs_providers() -> dict[str, list[str]]:
     """Extract provider IDs from prefs.js combo boxes."""
     text = PREFS_JS.read_text()
     result = {}
-    # Match: someCombo.append("id", "Label")
     for match in re.finditer(r'(\w+ProviderCombo)\.append\("([^"]+)"', text):
         combo_name = match.group(1)
         provider_id = match.group(2)

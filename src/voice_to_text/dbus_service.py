@@ -30,11 +30,6 @@ SERVICE_NAME = "com.happytomatoe.VoiceToText"
 OBJECT_PATH = "/com/happytomatoe/VoiceToText"
 
 
-# ── Signal values (stashed by callbacks, read by signal getters) ──────
-# dbus-next signals: the @signal() method's return value is emitted.
-# We stash the current value on the interface and the signal method reads it.
-
-
 def list_input_devices() -> list[list[str]]:
     """Return available input devices as (id, label) pairs.
 
@@ -101,7 +96,7 @@ class VoiceToTextInterface(ServiceInterface):
 
         def _on_level(level: float):
             self._last_level = level
-            self.AudioLevel()  # calls @signal() method → emits via dbus-next
+            self.AudioLevel()
 
         def _on_error(msg: str):
             self._last_error = msg
@@ -114,8 +109,6 @@ class VoiceToTextInterface(ServiceInterface):
         self._engine.on_audio_level = _on_level
         self._engine.on_error = _on_error
         self._engine.on_state_change = _on_state
-
-    # ── Methods ──────────────────────────────────────────────────────────
 
     @method()
     def StartRecording(self, config: "s") -> None:  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]
@@ -188,8 +181,6 @@ class VoiceToTextInterface(ServiceInterface):
         appears).
         """
         return list_input_devices()
-
-    # ── Signals ──────────────────────────────────────────────────────────
 
     @signal()
     def AudioLevel(self) -> "d":  # noqa: N802, F821  # pyright: ignore[reportUndefinedVariable]

@@ -15,12 +15,11 @@ export class AudioLevelWidget {
         this._smoothedLevel = 0;
         this._visible = false;
         this._showTimeoutId = 0;
-        this.onCancel = null; // callback when cancel button clicked
+        this.onCancel = null;
     }
     show() {
         if (this._widget) return;
 
-        // Delay showing the widget to avoid initial audio spikes
         this._showTimeoutId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
             SHOW_DELAY_MS,
@@ -55,15 +54,14 @@ export class AudioLevelWidget {
             this._segments.push(seg);
         }
 
-        // Cancel button (X icon, ghost circle → red on hover)
         this._cancelButton = new St.Button({
             style_class: 'osd-stop-button',
             accessible_name: _('Cancel recording'),
             reactive: true,
             track_hover: true,
             can_focus: true,
-            x_align: 2, // CENTER
-            y_align: 2, // CENTER
+            x_align: 2,
+            y_align: 2,
         });
         this._cancelButton.set_size(36, 36);
         const stopIcon = new St.Icon({
@@ -82,7 +80,6 @@ export class AudioLevelWidget {
     }
 
     hide() {
-        // Cancel any pending show timeout
         if (this._showTimeoutId) {
             GLib.source_remove(this._showTimeoutId);
             this._showTimeoutId = 0;
@@ -109,7 +106,6 @@ export class AudioLevelWidget {
             const seg = this._segments[i];
             const shouldBeActive = i < activeCount;
 
-            // Determine color tier based on absolute segment position
             let targetClass = 'idle';
             if (shouldBeActive) {
                 const ratio = i / NUM_SEGMENTS;
@@ -122,7 +118,6 @@ export class AudioLevelWidget {
                 }
             }
 
-            // Only update if class changed
             let currentClass = 'idle';
             if (seg.has_style_class_name('green')) {
                 currentClass = 'green';

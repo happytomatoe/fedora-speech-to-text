@@ -100,10 +100,6 @@ def check_config(manager: ConfigManager) -> list[str]:
     findings: list[str] = []
     selected = manager.get_selected_provider()
     sections = manager.config
-    # Only flag a missing section when it's genuinely unknown: built-in
-    # providers work from env vars alone, and template sections are validated
-    # below. A misspelled selected provider with no other sections must still
-    # be reported.
     builtin_providers = set(_BATCH_PROVIDERS) - {"batch_custom"}
     if selected not in sections and selected not in builtin_providers:
         findings.append(f"transcription.provider '{selected}' has no config section")
@@ -113,9 +109,6 @@ def check_config(manager: ConfigManager) -> list[str]:
         findings.extend(_findings_for_template_provider(name, section))
     selected_section = sections.get(selected)
     if isinstance(selected_section, dict) and selected_section.get("type") == "batch_custom":
-        # Selected custom provider must also instantiate via its registry type.
-        # Neutralize api_key sources: resolve_api_key runs !command substitutions,
-        # which must never execute during a supposedly dry validation.
         cfg = dict(manager.get_provider_config(selected))
         cfg.pop("api_key", None)
         cfg.pop("api_key_env", None)
@@ -134,10 +127,6 @@ def main() -> int:
     except Exception as e:
         print(f"FAILED to load config: {e}", file=sys.stderr)
         return 1
-    # Validate the raw YAML first: ConfigManager silently swallows parse
-    # errors into an empty config, which would make a broken config file
-    # pass as "config OK" here. Parse whatever file the manager actually
-    # resolved (env override or default-discovered).
     try:
         with open(manager.config_path) as f:
             yaml.safe_load(f)

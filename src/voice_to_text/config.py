@@ -15,18 +15,15 @@ class ConfigManager:
     def __init__(self, config_path: str | None = None):
         """Initialize the configuration manager."""
         self._explicit_config_path = bool(config_path)
-        # User config path (persistent)
         self.user_config_path = str(Path.home() / ".config" / "voice-to-text" / "config.yaml")
 
-        # Look for config in multiple locations
         default_paths = [
-            self.user_config_path,  # User config (persistent)
-            str(Path(__file__).parent.parent / "config.yaml"),  # Development
-            str(Path(__file__).parent / "config.yaml"),  # Alternative dev location
-            str(Path(__file__).parent.parent.parent / "config.yaml"),  # Root project
+            self.user_config_path,
+            str(Path(__file__).parent.parent / "config.yaml"),
+            str(Path(__file__).parent / "config.yaml"),
+            str(Path(__file__).parent.parent.parent / "config.yaml"),
         ]
 
-        # Use provided path or find first existing one
         if config_path:
             self.config_path = config_path
         else:
@@ -76,10 +73,8 @@ class ConfigManager:
         """Get configuration for specific provider."""
         provider_config = self.config.get(provider_name, {})
 
-        # Merge with global transcription settings
         transcription_config = self.config.get("transcription", {})
 
-        # Provider-specific config takes precedence
         merged = transcription_config.copy()
         merged.update(provider_config)
 

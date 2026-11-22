@@ -68,12 +68,10 @@ class RecordingEngine:
         self._skip_output = False
         self._typer: DotoolTyper | MutterVirtualTyper | MutterVirtualPaster | None = None
         self._profile_timings: list[tuple[str, float]] = []
-        # Initialize stop_timeout with default (will be overridden in start())
         config_mgr = ConfigManager()
         engine_cfg = config_mgr.config.get("engine", {})
         self._stop_timeout = engine_cfg.get("stop_timeout", 120)
 
-        # Callbacks set by the D-Bus service to emit signals
         self.on_audio_level: Callable[[float], None] | None = None
         self.on_error: Callable[[str], None] | None = None
         self.on_state_change: Callable[[EngineState], None] | None = None
@@ -83,7 +81,6 @@ class RecordingEngine:
         if self.state != EngineState.IDLE:
             raise RuntimeError(f"Cannot start: engine is {self.state.value}")
         self._cancel_event.clear()
-        # Validate and resolve stop_timeout from D-Bus config
         config_mgr = ConfigManager()
         engine_cfg = config_mgr.config.get("engine", {})
         default_timeout = engine_cfg.get("stop_timeout", 120)
@@ -92,7 +89,6 @@ class RecordingEngine:
             val = int(raw) if raw is not None else None
         except (TypeError, ValueError):
             val = None
-        # Only accept positive integers; otherwise fall back to configured default
         self._stop_timeout = val if (val is not None and val > 0) else default_timeout
         self._task = asyncio.create_task(self._run(config))
 
@@ -108,8 +104,6 @@ class RecordingEngine:
             except (TimeoutError, asyncio.CancelledError):
                 logger.warning("Recording task did not finish in time (timeout=%ds)", self._stop_timeout)
                 task.cancel()
-                # If the task's finally block already nulled self._task,
-                # that's fine — our local reference still lets us wait
                 with contextlib.suppress(TimeoutError, asyncio.CancelledError):
                     await asyncio.wait_for(task, timeout=5.0)
         if self.state != EngineState.IDLE:
@@ -140,7 +134,7 @@ class RecordingEngine:
         profiling_enabled = config_mgr.config.get("profiling", False)
         if not profiling_enabled:
             return False, lambda label: None
-        self._profile_timings = []  # (label, elapsed)
+        self._profile_timings = []
         t0 = _time.monotonic()
 
         def _step(label: str) -> None:
@@ -181,7 +175,6 @@ class RecordingEngine:
 
     async def _run_debug_mode(self, config: dict[str, Any], typer) -> None:
         """Handle debug-mode recording (test file instead of microphone)."""
-        # handle_debug_recording is guaranteed importable when is_debug_mode() is True
         from voice_to_text.debug import handle_debug_recording  # noqa: PLC0415
 
         self.state = EngineState.RECORDING
@@ -191,8 +184,6 @@ class RecordingEngine:
         self._notify_state()
         if text and typer:
             await typer.stream_diff(text)
-            # stream_diff only stores text for MutterVirtualPaster (commit
-            # happens in flush()); commit now so output isn't dropped.
             if isinstance(typer, MutterVirtualPaster):
                 await typer.flush()
         logger.info("DEBUG MODE: Transcription complete")
@@ -205,8 +196,6 @@ class RecordingEngine:
 
         if mode not in ("hybrid", "streaming"):
             provider_config = config_mgr.get_provider_config(provider)
-            # Construct the provider in a worker thread: its __init__ may
-            # run blocking I/O (e.g. API key resolution).
             batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
             return None, batch_provider
 
@@ -217,12 +206,9 @@ class RecordingEngine:
         if mode == "hybrid":
             batch_name = config.get("batch_provider") or hybrid_cfg.get("batch_provider", "voxtral")
             batch_config = config_mgr.get_provider_config(batch_name)
-            # Construct providers in worker threads: their __init__
-            # may run blocking I/O (e.g. API key resolution).
             streaming_provider = await asyncio.to_thread(get_streaming_provider, streaming_name, streaming_config)
             batch_provider = await asyncio.to_thread(get_batch_provider, batch_name, batch_config)
         else:
-            # streaming mode — the stream's own final transcript is the result
             streaming_provider = await asyncio.to_thread(get_streaming_provider, streaming_name, streaming_config)
             batch_provider = None
         transcriber = HybridTranscriber(streaming_provider, batch_provider)
@@ -313,7 +299,6 @@ class RecordingEngine:
 
             filepath = await self._recording_loop(recorder, transcriber, self._typer)
 
-        # Stop microphone before transitioning to processing
         _step("recording_stopped")
         self.state = EngineState.PROCESSING
         self._notify_state()
@@ -325,15 +310,13 @@ class RecordingEngine:
             try:
                 chunk = await asyncio.wait_for(recorder.read_chunk(), timeout=0.1)
             except TimeoutError:
-                continue  # no data yet, re-check cancellation
+                continue
             if chunk is None:
-                break  # stream ended
+                break
 
-            # Emit audio level for D-Bus signal
             if self.on_audio_level:
                 self.on_audio_level(recorder.smoothed_level)
 
-            # Feed streaming provider + type incrementally
             if transcriber and typer:
                 partial = await transcriber.on_audio_chunk(chunk)
                 if partial:
@@ -382,7 +365,6 @@ class RecordingEngine:
                 len(text),
             )
             await typer.stream_diff(text)
-            # For MutterVirtualPaster, commit the accumulated text after streaming
             if isinstance(typer, MutterVirtualPaster):
                 await typer.flush()
         elif text and typer and not typer._usable:
@@ -394,7 +376,6 @@ class RecordingEngine:
             with contextlib.suppress(Exception):
                 await self._typer.stop()
             self._typer = None
-        # Close providers
         if self._transcriber:
             with contextlib.suppress(Exception):
                 await self._transcriber.close()
@@ -413,8 +394,6 @@ class RecordingEngine:
             typer = await self._init_typer(config)
             _step("dotoolc_opened")
 
-            # Check for debug mode (test file instead of microphone)
-            # Lazy import to avoid circular dependencies in production builds
             try:
                 from voice_to_text.debug import is_debug_mode  # noqa: PLC0415
             except ImportError:

@@ -8,7 +8,7 @@ from voice_to_text.config_check import check_config
 from voice_to_text.config_check import main as config_check_main
 from voice_to_text.provider_test import main as provider_test_main
 
-main = provider_test_main  # shorthand
+main = provider_test_main
 
 VALID_TEMPLATE_CONFIG = """
 transcription:

@@ -77,5 +77,4 @@ def test_list_input_devices_exposes_pipewire(monkeypatch):
     assert "__system_default__" in ids
     assert "pipewire" in ids
     assert "sysdefault" in ids
-    # The system-default sentinel must come first.
     assert ids[0] == "__system_default__"

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Store API keys for voice-to-text providers (pure bash)
-
 if ! command -v secret-tool &>/dev/null; then
   echo "Error: 'secret-tool' is required (usually in libsecret-tools package)."
   echo "  sudo apt install libsecret-tools   # Debian/Ubuntu"
@@ -21,7 +19,6 @@ select provider in "${providers[@]}"; do
   echo "Invalid selection. Try again."
 done
 
-# Map display name to keyring username + create-key URL
 case "$provider" in
 Deepgram)
   username="deepgram"

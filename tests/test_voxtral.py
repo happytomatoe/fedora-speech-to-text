@@ -32,7 +32,6 @@ class TestVoxtralProvider:
             )
 
     def test_missing_api_key(self):
-        # Unset the environment variables for this test
         import os
 
         old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
@@ -53,8 +52,6 @@ class TestVoxtralProvider:
         import tempfile
         from unittest.mock import MagicMock
 
-        # Isolate from host env: resolve_api_key prefers env vars, and a real
-        # VOXTRAL_API_KEY on the dev machine would override the mock key.
         old_voxtral_key = os.environ.pop("VOXTRAL_API_KEY", None)
         old_mistral_key = os.environ.pop("MISTRAL_API_KEY", None)
 
@@ -74,34 +71,28 @@ class TestVoxtralProvider:
 
         provider._client.post = _fake_post  # type: ignore[assignment]
 
-        # Create a temporary audio file for testing
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(b"RIFF....WAVEfmt ")  # Minimal WAV header
+            tmp.write(b"RIFF....WAVEfmt ")
             tmp_path = tmp.name
 
         try:
             result = await provider.transcribe_file(tmp_path)
 
-            # Check URL
             assert captured["url"] == "https://api.mistral.ai/v1/audio/transcriptions"
 
-            # Check headers
             headers = captured["headers"]
             assert headers["Authorization"] == "Bearer test_key"
 
-            # Check files parameter
             files = captured["files"]
             assert "file" in files
             file_tuple = files["file"]
-            assert len(file_tuple) == 2  # Should be (filename, file_object)
+            assert len(file_tuple) == 2
             assert file_tuple[0] == os.path.basename(tmp_path)
 
-            # Check data parameter
             data = captured["data"]
             assert data["model"] == "voxtral-mini-latest"
             assert data["language"] == "en"
 
-            # Check result
             assert result == "test transcription"
 
         finally:

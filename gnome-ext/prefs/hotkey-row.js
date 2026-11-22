@@ -66,7 +66,6 @@ function showHotkeyDialog(settings, parentWindow, label) {
 
     let currentKey = null;
 
-    // Create a key capture controller
     const keyController = new Gtk.EventControllerKey();
     dialog.add_controller(keyController);
 
@@ -80,7 +79,6 @@ function showHotkeyDialog(settings, parentWindow, label) {
                 return false;
             }
 
-            // Ignore modifier-only key presses
             if (
                 key === 'Control_L' ||
                 key === 'Control_R' ||
@@ -120,7 +118,6 @@ function showHotkeyDialog(settings, parentWindow, label) {
         dialog.close();
     });
 
-    // Handle escape key
     const escapeController = new Gtk.EventControllerKey();
     dialog.add_controller(escapeController);
     escapeController.connect('key-pressed', (controller, keyval) => {

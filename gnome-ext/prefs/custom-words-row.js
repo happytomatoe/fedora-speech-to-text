@@ -33,18 +33,13 @@ export function createCustomWordsGroup(
     /** @type {Adw.ActionRow|null} */
     let addWordRow = null;
 
-    // Use a mutable reference to break circular dependency between
-    // createWordRow (which calls populate) and populate (which calls createWordRow)
     const ref = {populate: () => {}};
 
-    // Helper to create a word row
     const createWordRow = word => {
         const row = new Adw.ActionRow();
         row.title = word;
         const deleteButton = new Gtk.Button({
             icon_name: 'edit-delete-symbolic',
-            // Icon-only button — expose an accessible name so AT-SPI tests and
-            // screen readers can target it.
             css_classes: ['flat', 'error'],
             valign: Gtk.Align.CENTER,
         });
@@ -68,9 +63,7 @@ export function createCustomWordsGroup(
         return row;
     };
 
-    // Populate existing words from GSettings (called after config sync)
     ref.populate = () => {
-        // Remove all word rows (but keep addWordRow)
         let child = customWordsList.get_first_child();
         while (child) {
             const next = child.get_next_sibling();
@@ -83,7 +76,6 @@ export function createCustomWordsGroup(
             }
             child = next;
         }
-        // Add words in reverse order so most recent appears at top
         const customWords = settings.get_strv('custom-words');
         for (let i = customWords.length - 1; i >= 0; i--) {
             if (customWords[i]) {
@@ -92,8 +84,6 @@ export function createCustomWordsGroup(
         }
     };
 
-    // "Add Word…" row at the top. GTK4 rows expose no AT-SPI actions, so the
-    // actual activation lives on a suffix button (clickable via AT-SPI).
     addWordRow = new Adw.ActionRow({
         activatable: true,
         title: _('Add Word…'),
@@ -158,13 +148,11 @@ export function createCustomWordsGroup(
         const doAdd = async () => {
             const text = entry.get_text().trim();
             if (text) {
-                // Check for duplicates
                 const existing = settings.get_strv('custom-words');
                 if (existing.includes(text)) {
                     dialog.close();
                     return;
                 }
-                // Persist insertion order (append to end of stored array)
                 settings.set_strv('custom-words', [...existing, text]);
                 ref.populate();
                 try {
@@ -188,7 +176,6 @@ export function createCustomWordsGroup(
     addWordButton.connect('clicked', openAddDialog);
     addWordRow.connect('activated', openAddDialog);
     addWordRow.add_suffix(addWordButton);
-    // Add "Add Word…" row first so it appears at the top of the list
     customWordsList.append(addWordRow);
 
     return {group, populate: () => ref.populate()};

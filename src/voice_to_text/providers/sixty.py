@@ -19,7 +19,6 @@ from .base import BatchProvider, StreamingProvider, get_shared_client, resolve_a
 
 logger = logging.getLogger(__name__)
 
-# HTTP status codes
 _HTTP_UNAUTHORIZED = 401
 _API_KEY_MIN_LEN = 10
 
@@ -33,9 +32,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         self.api_url = config.get("api_url", "https://api.60db.ai").rstrip("/")
         self.ws_url = config.get("ws_url", "wss://api.60db.ai/ws/stt")
         self.model = config.get("model", "60db-stt-v01")
-        # Use shared HTTP client (created once at service startup)
         self._client = get_shared_client()
-        # Streaming state
         self._ws: Any = None
         self._recv_task: asyncio.Task | None = None
         self._sample_rate: int = 16000
@@ -44,8 +41,6 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         self._connected = asyncio.Event()
         self._session_started = asyncio.Event()
         self._session_stopped = asyncio.Event()
-
-    # ── Batch ──────────────────────────────────────────────────────────
 
     async def transcribe_file(
         self, audio_path: str, language: str = "en", custom_words: list[str] | None = None
@@ -92,8 +87,6 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             logger.exception("60db transcription failed")
             raise RuntimeError(f"60db transcription failed: {e}") from e
 
-    # ── Streaming ──────────────────────────────────────────────────────
-
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Start a WebSocket streaming session with 60db."""
         self._sample_rate = sample_rate
@@ -107,7 +100,6 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         self._ws = await websockets.connect(ws_url)
         self._recv_task = asyncio.create_task(self._receive_loop())
 
-        # Wait for auth before sending start
         try:
             await asyncio.wait_for(self._connected.wait(), timeout=10.0)
         except TimeoutError as e:
@@ -135,7 +127,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         try:
             async for raw in self._ws:
                 if isinstance(raw, bytes):
-                    continue  # binary frames are telephony μ-law; we use JSON
+                    continue
                 try:
                     msg = json.loads(raw)
                 except (ValueError, TypeError):
@@ -147,8 +139,6 @@ class SixtyProvider(BatchProvider, StreamingProvider):
             logger.warning("60db receive loop error: %s", e)
 
     def _handle_message(self, msg: dict[str, Any]) -> None:
-        # "connection_established" may arrive as a key (some SDK shapes) or as
-        # msg["type"] == "connection_established" (documented WS protocol).
         if msg.get("connection_established") is not None or msg.get("type") == "connection_established":
             self._connected.set()
             return
@@ -166,7 +156,6 @@ class SixtyProvider(BatchProvider, StreamingProvider):
         if msg.get("is_partial") or not msg.get("is_final"):
             self._partial_result = msg.get("text") or None
             return
-        # is_final and speech_final → canonical; append if non-empty
         text = (msg.get("text") or "").strip()
         if text:
             self._finalized_text = (self._finalized_text + " " + text).strip()
@@ -175,7 +164,7 @@ class SixtyProvider(BatchProvider, StreamingProvider):
     async def send_audio(self, audio_chunk: bytes) -> None:
         """Send an audio chunk to the streaming transcriber."""
         if self._ws is None or not self._session_started.is_set():
-            return  # drop frames before session is ready
+            return
         frame = json.dumps(
             {
                 "type": "audio",

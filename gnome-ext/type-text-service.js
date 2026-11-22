@@ -30,9 +30,13 @@ export class TypeTextService {
                 Clutter.InputDeviceType.KEYBOARD_DEVICE
             );
             if (this._virtualKeyboard) {
-                console.debug('[VoiceToText] TypeText virtual keyboard obtained');
+                console.debug(
+                    '[VoiceToText] TypeText virtual keyboard obtained'
+                );
             } else {
-                console.debug('[VoiceToText] TypeText virtual keyboard not available')
+                console.debug(
+                    '[VoiceToText] TypeText virtual keyboard not available'
+                );
             }
         } catch (e) {
             console.error(
@@ -107,7 +111,6 @@ export class TypeTextService {
                         Clutter.KeyState.RELEASED
                     );
                 } else if (char === '\x08') {
-                    // Handle backspace (U+0008) for diff-correction
                     this._virtualKeyboard.notify_keyval(
                         time++,
                         Clutter.KEY_BackSpace,
@@ -140,7 +143,6 @@ export class TypeTextService {
             console.error('VoiceToText: TypeText failed:', e);
             return;
         }
-        // CI/headless capture: proves the keystroke loop actually completed.
         const e2eCapture = GLib.getenv('VOX_CI_E2E_TEXT_FILE');
         if (e2eCapture) {
             GLib.file_set_contents(e2eCapture, text);
@@ -149,10 +151,8 @@ export class TypeTextService {
     }
 
     CommitText(text) {
-        if (!Main.inputMethod.currentFocus) { // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
-            // CI/headless fallback: no focused input context exists in a headless
-            // session, so capture the text to a file for the E2E assertion instead
-            // of throwing. Only active when the CI harness sets the env var.
+        if (!Main.inputMethod.currentFocus) {
+            // aislop-ignore-line import/namespace -- GNOME resource:// namespace is runtime-resolved
             const e2eCapture = GLib.getenv('VOX_CI_E2E_TEXT_FILE');
             if (e2eCapture) {
                 GLib.file_set_contents(e2eCapture, text);

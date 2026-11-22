@@ -53,7 +53,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
 
-        // Add Ctrl+W to close the preferences window via key controller
         const keyController = new Gtk.EventControllerKey();
         keyController.connect(
             'key-pressed',
@@ -72,7 +71,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         window.add_controller(keyController);
         const settings = this.getSettings();
 
-        // Sync state tracking
         const _configSyncFailed = {v: false};
 
         const _syncAllToConfig = async () => {
@@ -80,7 +78,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
                 await syncToConfig(settings);
             } catch (e) {
                 console.error('VoiceToText: syncToConfig failed:', e);
-                // The drift is surfaced to the user via syncWarningRow below.
                 _configSyncFailed.v = true;
             }
         };
@@ -189,7 +186,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         languageRow.add_suffix(languageEntry);
         recordingGroup.add(languageRow);
 
-        // Shown when a config sync previously failed (see _syncAllToConfig).
         const syncWarningRow = new Adw.ActionRow({
             title: _('⚠️ Configuration Drift'),
             subtitle: _(
@@ -222,7 +218,6 @@ export default class VoiceToTextPrefs extends ExtensionPreferences {
         editConfigRow.add_suffix(editConfigButton);
 
         editConfigButton.connect('clicked', () => {
-            // Same path as CONFIG_PATH in prefs/config-sync.js.
             const configPath = `${GLib.get_home_dir()}/.config/voice-to-text/config.yaml`;
             try {
                 const launcher = new Gio.SubprocessLauncher({

@@ -80,19 +80,10 @@ class CustomProvider(BatchProvider):
         self._variables = self._validate_variables(config.get("variables", {}))
         wants_key = bool(config.get("api_key") or config.get("api_key_env"))
         self.api_key = resolve_api_key(config, "CUSTOM_API_KEY", provider_name="batch_custom") if wants_key else ""
-        # NativeEnvironment renders {{ CUSTOM_WORDS }} to a real list in JSON bodies
         self.env: Environment = NativeEnvironment()
 
         def _usable_header(source: str) -> bool:
             """Return whether a header template is usable when no API key is configured."""
-            # Key configured → always usable. Without a key, render with
-            # API_KEY as a sentinel (ChainableUndefined keeps fallbacks like
-            # `{{ API_KEY or 'public' }}` and `{% if API_KEY %}` working —
-            # StrictUndefined would raise on the truthiness check and drop
-            # legitimate no-key-friendly headers). If the sentinel survives
-            # into the output, the header depends on a bare unresolved
-            # API_KEY → skip it (an unfilled "Bearer " would be an illegal
-            # header value).
             if self.api_key != "":
                 return True
             if "API_KEY" not in source:
@@ -162,8 +153,6 @@ class CustomProvider(BatchProvider):
             "LANGUAGE": language,
             "CUSTOM_WORDS": list(custom_words or []),
         }
-        # The audio file forces multipart encoding, so `json` fields ride along as
-        # additional multipart form fields; list values become repeated keys.
         fields: list[tuple[str, str]] = [(k, str(t.render(**ctx))) for k, t in self._form_tmpl.items()]
         for k, (is_tmpl, tmpl) in self._json_tmpl.items():
             value = tmpl.render(**ctx) if is_tmpl else tmpl
@@ -196,11 +185,6 @@ class CustomProvider(BatchProvider):
 
         """
         rendered = self.render(language, custom_words)
-        # httpx AsyncClient rejects list-of-tuples `data=` payloads (mis-detects
-        # them as a sync stream, httpx #3471) — pass a dict instead. Repeated
-        # keys (list-valued json fields) can't live in a dict, so they ride in
-        # `files=` as (name, (None, value)) tuples, which httpx encodes as
-        # additional multipart fields.
         data: dict[str, str] = {}
         repeated: list[tuple[str, tuple[None, str]]] = []
         seen: set[str] = set()

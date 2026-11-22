@@ -39,8 +39,6 @@ DEFAULT_API_URL = "https://sync.assemblyai.com"
 DEFAULT_STREAMING_URL = "wss://streaming.assemblyai.com"
 MODEL_HEADER = "X-AAI-Model"
 
-# Languages the Sync and streaming models accept in ``language_codes``.
-# https://www.assemblyai.com/docs/streaming/multilingual-transcription
 _SUPPORTED_LANGUAGES = frozenset(
     {
         "af",
@@ -80,11 +78,9 @@ _SUPPORTED_LANGUAGES = frozenset(
 
 _KEYTERM_FIELDS = ("keyterms_prompt", "keyterms", "word_boost")
 
-# API limits: 100 keyterms per request, 8000 characters across all Sync keyterms.
 _MAX_KEYTERMS = 100
 _MAX_BATCH_KEYTERM_CHARS = 8000
 
-# The Sync API needs the part's content type; the suffix identifies it.
 _AUDIO_CONTENT_TYPES = {
     ".wav": "audio/wav",
     ".pcm": "audio/pcm",
@@ -147,7 +143,6 @@ class AssemblyAIProvider(BatchProvider, WebSocketStreamingProvider):
         self.streaming_model = config.get("streaming_model", DEFAULT_STREAMING_MODEL)
         self.api_url = config.get("api_url", DEFAULT_API_URL)
         self.streaming_url = config.get("streaming_url", DEFAULT_STREAMING_URL)
-        # Extra Sync ``config`` fields and streaming connection parameters.
         self.batch_options: dict[str, Any] = dict(config.get("batch_options", {}))
         self.streaming_options: dict[str, Any] = dict(config.get("streaming_options", {}))
         self._client = get_shared_client()

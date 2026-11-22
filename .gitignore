@@ -67,11 +67,12 @@ build/
 src/voice_to_text/_build_info.py
 .pi/
 .pi-*/
-docs/
+docs/*
 !docs/e2e-atspi-plan.md
 !docs/e2e-atspi-handoff.md
 !e2e/docs/
 !docs/providers/
+!docs/adr/
 thoughts/
 # Visual regression test output
 tests/gnome-snapshots/

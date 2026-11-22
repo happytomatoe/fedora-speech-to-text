@@ -43,7 +43,6 @@ class AsyncAudioRecorder:
         self.smoothed_level: float = 0.0
         self.frame_count: int = 0
         self._stream: Any = None
-        # ~2 minutes of audio buffer (1000 chunks x 2048 samples / 16kHz ~ 128s)
         self._queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=1000)
         self._wav_file = None
         self._filepath: str | None = None
@@ -57,15 +56,8 @@ class AsyncAudioRecorder:
         self._wav_file.setsampwidth(2)
         self._wav_file.setframerate(self.sample_rate)
 
-        # Store event loop reference for thread-safe callback
         self._loop = asyncio.get_running_loop()
 
-        # When no device is explicitly chosen, prefer "pipewire" so recording
-        # routes through PipeWire. This (a) makes GNOME Shell's microphone /
-        # privacy recording indicator appear, and (b) selects the correct input
-        # on PipeWire systems. Fall back to PortAudio's default only if the
-        # pipewire ALSA plugin is unavailable (e.g. non-PipeWire setups).
-        # An explicitly selected device is used as-is (no silent fallback).
         candidates = ["pipewire", None] if self.device is None else [self.device]
         last_err: Exception | None = None
         opened_device: object = self.device
@@ -102,10 +94,8 @@ class AsyncAudioRecorder:
         """
         raw = indata.tobytes()
 
-        # Smoothed level for D-Bus AudioLevel signal
         float_data = indata[:, 0].astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(float_data**2)))
-        # Convert to dBFS (floor at -50, ceiling at 0) for widget display
         db = 20 * np.log10(max(rms, 1e-5))
         db_normalized = max(0.0, min(1.0, (db + 50) / 50))
         self.smoothed_level = 0.7 * self.smoothed_level + 0.3 * db_normalized
@@ -117,7 +107,7 @@ class AsyncAudioRecorder:
 
         def _safe_put() -> None:
             with contextlib.suppress(asyncio.QueueFull):
-                self._queue.put_nowait(raw)  # drop frame if consumer is too slow
+                self._queue.put_nowait(raw)
 
         self._loop.call_soon_threadsafe(_safe_put)
 
@@ -136,7 +126,6 @@ class AsyncAudioRecorder:
             self._wav_file = None
         filepath = self._filepath
         self._filepath = None
-        # Signal consumer that no more data
         self._queue.put_nowait(None)
 
         return filepath

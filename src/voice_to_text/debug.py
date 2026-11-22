@@ -25,10 +25,8 @@ from voice_to_text.providers import get_batch_provider
 
 logger = logging.getLogger(__name__)
 
-# Debug recording duration in seconds (show audio level before using test file)
 DEBUG_RECORDING_DURATION = 3
 
-# Audio level simulation thresholds
 _RAMP_UP_END = 0.2
 _RAMP_DOWN_START = 0.8
 
@@ -67,32 +65,26 @@ async def handle_debug_recording(  # noqa: C901, PLR0912
     batch_provider = await asyncio.to_thread(get_batch_provider, provider, provider_config)
 
     try:
-        # Simulate audio level feedback for a few seconds
-        # This gives visual feedback that recording started
         logger.info("DEBUG MODE: Simulating audio capture for %d seconds...", DEBUG_RECORDING_DURATION)
 
-        # Emit fake audio levels to show the indicator is working
         level = 0.0
-        for i in range(DEBUG_RECORDING_DURATION * 10):  # 10 updates per second
+        for i in range(DEBUG_RECORDING_DURATION * 10):
             if _cancel_event and _cancel_event.is_set():
                 logger.info("DEBUG MODE: Cancelled during simulation")
                 return None
             await asyncio.sleep(0.1)
-            # Ramp up, hold, then ramp down
             progress = i / (DEBUG_RECORDING_DURATION * 10)
             if progress < _RAMP_UP_END:
-                level = progress * 2.5  # ramp up 0 -> 0.5
+                level = progress * 2.5
             elif progress < _RAMP_DOWN_START:
-                # Deterministic waveform using sin wave for visual variety
-                level = 0.4 + 0.15 * math.sin(progress * 60)  # hold ~0.5 with sine wave
+                level = 0.4 + 0.15 * math.sin(progress * 60)
             else:
-                level = max(0, (1.0 - progress) * 2.5)  # ramp down 0.5 -> 0
+                level = max(0, (1.0 - progress) * 2.5)
 
             level = max(0.0, min(1.0, level))
             if on_level:
                 on_level(level)
 
-            # Log progress every second
             if i % 10 == 0:
                 logger.debug(
                     "DEBUG MODE: Simulating audio capture... %ds/%ds (level=%.2f)",
@@ -101,17 +93,14 @@ async def handle_debug_recording(  # noqa: C901, PLR0912
                     level,
                 )
 
-        # Final level reset
         if on_level:
             on_level(0.0)
 
         logger.info("DEBUG MODE: Audio simulation complete, transcribing test file...")
 
-        # Transcribe the test file
         language = config.get("language", "en")
         text = await batch_provider.transcribe_file(debug_file, language)
 
-        # Apply post-processing (same as normal pipeline)
         if text:
             postprocess_cfg = config_mgr.config.get("postprocess", {})
             if postprocess_cfg.get("enabled", True):

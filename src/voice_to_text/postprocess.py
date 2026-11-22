@@ -4,11 +4,11 @@ Deterministic cleanup of transcription output: filler word removal,
 stutter collapsing. No LLM dependency.
 
 Ported from Handy (src-tauri/src/audio_toolkit/text.rs).
+
+Policy rationale: docs/adr/0013-post-processing-conservatism.md.
 """
 
 import re
-
-# ── Filler word removal ──────────────────────────────────────────
 
 FILLER_WORDS: dict[str, list[str]] = {
     "en": ["uh", "um", "uhm", "umm", "uhh", "uhhh", "ah", "hmm", "hm", "mmm", "mm", "mh", "eh", "ehh", "ha"],
@@ -28,10 +28,8 @@ FILLER_WORDS: dict[str, list[str]] = {
     "vi": ["hmm", "mmm", "hm"],
     "zh": ["hmm", "mmm"],
 }
-# Conservative fallback — no "um", "eh", "ha" (real words in some languages)
 FILLER_FALLBACK = ["uh", "uhm", "umm", "uhh", "uhhh", "ah", "hmm", "hm", "mmm", "mm", "mh", "ehh"]
 
-# Minimum consecutive repetitions to collapse as stutter
 STUTTER_MIN_COUNT = 3
 
 
@@ -39,9 +37,6 @@ def get_filler_words(lang: str) -> list[str]:
     """Return filler words for a language code (e.g. 'en', 'pt-BR')."""
     base = re.split(r"[-_]", lang)[0]
     return FILLER_WORDS.get(base, FILLER_FALLBACK)
-
-
-# ── Stutter collapse ─────────────────────────────────────────────
 
 
 def collapse_stutters(text: str) -> str:
@@ -108,9 +103,6 @@ def filter_transcription_output(
     filtered = collapse_stutters(filtered)
     filtered = _MULTI_SPACE.sub(" ", filtered)
     return filtered.strip()
-
-
-# ── Convenience function ─────────────────────────────────────────
 
 
 def postprocess(

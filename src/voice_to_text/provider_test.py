@@ -122,7 +122,7 @@ def _parse_value_flag(parsed: "_Args", flag: str, value: str) -> "_Args | int":
         parsed.words = [w.strip() for w in value.split(",") if w.strip()]
     elif flag == "--api-key":
         parsed.api_key = value
-    else:  # --var NAME=VALUE
+    else:
         var_name, sep, raw = value.partition("=")
         if not sep or not var_name:
             print(f"--var expects NAME=VALUE, got {value!r}", file=sys.stderr)
