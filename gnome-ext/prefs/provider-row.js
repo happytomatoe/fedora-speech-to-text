@@ -21,6 +21,7 @@ const BATCH_PROVIDERS = {
     '60db': '60db',
     elevenlabs: 'ElevenLabs',
     moonshine: 'Moonshine',
+    speechmatics: 'Speechmatics',
 };
 
 /**
@@ -33,6 +34,7 @@ const STREAMING_PROVIDER_IDS = [
     'voxtral',
     '60db',
     'moonshine',
+    'speechmatics',
 ];
 
 /**

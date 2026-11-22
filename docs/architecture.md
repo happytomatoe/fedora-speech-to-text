@@ -108,7 +108,7 @@ and `Error`.
 | Recording engine | `src/voice_to_text/engine.py` | State machine (`idle`/`recording`/`processing`); orchestrates the pipeline. |
 | Audio capture | `src/voice_to_text/audio.py` | `AsyncAudioRecorder` (sounddevice + queue) and speaker volume control. |
 | Bluetooth | `src/voice_to_text/bluetooth.py` | Switches headset to hands-free mic before recording. |
-| Providers | `src/voice_to_text/providers/*.py` | Cloud (Voxtral, Groq, Deepgram, AssemblyAI, 60db, ElevenLabs) and local (Parakeet) transcription. |
+| Providers | `src/voice_to_text/providers/*.py` | Cloud (Voxtral, Groq, Deepgram, AssemblyAI, Speechmatics, 60db, ElevenLabs) and local (Parakeet) transcription. |
 | Hybrid | `src/voice_to_text/hybrid.py` | Mixes a streaming provider (live partials) with a batch provider (final pass). |
 | Output | `src/voice_to_text/dotool_typer.py` | Incremental typing via `dotoolc`; clipboard fallback. |
 | Config | `src/voice_to_text/config.py`, `config.yaml` | Loads/resolves provider config and secrets. |
@@ -171,6 +171,7 @@ graph TB
     BP --> Parakeet
     BP --> ElevenLabs
     BP --> AssemblyAI
+    BP --> Speechmatics
     BP --> 60db
 
     SP[StreamingProvider<br/>start_stream / send_audio / get_partial / finalize]
@@ -178,10 +179,11 @@ graph TB
     SP --> DeepgramS[Deepgram]
     SP --> VoxtralS[Voxtral]
     SP --> AssemblyAI
+    SP --> Speechmatics
     SP --> 60dbS[60db]
 ```
 
-All streaming providers extend `WebSocketStreamingProvider` which handles the Deepgram-compatible WebSocket protocol.
+Streaming providers extend `WebSocketStreamingProvider` for connection, buffered message pumping, and teardown. Each provider parses its own server messages; Deepgram keeps its Deepgram-specific loop.
 
 ## Configuration & secrets
 

@@ -12,7 +12,7 @@ Voice-to-text converts speech to text on Linux using free cloud/local APIs. It i
 - **Python service** (`src/voice_to_text/`): the transcription engine, audio capture, providers, and a D-Bus service that the GNOME extension calls.
 - **GNOME Shell extension** (`gnome-ext/`): JS UI (indicator, hotkey, preferences, typer) that talks to the D-Bus service.
 
-Transcription providers: cloud (Voxtral, Groq, Deepgram, 60db, ElevenLabs) and local (Parakeet). API keys come from env vars, `config.yaml`, or command substitution (`!command`).
+Transcription providers: cloud (Voxtral, Groq, Deepgram, AssemblyAI, Speechmatics, 60db, ElevenLabs) and local (Parakeet, Moonshine). API keys come from env vars, `config.yaml`, or command substitution (`!command`).
 
 ## Output Methods
 

@@ -328,7 +328,7 @@ class TestAssemblyAIStreaming:
         ws = _FakeWS([json.dumps({"type": "Termination", "audio_duration_seconds": 1})])
         provider._ws = ws
 
-        await provider._collect_final_turns()
+        await provider._drain_until_terminated()
         assert ws._messages == []
 
     @pytest.mark.asyncio

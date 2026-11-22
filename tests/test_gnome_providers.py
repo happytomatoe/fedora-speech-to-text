@@ -9,6 +9,7 @@ from voice_to_text.providers import _BATCH_PROVIDERS, _STREAMING_PROVIDERS
 GNOME_EXT = Path(__file__).resolve().parent.parent / "gnome-ext"
 GSCHEMA_XML = GNOME_EXT / "schemas" / "org.gnome.shell.extensions.voice-to-text.gschema.xml"
 PREFS_JS = GNOME_EXT / "prefs.js"
+PROVIDER_ROW_JS = GNOME_EXT / "prefs" / "provider-row.js"
 
 
 def _parse_gschema_provider_defaults() -> dict[str, str]:
@@ -24,15 +25,29 @@ def _parse_gschema_provider_defaults() -> dict[str, str]:
     return defaults
 
 
+def _js_block(text: str, start: str, end: str) -> str:
+    """Return the text between two markers."""
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
 def _parse_prefs_providers() -> dict[str, list[str]]:
-    """Extract provider IDs from prefs.js combo boxes."""
+    """Extract provider IDs from the prefs UI (combo literals and provider-row.js)."""
+    result: dict[str, list[str]] = {}
+
     text = PREFS_JS.read_text()
-    result = {}
     # Match: someCombo.append("id", "Label")
     for match in re.finditer(r'(\w+ProviderCombo)\.append\("([^"]+)"', text):
-        combo_name = match.group(1)
-        provider_id = match.group(2)
-        result.setdefault(combo_name, []).append(provider_id)
+        result.setdefault(match.group(1), []).append(match.group(2))
+
+    row_text = PROVIDER_ROW_JS.read_text()
+    batch_block = _js_block(row_text, "const BATCH_PROVIDERS = {", "};")
+    batch_ids = [quoted or bare for quoted, bare in re.findall(r"^\s+(?:'([^']+)'|(\w+)):", batch_block, re.M)]
+    streaming_block = _js_block(row_text, "const STREAMING_PROVIDER_IDS = [", "];")
+    streaming_ids = re.findall(r"'([^']+)'", streaming_block)
+
+    result.setdefault("batchProviderCombo", []).extend(batch_ids)
+    result.setdefault("providerCombo", []).extend(batch_ids)
+    result.setdefault("streamingProviderCombo", []).extend(streaming_ids)
     return result
 
 
@@ -94,3 +109,15 @@ class TestProviderConsistency:
             assert pid in all_python, (
                 f"prefs.js provider '{pid}' is not a registered provider. Available: {sorted(all_python)}"
             )
+
+    def test_python_batch_providers_exist_in_prefs(self):
+        prefs = _parse_prefs_providers()
+        shown = set(prefs.get("batchProviderCombo", [])) | set(prefs.get("providerCombo", []))
+        missing = (set(_BATCH_PROVIDERS) - {"batch_custom"}) - shown
+        assert not missing, f"Python batch providers missing from prefs.js: {sorted(missing)}"
+
+    def test_python_streaming_providers_exist_in_prefs(self):
+        prefs = _parse_prefs_providers()
+        shown = set(prefs.get("streamingProviderCombo", []))
+        missing = set(_STREAMING_PROVIDERS) - shown
+        assert not missing, f"Python streaming providers missing from prefs.js: {sorted(missing)}"

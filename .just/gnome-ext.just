@@ -14,6 +14,7 @@ gnome-ext-dev: reinstall gnome-ext-install
         export ELEVENLABS_API_KEY=$(secret-tool lookup service voice-to-text username elevenlabs 2>/dev/null)
         export SIXTYDB_API_KEY=$(secret-tool lookup service voice-to-text username 60db 2>/dev/null)
         export ASSEMBLYAI_API_KEY=$(secret-tool lookup service voice-to-text username assemblyai 2>/dev/null)
+        export SPEECHMATICS_API_KEY=$(secret-tool lookup service voice-to-text username speechmatics 2>/dev/null)
     fi
     set -x
     if [ -n "${TOOLBOX_PATH:-}" ] || [ "${container:-}" = "oci" ]; then

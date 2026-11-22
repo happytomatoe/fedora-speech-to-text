@@ -320,6 +320,53 @@ class WebSocketStreamingProvider(StreamingProvider):
             self._ws = None
             raise RuntimeError("Streaming connection lost") from e
 
+    def _handle_message(self, data: dict[str, Any]) -> bool:
+        """Apply one provider message; return True when the stream ends."""
+        raise NotImplementedError(self.name)
+
+    async def _pump_messages(self) -> None:
+        """Apply buffered messages without blocking the audio loop."""
+        if self._ws is None:
+            return
+        try:
+            async with asyncio.timeout(0.01):
+                while self._ws is not None:
+                    raw = await self._ws.recv()
+                    if isinstance(raw, str) and self._handle_message(json.loads(raw)):
+                        return
+        except TimeoutError:
+            pass
+        except Exception as e:
+            logger.warning("Error processing %s messages: %s", self.name, e)
+            ws, self._ws = self._ws, None
+            if ws is not None:
+                with contextlib.suppress(Exception):
+                    await ws.close()
+
+    async def _drain_until_terminated(self) -> None:
+        """Read messages until the provider reports the stream ended."""
+        while self._ws is not None:
+            raw = await self._ws.recv()
+            if isinstance(raw, str) and self._handle_message(json.loads(raw)):
+                return
+
+    async def _finalize_ws(self, end_message: dict[str, Any], *, timeout: float = 3.0) -> None:
+        """Send the end message, drain remaining transcripts, then close."""
+        if self._ws is None:
+            return
+        try:
+            await self._ws.send(json.dumps(end_message))
+            await asyncio.wait_for(self._drain_until_terminated(), timeout=timeout)
+        except TimeoutError:
+            logger.debug("Timeout draining %s stream during close", self.name)
+        except Exception as e:
+            logger.warning("Error closing %s stream: %s", self.name, e)
+        finally:
+            ws, self._ws = self._ws, None
+            if ws is not None:
+                with contextlib.suppress(Exception):
+                    await ws.close()
+
     async def get_partial_result(self) -> str | None:
         """Get the latest partial transcript."""
         if self._partial_result:

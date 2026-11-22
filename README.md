@@ -46,6 +46,7 @@ Cloud:
 - AssemblyAI
 - 60db
 - ElevenLabs
+- Speechmatics
 
 Local:
 - Parakeet. You can install it in podman container using [this script](./parakeet-v2.sh)
@@ -79,6 +80,7 @@ You can provide API keys using next:
 export VOXTRAL_API_KEY="your-api-key-here"
 export DEEPGRAM_API_KEY="your-api-key-here"
 export ASSEMBLYAI_API_KEY="your-api-key-here"
+export SPEECHMATICS_API_KEY="your-api-key-here"
 export GROQ_API_KEY="your-api-key-here"
 export SIXTYDB_API_KEY="your-api-key-here"
 export ELEVENLABS_API_KEY="your-api-key-here"
