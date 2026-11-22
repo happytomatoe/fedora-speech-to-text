@@ -180,6 +180,7 @@ graph TB
     SP --> VoxtralS[Voxtral]
     SP --> AssemblyAI
     SP --> Speechmatics
+    SP --> Moonshine
     SP --> 60dbS[60db]
 ```
 
