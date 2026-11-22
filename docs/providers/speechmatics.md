@@ -28,8 +28,8 @@ does not translate `operating_point`.
 |---|---|
 | `enhanced` | Default. Highest accuracy for single-language audio. |
 | `standard` | Lower latency and higher throughput. |
-| `melia-1` | Multilingual (`language: multi`). Batch supported; realtime needs `ForceEndOfUtterance`, which this provider does not send. |
-| `oak-1` | Batch only. |
+| `melia-1` | Multilingual (`language: multi`). Batch supported; realtime needs client-side `ForceEndOfUtterance`, which this provider does not send. |
+| `oak-1` | Multilingual healthcare. Batch supported; realtime has the same `ForceEndOfUtterance` requirement. |
 
 ## Batch
 

@@ -67,7 +67,7 @@ assemblyai:
 speechmatics:
   api_key_env: "SPEECHMATICS_API_KEY"
   model: "enhanced"            # standard or enhanced; used by batch and realtime
-  # melia-1 / oak-1 are batch-only here; realtime melia-1 needs
+  # melia-1 / oak-1 are batch-only here; realtime needs client-side
   # ForceEndOfUtterance, which this provider does not send.
   # batch_options:             # extra transcription_config fields for batch
   #   domain: "medical"
