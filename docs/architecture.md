@@ -183,7 +183,7 @@ graph TB
     SP --> 60dbS[60db]
 ```
 
-WebSocket-based streaming providers (AssemblyAI, Deepgram, Speechmatics) extend `WebSocketStreamingProvider` for connection, buffered message pumping, and teardown. Each parses its own server messages in `_handle_message`.
+AssemblyAI, Deepgram, and Speechmatics extend `WebSocketStreamingProvider` for connection, buffered message pumping, and teardown, parsing their own server messages in `_handle_message`. Voxtral, 60db, and Moonshine implement `StreamingProvider` directly; 60db manages its own WebSocket.
 
 ## Configuration & secrets
 

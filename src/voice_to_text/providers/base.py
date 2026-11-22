@@ -278,7 +278,7 @@ def resolve_api_key(
 class WebSocketStreamingProvider(StreamingProvider):
     """Shared WebSocket streaming logic for JSON-message providers.
 
-    Subclasses implement: __init__, transcribe_file, start_stream (URL/headers), name.
+    Subclasses implement: __init__, transcribe_file, start_stream (URL/headers), name, _handle_message.
 
     Uses the ``websockets`` async library (replaces legacy websocket-client).
     """
@@ -379,16 +379,12 @@ class WebSocketStreamingProvider(StreamingProvider):
 
     async def finalize_stream(self) -> str:
         """Finalize the streaming session and return the complete text."""
-        had_ws = self._ws is not None
         await self._finalize_ws({"type": "CloseStream"}, timeout=2.0)
-        if had_ws:
-            result = self._finalized_text
-        else:
-            result = (
-                (self._finalized_text + " " + self._partial_result).strip()
-                if self._partial_result
-                else self._finalized_text
-            )
+        result = (
+            (self._finalized_text + " " + self._partial_result).strip()
+            if self._partial_result
+            else self._finalized_text
+        )
         self._partial_result = None
         self._finalized_text = ""
         return result

@@ -27,6 +27,7 @@ class HybridTranscriber:
         self.streaming = streaming
         self.batch = batch
         self.partial_text = ""
+        self._streaming_available = True
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         """Start the streaming session; hybrid mode continues without it on failure."""
@@ -35,11 +36,14 @@ class HybridTranscriber:
         except Exception as e:
             if self.batch is None:
                 raise
+            self._streaming_available = False
             logger.warning("Streaming start failed, continuing with batch-only transcription: %s", e)
         self.partial_text = ""
 
     async def on_audio_chunk(self, chunk: bytes) -> str:
         """Process an audio chunk during recording and return live text."""
+        if not self._streaming_available:
+            return self.partial_text
         logger.debug("Hybrid.on_audio_chunk: %d bytes", len(chunk))
         try:
             await self.streaming.send_audio(chunk)
@@ -50,17 +54,18 @@ class HybridTranscriber:
             else:
                 logger.debug("No partial result from streaming provider")
         except Exception as e:
+            self._streaming_available = False
             logger.warning("Streaming connection lost, continuing without live text: %s", e)
         return self.partial_text
 
     async def _finalize_stream(self) -> str:
         """Close the stream and return the best transcript available."""
+        if not self._streaming_available:
+            return self.partial_text
         try:
             finalized = await asyncio.wait_for(self.streaming.finalize_stream(), timeout=STREAM_FINALIZE_TIMEOUT)
         except TimeoutError:
-            logger.warning(
-                "Streaming finalize exceeded %.1fs, using last partial transcript", STREAM_FINALIZE_TIMEOUT
-            )
+            logger.warning("Streaming finalize exceeded %.1fs, using last partial transcript", STREAM_FINALIZE_TIMEOUT)
             with contextlib.suppress(Exception):
                 latest = await self.streaming.get_partial_result()
                 if latest:

@@ -231,3 +231,12 @@ class TestDeepgramProvider:
         provider._partial_result = "partial"
 
         assert await provider.finalize_stream() == "final partial"
+
+    async def test_finalize_keeps_interim_after_close(self):
+        provider = DeepgramProvider({"api_key": "test_key"})
+        provider._finalized_text = "body"
+        provider._ws = _FakeWS(
+            [json.dumps({"type": "Results", "is_final": False, "channel": {"alternatives": [{"transcript": "tail"}]}})]
+        )
+
+        assert await provider.finalize_stream() == "body tail"

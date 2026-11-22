@@ -15,18 +15,21 @@ class FakeStreaming:
         self.fail_start = fail_start
         self.latest = final
         self.closed = False
+        self.send_calls = 0
+        self.finalize_calls = 0
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
         if self.fail_start:
             raise RuntimeError("handshake failed")
 
     async def send_audio(self, chunk: bytes) -> None:
-        pass
+        self.send_calls += 1
 
     async def get_partial_result(self) -> str | None:
         return self.latest
 
     async def finalize_stream(self) -> str:
+        self.finalize_calls += 1
         if self.hang:
             await asyncio.sleep(30)
         return self.final
@@ -71,11 +74,15 @@ async def test_hybrid_mode_falls_back_to_stream_text_when_batch_fails():
 
 
 async def test_hybrid_mode_falls_back_to_batch_when_stream_start_fails():
+    streaming = FakeStreaming(fail_start=True)
     batch = FakeBatch("batch text")
-    transcriber = HybridTranscriber(FakeStreaming(fail_start=True), batch)
+    transcriber = HybridTranscriber(streaming, batch)
     await transcriber.start_stream()
+    assert await transcriber.on_audio_chunk(b"chunk") == ""
     assert await transcriber.on_recording_stop("/tmp/a.wav", "en") == "batch text"
     assert batch.calls == 1
+    assert streaming.send_calls == 0
+    assert streaming.finalize_calls == 0
 
 
 async def test_streaming_mode_propagates_stream_start_failure():
