@@ -29,8 +29,13 @@ class HybridTranscriber:
         self.partial_text = ""
 
     async def start_stream(self, language: str = "en", sample_rate: int = 16000) -> None:
-        """Start the streaming session."""
-        await self.streaming.start_stream(language, sample_rate=sample_rate)
+        """Start the streaming session; hybrid mode continues without it on failure."""
+        try:
+            await self.streaming.start_stream(language, sample_rate=sample_rate)
+        except Exception as e:
+            if self.batch is None:
+                raise
+            logger.warning("Streaming start failed, continuing with batch-only transcription: %s", e)
         self.partial_text = ""
 
     async def on_audio_chunk(self, chunk: bytes) -> str:

@@ -223,10 +223,6 @@ class AssemblyAIProvider(BatchProvider, WebSocketStreamingProvider):
         self._finalized_text = ""
         return result
 
-    async def _process_messages(self) -> None:
-        """Apply buffered streaming messages without blocking the audio loop."""
-        await self._pump_messages()
-
     def _handle_message(self, data: dict[str, Any]) -> bool:
         """Apply one streaming message; return True on session termination."""
         kind = data.get("type")

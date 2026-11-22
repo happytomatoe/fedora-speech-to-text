@@ -162,3 +162,19 @@ class DeepgramProvider(BatchProvider, WebSocketStreamingProvider):
         if self._ws is not None:
             with contextlib.suppress(Exception):
                 await self._ws.close()
+
+    def _handle_message(self, data: dict[str, Any]) -> bool:
+        """Apply one Deepgram message; the server never reports termination explicitly."""
+        msg_type = data.get("type", "unknown")
+        if msg_type == "Results":
+            channel = data.get("channel", {})
+            alternatives = channel.get("alternatives", [{}])
+            transcript = alternatives[0].get("transcript", "") if alternatives else ""
+            if data.get("is_final", False) and transcript:
+                self._finalized_text = (self._finalized_text + " " + transcript).strip()
+                self._partial_result = None
+            elif transcript:
+                self._partial_result = transcript
+        elif msg_type == "Error":
+            logger.error("%s stream error: %s", self.name, data.get("message"))
+        return False

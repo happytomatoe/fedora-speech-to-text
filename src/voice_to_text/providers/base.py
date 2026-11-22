@@ -276,7 +276,7 @@ def resolve_api_key(
 
 
 class WebSocketStreamingProvider(StreamingProvider):
-    """Shared WebSocket streaming logic for providers using the Deepgram-compatible protocol.
+    """Shared WebSocket streaming logic for JSON-message providers.
 
     Subclasses implement: __init__, transcribe_file, start_stream (URL/headers), name.
 
@@ -379,76 +379,12 @@ class WebSocketStreamingProvider(StreamingProvider):
 
     async def finalize_stream(self) -> str:
         """Finalize the streaming session and return the complete text."""
-        if self._ws is None:
-            result = (
-                (self._finalized_text + " " + self._partial_result).strip()
-                if self._partial_result
-                else self._finalized_text
-            )
-            self._partial_result = None
-            self._finalized_text = ""
-            return result
-
-        try:
-            await self._ws.send(json.dumps({"type": "CloseStream"}))
-            await asyncio.wait_for(self._drain_final_transcripts(), timeout=2.0)
-        except TimeoutError as e:
-            logger.debug("Timeout draining %s stream during close: %s", self.name, e)
-        except Exception as e:
-            logger.warning("Error closing %s stream: %s", self.name, e)
-        finally:
-            if self._ws is not None:
-                with contextlib.suppress(Exception):
-                    await self._ws.close()
-
+        await self._finalize_ws({"type": "CloseStream"}, timeout=2.0)
         result = self._finalized_text
-        self._ws = None
         self._partial_result = None
         self._finalized_text = ""
         return result
 
-    async def _drain_final_transcripts(self) -> None:
-        """Collect remaining final transcripts until the server closes the stream."""
-        assert self._ws is not None
-        while True:
-            msg = await self._ws.recv()
-            if not isinstance(msg, str):
-                continue
-            data = json.loads(msg)
-            if data.get("type", "") != "Results":
-                continue
-            channel = data.get("channel") or {}
-            alternatives = channel.get("alternatives") or []
-            transcript = alternatives[0].get("transcript", "") if alternatives else ""
-            if transcript:
-                self._finalized_text = (self._finalized_text + " " + transcript).strip()
-
     async def _process_messages(self) -> None:
-        if self._ws is None:
-            return
-
-        try:
-            async with asyncio.timeout(0.01):
-                while True:
-                    msg = await self._ws.recv()
-                    if isinstance(msg, str):
-                        data = json.loads(msg)
-                        msg_type = data.get("type", "unknown")
-                        if msg_type == "Results":
-                            logger.debug("Deepgram Results: %s", msg)
-                            channel = data.get("channel", {})
-                            alternatives = channel.get("alternatives", [{}])
-                            transcript = alternatives[0].get("transcript", "") if alternatives else ""
-                            is_final = data.get("is_final", False)
-                            if is_final and transcript:
-                                self._finalized_text = (self._finalized_text + " " + transcript).strip()
-                                self._partial_result = None
-                            elif transcript:
-                                self._partial_result = transcript
-                        elif msg_type == "Error":
-                            logger.error("%s stream error: %s", self.name, data.get("message"))
-        except (TimeoutError, asyncio.CancelledError):
-            pass
-        except Exception as e:
-            logger.warning("Error processing %s messages: %s", self.name, e)
-            self._ws = None
+        """Apply buffered messages without blocking the audio loop."""
+        await self._pump_messages()

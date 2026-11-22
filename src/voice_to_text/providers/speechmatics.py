@@ -189,10 +189,6 @@ class SpeechmaticsProvider(BatchProvider, WebSocketStreamingProvider):
         await self._finalize_ws({"message": "EndOfStream", "last_seq_no": self._audio_seq})
         return self._take_combined_text()
 
-    async def _process_messages(self) -> None:
-        """Apply buffered messages without blocking the audio loop."""
-        await self._pump_messages()
-
     def _handle_message(self, data: dict[str, Any]) -> bool:
         """Apply one server message; return True on ``EndOfTranscript``."""
         kind = data.get("message")

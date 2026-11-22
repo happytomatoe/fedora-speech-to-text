@@ -1,11 +1,33 @@
 """Tests for Deepgram provider."""
 
+import json
 import os
 
 import pytest
 
 from voice_to_text.providers import get_batch_provider
 from voice_to_text.providers.deepgram import DeepgramProvider
+
+
+class _FakeWS:
+    """Minimal stand-in for a websockets client connection."""
+
+    def __init__(self, messages: list[str]):
+        self._messages = list(messages)
+        self.sent: list[dict] = []
+        self.closed = False
+
+    async def send(self, payload: str | bytes) -> None:
+        if isinstance(payload, str):
+            self.sent.append(json.loads(payload))
+
+    async def recv(self) -> str:
+        if self._messages:
+            return self._messages.pop(0)
+        raise TimeoutError
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 class TestDeepgramProvider:
@@ -181,3 +203,24 @@ class TestDeepgramProvider:
             assert params["mip_opt_out"] is True
             assert params["custom_param"] == "custom_val"
             assert params["model"] == "nova-3"
+
+    async def test_streaming_uses_shared_message_pump(self):
+        provider = DeepgramProvider({"api_key": "test_key"})
+        ws = _FakeWS(
+            [
+                json.dumps(
+                    {"type": "Results", "is_final": False, "channel": {"alternatives": [{"transcript": "hel"}]}}
+                ),
+                json.dumps(
+                    {"type": "Results", "is_final": True, "channel": {"alternatives": [{"transcript": "hello"}]}}
+                ),
+            ]
+        )
+        provider._ws = ws
+
+        await provider._process_messages()
+        assert await provider.get_partial_result() == "hello"
+
+        assert await provider.finalize_stream() == "hello"
+        assert ws.sent[-1] == {"type": "CloseStream"}
+        assert ws.closed is True

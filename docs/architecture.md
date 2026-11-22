@@ -183,7 +183,7 @@ graph TB
     SP --> 60dbS[60db]
 ```
 
-Streaming providers extend `WebSocketStreamingProvider` for connection, buffered message pumping, and teardown. Each provider parses its own server messages; Deepgram keeps its Deepgram-specific loop.
+WebSocket-based streaming providers (AssemblyAI, Deepgram, Speechmatics) extend `WebSocketStreamingProvider` for connection, buffered message pumping, and teardown. Each parses its own server messages in `_handle_message`.
 
 ## Configuration & secrets
 
