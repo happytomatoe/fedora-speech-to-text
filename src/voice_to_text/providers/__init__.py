@@ -11,6 +11,7 @@ from .groq import GroqProvider
 from .moonshine import MoonshineProvider
 from .parakeet import ParakeetProvider
 from .sixty import SixtyProvider
+from .speechmatics import SpeechmaticsProvider
 from .voxtral import VoxtralProvider
 
 _BATCH_PROVIDERS = {
@@ -22,6 +23,7 @@ _BATCH_PROVIDERS = {
     "60db": SixtyProvider,
     "elevenlabs": ElevenLabsProvider,
     "moonshine": MoonshineProvider,
+    "speechmatics": SpeechmaticsProvider,
     "batch_custom": CustomProvider,
 }
 
@@ -31,6 +33,7 @@ _STREAMING_PROVIDERS = {
     "voxtral": VoxtralProvider,
     "60db": SixtyProvider,
     "moonshine": MoonshineProvider,
+    "speechmatics": SpeechmaticsProvider,
 }
 
 

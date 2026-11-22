@@ -4,7 +4,7 @@
 # Provider selection
 transcription:
   mode: "batch"        # "batch", "hybrid", or "streaming"
-  provider: "voxtral"   # batch: "deepgram", "groq", "voxtral", "parakeet", "elevenlabs", or "assemblyai"
+  provider: "voxtral"   # batch: "deepgram", "groq", "voxtral", "parakeet", "elevenlabs", "assemblyai", or "speechmatics"
   language: "en"
   hybrid:
     streaming_provider: "voxtral"
@@ -63,6 +63,18 @@ assemblyai:
   # Retention: the training opt-out is an account setting in the AssemblyAI
   # dashboard, not a request parameter. Free plans cannot opt out, and zero
   # retention on the streaming product requires a paid plan.
+
+speechmatics:
+  api_key_env: "SPEECHMATICS_API_KEY"
+  model: "enhanced"            # standard, enhanced (batch also: melia-1, oak-1)
+  # batch_options:             # extra transcription_config fields for batch
+  #   domain: "medical"
+  # streaming_options:         # extra transcription_config fields for realtime
+  #   max_delay: 1.0
+  # Data residency: set api_url / realtime_url below for the EU endpoints
+  # (default) or your on-prem appliance.
+  # api_url: "https://eu1.asr.api.speechmatics.com/v2"
+  # realtime_url: "wss://eu2.rt.speechmatics.com/v2"
 
 moonshine:
   model: medium
